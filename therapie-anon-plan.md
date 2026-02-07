@@ -27,16 +27,46 @@
 
 ## 3. Funktionale Anforderungen (User Stories)
 
+### Epic 0: Sitzungsverwaltung
+
+#### US-0: Sitzungen verwalten
+
+**Als** Psychotherapeut/in
+**möchte ich** eine Übersicht aller meiner Sitzungen haben,
+**damit** ich mehrere Sitzungen parallel bearbeiten und den Überblick behalten kann.
+
+**Vorbedingungen:**
+1. Die App ist geöffnet
+
+**Akzeptanzkriterien:**
+1. Das SYSTEM zeigt eine Sitzungsliste (Dashboard) als zentrale Übersicht
+2. Jede neue Sitzung (Aufnahme oder Import) erhält automatisch einen Titel basierend auf Datum und Uhrzeit (z.B. "Sitzung 07.02.2026 14:30")
+3. Der USER kann den Titel einer Sitzung nachträglich umbenennen
+4. Jede Sitzung zeigt ihren aktuellen Status (Aufnahme läuft, Transkription, Review, Exportiert)
+5. Der USER kann eine Sitzung manuell löschen (mit Bestätigungsdialog)
+6. Sitzungen bleiben in der Liste erhalten bis der USER sie aktiv löscht — auch nach Export
+7. Das SYSTEM persistiert die Sitzungsliste zwischen App-Neustarts
+
+**Nachbedingungen:**
+1. Alle Sitzungen sind in der Liste sichtbar und nach Status/Datum navigierbar
+
+**Offene Fragen:**
+1. Soll die Sitzungsliste sortier- oder filterbar sein (z.B. nach Status)?
+2. Gibt es eine maximale Anzahl Sitzungen, die praktikabel in der Liste bleiben?
+
+---
+
 ### Epic 1: Audio-Aufnahme & Import
 
 #### US-1: Gespräch aufnehmen
+
 **Als** Psychotherapeut/in
 **möchte ich** ein Therapiegespräch über das Mikrofon meines Macs aufnehmen können,
 **damit** ich das Gespräch anschliessend transkribieren lassen kann.
 
 **Vorbedingungen:**
 1. Die App ist geöffnet und betriebsbereit
-2. Ein Mikrofon ist verfügbar und die App hat Mikrofonzugriff
+2. Ein Mikrofon ist verfügbar und die App hat Mikrofonzugriff (Standard-Eingabegerät des OS)
 
 **Akzeptanzkriterien:**
 1. Der USER kann eine Aufnahme mit einem Klick starten
@@ -45,13 +75,29 @@
 4. Das SYSTEM speichert die Aufnahme lokal auf dem Gerät
 5. Der USER kann eine Aufnahme pausieren und fortsetzen
 6. Die App funktioniert zuverlässig im Hintergrund (minimiert), da der USER während der Therapiesitzung nicht mit der App interagiert
+7. Das SYSTEM zeigt ein Menu Bar Icon in der macOS-Menüleiste mit Aufnahmestatus (rot = läuft), Dauer und Stop/Pause-Steuerung — damit der USER die Aufnahme kontrollieren kann, ohne die App in den Vordergrund zu holen
+8. Das SYSTEM verhindert aktiv den macOS-Ruhezustand während einer laufenden Aufnahme (analog zu Zoom/Spotify)
+9. Das SYSTEM speichert die Aufnahme periodisch als Zwischensicherung (mindestens alle 60 Sekunden), sodass bei einem Absturz maximal 60 Sekunden Audio verloren gehen
+10. Beim App-Start nach einem Absturz zeigt das SYSTEM wiederhergestellte Aufnahmen an und bietet deren Weiterverarbeitung an
+11. Das SYSTEM stoppt die Aufnahme automatisch nach 3 Stunden und informiert den USER, um versehentliche Endlos-Aufnahmen zu vermeiden
+12. Beim erstmaligen Starten einer Aufnahme zeigt das SYSTEM einen Hinweis zur Einholung der Patienteneinwilligung (StGB Art. 179bis) — ohne die Aufnahme zu blockieren
 
 **Nachbedingungen:**
 1. Die Audiodatei ist lokal gespeichert und bereit zur Transkription
+2. Eine neue Sitzung wurde in der Sitzungsliste erstellt
+
+**Out of Scope:**
+- Mikrofon-Auswahlmenü — die App nutzt das vom macOS gewählte Standard-Eingabegerät
+- Echtzeit-Transkription während der Aufnahme (inhaltlich unerwünscht: Therapeut soll während der Sitzung nicht auf ein Transkript schauen)
+
+**Constraints & Randbedingungen:**
+1. macOS bietet APIs zur Standby-Unterdrückung (IOPMAssertionCreateWithName / NSProcessInfo.beginActivity)
+2. Audio-Streaming direkt auf Disk ist für Auto-Recovery nötig (kein reines In-Memory-Recording)
 
 ---
 
 #### US-1b: Audio-Datei importieren
+
 **Als** Psychotherapeut/in
 **möchte ich** bestehende Audio-Dateien in die App importieren können,
 **damit** ich auch extern aufgenommene Gespräche transkribieren und anonymisieren kann.
@@ -60,12 +106,21 @@
 1. Die App ist geöffnet
 
 **Akzeptanzkriterien:**
-1. Der USER kann Audio-Dateien per Dateiauswahl importieren
-2. Das SYSTEM akzeptiert gängige Formate (mp3, wav, m4a, webm)
-3. Nach dem Import wird automatisch die Transkription gestartet
+1. Der USER kann Audio-Dateien per Dateiauswahl-Dialog importieren
+2. Der USER kann Audio-Dateien per Drag-and-Drop in die App importieren
+3. Der USER kann mehrere Audio-Dateien gleichzeitig importieren (Batch-Import)
+4. Das SYSTEM akzeptiert gängige Formate (mp3, wav, m4a, webm)
+5. Das SYSTEM zeigt eine klare Fehlermeldung bei nicht unterstützten oder beschädigten Dateien, inkl. Liste der unterstützten Formate
+6. Nach dem Import wird automatisch die Transkription gestartet
+7. Bei Batch-Import werden die Dateien in einer Queue nacheinander transkribiert (FIFO)
+8. Der USER sieht den Fortschritt der Queue (welche Datei wird gerade verarbeitet, wie viele verbleiben)
 
 **Nachbedingungen:**
-1. Die importierte Audiodatei wird wie eine Aufnahme behandelt (Transkription → Anonymisierung)
+1. Für jede importierte Datei wurde eine neue Sitzung in der Sitzungsliste erstellt
+2. Die Transkription läuft oder steht in der Queue
+
+**Out of Scope:**
+- Audio-Player/Vorschau vor der Transkription — der USER nutzt dafür seinen Standard-Player
 
 ---
 
@@ -308,7 +363,11 @@ flowchart TD
 ## 6. Zusätzliche Anforderungen (aus Klärung)
 
 - **Nutzungskontext:** App wird sowohl während der Sitzung (Hintergrund-Aufnahme) als auch nachträglich (Audio-Import) genutzt
-- **Aufnahmedauer:** Typisch 45-60 Minuten (Standard-Therapiesitzung)
+- **Aufnahmedauer:** Typisch 45-60 Minuten (Standard-Therapiesitzung), Max. 3 Stunden (Auto-Stop)
+- **Sitzungsverwaltung:** Mehrere Sitzungen parallel möglich, Dashboard mit Auto-Titel, persistiert bis manuell gelöscht
+- **Hintergrund-Modus:** Menu Bar Icon mit Status, Standby-Unterdrückung, Auto-Recovery (max. 60s Verlust)
+- **Import:** Dateiauswahl + Drag-and-Drop + Batch, Queue-basierte Verarbeitung
+- **Einwilligung:** Hinweis beim ersten Aufnahmestart, kein Zwang
 - **Therapieformen:** Einzeltherapie (2 Sprecher) UND Paartherapie/Angehörigengespräche (bis 4 Sprecher)
 - **Exportziele:** Supervision/Intervision, eigene Dokumentation, Praxissoftware — je nach Situation
 - **Sperrliste:** Global pro Therapeut/in, exaktes Matching, persistiert lokal
@@ -319,10 +378,10 @@ flowchart TD
 1. Cloud-basierte Verarbeitung oder Synchronisation
 2. Automatische Pseudonymisierung (fiktive Namen statt Platzhalter)
 3. Anonymisierung von Bildinhalten in PDFs (z.B. Gesichtserkennung)
-4. Echtzeit-Transkription während des Gesprächs
+4. Echtzeit-Transkription während des Gesprächs (inhaltlich unerwünscht — therapeutische Beziehung)
 5. Nutzerverwaltung / Multi-User-Betrieb
 6. Mobile Version (iOS/Android)
-7. Archivierung/Verwaltung vergangener Transkripte
+7. ~~Archivierung/Verwaltung vergangener Transkripte~~ → Ersetzt durch Epic 0: Sitzungsverwaltung
 8. ICD-Diagnose-Codes und ausgeschriebene Diagnosenamen (kein Identifikationsrisiko)
 9. Institutionsnamen (Spitäler, Schulen, Arbeitgeber, Behörden)
 10. Relative Zeitangaben ("letzte Woche", "vor drei Tagen")
@@ -354,6 +413,21 @@ flowchart TD
 | 15 | ICD-Codes anonymisieren? | Nein — Diagnosen bleiben im Text | 2026-02-07 |
 | 16 | Sperrliste pro Therapeut oder pro Fall? | Eine globale Liste pro Therapeut/in | 2026-02-07 |
 | 17 | Varianten-Matching in Sperrliste? | Exakte Treffer — keine Fuzzy-Erkennung | 2026-02-07 |
+| 18 | Mikrofon-Auswahl nötig? | Nein — Standard-Mikrofon (OS-Default) reicht | 2026-02-07 |
+| 19 | Auto-Recovery bei Absturz? | Pflicht — max. 60 Sekunden Datenverlust, Wiederherstellung beim Start | 2026-02-07 |
+| 20 | Auto-Transkription nach Import? | Immer automatisch, Queue bei Batch-Import | 2026-02-07 |
+| 21 | Parallele Sitzungen? | Ja — mehrere Sitzungen gleichzeitig in verschiedenen Stadien | 2026-02-07 |
+| 22 | Sitzungsliste/Dashboard? | Ja — mit Auto-Titel (Datum+Uhrzeit), User kann umbenennen | 2026-02-07 |
+| 23 | Hintergrund-Feedback? | Menu Bar Icon mit Status (rot=läuft), Dauer, Stop/Pause | 2026-02-07 |
+| 24 | Standby während Aufnahme? | App verhindert aktiv den Ruhezustand | 2026-02-07 |
+| 25 | Batch-Verarbeitung? | Queue — nacheinander, FIFO | 2026-02-07 |
+| 26 | Warum keine Echtzeit-Transkription? | Inhaltlich unerwünscht — stört therapeutische Beziehung | 2026-02-07 |
+| 27 | Einwilligungs-Dialog? | Hinweis beim ersten Mal, kein Zwang (Therapeut verantwortlich) | 2026-02-07 |
+| 28 | Maximale Aufnahmedauer? | 3 Stunden, dann Auto-Stop mit Benachrichtigung | 2026-02-07 |
+| 29 | Import-Fehler & Preview? | Klare Fehlermeldung, kein Audio-Player (User nutzt Standard-Player) | 2026-02-07 |
+| 30 | Sitzungsverwaltung als Epic? | Ja — neues Epic 0 (Grundlage für alle Workflows) | 2026-02-07 |
+| 31 | Lebenszyklus Sitzungen? | Bleiben bis manuell gelöscht — auch nach Export | 2026-02-07 |
+| 32 | Audio-Import UX? | Dateiauswahl + Drag-and-Drop + Batch | 2026-02-07 |
 
 ---
 
