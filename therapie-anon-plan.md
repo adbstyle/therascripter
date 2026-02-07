@@ -50,8 +50,10 @@
 **Nachbedingungen:**
 1. Alle Sitzungen sind in der Liste sichtbar und nach Status/Datum navigierbar
 
+**Hinweis:** Die Sitzungsliste enthält zwei Typen: Audio-Sitzungen (Aufnahme/Import → Transkription → Anonymisierung → Review → Export) und PDF-Sitzungen (Import → Textextraktion → Anonymisierung → Review → Export). Beide Typen sind visuell unterscheidbar (Typ-Icon).
+
 **Offene Fragen:**
-1. Soll die Sitzungsliste sortier- oder filterbar sein (z.B. nach Status)?
+1. Soll die Sitzungsliste sortier- oder filterbar sein (z.B. nach Status oder Typ)?
 2. Gibt es eine maximale Anzahl Sitzungen, die praktikabel in der Liste bleiben?
 
 ---
@@ -81,18 +83,22 @@
 10. Beim App-Start nach einem Absturz zeigt das SYSTEM wiederhergestellte Aufnahmen an und bietet deren Weiterverarbeitung an
 11. Das SYSTEM stoppt die Aufnahme automatisch nach 3 Stunden und informiert den USER, um versehentliche Endlos-Aufnahmen zu vermeiden
 12. Beim erstmaligen Starten einer Aufnahme zeigt das SYSTEM einen Hinweis zur Einholung der Patienteneinwilligung (StGB Art. 179bis) — ohne die Aufnahme zu blockieren
+13. Wenn Parallel-Transkription aktiviert ist (Settings): Das SYSTEM transkribiert das Audio bereits während der laufenden Aufnahme im Hintergrund — OHNE dem USER das Transkript anzuzeigen
+14. Nach Aufnahme-Stop führt das SYSTEM einen finalen Qualitäts-/Diarization-Pass durch und zeigt das fertige Transkript innerhalb von 5 Minuten an (statt 20-40 Min bei sequenzieller Verarbeitung)
 
 **Nachbedingungen:**
 1. Die Audiodatei ist lokal gespeichert und bereit zur Transkription
 2. Eine neue Sitzung wurde in der Sitzungsliste erstellt
+3. Bei aktivierter Parallel-Transkription: Das Transkript ist innerhalb von 5 Minuten nach Stop verfügbar
 
 **Out of Scope:**
 - Mikrofon-Auswahlmenü — die App nutzt das vom macOS gewählte Standard-Eingabegerät
-- Echtzeit-Transkription während der Aufnahme (inhaltlich unerwünscht: Therapeut soll während der Sitzung nicht auf ein Transkript schauen)
+- Anzeige des Transkripts WÄHREND der laufenden Aufnahme (inhaltlich unerwünscht: Therapeut soll während der Sitzung nicht auf ein Transkript schauen — auch wenn im Hintergrund bereits transkribiert wird)
 
 **Constraints & Randbedingungen:**
 1. macOS bietet APIs zur Standby-Unterdrückung (IOPMAssertionCreateWithName / NSProcessInfo.beginActivity)
 2. Audio-Streaming direkt auf Disk ist für Auto-Recovery nötig (kein reines In-Memory-Recording)
+3. Parallel-Transkription erfordert deutlich mehr CPU/RAM — ist daher optional (Settings, Standard: an)
 
 ---
 
@@ -149,6 +155,8 @@
 11. Der USER kann die App während der Transkription für andere Sitzungen nutzen (nicht-blockierend)
 12. Das SYSTEM zeigt eine macOS-Benachrichtigung, wenn die Transkription abgeschlossen ist
 13. Nach Abschluss der Transkription startet das SYSTEM automatisch die Anonymisierung (kein manueller Zwischenschritt)
+14. Bei Live-Aufnahmen mit aktivierter Parallel-Transkription: Das SYSTEM nutzt die bereits im Hintergrund erstellte Transkription und führt nach Aufnahme-Stop nur einen finalen Diarization-/Qualitäts-Pass durch — Ergebnis innerhalb von 5 Minuten nach Stop
+15. Bei importierten Audio-Dateien oder deaktivierter Parallel-Transkription: Sequenzielle Verarbeitung wie bisher (max. 2x Echtzeit gemäss NFR-3)
 
 **Nachbedingungen:**
 1. Ein strukturierter Text mit Sprecherzuordnung und Zeitstempeln liegt vor
@@ -181,6 +189,7 @@
 2. Das SYSTEM ersetzt das Label konsistent im gesamten Transkript
 3. Die Umbenennung ist optional — der USER kann Labels auch als Person A/B/C/D belassen
 4. Die Umbenennung ist jederzeit möglich — auch nach der Anonymisierung, im Review-Modus (Epic 6)
+5. **Achtung:** Speaker-Labels werden bei der Anonymisierung (Epic 4) mitgeprüft. Enthält ein Label einen erkannten Namen (z.B. "Dr. Müller"), wird es anonymisiert (z.B. → [PERSON 1]). Der USER sollte daher rollenbasierte Labels verwenden (z.B. "Therapeut", "Patient")
 
 **Nachbedingungen:**
 1. Der Text zeigt die vom USER gewählten Sprecherbezeichnungen
@@ -193,22 +202,47 @@
 ### Epic 3: PDF-Import & OCR
 
 #### US-3: PDF importieren und Text extrahieren
+
 **Als** Psychotherapeut/in
 **möchte ich** PDF-Dokumente in die App importieren können, auch gescannte Dokumente,
 **damit** ich deren Textinhalt anonymisieren kann.
+
+**Typische Dokumente:** Ärztliche Berichte/Zuweisungen, psychiatrische Gutachten, Versicherungsformulare, eigene Therapienotizen/-protokolle, Laborergebnisse.
 
 **Vorbedingungen:**
 1. Die App ist geöffnet
 
 **Akzeptanzkriterien:**
-1. Der USER kann PDF-Dateien per Drag-and-Drop oder Dateiauswahl importieren
-2. Das SYSTEM extrahiert Text aus Text-PDFs direkt
-3. Das SYSTEM erkennt Text in gescannten PDFs mittels OCR (lokal)
-4. Das SYSTEM zeigt den extrahierten Text dem USER an
-5. Der USER kann mehrere PDFs nacheinander importieren
+1. Der USER kann PDF-Dateien per Drag-and-Drop oder Dateiauswahl-Dialog importieren
+2. Der USER kann mehrere PDF-Dateien gleichzeitig importieren (Batch-Import)
+3. Das SYSTEM erkennt pro Seite automatisch, ob Text direkt extrahierbar ist oder OCR nötig ist (Mixed-PDF-Unterstützung)
+4. Das SYSTEM extrahiert Text aus Text-PDF-Seiten direkt
+5. Das SYSTEM erkennt gedruckten Text in gescannten Seiten mittels OCR (lokal, Deutsch)
+6. Das SYSTEM erkennt passwortgeschützte PDFs und fragt den USER nach dem Passwort
+7. Der extrahierte Text wird als linearer Fliesstext dargestellt (keine Layout-Erhaltung von Tabellen, Spalten etc.)
+8. Das SYSTEM zeigt den extrahierten Text dem USER an
+9. Nach der Textextraktion startet das SYSTEM automatisch die Anonymisierung (konsistent mit Audio-Workflow)
+10. Bei Batch-Import werden die PDFs in einer Queue nacheinander verarbeitet (FIFO)
+11. Die Textextraktion/OCR ist non-blocking — der USER kann die App für andere Aufgaben nutzen
+12. Das SYSTEM zeigt eine macOS-Benachrichtigung, wenn die Verarbeitung abgeschlossen ist
+13. Das SYSTEM zeigt eine Warnung bei PDFs mit mehr als 50 Seiten (Verarbeitung trotzdem möglich)
+14. Jedes importierte PDF erstellt einen Eintrag in der Sitzungsliste mit Typ-Kennzeichnung "PDF" (unterscheidbar von Audio-Sitzungen)
 
 **Nachbedingungen:**
-1. Der extrahierte Text ist bereit zur Anonymisierung
+1. Der extrahierte Text ist bereit zur Anonymisierung bzw. die Anonymisierung wurde automatisch gestartet
+2. Ein neuer Eintrag vom Typ "PDF" wurde in der Sitzungsliste erstellt
+
+**Out of Scope:**
+- Handschrift-Erkennung — OCR erkennt nur gedruckten Text
+- Layout-Erhaltung (Tabellen, Spalten, Kopf-/Fusszeilen) — nur linearer Fliesstext
+- Andere Dokumentformate (.docx, .jpg, .png) — nur PDF
+- Anonymisierung von Bildinhalten in PDFs (z.B. Fotos, Logos)
+- OCR in anderen Sprachen als Deutsch
+
+**Constraints & Randbedingungen:**
+1. OCR muss komplett lokal laufen (NFR-1: keine Cloud-Verarbeitung)
+2. Mixed-PDFs erfordern eine Seite-für-Seite-Analyse (Text vorhanden → direkte Extraktion; kein Text → OCR)
+3. PDF-Einträge in der Sitzungsliste haben einen kürzeren Workflow als Audio-Sitzungen (kein Transkriptions-/Diarization-Schritt)
 
 ---
 
@@ -223,25 +257,42 @@
 1. Ein transkribierter Text oder ein importierter PDF-Text liegt vor
 
 **Akzeptanzkriterien:**
-1. Das SYSTEM erkennt **Personennamen** im Text und ersetzt sie durch konsistente Platzhalter ([PERSON A], [PERSON B] etc.)
-2. Das SYSTEM erkennt **Ortsnamen** im Text und ersetzt sie durch konsistente Platzhalter ([ORT 1], [ORT 2] etc.)
+1. Das SYSTEM erkennt **Personennamen** im Text und ersetzt sie durch typ-spezifisch nummerierte Platzhalter ([PERSON 1], [PERSON 2] etc.)
+2. Das SYSTEM erkennt **Ortsnamen** im Text und ersetzt sie durch typ-spezifisch nummerierte Platzhalter ([ORT 1], [ORT 2] etc.)
 3. Das SYSTEM erkennt **Kontaktdaten** (Telefonnummern, E-Mail-Adressen, Postadressen, Social-Media-Handles) und ersetzt sie durch typisierte Platzhalter ([TELEFON 1], [EMAIL 1], [ADRESSE 1] etc.)
 4. Das SYSTEM erkennt **medizinische Identifikatoren** (AHV-Nummern, Versicherungsnummern, Fallnummern) und ersetzt sie durch typisierte Platzhalter ([AHV-NR 1], [VERS-NR 1] etc.)
 5. Das SYSTEM erkennt **Geburtsdaten** (explizite Datumsangaben wie "15.03.1985", "geb. 1990") und ersetzt sie durch Platzhalter ([GEBURTSDATUM 1] etc.)
-6. Gleiche Entitäten werden im gesamten Text konsistent durch denselben Platzhalter ersetzt
-7. Die Anonymisierung erfolgt komplett lokal
-8. Die Sprecherzuordnung bleibt nach der Anonymisierung erhalten
-9. Das SYSTEM wendet zusätzlich die persönliche Sperrliste des USERs an (siehe Epic 5)
-10. Das SYSTEM versucht **best-effort** auch gesprochene Kontaktdaten in Transkripten zu erkennen (z.B. "null sieben neun...") — ohne Garantie auf vollständige Erkennung
+6. Die Platzhalter-Nummerierung ist **typ-spezifisch**: Jeder Entitätstyp hat eine eigene Nummerierung ([PERSON 1], [PERSON 2], [ORT 1], [ORT 2] etc.) — nicht global fortlaufend
+7. Gleiche Entitäten werden innerhalb einer Sitzung konsistent durch denselben Platzhalter ersetzt (kein sitzungsübergreifendes Mapping)
+8. Das SYSTEM erkennt **Varianten desselben Namens** best-effort als eine Entität (Coreference-Resolution): "Dr. Müller", "Müller", "Herr Müller" → alle [PERSON 1]
+9. Das SYSTEM anonymisiert nur **ganze Wörter/eigenständige Entitäten** — keine Teilstrings in zusammengesetzten Wörtern (z.B. "Müller" in "Müllerstrasse" bleibt unverändert)
+10. Die **NER hat Vorrang** vor der Sperrliste: NER-Ergebnisse sind primär, die Sperrliste ergänzt was NER nicht erkennt. Bei Typ-Konflikt gilt der NER-Typ
+11. Das SYSTEM wendet zusätzlich die persönliche Sperrliste des USERs an (siehe Epic 5)
+12. Das SYSTEM anonymisiert auch **Speaker-Labels** (aus US-2b), wenn diese erkannte Namen enthalten (z.B. "Dr. Müller" als Label → [PERSON 1])
+13. Die Sprecherzuordnung (Absätze, Zeitstempel) bleibt nach der Anonymisierung erhalten
+14. Das SYSTEM versucht **best-effort** auch gesprochene Kontaktdaten in Transkripten zu erkennen (z.B. "null sieben neun...") — ohne Garantie auf vollständige Erkennung
+15. Im Review-Modus (Epic 6) sind die **Originalwerte hinter den Platzhaltern sichtbar** (z.B. Hover/Tooltip), damit der USER die Korrektheit prüfen kann. Erst nach Finalisierung werden die Originale endgültig entfernt
+16. Die Anonymisierung erfolgt komplett lokal
+17. Die Anonymisierung ist innerhalb von **30 Sekunden** abgeschlossen — auch bei langen Texten (ca. 10'000 Wörter)
 
 **Nachbedingungen:**
 1. Der Text enthält keine identifizierenden Informationen mehr (im Rahmen der definierten Entitätstypen)
+2. Das Platzhalter-Mapping (Original → Platzhalter) bleibt bis zur Finalisierung gespeichert (für Review)
 
 **Out of Scope:**
 - ICD-Diagnose-Codes und ausgeschriebene Diagnosenamen werden NICHT anonymisiert (klinisch relevant, kein Identifikationsrisiko)
 - Relative Zeitangaben ("letzte Woche", "vor drei Tagen") werden NICHT anonymisiert
 - Institutionsnamen (Spitäler, Schulen, Arbeitgeber) werden NICHT anonymisiert
 - Sonstige Datumsangaben ausser Geburtsdaten werden NICHT anonymisiert
+- Sitzungsübergreifende Platzhalter-Konsistenz — kein globales Entitäts-Mapping zwischen Sitzungen
+- Automatische Re-Anonymisierung nach Text-Editierung im Review — User markiert neue Entitäten manuell (Epic 6)
+- Teilstring-Anonymisierung in zusammengesetzten Wörtern
+
+**Constraints & Randbedingungen:**
+1. Coreference-Resolution für Namens-Varianten ist best-effort — Qualität hängt vom gewählten NER-Modell ab (NFR-9)
+2. Platzhalter-Mapping muss bis zur Finalisierung persistiert werden (für Review-Modus, Epic 6)
+3. Anonymisierung muss Sprecherzuordnung, Zeitstempel und Absatzstruktur unangetastet lassen
+4. Speaker-Label-Anonymisierung erfordert Koordination mit US-2b (Labels können nach Anonymisierung nicht mehr auf Klarnamen gesetzt werden)
 
 ---
 
@@ -289,7 +340,7 @@
 **Nachbedingungen:**
 1. Der überprüfte und korrigierte Text ist finalisiert und bereit zum Export
 
-**Hinweis:** Der USER kann im Review-Modus AUCH den transkribierten Text editieren (z.B. Transkriptionsfehler korrigieren), nicht nur Anonymisierungsentscheidungen treffen. Details werden bei der Verfeinerung von Epic 6 definiert.
+**Hinweis:** Der USER kann im Review-Modus AUCH den transkribierten Text editieren (z.B. Transkriptionsfehler korrigieren), nicht nur Anonymisierungsentscheidungen treffen. Die Originalwerte hinter den Platzhaltern sind im Review sichtbar (z.B. Hover/Tooltip) — erst nach Finalisierung werden sie endgültig entfernt. Bei Text-Editierung im Review erfolgt KEINE automatische Re-Anonymisierung; der User markiert neue Entitäten manuell. Details werden bei der Verfeinerung von Epic 6 definiert.
 
 ---
 
@@ -339,7 +390,7 @@
 |----|-----------|-------------|------|-----------|
 | NFR-1 | Datenschutz | Alle Verarbeitung komplett lokal | 0 Netzwerk-Requests für Datenverarbeitung | Kritisch |
 | NFR-2 | Datenschutz | Löschung von Rohdaten nach Export | USER entscheidet nach Export über Löschung von Audio und Originaltexten | Hoch |
-| NFR-3 | Performance | Transkription in akzeptabler Zeit | Max. 2x Echtzeit (10 Min Audio → max. 20 Min Verarbeitung) | Hoch |
+| NFR-3 | Performance | Transkription in akzeptabler Zeit | Sequenziell: Max. 2x Echtzeit (10 Min Audio → max. 20 Min). Mit Parallel-Transkription: < 5 Min nach Aufnahme-Stop | Hoch |
 | NFR-4 | Usability | Einfache, intuitive Bedienung | Ohne technische Vorkenntnisse bedienbar | Hoch |
 | NFR-5 | Sprache | Deutsch allgemein (Hochdeutsch + CH-Dialekte) | Verständlicher Hochdeutsch-Output aus allen gängigen Schweizerdeutschen Dialekten | Hoch |
 | NFR-6 | Plattform | macOS Desktop-Applikation | Electron-basiert, macOS 13+ | Hoch |
@@ -347,6 +398,7 @@
 | NFR-8 | Persistenz | Sperrliste überlebt App-Neustart | Lokale Speicherung der Benutzerdaten (Sperrliste) | Hoch |
 | NFR-9 | Flexibilität | Alle ML-Modelle austauschbar (Transkription, Diarization, NER, OCR) | Globale Einstellung in Settings; User wählt aus verfügbaren Modellen (technische Modellnamen) | Hoch |
 | NFR-10 | Erweiterbarkeit | User kann eigene/neue lokale Modelle hinzufügen und aktivieren | Plugin-artige Architektur; neue Modelle ohne App-Update einsetzbar | Hoch |
+| NFR-11 | Performance | Anonymisierung in akzeptabler Zeit | < 30 Sekunden, auch bei langen Texten (ca. 10'000 Wörter / 60 Min Transkript) | Hoch |
 
 ---
 
@@ -403,6 +455,10 @@ flowchart TD
 - **Workflow:** Transkription → Anonymisierung automatisch, kein Zwischenschritt; Transkription non-blocking
 - **Review:** Text UND Anonymisierung editierbar im gleichen Review-Modus (Epic 6)
 - **Modellauswahl:** Alle ML-Modelle (Transkription, Diarization, NER, OCR) austauschbar in globalen Settings; technische Modellnamen; User kann eigene Modelle hinzufügen (Plugin-Architektur)
+- **PDF-Import:** Nur PDF-Format; Batch + non-blocking; Mixed-PDF auto pro Seite (Text vs. OCR); Passwort-Eingabe; max. 50 Seiten (Warnung); linearer Fliesstext; nur gedruckter Text (keine Handschrift); nur Deutsch-OCR
+- **Sitzungstypen:** Audio-Sitzungen und PDF-Sitzungen in gleicher Liste, visuell unterscheidbar; PDF hat kürzeren Workflow (kein Transkriptions-Schritt)
+- **Parallel-Transkription:** Bei Live-Aufnahmen wird im Hintergrund bereits transkribiert (ohne Anzeige); nach Stop finaler Qualitäts-/Diarization-Pass; Ergebnis innerhalb 5 Minuten nach Stop; optional in Settings (Standard: an); erfordert mehr CPU/RAM
+- **Anonymisierung:** Typ-spezifische Platzhalter ([PERSON 1], [ORT 1] etc.); Konsistenz nur pro Sitzung; Coreference-Resolution für Namens-Varianten (best-effort); NER hat Vorrang vor Sperrliste; nur ganze Wörter (keine Teilstrings); Speaker-Labels werden mitanonymisiert; Originale im Review sichtbar (Hover/Tooltip), erst nach Finalisierung weg; < 30 Sekunden Performance; keine Re-Anonymisierung nach Text-Edit im Review
 
 ---
 
@@ -410,7 +466,7 @@ flowchart TD
 1. Cloud-basierte Verarbeitung oder Synchronisation
 2. Automatische Pseudonymisierung (fiktive Namen statt Platzhalter)
 3. Anonymisierung von Bildinhalten in PDFs (z.B. Gesichtserkennung)
-4. Echtzeit-Transkription während des Gesprächs (inhaltlich unerwünscht — therapeutische Beziehung)
+4. Anzeige des Transkripts WÄHREND der laufenden Aufnahme (inhaltlich unerwünscht — therapeutische Beziehung). Hinweis: Hintergrund-Transkription ohne Anzeige ist IN Scope (Parallel-Transkription, siehe US-1 AC 13-14)
 5. Nutzerverwaltung / Multi-User-Betrieb
 6. Mobile Version (iOS/Android)
 7. ~~Archivierung/Verwaltung vergangener Transkripte~~ → Ersetzt durch Epic 0: Sitzungsverwaltung
@@ -477,6 +533,32 @@ flowchart TD
 | 47 | Zielgruppe Modellauswahl? | Auch Therapeut/in, nicht nur Power-User | 2026-02-07 |
 | 48 | Darstellung Modellnamen? | Technische Modellnamen direkt anzeigen | 2026-02-07 |
 | 49 | Eigene Modelle hinzufügen? | Ja — User kann neue lokale Modelle installieren/aktivieren (Plugin-Architektur) | 2026-02-07 |
+| 50 | Welche PDF-Typen? | Ärztliche Berichte, Gutachten, Versicherungsformulare, eigene Notizen, Laborergebnisse | 2026-02-07 |
+| 51 | PDF-Workflow vs. Audio? | Eigener kürzerer Workflow (kein Transkriptions-Schritt), aber gleiche Sitzungsliste | 2026-02-07 |
+| 52 | PDF in Sitzungsliste? | Ja — gleiche Liste, anderer Typ (visuell unterscheidbar) | 2026-02-07 |
+| 53 | Handschrift-OCR? | Nein — nur gedruckter Text | 2026-02-07 |
+| 54 | PDF-Layout? | Linearer Fliesstext, keine Layout-Erhaltung | 2026-02-07 |
+| 55 | Auto-Anonymisierung bei PDF? | Ja — automatisch nach Textextraktion, wie bei Audio | 2026-02-07 |
+| 56 | PDF-Seitenlimit? | Max. 50 Seiten, darüber Warnung (Verarbeitung trotzdem möglich) | 2026-02-07 |
+| 57 | Dokumentformate? | Nur PDF — kein Word, keine Bilder | 2026-02-07 |
+| 58 | Passwortgeschützte PDFs? | Passwort-Eingabe ermöglichen | 2026-02-07 |
+| 59 | Mixed-PDFs (Text + Scan)? | Automatisch pro Seite erkennen (Text → direkte Extraktion, Scan → OCR) | 2026-02-07 |
+| 60 | OCR-Sprache? | Nur Deutsch | 2026-02-07 |
+| 61 | PDF Batch & Blocking? | Batch-Import + non-blocking (Queue, FIFO) — konsistent mit Audio | 2026-02-07 |
+| 62 | Parallel-Transkription: Was genau? | Hintergrund-Transkription während Live-Aufnahme — OHNE Anzeige des Transkripts (inhaltliche Entscheidung #26 bleibt) | 2026-02-07 |
+| 63 | Qualität vs. Geschwindigkeit? | Qualität hat Priorität — nach Aufnahme-Stop finaler Diarization-/Qualitäts-Pass | 2026-02-07 |
+| 64 | Ziel-Wartezeit nach Stop? | < 5 Minuten nach Aufnahme-Stop (statt 20-40 Min bei sequenzieller Verarbeitung) | 2026-02-07 |
+| 65 | Parallel-Transkription obligatorisch? | Optional in Settings (Standard: an) — da deutlich mehr CPU/RAM benötigt wird | 2026-02-07 |
+| 66 | Platzhalter-Konsistenz Scope? | Nur pro Sitzung — jede Sitzung hat eigene Platzhalter-Nummerierung, kein sitzungsübergreifendes Mapping | 2026-02-07 |
+| 67 | Originale nach Anonymisierung sichtbar? | Im Review sichtbar (Hover/Tooltip), erst nach Finalisierung endgültig entfernt | 2026-02-07 |
+| 68 | NER vs. Sperrliste Priorität? | NER hat Vorrang; Sperrliste ergänzt was NER nicht findet; bei Typ-Konflikt gilt NER | 2026-02-07 |
+| 69 | Umgang mit Mehrdeutigkeiten? | Auto-Anonymisierung + Review bei Bedarf (kein Bestätigungs-Zwang pro Fund) | 2026-02-07 |
+| 70 | Namens-Varianten erkennen? | Intelligente Zuordnung (best-effort Coreference): "Dr. Müller" = "Müller" = "Herr Müller" → [PERSON 1] | 2026-02-07 |
+| 71 | Re-Anonymisierung nach Text-Edit? | Nein — im Review ist der User verantwortlich; neue Entitäten manuell markieren | 2026-02-07 |
+| 72 | Anonymisierungs-Performance? | < 30 Sekunden, auch bei langen Texten (ca. 10'000 Wörter) | 2026-02-07 |
+| 73 | Teilstrings anonymisieren? | Nein — nur ganze Wörter/eigenständige Entitäten. "Müller" in "Müllerstrasse" bleibt | 2026-02-07 |
+| 74 | Speaker-Labels anonymisieren? | Ja — Labels werden wie jeder andere Text anonymisiert, wenn sie erkannte Namen enthalten | 2026-02-07 |
+| 75 | Platzhalter-Nummerierung? | Typ-spezifisch: [PERSON 1], [ORT 1], [TELEFON 1] etc. (nicht global fortlaufend) | 2026-02-07 |
 
 ---
 
