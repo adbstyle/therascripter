@@ -127,6 +127,7 @@
 ### Epic 2: Transkription & Sprechererkennung
 
 #### US-2: Gespräch transkribieren mit Sprechererkennung
+
 **Als** Psychotherapeut/in
 **möchte ich** eine Aufnahme automatisch transkribieren lassen, wobei das System die verschiedenen Sprecher unterscheidet,
 **damit** ich ein lesbares Protokoll mit klarer Zuordnung erhalte.
@@ -136,31 +137,56 @@
 
 **Akzeptanzkriterien:**
 1. Das SYSTEM transkribiert die Aufnahme komplett lokal (keine Cloud-Verarbeitung)
-2. Das SYSTEM erkennt automatisch bis zu 4 verschiedene Sprecher und weist ihnen Labels zu (Person A, Person B, Person C, Person D)
-3. Das SYSTEM transkribiert Deutsch allgemein (Hochdeutsch und Schweizerdeutsche Dialekte) in lesbaren Hochdeutsch-Text
-4. Das SYSTEM zeigt den transkribierten Text mit Sprecherzuordnung an
-5. Der USER sieht den Fortschritt der Transkription
+2. Das SYSTEM erkennt die Anzahl Sprecher automatisch und weist ihnen Labels zu (Person A, Person B, Person C, Person D)
+3. Bei nur 1 erkanntem Sprecher wird kein Speaker-Label vergeben (einfacher Fliesstext)
+4. Bei 5+ erkannten Sprechern arbeitet das SYSTEM best-effort (Stimmen können zusammengefasst werden)
+5. Das SYSTEM transkribiert Deutsch allgemein (Hochdeutsch und Schweizerdeutsche Dialekte) in lesbaren Hochdeutsch-Text
+6. Das SYSTEM entfernt offensichtliche Verlegenheitslaute ("äh", "ähm") aus dem Transkript. Sonstige Füllwörter ("also", "halt"), Satzabbrüche und Wiederholungen bleiben erhalten
+7. Das SYSTEM versieht den Text mit voller Interpunktion (Satzzeichen, Grossschreibung) und setzt Absatzumbrüche bei jedem Sprecherwechsel
+8. Das SYSTEM fügt bei jedem Sprecherwechsel einen Zeitstempel ein (z.B. [00:23:40])
+9. Das SYSTEM zeigt den transkribierten Text mit Sprecherzuordnung an
+10. Der USER sieht den Fortschritt der Transkription (Prozent + geschätzte Restzeit)
+11. Der USER kann die App während der Transkription für andere Sitzungen nutzen (nicht-blockierend)
+12. Das SYSTEM zeigt eine macOS-Benachrichtigung, wenn die Transkription abgeschlossen ist
+13. Nach Abschluss der Transkription startet das SYSTEM automatisch die Anonymisierung (kein manueller Zwischenschritt)
 
 **Nachbedingungen:**
-1. Ein strukturierter Text mit Sprecherzuordnung liegt vor
+1. Ein strukturierter Text mit Sprecherzuordnung und Zeitstempeln liegt vor
+2. Die Anonymisierung wurde automatisch gestartet
+
+**Out of Scope:**
+- Abbrechen oder Neustarten einer laufenden Transkription — sie läuft immer bis zum Ende durch
+- Korrektur einzelner Sprecherzuordnungen (z.B. Segment von Person A → Person B umhängen) — nicht im MVP
+- Originaler Dialekt-Text verfügbar machen — nur Hochdeutsch-Output, keine Originalversion
+- Audio-Qualitätscheck vor der Transkription — kein Vorher-Check, das System liefert best-effort Ergebnis
+
+**Constraints & Randbedingungen:**
+1. NFR-3: Transkription max. 2x Echtzeit (10 Min Audio → max. 20 Min Verarbeitung)
+2. Schweizerdeutsch → Hochdeutsch ist eine Übersetzungsleistung, nicht nur Transkription. Begriffe ohne Hochdeutsch-Äquivalent werden bestmöglich übersetzt
+3. Transkription muss non-blocking sein, da der User parallel andere Sitzungen bearbeiten kann (Epic 0)
 
 ---
 
 #### US-2b: Speaker-Labels benennen
+
 **Als** Psychotherapeut/in
 **möchte ich** die automatisch zugewiesenen Speaker-Labels (Person A, Person B) nachträglich benennen können,
 **damit** das Transkript für Supervision und Dokumentation besser lesbar ist.
 
 **Vorbedingungen:**
-1. Eine Transkription mit Sprecherzuordnung liegt vor
+1. Eine Transkription mit Sprecherzuordnung liegt vor (mindestens 2 erkannte Sprecher)
 
 **Akzeptanzkriterien:**
 1. Der USER kann jedes Speaker-Label individuell umbenennen (z.B. "Person A" → "Therapeut", "Person B" → "Patient", "Person C" → "Partnerin")
 2. Das SYSTEM ersetzt das Label konsistent im gesamten Transkript
 3. Die Umbenennung ist optional — der USER kann Labels auch als Person A/B/C/D belassen
+4. Die Umbenennung ist jederzeit möglich — auch nach der Anonymisierung, im Review-Modus (Epic 6)
 
 **Nachbedingungen:**
 1. Der Text zeigt die vom USER gewählten Sprecherbezeichnungen
+
+**Out of Scope:**
+- Korrektur einzelner Sprecherzuordnungen (Segment einem anderen Sprecher zuweisen) — nicht im MVP
 
 ---
 
@@ -263,8 +289,7 @@
 **Nachbedingungen:**
 1. Der überprüfte und korrigierte Text ist finalisiert und bereit zum Export
 
-**Out of Scope:**
-- Kein Editieren des Originaltexts — nur Anonymisierungsentscheidungen
+**Hinweis:** Der USER kann im Review-Modus AUCH den transkribierten Text editieren (z.B. Transkriptionsfehler korrigieren), nicht nur Anonymisierungsentscheidungen treffen. Details werden bei der Verfeinerung von Epic 6 definiert.
 
 ---
 
@@ -320,6 +345,8 @@
 | NFR-6 | Plattform | macOS Desktop-Applikation | Electron-basiert, macOS 13+ | Hoch |
 | NFR-7 | Qualität | NER-Genauigkeit für Anonymisierung | >90% Recall für Namen und Orte; Best-effort für Kontaktdaten in gesprochener Sprache | Hoch |
 | NFR-8 | Persistenz | Sperrliste überlebt App-Neustart | Lokale Speicherung der Benutzerdaten (Sperrliste) | Hoch |
+| NFR-9 | Flexibilität | Alle ML-Modelle austauschbar (Transkription, Diarization, NER, OCR) | Globale Einstellung in Settings; User wählt aus verfügbaren Modellen (technische Modellnamen) | Hoch |
+| NFR-10 | Erweiterbarkeit | User kann eigene/neue lokale Modelle hinzufügen und aktivieren | Plugin-artige Architektur; neue Modelle ohne App-Update einsetzbar | Hoch |
 
 ---
 
@@ -371,6 +398,11 @@ flowchart TD
 - **Therapieformen:** Einzeltherapie (2 Sprecher) UND Paartherapie/Angehörigengespräche (bis 4 Sprecher)
 - **Exportziele:** Supervision/Intervision, eigene Dokumentation, Praxissoftware — je nach Situation
 - **Sperrliste:** Global pro Therapeut/in, exaktes Matching, persistiert lokal
+- **Transkription:** Bereinigt (nur Äh/Ähm entfernt), volle Interpunktion, Zeitstempel bei Sprecherwechsel
+- **Sprecheranzahl:** Auto-Erkennung; 1 Sprecher = kein Label; 5+ = best-effort
+- **Workflow:** Transkription → Anonymisierung automatisch, kein Zwischenschritt; Transkription non-blocking
+- **Review:** Text UND Anonymisierung editierbar im gleichen Review-Modus (Epic 6)
+- **Modellauswahl:** Alle ML-Modelle (Transkription, Diarization, NER, OCR) austauschbar in globalen Settings; technische Modellnamen; User kann eigene Modelle hinzufügen (Plugin-Architektur)
 
 ---
 
@@ -428,6 +460,23 @@ flowchart TD
 | 30 | Sitzungsverwaltung als Epic? | Ja — neues Epic 0 (Grundlage für alle Workflows) | 2026-02-07 |
 | 31 | Lebenszyklus Sitzungen? | Bleiben bis manuell gelöscht — auch nach Export | 2026-02-07 |
 | 32 | Audio-Import UX? | Dateiauswahl + Drag-and-Drop + Batch | 2026-02-07 |
+| 33 | Bereinigung — was genau? | Nur Äh/Ähm entfernen; Füllwörter, Satzabbrüche, Wiederholungen bleiben | 2026-02-07 |
+| 34 | Schweizerdeutsch-Begriffe? | Nur Hochdeutsch-Output, bestmöglich übersetzt, kein Original verfügbar | 2026-02-07 |
+| 35 | Sprecherzuordnung korrigierbar? | Out of Scope für MVP — nur Label-Umbenennung | 2026-02-07 |
+| 36 | Transkript editierbar? | Ja, im Review-Modus (Epic 6), kein separater Schritt | 2026-02-07 |
+| 37 | Zeitstempel im Transkript? | Ja — bei jedem Sprecherwechsel (z.B. [00:23:40]) | 2026-02-07 |
+| 38 | Sprecheranzahl-Handling? | Auto-Erkennung; 1 Sprecher = kein Label; 5+ = best-effort | 2026-02-07 |
+| 39 | Transkription abbrechen/neustarten? | Nein — läuft immer durch, Korrektur im Review | 2026-02-07 |
+| 40 | Wartezeit-UX? | Fortschrittsbalken (% + Restzeit) + App nutzbar + macOS-Benachrichtigung | 2026-02-07 |
+| 41 | Anonymisierung nach Transkription? | Automatisch, kein manueller Zwischenschritt | 2026-02-07 |
+| 42 | Formatierung Transkript? | Volle Interpunktion + Grossschreibung + Absätze bei Sprecherwechsel | 2026-02-07 |
+| 43 | Audio-Qualitätscheck? | Kein Vorher-Check — best-effort Ergebnis | 2026-02-07 |
+| 44 | Warum Modellauswahl? | Zukunftssicherheit — neue/bessere Modelle ohne App-Update einsetzbar | 2026-02-07 |
+| 45 | Welche Modelle wählbar? | Alle: Transkription, Diarization, NER, OCR | 2026-02-07 |
+| 46 | Wo konfiguriert? | Globale Einstellung in Settings (gilt für alle Sitzungen) | 2026-02-07 |
+| 47 | Zielgruppe Modellauswahl? | Auch Therapeut/in, nicht nur Power-User | 2026-02-07 |
+| 48 | Darstellung Modellnamen? | Technische Modellnamen direkt anzeigen | 2026-02-07 |
+| 49 | Eigene Modelle hinzufügen? | Ja — User kann neue lokale Modelle installieren/aktivieren (Plugin-Architektur) | 2026-02-07 |
 
 ---
 
