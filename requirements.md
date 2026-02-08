@@ -309,14 +309,33 @@
 **Akzeptanzkriterien:**
 1. Der USER kann eigene Begriffe (Namen, Orte, andere Ausdrücke) zur Sperrliste hinzufügen
 2. Der USER kann jedem Eintrag einen Platzhalter-Typ zuweisen (Person, Ort, Kontaktdaten etc.)
-3. Das SYSTEM speichert die Sperrliste lokal und **persistiert sie zwischen App-Neustarts**
-4. Die Sperrliste wird bei jeder Anonymisierung zusätzlich zur automatischen NER angewendet
-5. Der USER kann Einträge aus der Sperrliste entfernen oder bearbeiten
-6. Es gibt EINE globale Sperrliste pro Therapeut/in (nicht pro Fall)
-7. Das SYSTEM verwendet **exaktes String-Matching** für Sperrlisten-Einträge (keine Varianten-Erkennung)
+3. Der USER kann auch **Mehrwort-Phrasen** als einen Eintrag hinzufügen (z.B. "Dr. Hans Müller", "Bahnhofstrasse 42")
+4. Das SYSTEM speichert die Sperrliste lokal und **persistiert sie zwischen App-Neustarts**
+5. Die Sperrliste wird bei jeder Anonymisierung zusätzlich zur automatischen NER angewendet (NER hat Vorrang, siehe US-4 AC 10)
+6. Der USER kann Einträge aus der Sperrliste entfernen oder bearbeiten
+7. Es gibt EINE globale Sperrliste pro Therapeut/in (nicht pro Fall)
+8. Das SYSTEM verwendet **exaktes String-Matching** (keine Varianten-/Fuzzy-Erkennung), aber **case-insensitive** — Gross-/Kleinschreibung wird ignoriert
+9. Bei **überlappenden Einträgen** gilt Longest Match: "Hans Müller" wird als Ganzes anonymisiert, nicht einzeln als "Hans" + "Müller"
+10. Die Sperrliste ist über **zwei Zugangspunkte** erreichbar: Globale Settings (volle Übersicht + CRUD) UND im Review-Modus als Schnellaktion ("zur Sperrliste hinzufügen") bei manuell markierten False Negatives
+11. Wenn der USER im Review-Modus einen Begriff zur Sperrliste hinzufügt, wird dieser **sofort auf den gesamten Text der aktuellen Sitzung angewendet** (alle weiteren Vorkommen werden anonymisiert)
+12. Im Review-Modus ist die **Herkunft jedes Treffers sichtbar** — der USER erkennt, ob eine Anonymisierung von der NER oder von der Sperrliste stammt (z.B. Icon oder Tooltip)
+13. Das SYSTEM führt **keine Eingabe-Validierung** durch (keine Duplikat-Prüfung, keine Mindestlänge) — der USER ist verantwortlich für sinnvolle Einträge
 
 **Nachbedingungen:**
 1. Die Sperrliste ist gespeichert und wird bei der nächsten Anonymisierung berücksichtigt
+2. Bei Hinzufügen aus dem Review-Modus: Alle Vorkommen des Begriffs in der aktuellen Sitzung wurden anonymisiert
+
+**Out of Scope:**
+- Import/Export der Sperrliste — die Liste lebt nur lokal in der App (kein Backup, kein Transfer)
+- Varianten-/Fuzzy-Matching (Entscheidung #17)
+- Fallbasierte Sperrlisten — nur eine globale Liste (Entscheidung #16)
+- Eingabe-Validierung (Duplikate, Mindestlänge, generische Begriffe)
+
+**Constraints & Randbedingungen:**
+1. Case-insensitive Matching erfordert normalisierte Vergleiche
+2. Longest-Match-Strategie erfordert sortierte Anwendung (längste Einträge zuerst)
+3. Retroaktive Anwendung im Review erfordert Re-Scan des gesamten Texts der aktuellen Sitzung
+4. NER hat Vorrang vor Sperrliste (Entscheidung #68) — Sperrliste ergänzt nur was NER nicht erkennt
 
 ---
 
@@ -336,6 +355,8 @@
 3. Der USER kann eine nicht erkannte Entität manuell als zu anonymisieren markieren (False Negative ergänzen)
 4. Der USER kann die Zuordnung eines Platzhalters ändern (z.B. Typ oder Nummer)
 5. Der USER kann die Anonymisierung mit einem Klick finalisieren/bestätigen
+6. Bei manuell markierten False Negatives (AC 3) bietet das SYSTEM eine Schnellaktion **"zur Sperrliste hinzufügen"** an — der Begriff wird in die globale Sperrliste übernommen UND sofort auf alle weiteren Vorkommen in der aktuellen Sitzung angewendet
+7. Das SYSTEM zeigt die **Herkunft jedes Treffers** an — ob eine Anonymisierung von der NER oder von der Sperrliste stammt (z.B. Icon oder Tooltip)
 
 **Nachbedingungen:**
 1. Der überprüfte und korrigierte Text ist finalisiert und bereit zum Export
@@ -449,7 +470,7 @@ flowchart TD
 - **Einwilligung:** Hinweis beim ersten Aufnahmestart, kein Zwang
 - **Therapieformen:** Einzeltherapie (2 Sprecher) UND Paartherapie/Angehörigengespräche (bis 4 Sprecher)
 - **Exportziele:** Supervision/Intervision, eigene Dokumentation, Praxissoftware — je nach Situation
-- **Sperrliste:** Global pro Therapeut/in, exaktes Matching, persistiert lokal
+- **Sperrliste:** Global pro Therapeut/in, exaktes Matching (case-insensitive), Mehrwort-Phrasen erlaubt, Longest Match bei Überlappung, persistiert lokal; Zugang via Settings + Review-Schnellaktion; retroaktive Anwendung in aktueller Sitzung; Herkunft (NER vs. Sperrliste) im Review sichtbar; kein Import/Export; keine Eingabe-Validierung
 - **Transkription:** Bereinigt (nur Äh/Ähm entfernt), volle Interpunktion, Zeitstempel bei Sprecherwechsel
 - **Sprecheranzahl:** Auto-Erkennung; 1 Sprecher = kein Label; 5+ = best-effort
 - **Workflow:** Transkription → Anonymisierung automatisch, kein Zwischenschritt; Transkription non-blocking
@@ -559,6 +580,14 @@ flowchart TD
 | 73 | Teilstrings anonymisieren? | Nein — nur ganze Wörter/eigenständige Entitäten. "Müller" in "Müllerstrasse" bleibt | 2026-02-07 |
 | 74 | Speaker-Labels anonymisieren? | Ja — Labels werden wie jeder andere Text anonymisiert, wenn sie erkannte Namen enthalten | 2026-02-07 |
 | 75 | Platzhalter-Nummerierung? | Typ-spezifisch: [PERSON 1], [ORT 1], [TELEFON 1] etc. (nicht global fortlaufend) | 2026-02-07 |
+| 76 | Sperrliste Zugangspunkt? | Settings (volle CRUD-Verwaltung) + Review-Modus (Schnellaktion: Begriff zur Sperrliste hinzufügen) | 2026-02-08 |
+| 77 | Sperrliste Case-Sensitivity? | Case-insensitive — Gross-/Kleinschreibung wird ignoriert (präzisiert Entscheidung #17) | 2026-02-08 |
+| 78 | Mehrwort-Einträge in Sperrliste? | Ja — beliebige Phrasen als ein Eintrag (z.B. "Dr. Hans Müller", "Bahnhofstrasse 42") | 2026-02-08 |
+| 79 | Sperrliste Import/Export? | Nein — kein Import/Export, nur lokale Verwaltung | 2026-02-08 |
+| 80 | Retroaktive Anwendung im Review? | Sofort — hinzugefügter Begriff wird auf gesamten Text der aktuellen Sitzung angewendet | 2026-02-08 |
+| 81 | Überlappende Sperrlisten-Einträge? | Longest Match — längster Treffer hat Vorrang | 2026-02-08 |
+| 82 | Herkunft im Review sichtbar? | Ja — User sieht ob Treffer von NER oder Sperrliste stammt (z.B. Icon/Tooltip) | 2026-02-08 |
+| 83 | Sperrlisten-Eingabe-Validierung? | Keine — User ist vollständig verantwortlich für sinnvolle Einträge | 2026-02-08 |
 
 ---
 
