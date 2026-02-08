@@ -43,7 +43,7 @@
 2. Jede neue Sitzung (Aufnahme oder Import) erhält automatisch einen Titel basierend auf Datum und Uhrzeit (z.B. "Sitzung 07.02.2026 14:30")
 3. Der USER kann den Titel einer Sitzung nachträglich umbenennen
 4. Jede Sitzung zeigt ihren aktuellen Status (Aufnahme läuft, Transkription, Review, Exportiert)
-5. Der USER kann eine Sitzung manuell löschen (mit Bestätigungsdialog)
+5. Der USER kann eine Sitzung manuell löschen (mit Bestätigungsdialog). Beim Löschen werden **ALLE zugehörigen Daten** entfernt: Audiodatei, Originaltext, Platzhalter-Mapping, anonymisierter Text — die Sitzung verschwindet vollständig
 6. Sitzungen bleiben in der Liste erhalten bis der USER sie aktiv löscht — auch nach Export
 7. Das SYSTEM persistiert die Sitzungsliste zwischen App-Neustarts
 
@@ -271,13 +271,13 @@
 12. Das SYSTEM anonymisiert auch **Speaker-Labels** (aus US-2b), wenn diese erkannte Namen enthalten (z.B. "Dr. Müller" als Label → [PERSON 1])
 13. Die Sprecherzuordnung (Absätze, Zeitstempel) bleibt nach der Anonymisierung erhalten
 14. Das SYSTEM versucht **best-effort** auch gesprochene Kontaktdaten in Transkripten zu erkennen (z.B. "null sieben neun...") — ohne Garantie auf vollständige Erkennung
-15. Im Review-Modus (Epic 6) sind die **Originalwerte hinter den Platzhaltern sichtbar** (z.B. Hover/Tooltip), damit der USER die Korrektheit prüfen kann. Originale werden erst bei Rohdaten-Löschung (US-7b) endgültig entfernt
+15. Im Review-Modus (Epic 6) sind die **Originalwerte hinter den Platzhaltern sichtbar** (z.B. Hover/Tooltip), damit der USER die Korrektheit prüfen kann. Originale werden erst bei Sitzungslöschung (US-0 AC 5) endgültig entfernt
 16. Die Anonymisierung erfolgt komplett lokal
 17. Die Anonymisierung ist innerhalb von **30 Sekunden** abgeschlossen — auch bei langen Texten (ca. 10'000 Wörter)
 
 **Nachbedingungen:**
 1. Der Text enthält keine identifizierenden Informationen mehr (im Rahmen der definierten Entitätstypen)
-2. Das Platzhalter-Mapping (Original → Platzhalter) bleibt bis zur Rohdaten-Löschung (US-7b) gespeichert — der USER kann jederzeit zurück in den Review
+2. Das Platzhalter-Mapping (Original → Platzhalter) bleibt bis zur Sitzungslöschung (US-0 AC 5) gespeichert — der USER kann jederzeit zurück in den Review
 
 **Out of Scope:**
 - ICD-Diagnose-Codes und ausgeschriebene Diagnosenamen werden NICHT anonymisiert (klinisch relevant, kein Identifikationsrisiko)
@@ -290,7 +290,7 @@
 
 **Constraints & Randbedingungen:**
 1. Coreference-Resolution für Namens-Varianten ist best-effort — Qualität hängt vom gewählten NER-Modell ab (NFR-9)
-2. Platzhalter-Mapping muss bis zur Rohdaten-Löschung (US-7b) persistiert werden (für Review-Modus, Epic 6)
+2. Platzhalter-Mapping muss bis zur Sitzungslöschung (US-0 AC 5) persistiert werden (für Review-Modus, Epic 6)
 3. Anonymisierung muss Sprecherzuordnung, Zeitstempel und Absatzstruktur unangetastet lassen
 4. Speaker-Label-Anonymisierung erfordert Koordination mit US-2b (Labels können nach Anonymisierung nicht mehr auf Klarnamen gesetzt werden)
 
@@ -358,7 +358,7 @@
 6. Der USER kann nicht erkannten Text markieren und als **neue Entität anonymisieren** (False Negative: Text wird durch Platzhalter ersetzt, mit Typ-Auswahl)
 7. Bei False-Negative-Markierung bietet das SYSTEM eine Schnellaktion **"zur Sperrliste hinzufügen"** an (US-5 AC 10) — sofort auf alle weiteren Vorkommen in der aktuellen Sitzung angewendet
 8. Der Review-Modus ist **jederzeit unterbrechbar** — alle Änderungen werden automatisch gespeichert. Der USER kann später fortsetzen
-9. Es gibt **keinen expliziten Finalisierungs-Schritt** — der USER exportiert den Text wenn er zufrieden ist (Epic 7). Originale werden erst bei Rohdaten-Löschung (US-7b) entfernt
+9. Es gibt **keinen expliziten Finalisierungs-Schritt** — der USER exportiert den Text wenn er zufrieden ist (Epic 7). Originale werden erst bei Sitzungslöschung (US-0 AC 5) entfernt
 10. Der Review-Modus ist für **Audio- und PDF-Sitzungen identisch** — bei PDF-Sitzungen fehlen lediglich Zeitstempel und Speaker-Labels
 11. Speaker-Labels (aus US-2b) können im Review-Modus **umbenannt** werden
 12. Bei Text-Editierung im Review erfolgt **KEINE automatische Re-Anonymisierung** — der USER markiert neue Entitäten manuell (AC 6)
@@ -375,7 +375,7 @@
 **Constraints & Randbedingungen:**
 1. Freies Text-Editieren muss mit speziellen Platzhalter-Elementen koexistieren (Platzhalter dürfen nicht versehentlich gelöscht/zerstückelt werden)
 2. Auto-Save muss alle Änderungen (Text + Anonymisierungs-Korrekturen) zwischen App-Neustarts persistieren
-3. Originale bleiben bis zur Rohdaten-Löschung (US-7b) gespeichert — es gibt keinen separaten Finalisierungs-Zeitpunkt
+3. Originale bleiben bis zur Sitzungslöschung (US-0 AC 5) gespeichert — es gibt keinen separaten Finalisierungs-Zeitpunkt
 4. Review-Modus für PDF- und Audio-Sitzungen teilt die gleiche Funktionalität, nur mit/ohne Zeitstempel + Speaker-Labels
 
 ---
@@ -388,35 +388,33 @@
 **damit** ich ihn in anderen Anwendungen weiterverwenden kann.
 
 **Vorbedingungen:**
-1. Ein anonymisierter und finalisierter Text liegt vor
+1. Eine Anonymisierung wurde durchgeführt (kein Finalisierungs-Schritt erforderlich)
 
 **Akzeptanzkriterien:**
-1. Der USER kann den gesamten anonymisierten Text mit einem Klick in die Zwischenablage kopieren
-2. Der USER kann den Text als .txt-Datei exportieren
-3. Der exportierte Text behält die Formatierung mit Sprecherzuordnung bei (z.B. "[Therapeut]: ..." oder "[PERSON A]: ...")
-4. Das SYSTEM zeigt eine Bestätigung nach erfolgreichem Kopieren/Export
+1. Der USER kann den gesamten anonymisierten Text mit einem Klick in die **Zwischenablage** kopieren
+2. Der USER kann den Text als **.txt-Datei** exportieren — über einen Standard-macOS-Speichern-Dialog (User wählt Ordner + Dateiname)
+3. Das SYSTEM schlägt den **Sitzungstitel als Dateiname** vor (z.B. "Sitzung 07.02.2026 14:30.txt")
+4. Der exportierte Text enthält **nur den anonymisierten Text** mit Speaker-Labels und Zeitstempeln — keine Metadaten (kein Titel, kein Datum, keine Dauer)
+5. Der exportierte Text behält die Formatierung mit Sprecherzuordnung bei (z.B. "[Therapeut]: ..." oder "[PERSON 1]: ...")
+6. **Zwischenablage und .txt enthalten identischen Inhalt**
+7. Der Export ist **jederzeit verfügbar** — der USER muss den Review nicht abschliessen
+8. Der USER kann **beliebig oft exportieren** — jeder Export gibt den aktuellen Stand des Textes aus
+9. Das SYSTEM zeigt eine Bestätigung nach erfolgreichem Kopieren/Export
 
 **Nachbedingungen:**
 1. Der anonymisierte Text befindet sich in der Zwischenablage oder als Datei auf dem Dateisystem
+2. Die Sitzung bleibt in der Sitzungsliste erhalten (kein automatisches Löschen nach Export)
 
----
+**Out of Scope:**
+- Automatische Löschfrage nach dem Export — Datenverwaltung passiert unabhängig über die Sitzungsverwaltung (Epic 0, US-0 AC 5)
+- Export mit Metadaten (Titel, Datum, Dauer) — nur reiner Text
+- Word-/PDF-Export — nur Plaintext (.txt) und Zwischenablage (Entscheidung #7)
 
-#### US-7b: Rohdaten nach Export löschen
-**Als** Psychotherapeut/in
-**möchte ich** nach dem Export entscheiden können, ob die Rohdaten (Audio, Originaltext) gelöscht werden,
-**damit** ich die Kontrolle über sensible Daten behalte.
+**Constraints & Randbedingungen:**
+1. Export muss den aktuellen Stand des Review-Textes widerspiegeln (inkl. aller User-Editierungen)
+2. Bei PDF-Sitzungen: gleicher Export, aber ohne Zeitstempel und Speaker-Labels (nur Fliesstext mit Platzhaltern)
 
-**Vorbedingungen:**
-1. Ein Export (Zwischenablage oder Datei) wurde durchgeführt
-
-**Akzeptanzkriterien:**
-1. Das SYSTEM fragt den USER nach dem Export, ob die Rohdaten (Audiodatei, Originaltext) gelöscht werden sollen
-2. Der USER kann wählen: Daten löschen ODER behalten
-3. Das SYSTEM löscht die Daten endgültig WENN der USER die Löschaktion bestätigt
-4. Das SYSTEM zeigt einen Bestätigungsdialog vor der endgültigen Löschung
-
-**Nachbedingungen:**
-1. Die Rohdaten sind gelöscht ODER der USER hat sich bewusst entschieden, sie zu behalten
+**Hinweis:** ~~US-7b (Rohdaten nach Export löschen)~~ wurde gestrichen. Die Datenverwaltung (Löschen von Sitzungen inkl. aller Daten) erfolgt ausschliesslich über die Sitzungsverwaltung (Epic 0, US-0 AC 5). Beim Löschen einer Sitzung werden ALLE zugehörigen Daten entfernt (Audio, Originaltext, Mapping, anonymisierter Text).
 
 ---
 
@@ -425,7 +423,7 @@
 | ID | Kategorie | Anforderung | Ziel | Priorität |
 |----|-----------|-------------|------|-----------|
 | NFR-1 | Datenschutz | Alle Verarbeitung komplett lokal | 0 Netzwerk-Requests für Datenverarbeitung | Kritisch |
-| NFR-2 | Datenschutz | Löschung von Rohdaten nach Export | USER entscheidet nach Export über Löschung von Audio und Originaltexten | Hoch |
+| NFR-2 | Datenschutz | Löschung von Sitzungsdaten | USER kann Sitzungen jederzeit komplett löschen (alle Daten: Audio, Text, Mapping) über Sitzungsverwaltung | Hoch |
 | NFR-3 | Performance | Transkription in akzeptabler Zeit | Sequenziell: Max. 2x Echtzeit (10 Min Audio → max. 20 Min). Mit Parallel-Transkription: < 5 Min nach Aufnahme-Stop | Hoch |
 | NFR-4 | Usability | Einfache, intuitive Bedienung | Ohne technische Vorkenntnisse bedienbar | Hoch |
 | NFR-5 | Sprache | Deutsch allgemein (Hochdeutsch + CH-Dialekte) | Verständlicher Hochdeutsch-Output aus allen gängigen Schweizerdeutschen Dialekten | Hoch |
@@ -435,6 +433,15 @@
 | NFR-9 | Flexibilität | Alle ML-Modelle austauschbar (Transkription, Diarization, NER, OCR) | Globale Einstellung in Settings; User wählt aus verfügbaren Modellen (technische Modellnamen) | Hoch |
 | NFR-10 | Erweiterbarkeit | User kann eigene/neue lokale Modelle hinzufügen und aktivieren | Plugin-artige Architektur; neue Modelle ohne App-Update einsetzbar | Hoch |
 | NFR-11 | Performance | Anonymisierung in akzeptabler Zeit | < 30 Sekunden, auch bei langen Texten (ca. 10'000 Wörter / 60 Min Transkript) | Hoch |
+| NFR-12 | Sicherheit | Netzwerk-Isolation durchsetzen | CSP `connect-src 'none'` im Renderer; kein unbeabsichtigtes Telefonieren (Telemetrie, DNS-Leaks); Electron Auto-Updater bewusst konfigurieren oder deaktivieren | Kritisch |
+| NFR-13 | Sicherheit | FileVault-Prüfung beim App-Start | Warnung wenn macOS FileVault deaktiviert ist (OS-Verschlüsselung ist Grundvoraussetzung für Datenschutz) | Hoch |
+| NFR-14 | Sicherheit | Electron Security Hardening | `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, Electron Fuses (`RunAsNode=false`, `EnableNodeCliInspectArguments=false`), keine Remote-Inhalte | Hoch |
+| NFR-15 | Sicherheit | IPC-Eingabevalidierung | Alle IPC-Messages im Main Process gegen Schema validieren; keine unkontrollierten User-Strings in child_process-Aufrufen | Hoch |
+| NFR-16 | Sicherheit | Modell-Integritätsprüfung | Gebündelte Modelle per SHA-256 Hash verifizieren; PyTorch `weights_only=True`; Modell-Pfade auf `~/.therascript/models/` beschränken (kein Path Traversal) | Hoch |
+| NFR-17 | Sicherheit | Sichere Datenlöschung | SQLite `VACUUM` nach Sitzungslöschung; Temp-/Recovery-Dateien konsequent aufräumen; Spotlight-Ausschluss (`.metadata_never_index`) für Datenverzeichnis | Hoch |
+| NFR-18 | Sicherheit | macOS App Sandbox | App Sandbox aktivieren — verhindert Zugriff anderer Apps auf Therascript-Daten; restriktive File Permissions (700) auf Datenverzeichnis | Hoch |
+| NFR-19 | Sicherheit | Code Signing & Notarization | macOS Code Signing mit Apple Developer Certificate + Notarization für Gatekeeper-Kompatibilität | Hoch |
+| NFR-20 | Sicherheit | Supply-Chain-Hygiene | `npm audit` + Lockfile im CI; Python-Dependencies gepinnt mit Hash-Verification; Electron regelmässig aktualisieren (Chromium-Patches) | Mittel |
 
 ---
 
@@ -459,18 +466,16 @@ flowchart TD
     G --> I[Text anzeigen]
     H --> I
     I --> J[Automatische Anonymisierung + Sperrliste]
-    J --> K[Review-Modus: Entitäten prüfen]
-    K --> L{Korrekturen nötig?}
-    L -->|Ja| M[Manuell korrigieren]
-    M --> K
-    L -->|Nein| N[Finalisieren]
-    N --> O{Export}
-    O -->|Zwischenablage| P[In Clipboard kopieren]
-    O -->|Datei| Q[Als .txt exportieren]
-    P --> R{Rohdaten löschen?}
-    Q --> R
-    R -->|Ja| S[Daten löschen]
-    R -->|Nein| T[Daten behalten]
+    J --> K[Review-Modus: Text editieren + Entitäten prüfen]
+    K --> L{Export?}
+    L -->|Zwischenablage| M[In Clipboard kopieren]
+    L -->|Datei| N[Als .txt exportieren]
+    L -->|Weiter editieren| K
+    M --> O[Sitzung bleibt in Liste]
+    N --> O
+    O --> P{Sitzung löschen?}
+    P -->|Ja| Q[Alle Daten löschen]
+    P -->|Nein| R[Sitzung behalten]
 ```
 
 ---
@@ -494,7 +499,8 @@ flowchart TD
 - **PDF-Import:** Nur PDF-Format; Batch + non-blocking; Mixed-PDF auto pro Seite (Text vs. OCR); Passwort-Eingabe; max. 50 Seiten (Warnung); linearer Fliesstext; nur gedruckter Text (keine Handschrift); nur Deutsch-OCR
 - **Sitzungstypen:** Audio-Sitzungen und PDF-Sitzungen in gleicher Liste, visuell unterscheidbar; PDF hat kürzeren Workflow (kein Transkriptions-Schritt)
 - **Parallel-Transkription:** Bei Live-Aufnahmen wird im Hintergrund bereits transkribiert (ohne Anzeige); nach Stop finaler Qualitäts-/Diarization-Pass; Ergebnis innerhalb 5 Minuten nach Stop; optional in Settings (Standard: an); erfordert mehr CPU/RAM
-- **Anonymisierung:** Typ-spezifische Platzhalter ([PERSON 1], [ORT 1] etc.); Konsistenz nur pro Sitzung; Coreference-Resolution für Namens-Varianten (best-effort); NER hat Vorrang vor Sperrliste; nur ganze Wörter (keine Teilstrings); Speaker-Labels werden mitanonymisiert; Originale im Review sichtbar (Hover/Tooltip), erst nach Finalisierung weg; < 30 Sekunden Performance; keine Re-Anonymisierung nach Text-Edit im Review
+- **Anonymisierung:** Typ-spezifische Platzhalter ([PERSON 1], [ORT 1] etc.); Konsistenz nur pro Sitzung; Coreference-Resolution für Namens-Varianten (best-effort); NER hat Vorrang vor Sperrliste; nur ganze Wörter (keine Teilstrings); Speaker-Labels werden mitanonymisiert; Originale im Review sichtbar (Hover/Tooltip), erst bei Sitzungslöschung (US-0 AC 5) entfernt; < 30 Sekunden Performance; keine Re-Anonymisierung nach Text-Edit im Review
+- **Export:** Zwischenablage (ein Klick) und .txt-Export (macOS Speichern-Dialog); Vorgeschlagener Dateiname = Sitzungstitel; nur anonymisierter Text (keine Metadaten); Formatierung mit Speaker-Labels erhalten; jederzeit + mehrfach exportierbar (kein Voraussetzung); Bestätigung nach Export; kein separater Lösch-Schritt — Sitzungslöschung erfolgt über Sitzungsverwaltung (US-0 AC 5)
 
 ---
 
@@ -586,7 +592,7 @@ flowchart TD
 | 64 | Ziel-Wartezeit nach Stop? | < 5 Minuten nach Aufnahme-Stop (statt 20-40 Min bei sequenzieller Verarbeitung) | 2026-02-07 |
 | 65 | Parallel-Transkription obligatorisch? | Optional in Settings (Standard: an) — da deutlich mehr CPU/RAM benötigt wird | 2026-02-07 |
 | 66 | Platzhalter-Konsistenz Scope? | Nur pro Sitzung — jede Sitzung hat eigene Platzhalter-Nummerierung, kein sitzungsübergreifendes Mapping | 2026-02-07 |
-| 67 | Originale nach Anonymisierung sichtbar? | Im Review sichtbar (Hover/Tooltip), erst bei Rohdaten-Löschung (US-7b) endgültig entfernt (kein Finalisierungs-Schritt, siehe #87) | 2026-02-07 |
+| 67 | Originale nach Anonymisierung sichtbar? | Im Review sichtbar (Hover/Tooltip), erst bei Sitzungslöschung (US-0 AC 5) endgültig entfernt (kein Finalisierungs-Schritt, siehe #87) | 2026-02-07 |
 | 68 | NER vs. Sperrliste Priorität? | NER hat Vorrang; Sperrliste ergänzt was NER nicht findet; bei Typ-Konflikt gilt NER | 2026-02-07 |
 | 69 | Umgang mit Mehrdeutigkeiten? | Auto-Anonymisierung + Review bei Bedarf (kein Bestätigungs-Zwang pro Fund) | 2026-02-07 |
 | 70 | Namens-Varianten erkennen? | Intelligente Zuordnung (best-effort Coreference): "Dr. Müller" = "Müller" = "Herr Müller" → [PERSON 1] | 2026-02-07 |
@@ -606,11 +612,24 @@ flowchart TD
 | 84 | Review: Text-Editierung? | Freies Editieren wie in einem Texteditor (Cursor, Tippen, Löschen, Copy-Paste) | 2026-02-08 |
 | 85 | Review: Audio-Player? | Nein — kein Audio-Player im Review. User nutzt externen Player für Audio-Abgleich | 2026-02-08 |
 | 86 | Review: Zwischenspeicherung? | Jederzeit unterbrechbar — alle Änderungen werden automatisch gespeichert | 2026-02-08 |
-| 87 | Review: Finalisierung? | Kein expliziter Finalisierungs-Schritt — User exportiert wenn zufrieden. Originale erst bei Rohdaten-Löschung (US-7b) entfernt | 2026-02-08 |
+| 87 | Review: Finalisierung? | Kein expliziter Finalisierungs-Schritt — User exportiert wenn zufrieden. Originale erst bei Sitzungslöschung (US-0 AC 5) entfernt | 2026-02-08 |
 | 88 | Review-Modell? | Mittlerer Weg: Freier Texteditor + farblich hervorgehobene Platzhalter + Klick für Original. Keine komplexen Werkzeuge wie Typ-Ändern | 2026-02-08 |
 | 89 | Review: Entitäten-Navigation? | Nur Scrollen — kein Springen zum nächsten/vorherigen Platzhalter | 2026-02-08 |
 | 90 | Review: Herkunft (NER/Sperrliste)? | Bestätigt: Herkunft bleibt sichtbar (Entscheidung #82 gilt) | 2026-02-08 |
 | 91 | Review: PDF vs. Audio? | Identischer Review-Modus — bei PDF fehlen nur Zeitstempel und Speaker-Labels | 2026-02-08 |
+| 92 | Export-Zeitpunkt? | Jederzeit + mehrfach — kein Finalisierungs-Voraussetzung, jeder Export = aktueller Stand | 2026-02-08 |
+| 93 | Was wird bei Sitzungslöschung gelöscht? | Alles — Audio, Originaltext, Mapping, anonymisierter Text. Sitzung verschwindet komplett | 2026-02-08 |
+| 94 | Löschfrage nach Export? | Nein — Löschung nur unabhängig via Sitzungsverwaltung (Epic 0, US-0 AC 5) | 2026-02-08 |
+| 95 | Export-Inhalt? | Nur anonymisierter Text mit Speaker-Labels und Zeitstempeln, keine Metadaten | 2026-02-08 |
+| 96 | US-7b nötig? | Gestrichen — redundant mit US-0 AC 5 (Sitzung löschen = alles löschen) | 2026-02-08 |
+| 97 | Clipboard vs. .txt? | Identischer Inhalt | 2026-02-08 |
+| 98 | Speichern-Dialog? | Standard macOS Speichern-Dialog, vorgeschlagener Dateiname = Sitzungstitel | 2026-02-08 |
+| 99 | Encryption at Rest nötig? | Nein — FileVault (Default auf Apple Silicon) + App Sandbox reichen. App hat kein eigenes Login, daher kein Mehrwert durch SQLCipher. FileVault-Check beim Start stattdessen | 2026-02-08 |
+| 100 | Netzwerk-Isolation? | Strikte CSP im Renderer (`connect-src 'none'`); Electron-Telemetrie deaktivieren; Modell-Download nur beim First-Launch | 2026-02-08 |
+| 101 | Electron Hardening? | Vollständig: Context Isolation, Sandbox, Fuses, keine Remote-Inhalte, IPC-Schema-Validierung | 2026-02-08 |
+| 102 | Modell-Sicherheit (Plugin)? | Hash-Verification für gebündelte Modelle; `weights_only=True` für PyTorch; Pfad-Beschränkung auf `~/.therascript/models/` | 2026-02-08 |
+| 103 | Sichere Löschung? | SQLite VACUUM + Temp-Cleanup + Spotlight-Ausschluss. Kein Overwrite auf SSD (ineffektiv bei TRIM) | 2026-02-08 |
+| 104 | Code Signing? | Pflicht — Apple Developer Certificate + Notarization für Distribution | 2026-02-08 |
 
 ---
 
