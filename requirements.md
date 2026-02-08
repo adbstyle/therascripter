@@ -271,13 +271,13 @@
 12. Das SYSTEM anonymisiert auch **Speaker-Labels** (aus US-2b), wenn diese erkannte Namen enthalten (z.B. "Dr. Müller" als Label → [PERSON 1])
 13. Die Sprecherzuordnung (Absätze, Zeitstempel) bleibt nach der Anonymisierung erhalten
 14. Das SYSTEM versucht **best-effort** auch gesprochene Kontaktdaten in Transkripten zu erkennen (z.B. "null sieben neun...") — ohne Garantie auf vollständige Erkennung
-15. Im Review-Modus (Epic 6) sind die **Originalwerte hinter den Platzhaltern sichtbar** (z.B. Hover/Tooltip), damit der USER die Korrektheit prüfen kann. Erst nach Finalisierung werden die Originale endgültig entfernt
+15. Im Review-Modus (Epic 6) sind die **Originalwerte hinter den Platzhaltern sichtbar** (z.B. Hover/Tooltip), damit der USER die Korrektheit prüfen kann. Originale werden erst bei Rohdaten-Löschung (US-7b) endgültig entfernt
 16. Die Anonymisierung erfolgt komplett lokal
 17. Die Anonymisierung ist innerhalb von **30 Sekunden** abgeschlossen — auch bei langen Texten (ca. 10'000 Wörter)
 
 **Nachbedingungen:**
 1. Der Text enthält keine identifizierenden Informationen mehr (im Rahmen der definierten Entitätstypen)
-2. Das Platzhalter-Mapping (Original → Platzhalter) bleibt bis zur Finalisierung gespeichert (für Review)
+2. Das Platzhalter-Mapping (Original → Platzhalter) bleibt bis zur Rohdaten-Löschung (US-7b) gespeichert — der USER kann jederzeit zurück in den Review
 
 **Out of Scope:**
 - ICD-Diagnose-Codes und ausgeschriebene Diagnosenamen werden NICHT anonymisiert (klinisch relevant, kein Identifikationsrisiko)
@@ -290,7 +290,7 @@
 
 **Constraints & Randbedingungen:**
 1. Coreference-Resolution für Namens-Varianten ist best-effort — Qualität hängt vom gewählten NER-Modell ab (NFR-9)
-2. Platzhalter-Mapping muss bis zur Finalisierung persistiert werden (für Review-Modus, Epic 6)
+2. Platzhalter-Mapping muss bis zur Rohdaten-Löschung (US-7b) persistiert werden (für Review-Modus, Epic 6)
 3. Anonymisierung muss Sprecherzuordnung, Zeitstempel und Absatzstruktur unangetastet lassen
 4. Speaker-Label-Anonymisierung erfordert Koordination mit US-2b (Labels können nach Anonymisierung nicht mehr auf Klarnamen gesetzt werden)
 
@@ -343,25 +343,40 @@
 
 #### US-6: Anonymisierung überprüfen und korrigieren (Review-Modus)
 **Als** Psychotherapeut/in
-**möchte ich** die automatisch erkannten Entitäten überprüfen und bei Bedarf korrigieren können,
-**damit** ich sicherstellen kann, dass alle sensiblen Informationen korrekt anonymisiert wurden.
+**möchte ich** den anonymisierten Text überprüfen, korrigieren und frei bearbeiten können,
+**damit** ich sicherstellen kann, dass alle sensiblen Informationen korrekt anonymisiert sind und der Text inhaltlich stimmt.
 
 **Vorbedingungen:**
 1. Die automatische Anonymisierung wurde durchgeführt
 
 **Akzeptanzkriterien:**
-1. Das SYSTEM hebt alle erkannten und ersetzten Entitäten visuell hervor (farbliche Markierung nach Entitätstyp)
-2. Der USER kann eine falsch erkannte Entität rückgängig machen (False Positive korrigieren)
-3. Der USER kann eine nicht erkannte Entität manuell als zu anonymisieren markieren (False Negative ergänzen)
-4. Der USER kann die Zuordnung eines Platzhalters ändern (z.B. Typ oder Nummer)
-5. Der USER kann die Anonymisierung mit einem Klick finalisieren/bestätigen
-6. Bei manuell markierten False Negatives (AC 3) bietet das SYSTEM eine Schnellaktion **"zur Sperrliste hinzufügen"** an — der Begriff wird in die globale Sperrliste übernommen UND sofort auf alle weiteren Vorkommen in der aktuellen Sitzung angewendet
-7. Das SYSTEM zeigt die **Herkunft jedes Treffers** an — ob eine Anonymisierung von der NER oder von der Sperrliste stammt (z.B. Icon oder Tooltip)
+1. Der Text ist als **freier Texteditor** verfügbar — der USER kann den gesamten Text frei bearbeiten (Cursor setzen, tippen, löschen, Copy-Paste)
+2. Alle Platzhalter ([PERSON 1], [ORT 1] etc.) sind als **spezielle Elemente farblich hervorgehoben** (nach Entitätstyp)
+3. Der USER kann auf einen Platzhalter klicken/hovern, um den **Originalwert** dahinter zu sehen (z.B. [PERSON 1] → "Dr. Müller")
+4. Die **Herkunft jedes Treffers** ist visuell erkennbar — ob die Anonymisierung von NER oder Sperrliste stammt (z.B. kleines Icon)
+5. Der USER kann einen Platzhalter **rückgängig machen** (False Positive: Platzhalter wird durch Originaltext ersetzt)
+6. Der USER kann nicht erkannten Text markieren und als **neue Entität anonymisieren** (False Negative: Text wird durch Platzhalter ersetzt, mit Typ-Auswahl)
+7. Bei False-Negative-Markierung bietet das SYSTEM eine Schnellaktion **"zur Sperrliste hinzufügen"** an (US-5 AC 10) — sofort auf alle weiteren Vorkommen in der aktuellen Sitzung angewendet
+8. Der Review-Modus ist **jederzeit unterbrechbar** — alle Änderungen werden automatisch gespeichert. Der USER kann später fortsetzen
+9. Es gibt **keinen expliziten Finalisierungs-Schritt** — der USER exportiert den Text wenn er zufrieden ist (Epic 7). Originale werden erst bei Rohdaten-Löschung (US-7b) entfernt
+10. Der Review-Modus ist für **Audio- und PDF-Sitzungen identisch** — bei PDF-Sitzungen fehlen lediglich Zeitstempel und Speaker-Labels
+11. Speaker-Labels (aus US-2b) können im Review-Modus **umbenannt** werden
+12. Bei Text-Editierung im Review erfolgt **KEINE automatische Re-Anonymisierung** — der USER markiert neue Entitäten manuell (AC 6)
 
 **Nachbedingungen:**
-1. Der überprüfte und korrigierte Text ist finalisiert und bereit zum Export
+1. Der Text ist bereit zum Export (kein separater Finalisierungs-Schritt nötig)
 
-**Hinweis:** Der USER kann im Review-Modus AUCH den transkribierten Text editieren (z.B. Transkriptionsfehler korrigieren), nicht nur Anonymisierungsentscheidungen treffen. Die Originalwerte hinter den Platzhaltern sind im Review sichtbar (z.B. Hover/Tooltip) — erst nach Finalisierung werden sie endgültig entfernt. Bei Text-Editierung im Review erfolgt KEINE automatische Re-Anonymisierung; der User markiert neue Entitäten manuell. Details werden bei der Verfeinerung von Epic 6 definiert.
+**Out of Scope:**
+- Audio-Player im Review-Modus — der USER nutzt für Audio-Abgleich seinen Standard-Player
+- Entitäten-Navigation (zum nächsten/vorherigen Platzhalter springen) — der USER scrollt durch den Text
+- Platzhalter-Typ nachträglich ändern (z.B. [PERSON] → [ORT]) — der USER muss den Platzhalter rückgängig machen und neu markieren
+- Expliziter Finalisierungs-Schritt — es gibt keinen separaten "Abschliessen"-Button
+
+**Constraints & Randbedingungen:**
+1. Freies Text-Editieren muss mit speziellen Platzhalter-Elementen koexistieren (Platzhalter dürfen nicht versehentlich gelöscht/zerstückelt werden)
+2. Auto-Save muss alle Änderungen (Text + Anonymisierungs-Korrekturen) zwischen App-Neustarts persistieren
+3. Originale bleiben bis zur Rohdaten-Löschung (US-7b) gespeichert — es gibt keinen separaten Finalisierungs-Zeitpunkt
+4. Review-Modus für PDF- und Audio-Sitzungen teilt die gleiche Funktionalität, nur mit/ohne Zeitstempel + Speaker-Labels
 
 ---
 
@@ -474,7 +489,7 @@ flowchart TD
 - **Transkription:** Bereinigt (nur Äh/Ähm entfernt), volle Interpunktion, Zeitstempel bei Sprecherwechsel
 - **Sprecheranzahl:** Auto-Erkennung; 1 Sprecher = kein Label; 5+ = best-effort
 - **Workflow:** Transkription → Anonymisierung automatisch, kein Zwischenschritt; Transkription non-blocking
-- **Review:** Text UND Anonymisierung editierbar im gleichen Review-Modus (Epic 6)
+- **Review:** Freier Texteditor mit farblich hervorgehobenen Platzhaltern; Original per Hover/Klick sichtbar; Herkunft (NER/Sperrliste) erkennbar; False Positives rückgängig, False Negatives markieren + zur Sperrliste; kein Finalisierungs-Schritt (Export wenn fertig); jederzeit unterbrechbar (Auto-Save); kein Audio-Player; identisch für Audio + PDF; kein Typ-Ändern; nur Scrollen
 - **Modellauswahl:** Alle ML-Modelle (Transkription, Diarization, NER, OCR) austauschbar in globalen Settings; technische Modellnamen; User kann eigene Modelle hinzufügen (Plugin-Architektur)
 - **PDF-Import:** Nur PDF-Format; Batch + non-blocking; Mixed-PDF auto pro Seite (Text vs. OCR); Passwort-Eingabe; max. 50 Seiten (Warnung); linearer Fliesstext; nur gedruckter Text (keine Handschrift); nur Deutsch-OCR
 - **Sitzungstypen:** Audio-Sitzungen und PDF-Sitzungen in gleicher Liste, visuell unterscheidbar; PDF hat kürzeren Workflow (kein Transkriptions-Schritt)
@@ -571,7 +586,7 @@ flowchart TD
 | 64 | Ziel-Wartezeit nach Stop? | < 5 Minuten nach Aufnahme-Stop (statt 20-40 Min bei sequenzieller Verarbeitung) | 2026-02-07 |
 | 65 | Parallel-Transkription obligatorisch? | Optional in Settings (Standard: an) — da deutlich mehr CPU/RAM benötigt wird | 2026-02-07 |
 | 66 | Platzhalter-Konsistenz Scope? | Nur pro Sitzung — jede Sitzung hat eigene Platzhalter-Nummerierung, kein sitzungsübergreifendes Mapping | 2026-02-07 |
-| 67 | Originale nach Anonymisierung sichtbar? | Im Review sichtbar (Hover/Tooltip), erst nach Finalisierung endgültig entfernt | 2026-02-07 |
+| 67 | Originale nach Anonymisierung sichtbar? | Im Review sichtbar (Hover/Tooltip), erst bei Rohdaten-Löschung (US-7b) endgültig entfernt (kein Finalisierungs-Schritt, siehe #87) | 2026-02-07 |
 | 68 | NER vs. Sperrliste Priorität? | NER hat Vorrang; Sperrliste ergänzt was NER nicht findet; bei Typ-Konflikt gilt NER | 2026-02-07 |
 | 69 | Umgang mit Mehrdeutigkeiten? | Auto-Anonymisierung + Review bei Bedarf (kein Bestätigungs-Zwang pro Fund) | 2026-02-07 |
 | 70 | Namens-Varianten erkennen? | Intelligente Zuordnung (best-effort Coreference): "Dr. Müller" = "Müller" = "Herr Müller" → [PERSON 1] | 2026-02-07 |
@@ -588,6 +603,14 @@ flowchart TD
 | 81 | Überlappende Sperrlisten-Einträge? | Longest Match — längster Treffer hat Vorrang | 2026-02-08 |
 | 82 | Herkunft im Review sichtbar? | Ja — User sieht ob Treffer von NER oder Sperrliste stammt (z.B. Icon/Tooltip) | 2026-02-08 |
 | 83 | Sperrlisten-Eingabe-Validierung? | Keine — User ist vollständig verantwortlich für sinnvolle Einträge | 2026-02-08 |
+| 84 | Review: Text-Editierung? | Freies Editieren wie in einem Texteditor (Cursor, Tippen, Löschen, Copy-Paste) | 2026-02-08 |
+| 85 | Review: Audio-Player? | Nein — kein Audio-Player im Review. User nutzt externen Player für Audio-Abgleich | 2026-02-08 |
+| 86 | Review: Zwischenspeicherung? | Jederzeit unterbrechbar — alle Änderungen werden automatisch gespeichert | 2026-02-08 |
+| 87 | Review: Finalisierung? | Kein expliziter Finalisierungs-Schritt — User exportiert wenn zufrieden. Originale erst bei Rohdaten-Löschung (US-7b) entfernt | 2026-02-08 |
+| 88 | Review-Modell? | Mittlerer Weg: Freier Texteditor + farblich hervorgehobene Platzhalter + Klick für Original. Keine komplexen Werkzeuge wie Typ-Ändern | 2026-02-08 |
+| 89 | Review: Entitäten-Navigation? | Nur Scrollen — kein Springen zum nächsten/vorherigen Platzhalter | 2026-02-08 |
+| 90 | Review: Herkunft (NER/Sperrliste)? | Bestätigt: Herkunft bleibt sichtbar (Entscheidung #82 gilt) | 2026-02-08 |
+| 91 | Review: PDF vs. Audio? | Identischer Review-Modus — bei PDF fehlen nur Zeitstempel und Speaker-Labels | 2026-02-08 |
 
 ---
 
