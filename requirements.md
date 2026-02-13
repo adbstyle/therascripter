@@ -215,7 +215,7 @@
 
 **Nachbedingungen:**
 1. Der Text enthält keine identifizierenden Informationen mehr (im Rahmen der definierten Entitätstypen)
-2. Das Platzhalter-Mapping (Original → Platzhalter) ist intern gespeichert, damit False Positives rückgängig gemacht werden können (US-6 AC 5). Es wird bei Sitzungslöschung (US-0 AC 5) entfernt
+2. Das Platzhalter-Mapping (Original → Platzhalter) ist intern gespeichert, damit False Positives rückgängig gemacht werden können (US-6b AC 1). Es wird bei Sitzungslöschung (US-0 AC 5) entfernt
 
 **Out of Scope:**
 - ICD-Diagnose-Codes und ausgeschriebene Diagnosenamen werden NICHT anonymisiert (klinisch relevant, kein Identifikationsrisiko)
@@ -223,97 +223,174 @@
 - Institutionsnamen (Spitäler, Schulen) werden NICHT anonymisiert
 - Sonstige Datumsangaben ausser Geburtsdaten werden NICHT anonymisiert
 - Sitzungsübergreifende Platzhalter-Konsistenz — kein globales Entitäts-Mapping zwischen Sitzungen
-- Automatische Re-Anonymisierung nach Text-Editierung im Review — User markiert neue Entitäten manuell (Epic 6)
+- Automatische Re-Anonymisierung nach Text-Editierung im Review — User markiert neue Entitäten manuell (US-6a AC 9, US-6b)
 - Teilstring-Anonymisierung in zusammengesetzten Wörtern
 
 **Constraints & Randbedingungen:**
 1. Coreference-Resolution für Namens-Varianten ist best-effort — Qualität hängt vom gewählten NER-Modell ab (NFR-9)
-2. Platzhalter-Mapping muss intern persistiert werden (für False-Positive-Undo im Review, Epic 6), wird bei Sitzungslöschung entfernt
+2. Platzhalter-Mapping muss intern persistiert werden (für False-Positive-Undo im Review, US-6b), wird bei Sitzungslöschung entfernt
 3. Anonymisierung muss Sprecherzuordnung, Zeitstempel und Absatzstruktur unangetastet lassen
 
 ---
 
 ### Epic 5: Sperrliste / Benutzerwörterbuch
-Noch mit Lisa reviewen - review needed
 
 #### US-5: Persönliche Sperrliste pflegen
 **Als** Psychotherapeut/in
 **möchte ich** eine persönliche Liste von Begriffen pflegen, die immer anonymisiert werden,
-**damit** wiederkehrende Namen und Begriffe zuverlässig erkannt werden — auch wenn die automatische Erkennung sie nicht findet.
+**damit** wiederkehrende Namen und Begriffe zuverlässig erkannt werden — auch wenn die automatische Erkennung sie prinzipiell nicht finden kann (z.B. Spitznamen, Firmennamen, Therapie-spezifische Codes).
 
 **Vorbedingungen:**
 1. Die App ist geöffnet
 
 **Akzeptanzkriterien:**
 1. Der USER kann eigene Begriffe (Namen, Orte, andere Ausdrücke) zur Sperrliste hinzufügen
-2. Der USER kann jedem Eintrag einen Platzhalter-Typ zuweisen (Person, Ort, Kontaktdaten etc.)
+2. Der USER kann jedem Eintrag einen **Platzhalter-Typ** zuweisen: PERSON, ORT, DATUM, KONTAKT, ORGANISATION, MEDIZINISCH, SONSTIGES
 3. Der USER kann auch **Mehrwort-Phrasen** als einen Eintrag hinzufügen (z.B. "Dr. Hans Müller", "Bahnhofstrasse 42")
-4. Das SYSTEM speichert die Sperrliste lokal und **persistiert sie zwischen App-Neustarts**
-5. Die Sperrliste wird bei jeder Anonymisierung zusätzlich zur automatischen NER angewendet (NER hat Vorrang, siehe US-4 AC 10)
-6. Der USER kann Einträge aus der Sperrliste entfernen oder bearbeiten
-7. Es gibt EINE globale Sperrliste pro Therapeut/in (nicht pro Fall)
-8. Das SYSTEM verwendet **exaktes String-Matching** (keine Varianten-/Fuzzy-Erkennung), aber **case-insensitive** — Gross-/Kleinschreibung wird ignoriert
-9. Bei **überlappenden Einträgen** gilt Longest Match: "Hans Müller" wird als Ganzes anonymisiert, nicht einzeln als "Hans" + "Müller"
-10. Die Sperrliste ist über **zwei Zugangspunkte** erreichbar: Globale Settings (volle Übersicht + CRUD) UND im Review-Modus als Schnellaktion ("zur Sperrliste hinzufügen") bei manuell markierten False Negatives
-11. Wenn der USER im Review-Modus einen Begriff zur Sperrliste hinzufügt, wird dieser **sofort auf den gesamten Text der aktuellen Sitzung angewendet** (alle weiteren Vorkommen werden anonymisiert)
-12. Im Review-Modus ist die **Herkunft jedes Treffers sichtbar** — der USER erkennt, ob eine Anonymisierung von der NER oder von der Sperrliste stammt (z.B. Icon oder Tooltip)
+4. Beim Hinzufügen zeigt das SYSTEM einen **Bestätigungsdialog**: "[Begriff] als [Typ] zur Sperrliste hinzufügen?" mit [Abbrechen] und [Hinzufügen]
+5. Das SYSTEM speichert die Sperrliste lokal und **persistiert sie zwischen App-Neustarts**
+6. Die Sperrliste wird bei jeder Anonymisierung zusätzlich zur automatischen NER angewendet (NER hat Vorrang, siehe US-4 AC 10)
+7. Der USER kann Einträge aus der Sperrliste **entfernen** — Löschung wirkt nur auf zukünftige Anonymisierungen (bestehende Platzhalter in vergangenen Sitzungen bleiben unverändert)
+8. Der USER kann Einträge **bearbeiten** (Begriff oder Typ ändern) — Bearbeitung wirkt wie Löschen + Neuanlegen (bestehende Platzhalter bleiben, geänderter Begriff wirkt nur zukünftig)
+9. Es gibt EINE globale Sperrliste pro Therapeut/in (nicht pro Sitzung)
+10. Das SYSTEM verwendet **case-insensitive** String-Matching mit **Umlaut-Normalisierung**: ü↔ue, ä↔ae, ö↔oe, ß↔ss — "Müller" findet auch "Mueller" und umgekehrt
+11. Bei **überlappenden Einträgen** gilt Longest Match: "Hans Müller" wird als Ganzes anonymisiert, nicht einzeln als "Hans" + "Müller"
+12. Die Sperrliste ist über die **globalen Settings** erreichbar (volle Übersicht + CRUD). Für die Review-Schnellaktion siehe US-6c
 13. Das SYSTEM führt **keine Eingabe-Validierung** durch (keine Duplikat-Prüfung, keine Mindestlänge) — der USER ist verantwortlich für sinnvolle Einträge
 
 **Nachbedingungen:**
 1. Die Sperrliste ist gespeichert und wird bei der nächsten Anonymisierung berücksichtigt
-2. Bei Hinzufügen aus dem Review-Modus: Alle Vorkommen des Begriffs in der aktuellen Sitzung wurden anonymisiert
+2. Bei Löschung eines Eintrags: Bestehende Platzhalter in vergangenen Sitzungen bleiben unverändert
+3. Bei Bearbeitung eines Eintrags: Wie Löschung + Neuanlegen — alter Platzhalter bleibt, neuer Begriff wirkt zukünftig
 
 **Out of Scope:**
 - Import/Export der Sperrliste — die Liste lebt nur lokal in der App (kein Backup, kein Transfer)
-- Varianten-/Fuzzy-Matching (Entscheidung #17)
+- Varianten-/Fuzzy-Matching über Umlaut-Normalisierung hinaus (Entscheidung #17)
 - Fallbasierte Sperrlisten — nur eine globale Liste (Entscheidung #16)
 - Eingabe-Validierung (Duplikate, Mindestlänge, generische Begriffe)
+- Treffer-Vorschau im Bestätigungsdialog (keine Anzeige wie viele Treffer der Begriff im aktuellen Text hätte)
+- Review-Integration (Schnellaktion + retroaktive Anwendung + Herkunft) — siehe US-6c und US-6b
 
 **Constraints & Randbedingungen:**
-1. Case-insensitive Matching erfordert normalisierte Vergleiche
-2. Longest-Match-Strategie erfordert sortierte Anwendung (längste Einträge zuerst)
-3. Retroaktive Anwendung im Review erfordert Re-Scan des gesamten Texts der aktuellen Sitzung
+1. Umlaut-Normalisierung (ü↔ue, ä↔ae, ö↔oe, ß↔ss) erfordert bidirektionale Normalisierung beim Matching
+2. Case-insensitive Matching erfordert normalisierte Vergleiche
+3. Longest-Match-Strategie erfordert sortierte Anwendung (längste Einträge zuerst)
 4. NER hat Vorrang vor Sperrliste (Entscheidung #68) — Sperrliste ergänzt nur was NER nicht erkennt
+5. Platzhalter-Typen der Sperrliste (7 Typen) sind ein Superset der NER-Typen (5 Typen) + MEDIZINISCH + SONSTIGES
+
+**Offene Fragen:**
+1. Sollen MEDIZINISCH und SONSTIGES auch bei der manuellen False-Negative-Markierung im Review verfügbar sein (US-6b AC 3)? Aktuell nur PERSON, ORT, DATUM, KONTAKT, ORGANISATION
+2. Umlaut-Normalisierung: gilt sie auch für NER-Matching oder nur für Sperrlisten-Matching?
 
 ---
 
 ### Epic 6: Review & Korrektur
-Noch mit Lisa reviewen - review needed
 
-#### US-6: Anonymisierung überprüfen und korrigieren (Review-Modus)
+#### US-6a: Review-Basis-Editor (Text + Platzhalter-Anzeige)
 **Als** Psychotherapeut/in
-**möchte ich** den anonymisierten Text überprüfen, korrigieren und frei bearbeiten können,
-**damit** ich sicherstellen kann, dass alle sensiblen Informationen korrekt anonymisiert sind und der Text inhaltlich stimmt.
+**möchte ich** den anonymisierten Text in einem Editor sehen und frei bearbeiten können,
+**damit** ich inhaltliche Korrekturen am Transkript vornehmen kann und die anonymisierten Stellen klar erkenne.
 
 **Vorbedingungen:**
 1. Die automatische Anonymisierung wurde durchgeführt
 
 **Akzeptanzkriterien:**
 1. Der Text ist als **freier Texteditor** verfügbar — der USER kann den gesamten Text frei bearbeiten (Cursor setzen, tippen, löschen, Copy-Paste)
-2. Alle Platzhalter ([PERSON 1], [ORT 1] etc.) sind als **spezielle Elemente farblich hervorgehoben** (nach Entitätstyp)
-3. Die **Herkunft jedes Treffers** ist visuell erkennbar — ob die Anonymisierung von NER oder Sperrliste stammt (z.B. kleines Icon)
-5. Der USER kann einen Platzhalter **rückgängig machen** (False Positive: Platzhalter wird durch Originaltext ersetzt)
-6. Der USER kann nicht erkannten Text markieren und als **neue Entität anonymisieren** (False Negative: Text wird durch Platzhalter ersetzt, mit Typ-Auswahl)
-7. Bei False-Negative-Markierung bietet das SYSTEM eine Schnellaktion **"zur Sperrliste hinzufügen"** an (US-5 AC 10) — sofort auf alle weiteren Vorkommen in der aktuellen Sitzung angewendet
-8. Der Review-Modus ist **jederzeit unterbrechbar** — alle Änderungen werden automatisch gespeichert. Der USER kann später fortsetzen
-9. Es gibt **keinen expliziten Finalisierungs-Schritt** — der USER exportiert den Text wenn er zufrieden ist (Epic 7)
-10. Der Review-Modus ist für **Audio- und PDF-Sitzungen identisch** — bei PDF-Sitzungen fehlen lediglich Zeitstempel und Speaker-Labels
-11. Bei Text-Editierung im Review erfolgt **KEINE automatische Re-Anonymisierung** — der USER markiert neue Entitäten manuell (AC 6)
+2. Alle Platzhalter ([PERSON 1], [ORT 1] etc.) sind als **atomare Inline-Chips farblich hervorgehoben** (nach Entitätstyp) — der Cursor springt über Chips, sie können nicht teilweise editiert werden
+3. Bei **Audio-Sitzungen** sind Speaker-Labels (z.B. "[Therapeut]:") und Zeitstempel als **atomare Elemente** dargestellt — sie können vom USER durch Delete/Backspace oder Markieren+Löschen entfernt, aber nicht teilweise editiert werden
+4. Bei **PDF-Sitzungen** werden keine Speaker-Labels und Zeitstempel angezeigt — der restliche Editor ist identisch
+5. Der USER kann **Undo** (Cmd+Z) und **Redo** (Cmd+Shift+Z) verwenden — Standard-Editor-Verhalten mit gruppierten Schritten (z.B. "ein Wort tippen" = 1 Schritt), mindestens 100 Schritte Tiefe, History geht bei App-Neustart verloren
+6. **Auto-Save:** Alle Änderungen werden nach **~2 Sekunden Inaktivität** automatisch gespeichert (debounced). Gespeichert wird der gesamte Zustand (Text + Platzhalter-Positionen + Herkunfts-Metadaten), OHNE Undo-History
+7. Der Review-Modus ist **jederzeit unterbrechbar** — der USER kann die App schliessen und später am exakt gleichen Zustand fortsetzen
+8. Es gibt **keinen expliziten Finalisierungs-Schritt** — der USER exportiert den Text wenn er zufrieden ist (Epic 7)
+9. Bei Text-Editierung im Review erfolgt **KEINE automatische Re-Anonymisierung** — der USER markiert neue Entitäten manuell (US-6b)
+10. Standard-Keyboard-Shortcuts funktionieren: Cmd+Z (Undo), Cmd+Shift+Z (Redo), Cmd+C (Copy), Cmd+V (Paste), Cmd+X (Cut), Cmd+A (Alles markieren)
+11. **Copy-Paste mit Chips:** Innerhalb von Therascript bleiben Platzhalter-Chips beim Kopieren/Einfügen als atomare Chips erhalten. Beim Einfügen in **externe Anwendungen** wird der Platzhalter-String (z.B. "[PERSON 1]") als Klartext eingefügt
 
 **Nachbedingungen:**
-1. Der Text ist bereit zum Export (kein separater Finalisierungs-Schritt nötig)
+1. Der Text ist im Editor dargestellt und editierbar
+2. Alle Änderungen sind persistiert (Auto-Save)
 
 **Out of Scope:**
 - Audio-Player im Review-Modus — der USER nutzt für Audio-Abgleich seinen Standard-Player
 - Entitäten-Navigation (zum nächsten/vorherigen Platzhalter springen) — der USER scrollt durch den Text
-- Platzhalter-Typ nachträglich ändern (z.B. [PERSON] → [ORT]) — der USER muss den Platzhalter rückgängig machen und neu markieren
-- Expliziter Finalisierungs-Schritt — es gibt keinen separaten "Abschliessen"-Button
+- Anonymisierungs-Korrekturen (False Positive/Negative) — siehe US-6b
+- Sperrliste-Integration — siehe US-6c
 
 **Constraints & Randbedingungen:**
-1. Freies Text-Editieren muss mit speziellen Platzhalter-Elementen koexistieren (Platzhalter dürfen nicht versehentlich gelöscht/zerstückelt werden)
-2. Auto-Save muss alle Änderungen (Text + Anonymisierungs-Korrekturen) zwischen App-Neustarts persistieren
-3. Platzhalter-Mapping (für Undo) wird intern gespeichert und bei Sitzungslöschung entfernt
-4. Review-Modus für PDF- und Audio-Sitzungen teilt die gleiche Funktionalität, nur mit/ohne Zeitstempel + Speaker-Labels
+1. Platzhalter-Chips sind **atomare Elemente** — der Editor muss ein Rich-Text-Modell verwenden (z.B. ProseMirror, Slate, TipTap), kein reines Textarea
+2. Auto-Save muss alle Änderungen (Text + Platzhalter + Herkunfts-Metadaten) zwischen App-Neustarts persistieren
+3. Review-Modus für PDF- und Audio-Sitzungen teilt die gleiche Editorkomponente, nur mit/ohne Zeitstempel + Speaker-Labels
+4. NFR-25: Editor muss bei Texten bis ~15'000 Wörter mit ~100+ Platzhalter-Chips flüssig funktionieren (kein Lag beim Tippen, Scrollen, Hover)
+
+---
+
+#### US-6b: Anonymisierungs-Korrektur (False Positives + False Negatives)
+**Als** Psychotherapeut/in
+**möchte ich** fälschlich anonymisierte Stellen rückgängig machen und übersehene sensible Informationen nachträglich anonymisieren können,
+**damit** die Anonymisierung korrekt und vollständig ist.
+
+**Vorbedingungen:**
+1. Der Review-Editor ist geöffnet (US-6a)
+
+**Akzeptanzkriterien:**
+1. **False Positive (Batch-Rückgängig):** Der USER kann einen Platzhalter-Chip per **Delete/Backspace löschen** — das SYSTEM ersetzt **ALLE Chips mit derselben Identität** (z.B. alle [PERSON 1]) im gesamten Text durch den jeweiligen **Originaltext**
+2. **False Positive (Batch-Rückgängig):** Alternativ kann der USER über ein **Kontextmenü** (Rechtsklick auf Chip) die Aktion "Rückgängig machen" wählen — gleiches Batch-Ergebnis wie Delete
+3. **False Negative (Markieren):** Der USER kann Text selektieren und über ein **Kontextmenü** (Rechtsklick) die Aktion "Anonymisieren" wählen — das SYSTEM zeigt eine Typ-Auswahl mit allen Entitätstypen: PERSON, ORT, DATUM, KONTAKT, ORGANISATION
+4. Nach Typ-Auswahl ersetzt das SYSTEM den selektierten Text durch einen **neuen Platzhalter-Chip** des gewählten Typs (mit **fortlaufender Nummerierung** — immer nächste freie Nummer, Lücken werden NICHT gefüllt)
+5. Die **Herkunft jedes Platzhalter-Chips** ist visuell erkennbar — drei Herkünfte sind unterscheidbar: **NER** (automatisch erkannt), **Sperrliste** (via Blocklist-Match), **Manuell** (vom USER markiert) — z.B. durch kleine Icons oder Tooltip
+6. Alle Korrektur-Aktionen (Rückgängig + Markieren) sind über **Undo/Redo** (Cmd+Z / Cmd+Shift+Z) rücknehmbar — eine Batch-Rückgängig-Aktion zählt als **ein** Undo-Schritt
+7. Bei Markierung (AC 3): Wenn die Selektion einen **bestehenden Platzhalter-Chip teilweise überlappt**, erweitert das SYSTEM die Selektion automatisch auf den **gesamten Chip** (Chip + umgebenden selektierten Text)
+
+**Nachbedingungen:**
+1. Korrigierte Anonymisierungen sind im Text sichtbar und persistiert (Auto-Save aus US-6a)
+2. Platzhalter-Mapping ist aktualisiert (für False-Positive-Undo wird Originaltext aus Mapping gelesen)
+
+**Out of Scope:**
+- Platzhalter-Typ nachträglich ändern (z.B. [PERSON] → [ORT]) — der USER muss den Platzhalter rückgängig machen und neu markieren
+- Automatische Re-Anonymisierung nach Text-Editierung — der USER ist verantwortlich (siehe US-6a AC 9)
+- Einzelnes Rückgängig-Machen eines Chips OHNE die anderen gleichen Chips — Rückgängig ist immer Batch (alle gleichen Identitäten)
+- Sperrliste-Integration — siehe US-6c
+
+**Constraints & Randbedingungen:**
+1. Platzhalter-Mapping (Original → Platzhalter) muss intern gespeichert bleiben für Undo-Funktionalität — wird bei Sitzungslöschung entfernt
+2. Nummerierung ist **fortlaufend** — neue Chips bekommen immer die nächste Nummer, auch wenn durch Batch-Undo Lücken entstanden sind (z.B. [PERSON 1] und [PERSON 3] existieren → nächster wird [PERSON 4])
+3. Herkunfts-Metadaten (NER/Sperrliste/Manuell) müssen pro Platzhalter gespeichert werden
+4. Batch-Rückgängig einer Identität (z.B. alle [PERSON 1]) muss als **eine atomare Undo-Operation** implementiert werden
+
+---
+
+#### US-6c: Sperrliste-Schnellaktion im Review
+**Als** Psychotherapeut/in
+**möchte ich** einen nicht erkannten Begriff direkt aus dem Review zur Sperrliste hinzufügen können,
+**damit** dieser und alle weiteren Vorkommen in der aktuellen Sitzung sofort anonymisiert werden, ohne den Review zu verlassen.
+
+**Vorbedingungen:**
+1. Der Review-Editor ist geöffnet (US-6a)
+2. Die Sperrliste existiert (US-5)
+
+**Akzeptanzkriterien:**
+1. Beim **Anonymisieren eines False Negative** (US-6b AC 3) bietet das Kontextmenü zusätzlich die Option **"zur Sperrliste hinzufügen"** an
+2. Bei Auswahl dieser Option wird der selektierte Text zur **globalen Sperrliste** hinzugefügt (US-5) UND als Platzhalter-Chip anonymisiert
+3. Das SYSTEM wendet den neuen Sperrlisten-Eintrag **sofort retroaktiv** auf den gesamten Text der aktuellen Sitzung an — alle weiteren Vorkommen (exakter String, case-insensitive) werden automatisch anonymisiert
+4. Die retroaktiv anonymisierten Platzhalter erhalten die Herkunft **"Sperrliste"** (US-6b AC 5)
+5. Die retroaktive Anwendung erfolgt in **< 2 Sekunden** (NFR-27), auch bei langen Texten (~15'000 Wörter)
+6. **Undo einer Sperrlisten-Schnellaktion** (Cmd+Z) macht die **gesamte Aktion rückgängig**: Eintrag wird aus der Sperrliste entfernt UND alle retroaktiv anonymisierten Chips werden durch Originaltext ersetzt — zählt als **ein** Undo-Schritt
+
+**Nachbedingungen:**
+1. Der Begriff ist in der globalen Sperrliste gespeichert (wirkt auch auf zukünftige Sitzungen)
+2. Alle Vorkommen des Begriffs in der aktuellen Sitzung sind anonymisiert
+
+**Out of Scope:**
+- Feedback über Anzahl der retroaktiv anonymisierten Treffer — das SYSTEM zeigt keine Meldung wie "3 weitere Treffer anonymisiert"
+- Fuzzy-Matching oder Varianten-Erkennung — nur exakter String (case-insensitive), wie in US-5 definiert
+- Sperrliste verwalten (CRUD) — dafür gibt es die Settings-Ansicht (US-5)
+
+**Constraints & Randbedingungen:**
+1. Retroaktive Anwendung erfordert Re-Scan des gesamten Texts der aktuellen Sitzung
+2. NER hat Vorrang vor Sperrliste (Entscheidung #68) — bereits von NER erkannte Stellen werden nicht doppelt anonymisiert
+3. Sperrlisten-Einträge aus dem Review müssen sofort in die persistierte Sperrliste geschrieben werden (nicht nur in-memory)
+4. Undo der Sperrlisten-Schnellaktion muss sowohl den Sperrlisten-Eintrag als auch alle retroaktiven Anonymisierungen als **eine atomare Operation** rückgängig machen
 
 ---
 
@@ -433,7 +510,7 @@ flowchart TD
 - **Transkription:** Bereinigt (nur Äh/Ähm entfernt), volle Interpunktion, Zeitstempel bei Sprecherwechsel
 - **Sprecheranzahl:** Auto-Erkennung; 1 Sprecher = kein Label; 5+ = best-effort
 - **Workflow:** Transkription → Anonymisierung automatisch, kein Zwischenschritt; Transkription non-blocking
-- **Review:** Freier Texteditor mit farblich hervorgehobenen Platzhaltern; Herkunft (NER/Sperrliste) erkennbar; False Positives rückgängig, False Negatives markieren + zur Sperrliste; kein Finalisierungs-Schritt (Export wenn fertig); jederzeit unterbrechbar (Auto-Save); kein Audio-Player; identisch für Audio + PDF; kein Typ-Ändern; nur Scrollen
+- **Review:** Freier Texteditor mit atomaren Platzhalter-Chips (Inline, farblich nach Typ); Herkunft dreifach unterscheidbar (NER/Sperrliste/Manuell); False Positives rückgängig (Delete auf Chip = Original erscheint), False Negatives markieren (Selektion + Kontextmenü + Typ-Auswahl: PERSON/ORT/DATUM/KONTAKT/ORGANISATION) + zur Sperrliste; kein Finalisierungs-Schritt (Export wenn fertig); jederzeit unterbrechbar (Auto-Save debounced ~2s, gesamter Zustand ohne Undo-History); Undo/Redo (Cmd+Z/Shift+Z, Standard-Editor, ~100 Schritte, nicht persistent); Speaker-Labels + Zeitstempel atomar aber löschbar; kein Audio-Player; identisch für Audio + PDF; kein Typ-Ändern; nur Scrollen; nur Standard-Shortcuts
 - **Modellauswahl:** Alle ML-Modelle (Transkription, Diarization, NER, OCR) austauschbar in globalen Settings; technische Modellnamen; User kann eigene Modelle hinzufügen (Plugin-Architektur)
 - **PDF-Import:** Nur PDF-Format; Batch + non-blocking; Mixed-PDF auto pro Seite (Text vs. OCR); Passwort-Eingabe; linearer Fliesstext; nur gedruckter Text (keine Handschrift); nur Deutsch-OCR
 - **Sitzungstypen:** Audio-Sitzungen und PDF-Sitzungen in gleicher Liste, visuell unterscheidbar; PDF hat kürzeren Workflow (kein Transkriptions-Schritt)
@@ -558,9 +635,9 @@ flowchart TD
 | 85 | Review: Audio-Player? | Nein — kein Audio-Player im Review. User nutzt externen Player für Audio-Abgleich | 2026-02-08 |
 | 86 | Review: Zwischenspeicherung? | Jederzeit unterbrechbar — alle Änderungen werden automatisch gespeichert | 2026-02-08 |
 | 87 | Review: Finalisierung? | Kein expliziter Finalisierungs-Schritt — User exportiert wenn zufrieden | 2026-02-08 |
-| 88 | Review-Modell? | Mittlerer Weg: Freier Texteditor + farblich hervorgehobene Platzhalter + Klick für Original. Keine komplexen Werkzeuge wie Typ-Ändern | 2026-02-08 |
+| 88 | Review-Modell? | Mittlerer Weg: Freier Texteditor + atomare Platzhalter-Chips (Inline, farblich nach Typ). Keine komplexen Werkzeuge wie Typ-Ändern. Präzisiert durch Entscheidungen #128-#136 | 2026-02-08 |
 | 89 | Review: Entitäten-Navigation? | Nur Scrollen — kein Springen zum nächsten/vorherigen Platzhalter | 2026-02-08 |
-| 90 | Review: Herkunft (NER/Sperrliste)? | Bestätigt: Herkunft bleibt sichtbar (Entscheidung #82 gilt) | 2026-02-08 |
+| 90 | Review: Herkunft (NER/Sperrliste)? | Bestätigt + erweitert: **3 Herkünfte** (NER/Sperrliste/Manuell) visuell unterscheidbar (Entscheidung #132) | 2026-02-08 |
 | 91 | Review: PDF vs. Audio? | Identischer Review-Modus — bei PDF fehlen nur Zeitstempel und Speaker-Labels | 2026-02-08 |
 | 92 | Export-Zeitpunkt? | Jederzeit + mehrfach — kein Finalisierungs-Voraussetzung, jeder Export = aktueller Stand | 2026-02-08 |
 | 93 | Was wird bei Sitzungslöschung gelöscht? | Alles — Audio, Originaltext, Mapping, anonymisierter Text. Sitzung verschwindet komplett | 2026-02-08 |
@@ -598,6 +675,21 @@ flowchart TD
 | 125 | Minimum-RAM? | **8 GB ist Minimum UND Zielgerät** (MacBook Air M3 8 GB = typisches Therapeuten-Gerät). Parallel-Transkription fällt weg, ML-Verarbeitung strikt sequenziell | 2026-02-13 |
 | 126 | Parallel-Transkription? | **Gestrichen** — passt nicht ins 8 GB RAM-Budget. Immer sequenziell nach Aufnahme-Stop. Entscheidungen #62-#65 sind damit überholt | 2026-02-13 |
 | 127 | .txt-Dateiexport? | **Gestrichen** — nicht MVP. Nur Zwischenablage reicht. User ist verantwortlich, kopierten Text extern zu sichern. Entscheidungen #7, #97, #98, #112, #121 sind damit überholt | 2026-02-13 |
+| 128 | Review: Platzhalter-Interaktionsmodell? | **Atomar (Inline-Chip)** — Platzhalter sind unteilbare Elemente, Cursor springt darüber, keine partielle Editierung möglich | 2026-02-13 |
+| 129 | Review: Chip löschen = was passiert? | **Löschen = Undo** — Delete/Backspace auf Chip ersetzt ihn durch Originaltext (konsistent mit False-Positive-Rückgängig). Zum Entfernen von beidem: erst Chip löschen (Original erscheint), dann Text löschen | 2026-02-13 |
+| 130 | Review: Undo/Redo? | **Standard-Editor-Verhalten** — Cmd+Z/Shift+Z, gruppierte Schritte, ~100 Tiefe, History geht bei App-Neustart verloren (nicht persistiert) | 2026-02-13 |
+| 131 | Review: False-Negative-Interaktion? | **Selektion + Kontextmenü** — User selektiert Text, Rechtsklick zeigt Kontextmenü mit "Anonymisieren" + Typ-Auswahl (PERSON, ORT, DATUM, KONTAKT, ORGANISATION) | 2026-02-13 |
+| 132 | Review: Herkunft 3 Quellen? | **Ja, 3 Herkünfte visuell unterscheidbar** — NER (automatisch), Sperrliste (Blocklist-Match), Manuell (vom User markiert) | 2026-02-13 |
+| 133 | Review: Auto-Save Strategie? | **Debounced (~2s Inaktivität)** — Gesamtzustand (Text + Platzhalter + Metadaten) wird persistiert, OHNE Undo-History | 2026-02-13 |
+| 134 | Review: Sperrliste retroaktives Feedback? | **Kein Feedback** — keine Meldung über Anzahl retroaktiv anonymisierter Treffer. Exakter String-Match (case-insensitive) wie in US-5 | 2026-02-13 |
+| 135 | Review: Speaker-Labels/Zeitstempel? | **Atomar wie Platzhalter-Chips, aber löschbar** — können durch Delete/Backspace oder Markieren+Löschen entfernt werden, aber nicht teilweise editiert | 2026-02-13 |
+| 136 | Review: Keyboard-Shortcuts? | **Nur Standard-Shortcuts** — Cmd+Z, Cmd+Shift+Z, Cmd+C/V/X/A. Kein dedizierter Anonymisieren-Shortcut, nur via Kontextmenü | 2026-02-13 |
+| 137 | Review: Story-Slicing? | **US-6 aufgeteilt in 3 vertikale Slices** — US-6a (Basis-Editor), US-6b (False-Positive/Negative-Korrektur), US-6c (Sperrliste-Schnellaktion im Review) | 2026-02-13 |
+| 138 | Review: Copy-Paste mit Chips? | **Chips bleiben intern, Text extern** — innerhalb Therascript bleiben Chips als atomare Elemente, in externen Apps wird Platzhalter-String (z.B. "[PERSON 1]") als Text eingefügt | 2026-02-13 |
+| 139 | Review: Chip-Überlappung bei Selektion? | **Selektion wird erweitert** — überlappt die Selektion einen bestehenden Chip teilweise, erweitert das System automatisch auf den gesamten Chip | 2026-02-13 |
+| 140 | Review: Nummerierung bei Lücken? | **Fortlaufend** — immer nächste Nummer, Lücken werden NICHT gefüllt (z.B. [PERSON 1]+[PERSON 3] → nächster wird [PERSON 4]) | 2026-02-13 |
+| 141 | Review: Sperrliste-Undo? | **Vollständiges Undo** — Cmd+Z macht gesamte Sperrlisten-Schnellaktion rückgängig (Eintrag aus Sperrliste + alle retroaktiven Anonymisierungen) als ein Schritt | 2026-02-13 |
+| 142 | Review: Batch-Rückgängig? | **Immer Batch** — Rückgängig-Machen eines Chips (Delete/Backspace) macht ALLE Chips derselben Identität rückgängig (z.B. alle [PERSON 1]). Kein einzelnes Rückgängig möglich | 2026-02-13 |
 
 ---
 
