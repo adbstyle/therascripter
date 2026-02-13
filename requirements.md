@@ -45,7 +45,7 @@
 4. Jede Sitzung zeigt ihren aktuellen Status (Aufnahme läuft, Transkription, Anonymisierung, Review, Fehler)
 5. Der USER kann eine Sitzung manuell löschen (mit Bestätigungsdialog). Beim Löschen werden **ALLE zugehörigen Daten** entfernt: Audiodatei, Originaltext, Platzhalter-Mapping, anonymisierter Text — die Sitzung verschwindet vollständig
 7. Das SYSTEM persistiert die Sitzungsliste zwischen App-Neustarts
-8. Das SYSTEM löscht Sitzungen automatisch **30 Tage nach Erstellung** — inklusive aller zugehörigen Daten (Audio, Texte, Mapping, anonymisierter Text). Die Löschung erfolgt ohne Vorwarnung und unabhängig vom Export-Status. Die Frist ist nicht konfigurierbar. Die App ist kein Langzeit-Archiv — der exportierte .txt ist die Archivkopie
+8. Das SYSTEM löscht Sitzungen automatisch **30 Tage nach Erstellung** — inklusive aller zugehörigen Daten (Audio, Texte, Mapping, anonymisierter Text). Die Löschung erfolgt ohne Vorwarnung und unabhängig vom Export-Status. Die Frist ist nicht konfigurierbar. Die App ist kein Langzeit-Archiv — der USER ist verantwortlich, den kopierten Text extern zu sichern
 9. Die Sitzungsliste ist **chronologisch absteigend** sortiert (neueste Sitzung zuerst). Die Sortierung ist fest — kein Umschalten möglich
 10. Die Sitzungsliste ist **nach relativen Zeiträumen gruppiert**: "Heute", "Gestern", "Diese Woche", "Letzte Woche", "Älter" — dynamisch basierend auf dem aktuellen Datum. Leere Gruppen werden nicht angezeigt
 
@@ -234,6 +234,7 @@
 ---
 
 ### Epic 5: Sperrliste / Benutzerwörterbuch
+Noch mit Lisa reviewen - review needed
 
 #### US-5: Persönliche Sperrliste pflegen
 **Als** Psychotherapeut/in
@@ -277,6 +278,7 @@
 ---
 
 ### Epic 6: Review & Korrektur
+Noch mit Lisa reviewen - review needed
 
 #### US-6: Anonymisierung überprüfen und korrigieren (Review-Modus)
 **Als** Psychotherapeut/in
@@ -319,7 +321,7 @@
 
 #### US-7: Anonymisierten Text exportieren
 **Als** Psychotherapeut/in
-**möchte ich** den anonymisierten Text in die Zwischenablage kopieren oder als Textdatei exportieren können,
+**möchte ich** den anonymisierten Text in die Zwischenablage kopieren können,
 **damit** ich ihn in anderen Anwendungen weiterverwenden kann.
 
 **Vorbedingungen:**
@@ -327,29 +329,26 @@
 
 **Akzeptanzkriterien:**
 1. Der USER kann den gesamten anonymisierten Text mit einem Klick in die **Zwischenablage** kopieren
-2. Der USER kann den Text als **.txt-Datei** exportieren — über einen Standard-macOS-Speichern-Dialog (User wählt Ordner + Dateiname)
-3. Das SYSTEM schlägt den **Sitzungstitel als Dateiname** vor (z.B. "Sitzung 07.02.2026 14:30.txt")
-4. Der exportierte Text enthält **nur den anonymisierten Text** mit Speaker-Labels und Zeitstempeln — keine Metadaten (kein Titel, kein Datum, keine Dauer)
-5. Der exportierte Text behält die Formatierung mit Sprecherzuordnung bei (z.B. "[Therapeut]: ..." oder "[PERSON 1]: ...")
-6. **Zwischenablage und .txt enthalten identischen Inhalt**
-7. Der Export ist **jederzeit verfügbar** — der USER muss den Review nicht abschliessen
-8. Der USER kann **beliebig oft exportieren** — jeder Export gibt den aktuellen Stand des Textes aus
-9. Das SYSTEM zeigt eine Bestätigung nach erfolgreichem Kopieren/Export
+2. Der kopierte Text enthält **nur den anonymisierten Text** mit Speaker-Labels und Zeitstempeln — keine Metadaten (kein Titel, kein Datum, keine Dauer)
+3. Der kopierte Text behält die Formatierung mit Sprecherzuordnung bei (z.B. "[Therapeut]: ..." oder "[PERSON 1]: ...")
+4. Das Kopieren ist **jederzeit verfügbar** — der USER muss den Review nicht abschliessen
+5. Der USER kann **beliebig oft kopieren** — jedes Kopieren gibt den aktuellen Stand des Textes aus
+6. Das SYSTEM zeigt eine Bestätigung nach erfolgreichem Kopieren
 
 **Nachbedingungen:**
-1. Der anonymisierte Text befindet sich in der Zwischenablage oder als Datei auf dem Dateisystem
-2. Die Sitzung bleibt in der Sitzungsliste erhalten (kein automatisches Löschen nach Export)
+1. Der anonymisierte Text befindet sich in der Zwischenablage
+2. Die Sitzung bleibt in der Sitzungsliste erhalten (kein automatisches Löschen nach Kopieren)
 
 **Out of Scope:**
-- Automatische Löschfrage nach dem Export — Datenverwaltung passiert unabhängig über die Sitzungsverwaltung (Epic 0, US-0 AC 5)
-- Export mit Metadaten (Titel, Datum, Dauer) — bewusste Datenschutz-Entscheidung: weniger Kontext im exportierten Dokument = weniger Identifizierbarkeit des Patienten (Entscheidung #113)
-- Word-/PDF-Export — nur Plaintext (.txt) und Zwischenablage (Entscheidung #7)
-- Batch-Export (mehrere Sitzungen gleichzeitig exportieren) — nicht MVP (Entscheidung #116)
-- Teil-Export (Bereich markieren + exportieren) — ganzer Text via Export-Button, Teil-Export via normales Copy-Paste im Editor (Entscheidung #114)
+- Automatische Löschfrage nach dem Kopieren — Datenverwaltung passiert unabhängig über die Sitzungsverwaltung (Epic 0, US-0 AC 5)
+- Kopieren mit Metadaten (Titel, Datum, Dauer) — bewusste Datenschutz-Entscheidung: weniger Kontext = weniger Identifizierbarkeit des Patienten (Entscheidung #113)
+- .txt-Dateiexport — nicht MVP, Zwischenablage reicht (Entscheidung #127)
+- Batch-Export (mehrere Sitzungen gleichzeitig) — nicht MVP (Entscheidung #116)
+- Teil-Export (Bereich markieren + exportieren) — ganzer Text via Kopieren-Button, Teil-Export via normales Copy-Paste im Editor (Entscheidung #114)
 
 **Constraints & Randbedingungen:**
-1. Export muss den aktuellen Stand des Review-Textes widerspiegeln (inkl. aller User-Editierungen)
-2. Bei PDF-Sitzungen: gleicher Export, aber ohne Zeitstempel und Speaker-Labels (nur Fliesstext mit Platzhaltern)
+1. Kopieren muss den aktuellen Stand des Review-Textes widerspiegeln (inkl. aller User-Editierungen)
+2. Bei PDF-Sitzungen: gleiches Kopieren, aber ohne Zeitstempel und Speaker-Labels (nur Fliesstext mit Platzhaltern)
 
 **Hinweis:** ~~US-7b (Rohdaten nach Export löschen)~~ wurde gestrichen. Die Datenverwaltung erfolgt über: (1) Manuelle Löschung via Sitzungsverwaltung (Epic 0, US-0 AC 5) und (2) Auto-Löschung nach 30 Tagen (US-0 AC 8). Beim Löschen werden ALLE zugehörigen Daten entfernt (Audio, Originaltext, Mapping, anonymisierter Text).
 
@@ -409,12 +408,10 @@ flowchart TD
     H --> I
     I --> J[Automatische Anonymisierung + Sperrliste]
     J --> K[Review-Modus: Text editieren + Entitäten prüfen]
-    K --> L{Export?}
+    K --> L{Kopieren?}
     L -->|Zwischenablage| M[In Clipboard kopieren]
-    L -->|Datei| N[Als .txt exportieren]
     L -->|Weiter editieren| K
     M --> O[Sitzung bleibt in Liste]
-    N --> O
     O --> P{Sitzung löschen?}
     P -->|Ja| Q[Alle Daten löschen]
     P -->|Nein| R[Sitzung behalten]
@@ -442,8 +439,8 @@ flowchart TD
 - **Sitzungstypen:** Audio-Sitzungen und PDF-Sitzungen in gleicher Liste, visuell unterscheidbar; PDF hat kürzeren Workflow (kein Transkriptions-Schritt)
 - **Verarbeitung:** Strikt sequenziell — immer nur ein ML-Modell gleichzeitig geladen (8 GB RAM-Constraint). Keine Parallel-Transkription während Aufnahme. Verarbeitung startet nach Aufnahme-Stop. ML-Jobs werden über Task Queue serialisiert (FIFO)
 - **Anonymisierung:** Typ-spezifische Platzhalter ([PERSON 1], [ORT 1] etc.); Konsistenz nur pro Sitzung; Coreference-Resolution für Namens-Varianten (best-effort); NER hat Vorrang vor Sperrliste; nur ganze Wörter (keine Teilstrings); Platzhalter-Mapping intern gespeichert (für False-Positive-Undo), bei Sitzungslöschung entfernt; < 30 Sekunden Performance; keine Re-Anonymisierung nach Text-Edit im Review
-- **Export:** Zwischenablage (ein Klick) und .txt-Export (macOS Speichern-Dialog); Vorgeschlagener Dateiname = Sitzungstitel; nur anonymisierter Text (keine Metadaten — bewusste Datenschutz-Entscheidung); Formatierung mit Speaker-Labels erhalten; jederzeit + mehrfach exportierbar; Bestätigung nach Export; immer ganzer Text (Teil-Export via Copy-Paste im Editor); kein Batch-Export (nicht MVP); kein Export-Status/Flag in Sitzungsliste
-- **Datenretention:** Auto-Löschung aller Sitzungen 30 Tage nach Erstellung — inklusive aller Daten (Audio, Texte, Mapping). Stille Löschung ohne Vorwarnung. Nicht konfigurierbar. Unabhängig vom Export-Status. App ist kein Langzeit-Archiv — exportierte .txt ist die Archivkopie
+- **Export:** Nur Zwischenablage (ein Klick); nur anonymisierter Text (keine Metadaten — bewusste Datenschutz-Entscheidung); Formatierung mit Speaker-Labels erhalten; jederzeit + mehrfach kopierbar; Bestätigung nach Kopieren; immer ganzer Text (Teil-Export via Copy-Paste im Editor); kein .txt-Dateiexport (nicht MVP); kein Batch-Export (nicht MVP); kein Export-Status/Flag in Sitzungsliste
+- **Datenretention:** Auto-Löschung aller Sitzungen 30 Tage nach Erstellung — inklusive aller Daten (Audio, Texte, Mapping). Stille Löschung ohne Vorwarnung. Nicht konfigurierbar. Unabhängig vom Export-Status. App ist kein Langzeit-Archiv — der USER ist verantwortlich, den kopierten Text extern zu sichern
 
 ---
 
@@ -461,7 +458,7 @@ flowchart TD
 11. Sonstige Datumsangaben ausser expliziten Geburtsdaten
 12. Varianten-/Fuzzy-Matching in der Sperrliste
 13. Fallbasierte Sperrlisten (nur eine globale Liste)
-14. Word-/PDF-Export (nur Plaintext und Zwischenablage)
+14. Word-/PDF-/.txt-Dateiexport — nur Zwischenablage (Entscheidung #127)
 15. Batch-Export (mehrere Sitzungen gleichzeitig exportieren) — nicht MVP
 16. Konfigurierbare Datenretention — fixer 30-Tage-Default, nicht änderbar
 17. Export-Status/Flag in der Sitzungsliste — kein visueller Marker für "wurde exportiert"
@@ -480,7 +477,7 @@ flowchart TD
 | 4 | MVP-Scope? | Alles inkl. PDF — beide Eingabepfade von Anfang an | 2026-02-07 |
 | 5 | Welche Entitätstypen genau? | Kontaktdaten, Med. Identifikatoren, Geburtsdaten (NICHT Institutionen) | 2026-02-07 |
 | 6 | Live-Modus Interaktion? | Nur Hintergrund — keine Interaktion während Therapie | 2026-02-07 |
-| 7 | Exportformate? | Nur Plaintext (.txt) + Zwischenablage | 2026-02-07 |
+| 7 | ~~Exportformate?~~ | ~~Nur Plaintext (.txt) + Zwischenablage~~ → **AKTUALISIERT**: Nur Zwischenablage (kein .txt-Dateiexport, Entscheidung #127) | 2026-02-07 |
 | 8 | Sperrliste? | Ja, MVP-Feature — globale Liste pro Therapeut/in | 2026-02-07 |
 | 9 | Nur Geburtsdaten oder alle Daten? | Nur explizite Geburtsdaten | 2026-02-07 |
 | 10 | Welche Dialekte? | Deutsch allgemein — Hochdeutsch + Schweizerdeutsch breit | 2026-02-07 |
@@ -570,8 +567,8 @@ flowchart TD
 | 94 | Löschfrage nach Export? | Nein — Löschung nur unabhängig via Sitzungsverwaltung (Epic 0, US-0 AC 5) | 2026-02-08 |
 | 95 | Export-Inhalt? | Nur anonymisierter Text mit Speaker-Labels und Zeitstempeln, keine Metadaten | 2026-02-08 |
 | 96 | US-7b nötig? | Gestrichen — redundant mit US-0 AC 5 (Sitzung löschen = alles löschen) | 2026-02-08 |
-| 97 | Clipboard vs. .txt? | Identischer Inhalt | 2026-02-08 |
-| 98 | Speichern-Dialog? | Standard macOS Speichern-Dialog, vorgeschlagener Dateiname = Sitzungstitel | 2026-02-08 |
+| 97 | ~~Clipboard vs. .txt?~~ | ~~Identischer Inhalt~~ → **ENTFÄLLT** (.txt-Export gestrichen, Entscheidung #127) | 2026-02-08 |
+| 98 | ~~Speichern-Dialog?~~ | ~~Standard macOS Speichern-Dialog~~ → **ENTFÄLLT** (.txt-Export gestrichen, Entscheidung #127) | 2026-02-08 |
 | 99 | Encryption at Rest nötig? | Nein — FileVault (Default auf Apple Silicon) + App Sandbox reichen. App hat kein eigenes Login, daher kein Mehrwert durch SQLCipher. FileVault-Check beim Start stattdessen | 2026-02-08 |
 | 100 | Netzwerk-Isolation? | Strikte CSP im Renderer (`connect-src 'none'`); Electron-Telemetrie deaktivieren; Modell-Download nur beim First-Launch | 2026-02-08 |
 | 101 | Electron Hardening? | Vollständig: Context Isolation, Sandbox, Fuses, keine Remote-Inhalte, IPC-Schema-Validierung | 2026-02-08 |
@@ -585,21 +582,22 @@ flowchart TD
 | 109 | Modell-Download Resume? | Nein — kein Resume bei Abbruch, Download muss in einem Durchgang abgeschlossen werden | 2026-02-08 |
 | 110 | Editor-Performance Zielgrösse? | Bis 90 Min Transkript (~15'000 Wörter) muss der Editor flüssig bleiben | 2026-02-08 |
 | 111 | Epic 7 Name? | Umbenennen zu "Export" — Datenverwaltung ist vollständig in Epic 0 abgedeckt | 2026-02-13 |
-| 112 | .txt reicht für alle Exportziele? | Ja — Supervision, Dokumentation, Praxissoftware akzeptieren Plaintext | 2026-02-13 |
+| 112 | ~~.txt reicht für alle Exportziele?~~ | ~~Ja — Supervision, Dokumentation, Praxissoftware akzeptieren Plaintext~~ → **ENTFÄLLT** (.txt-Export gestrichen, nur Zwischenablage, Entscheidung #127) | 2026-02-13 |
 | 113 | Keine Metadaten im Export? | Bewusste Datenschutz-Entscheidung — weniger Kontext = weniger Identifizierbarkeit des Patienten | 2026-02-13 |
 | 114 | Teil-Export? | Nein — Export = immer ganzer Text. Teil-Export via normales Copy-Paste im Editor | 2026-02-13 |
 | 115 | Status "Exportiert"? | Entfernt — kein echter Statuswechsel, da beliebig oft exportierbar ohne Finalisierung | 2026-02-13 |
 | 116 | Batch-Export? | Nice-to-have, nicht MVP — einzeln exportieren reicht zunächst | 2026-02-13 |
-| 117 | Datenretention? | Auto-Löschung nach 30 Tagen ab Erstellung — App ist kein Langzeit-Archiv, exportierte .txt ist Archivkopie | 2026-02-13 |
+| 117 | Datenretention? | Auto-Löschung nach 30 Tagen ab Erstellung — App ist kein Langzeit-Archiv, User sichert kopierten Text selbst | 2026-02-13 |
 | 118 | Auch nicht-exportierte Sitzungen löschen? | Ja — Datenschutz hat Vorrang vor Komfort. Auch nie exportierte Sitzungen werden nach 30 Tagen gelöscht | 2026-02-13 |
 | 119 | Lösch-Warnung bei Auto-Löschung? | Nein — stille Löschung, kein Hinweis. Therapeut weiss das, weil es ein fixer Default ist | 2026-02-13 |
 | 120 | Export-Flag in Sitzungsliste? | Nein — kein visueller Marker für "wurde exportiert" | 2026-02-13 |
-| 121 | Encoding .txt-Export? | Plattform-konform — UTF-8 + LF ist macOS-Standard, kein explizites Requirement nötig | 2026-02-13 |
+| 121 | ~~Encoding .txt-Export?~~ | ~~Plattform-konform — UTF-8 + LF~~ → **ENTFÄLLT** (.txt-Export gestrichen, Entscheidung #127) | 2026-02-13 |
 | 122 | Sitzungsliste sortierbar? | Feste Sortierung: chronologisch absteigend (neueste zuerst). Kein Umschalten | 2026-02-13 |
 | 123 | Sitzungsliste gruppiert? | Relative Zeiträume: "Heute", "Gestern", "Diese Woche", "Letzte Woche", "Älter". Leere Gruppen ausgeblendet | 2026-02-13 |
 | 124 | Sitzungsliste filterbar? | Nein — bei max. 30 Tagen und typisch wenigen Sitzungen ist Filtern unnötig | 2026-02-13 |
 | 125 | Minimum-RAM? | **8 GB ist Minimum UND Zielgerät** (MacBook Air M3 8 GB = typisches Therapeuten-Gerät). Parallel-Transkription fällt weg, ML-Verarbeitung strikt sequenziell | 2026-02-13 |
 | 126 | Parallel-Transkription? | **Gestrichen** — passt nicht ins 8 GB RAM-Budget. Immer sequenziell nach Aufnahme-Stop. Entscheidungen #62-#65 sind damit überholt | 2026-02-13 |
+| 127 | .txt-Dateiexport? | **Gestrichen** — nicht MVP. Nur Zwischenablage reicht. User ist verantwortlich, kopierten Text extern zu sichern. Entscheidungen #7, #97, #98, #112, #121 sind damit überholt | 2026-02-13 |
 
 ---
 

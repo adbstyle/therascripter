@@ -715,7 +715,7 @@ PDF-Import → Queue (FIFO)
 - Epic 4: Anonymisierung (flair NER + Regex + Sperrliste)
 - Epic 5: Sperrliste (CRUD in SQLite)
 - Epic 6: Review-Modus (Basis-Editor mit Entity-Highlighting)
-- Epic 7: Export (Clipboard + .txt)
+- Epic 7: Export (nur Clipboard)
 
 ### Phase 2: Erweiterungen
 - Parallel-Transkription (US-1 AC 13-14)
