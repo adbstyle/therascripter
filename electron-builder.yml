@@ -1,0 +1,28 @@
+appId: com.therascript.app
+productName: Therascript
+directories:
+  buildResources: build
+  output: dist
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!tests/*'
+  - '!electron.vite.config.*'
+  - '!{.eslintrc,.eslintignore,.prettierrc,.prettierignore,eslint.config.*}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{vitest.config.*}'
+  - '!{*.md,LICENSE}'
+mac:
+  target:
+    - target: dmg
+      arch: arm64
+  category: public.app-category.medical
+  entitlementsInherit: build/entitlements.mac.plist
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications

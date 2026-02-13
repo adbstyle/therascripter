@@ -1,0 +1,34 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Therascript color palette (from wireframes section 8.1) */
+  --color-primary: #2563eb;
+  --color-primary-light: #dbeafe;
+  --color-recording: #dc2626;
+  --color-success: #16a34a;
+  --color-warning: #ea580c;
+
+  /* Entity chip colors (from wireframes section 8.2) */
+  --color-chip-person-bg: #dbeafe;
+  --color-chip-person-text: #1d4ed8;
+  --color-chip-ort-bg: #dcfce7;
+  --color-chip-ort-text: #15803d;
+  --color-chip-datum-bg: #fff7ed;
+  --color-chip-datum-text: #c2410c;
+  --color-chip-kontakt-bg: #f3e8ff;
+  --color-chip-kontakt-text: #7c3aed;
+  --color-chip-organisation-bg: #ccfbf1;
+  --color-chip-organisation-text: #0f766e;
+  --color-chip-medizinisch-bg: #fee2e2;
+  --color-chip-medizinisch-text: #b91c1c;
+  --color-chip-sonstiges-bg: #f3f4f6;
+  --color-chip-sonstiges-text: #4b5563;
+
+  /* Typography scale (from wireframes section 8.3) */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+}
+
+/* macOS-style frameless window: make titlebar area draggable */
+body {
+  -webkit-app-region: no-drag;
+}
