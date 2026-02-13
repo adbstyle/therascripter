@@ -42,23 +42,24 @@
 1. Das SYSTEM zeigt eine Sitzungsliste (Dashboard) als zentrale Übersicht
 2. Jede neue Sitzung (Aufnahme oder Import) erhält automatisch einen Titel basierend auf Datum und Uhrzeit (z.B. "Sitzung 07.02.2026 14:30")
 3. Der USER kann den Titel einer Sitzung nachträglich umbenennen
-4. Jede Sitzung zeigt ihren aktuellen Status (Aufnahme läuft, Transkription, Review, Exportiert)
+4. Jede Sitzung zeigt ihren aktuellen Status (Aufnahme läuft, Transkription, Anonymisierung, Review, Fehler)
 5. Der USER kann eine Sitzung manuell löschen (mit Bestätigungsdialog). Beim Löschen werden **ALLE zugehörigen Daten** entfernt: Audiodatei, Originaltext, Platzhalter-Mapping, anonymisierter Text — die Sitzung verschwindet vollständig
-6. Sitzungen bleiben in der Liste erhalten bis der USER sie aktiv löscht — auch nach Export
 7. Das SYSTEM persistiert die Sitzungsliste zwischen App-Neustarts
+8. Das SYSTEM löscht Sitzungen automatisch **30 Tage nach Erstellung** — inklusive aller zugehörigen Daten (Audio, Texte, Mapping, anonymisierter Text). Die Löschung erfolgt ohne Vorwarnung und unabhängig vom Export-Status. Die Frist ist nicht konfigurierbar. Die App ist kein Langzeit-Archiv — der exportierte .txt ist die Archivkopie
+9. Die Sitzungsliste ist **chronologisch absteigend** sortiert (neueste Sitzung zuerst). Die Sortierung ist fest — kein Umschalten möglich
+10. Die Sitzungsliste ist **nach relativen Zeiträumen gruppiert**: "Heute", "Gestern", "Diese Woche", "Letzte Woche", "Älter" — dynamisch basierend auf dem aktuellen Datum. Leere Gruppen werden nicht angezeigt
 
 **Nachbedingungen:**
-1. Alle Sitzungen sind in der Liste sichtbar und nach Status/Datum navigierbar
+1. Alle Sitzungen sind in der Liste sichtbar, chronologisch absteigend sortiert und nach Zeiträumen gruppiert
 
 **Hinweis:** Die Sitzungsliste enthält zwei Typen: Audio-Sitzungen (Aufnahme/Import → Transkription → Anonymisierung → Review → Export) und PDF-Sitzungen (Import → Textextraktion → Anonymisierung → Review → Export). Beide Typen sind visuell unterscheidbar (Typ-Icon).
 
 **Offene Fragen:**
-1. Soll die Sitzungsliste sortier- oder filterbar sein (z.B. nach Status oder Typ)?
-2. Gibt es eine maximale Anzahl Sitzungen, die praktikabel in der Liste bleiben?
+*Alle geklärt (siehe Entscheidungen #122-#124)*
 
 ---
 
-### Epic 1: Audio-Aufnahme & Import
+### Epic 1: Audio-Aufnahme
 
 #### US-1: Gespräch aufnehmen
 
@@ -75,58 +76,26 @@
 2. Der USER kann eine laufende Aufnahme mit einem Klick stoppen
 3. Der USER sieht während der Aufnahme eine visuelle Anzeige (Dauer, Audiopegel)
 4. Das SYSTEM speichert die Aufnahme lokal auf dem Gerät
-5. Der USER kann eine Aufnahme pausieren und fortsetzen
-6. Die App funktioniert zuverlässig im Hintergrund (minimiert), da der USER während der Therapiesitzung nicht mit der App interagiert
-7. Das SYSTEM zeigt ein Menu Bar Icon in der macOS-Menüleiste mit Aufnahmestatus (rot = läuft), Dauer und Stop/Pause-Steuerung — damit der USER die Aufnahme kontrollieren kann, ohne die App in den Vordergrund zu holen
+5. Die App funktioniert zuverlässig im Hintergrund (minimiert), da der USER während der Therapiesitzung nicht mit der App interagiert
+6. Das SYSTEM zeigt ein Menu Bar Icon in der macOS-Menüleiste mit Aufnahmestatus (rot = läuft), Dauer und Stop-Steuerung — damit der USER die Aufnahme kontrollieren kann, ohne die App in den Vordergrund zu holen
 8. Das SYSTEM verhindert aktiv den macOS-Ruhezustand während einer laufenden Aufnahme (analog zu Zoom/Spotify)
 9. Das SYSTEM speichert die Aufnahme periodisch als Zwischensicherung (mindestens alle 60 Sekunden), sodass bei einem Absturz maximal 60 Sekunden Audio verloren gehen
 10. Beim App-Start nach einem Absturz zeigt das SYSTEM wiederhergestellte Aufnahmen an und bietet deren Weiterverarbeitung an
-11. Das SYSTEM stoppt die Aufnahme automatisch nach 3 Stunden und informiert den USER, um versehentliche Endlos-Aufnahmen zu vermeiden
+11. Das SYSTEM stoppt die Aufnahme automatisch nach 2 Stunden und informiert den USER, um versehentliche Endlos-Aufnahmen zu vermeiden
 12. Beim erstmaligen Starten einer Aufnahme zeigt das SYSTEM einen Hinweis zur Einholung der Patienteneinwilligung (StGB Art. 179bis) — ohne die Aufnahme zu blockieren
-13. Wenn Parallel-Transkription aktiviert ist (Settings): Das SYSTEM transkribiert das Audio bereits während der laufenden Aufnahme im Hintergrund — OHNE dem USER das Transkript anzuzeigen
-14. Nach Aufnahme-Stop führt das SYSTEM einen finalen Qualitäts-/Diarization-Pass durch und zeigt das fertige Transkript innerhalb von 5 Minuten an (statt 20-40 Min bei sequenzieller Verarbeitung)
 
 **Nachbedingungen:**
 1. Die Audiodatei ist lokal gespeichert und bereit zur Transkription
 2. Eine neue Sitzung wurde in der Sitzungsliste erstellt
-3. Bei aktivierter Parallel-Transkription: Das Transkript ist innerhalb von 5 Minuten nach Stop verfügbar
 
 **Out of Scope:**
 - Mikrofon-Auswahlmenü — die App nutzt das vom macOS gewählte Standard-Eingabegerät
-- Anzeige des Transkripts WÄHREND der laufenden Aufnahme (inhaltlich unerwünscht: Therapeut soll während der Sitzung nicht auf ein Transkript schauen — auch wenn im Hintergrund bereits transkribiert wird)
+- Parallel-Transkription (Hintergrund-Transkription während laufender Aufnahme) — gestrichen wegen 8 GB RAM-Minimum (Entscheidung #125)
 
 **Constraints & Randbedingungen:**
 1. macOS bietet APIs zur Standby-Unterdrückung (IOPMAssertionCreateWithName / NSProcessInfo.beginActivity)
 2. Audio-Streaming direkt auf Disk ist für Auto-Recovery nötig (kein reines In-Memory-Recording)
-3. Parallel-Transkription erfordert deutlich mehr CPU/RAM — ist daher optional (Settings, Standard: an)
-
----
-
-#### US-1b: Audio-Datei importieren
-
-**Als** Psychotherapeut/in
-**möchte ich** bestehende Audio-Dateien in die App importieren können,
-**damit** ich auch extern aufgenommene Gespräche transkribieren und anonymisieren kann.
-
-**Vorbedingungen:**
-1. Die App ist geöffnet
-
-**Akzeptanzkriterien:**
-1. Der USER kann Audio-Dateien per Dateiauswahl-Dialog importieren
-2. Der USER kann Audio-Dateien per Drag-and-Drop in die App importieren
-3. Der USER kann mehrere Audio-Dateien gleichzeitig importieren (Batch-Import)
-4. Das SYSTEM akzeptiert gängige Formate (mp3, wav, m4a, webm)
-5. Das SYSTEM zeigt eine klare Fehlermeldung bei nicht unterstützten oder beschädigten Dateien, inkl. Liste der unterstützten Formate
-6. Nach dem Import wird automatisch die Transkription gestartet
-7. Bei Batch-Import werden die Dateien in einer Queue nacheinander transkribiert (FIFO)
-8. Der USER sieht den Fortschritt der Queue (welche Datei wird gerade verarbeitet, wie viele verbleiben)
-
-**Nachbedingungen:**
-1. Für jede importierte Datei wurde eine neue Sitzung in der Sitzungsliste erstellt
-2. Die Transkription läuft oder steht in der Queue
-
-**Out of Scope:**
-- Audio-Player/Vorschau vor der Transkription — der USER nutzt dafür seinen Standard-Player
+3. ML-Verarbeitung erfolgt strikt sequenziell — immer nur ein Modell gleichzeitig geladen (8 GB RAM-Constraint)
 
 ---
 
@@ -155,8 +124,7 @@
 11. Der USER kann die App während der Transkription für andere Sitzungen nutzen (nicht-blockierend)
 12. Das SYSTEM zeigt eine macOS-Benachrichtigung, wenn die Transkription abgeschlossen ist
 13. Nach Abschluss der Transkription startet das SYSTEM automatisch die Anonymisierung (kein manueller Zwischenschritt)
-14. Bei Live-Aufnahmen mit aktivierter Parallel-Transkription: Das SYSTEM nutzt die bereits im Hintergrund erstellte Transkription und führt nach Aufnahme-Stop nur einen finalen Diarization-/Qualitäts-Pass durch — Ergebnis innerhalb von 5 Minuten nach Stop
-15. Bei importierten Audio-Dateien oder deaktivierter Parallel-Transkription: Sequenzielle Verarbeitung wie bisher (max. 2x Echtzeit gemäss NFR-3)
+14. Die Verarbeitung erfolgt immer sequenziell nach Aufnahme-Stop oder Import: Transkription → Diarization → Anonymisierung (max. 2x Echtzeit gemäss NFR-3)
 
 **Nachbedingungen:**
 1. Ein strukturierter Text mit Sprecherzuordnung und Zeitstempeln liegt vor
@@ -172,30 +140,6 @@
 1. NFR-3: Transkription max. 2x Echtzeit (10 Min Audio → max. 20 Min Verarbeitung)
 2. Schweizerdeutsch → Hochdeutsch ist eine Übersetzungsleistung, nicht nur Transkription. Begriffe ohne Hochdeutsch-Äquivalent werden bestmöglich übersetzt
 3. Transkription muss non-blocking sein, da der User parallel andere Sitzungen bearbeiten kann (Epic 0)
-
----
-
-#### US-2b: Speaker-Labels benennen
-
-**Als** Psychotherapeut/in
-**möchte ich** die automatisch zugewiesenen Speaker-Labels (Person A, Person B) nachträglich benennen können,
-**damit** das Transkript für Supervision und Dokumentation besser lesbar ist.
-
-**Vorbedingungen:**
-1. Eine Transkription mit Sprecherzuordnung liegt vor (mindestens 2 erkannte Sprecher)
-
-**Akzeptanzkriterien:**
-1. Der USER kann jedes Speaker-Label individuell umbenennen (z.B. "Person A" → "Therapeut", "Person B" → "Patient", "Person C" → "Partnerin")
-2. Das SYSTEM ersetzt das Label konsistent im gesamten Transkript
-3. Die Umbenennung ist optional — der USER kann Labels auch als Person A/B/C/D belassen
-4. Die Umbenennung ist jederzeit möglich — auch nach der Anonymisierung, im Review-Modus (Epic 6)
-5. **Achtung:** Speaker-Labels werden bei der Anonymisierung (Epic 4) mitgeprüft. Enthält ein Label einen erkannten Namen (z.B. "Dr. Müller"), wird es anonymisiert (z.B. → [PERSON 1]). Der USER sollte daher rollenbasierte Labels verwenden (z.B. "Therapeut", "Patient")
-
-**Nachbedingungen:**
-1. Der Text zeigt die vom USER gewählten Sprecherbezeichnungen
-
-**Out of Scope:**
-- Korrektur einzelner Sprecherzuordnungen (Segment einem anderen Sprecher zuweisen) — nicht im MVP
 
 ---
 
@@ -218,15 +162,12 @@
 3. Das SYSTEM erkennt pro Seite automatisch, ob Text direkt extrahierbar ist oder OCR nötig ist (Mixed-PDF-Unterstützung)
 4. Das SYSTEM extrahiert Text aus Text-PDF-Seiten direkt
 5. Das SYSTEM erkennt gedruckten Text in gescannten Seiten mittels OCR (lokal, Deutsch)
-6. Das SYSTEM erkennt passwortgeschützte PDFs und fragt den USER nach dem Passwort
 7. Der extrahierte Text wird als linearer Fliesstext dargestellt (keine Layout-Erhaltung von Tabellen, Spalten etc.)
-8. Das SYSTEM zeigt den extrahierten Text dem USER an
-9. Nach der Textextraktion startet das SYSTEM automatisch die Anonymisierung (konsistent mit Audio-Workflow)
+8. Nach der Textextraktion startet das SYSTEM automatisch die Anonymisierung (konsistent mit Audio-Workflow)
 10. Bei Batch-Import werden die PDFs in einer Queue nacheinander verarbeitet (FIFO)
 11. Die Textextraktion/OCR ist non-blocking — der USER kann die App für andere Aufgaben nutzen
 12. Das SYSTEM zeigt eine macOS-Benachrichtigung, wenn die Verarbeitung abgeschlossen ist
-13. Das SYSTEM zeigt eine Warnung bei PDFs mit mehr als 50 Seiten (Verarbeitung trotzdem möglich)
-14. Jedes importierte PDF erstellt einen Eintrag in der Sitzungsliste mit Typ-Kennzeichnung "PDF" (unterscheidbar von Audio-Sitzungen)
+13. Jedes importierte PDF erstellt einen Eintrag in der Sitzungsliste mit Typ-Kennzeichnung "PDF" (unterscheidbar von Audio-Sitzungen)
 
 **Nachbedingungen:**
 1. Der extrahierte Text ist bereit zur Anonymisierung bzw. die Anonymisierung wurde automatisch gestartet
@@ -265,24 +206,21 @@
 6. Die Platzhalter-Nummerierung ist **typ-spezifisch**: Jeder Entitätstyp hat eine eigene Nummerierung ([PERSON 1], [PERSON 2], [ORT 1], [ORT 2] etc.) — nicht global fortlaufend
 7. Gleiche Entitäten werden innerhalb einer Sitzung konsistent durch denselben Platzhalter ersetzt (kein sitzungsübergreifendes Mapping)
 8. Das SYSTEM erkennt **Varianten desselben Namens** best-effort als eine Entität (Coreference-Resolution): "Dr. Müller", "Müller", "Herr Müller" → alle [PERSON 1]
-9. Das SYSTEM anonymisiert nur **ganze Wörter/eigenständige Entitäten** — keine Teilstrings in zusammengesetzten Wörtern (z.B. "Müller" in "Müllerstrasse" bleibt unverändert)
+9. Das SYSTEM anonymisiert nur **ganze Wörter/eigenständige Entitäten** — keine Teilstrings in zusammengesetzten Wörtern (z.B. "MDas hier ist schon ein Modell, das lokal läuft. Das heisst, es macht alles nach Wahrscheinlichkeiten von Audioaufnahmen, Tönen, Abfolgen. Weiss es nachher, welcher Ton ist. Das ist auch die zwei, drei Buchstaben dahinter. Das berechnet alles nach Wahrscheinlichkeiten. Und nachher gibt es diese Wahrscheinlichkeitsmaschine. Die braucht brutal viel Rechenpower, darum dreht sie auch durch. Und hier kann man die nicht so guten Modelle laufen auf diesen Computern. Und dann wird das Wahrscheinlichste zu diesem Ton die Buchstaben herausgegeben.üller" in "Müllerstrasse" bleibt unverändert)
 10. Die **NER hat Vorrang** vor der Sperrliste: NER-Ergebnisse sind primär, die Sperrliste ergänzt was NER nicht erkennt. Bei Typ-Konflikt gilt der NER-Typ
 11. Das SYSTEM wendet zusätzlich die persönliche Sperrliste des USERs an (siehe Epic 5)
-12. Das SYSTEM anonymisiert auch **Speaker-Labels** (aus US-2b), wenn diese erkannte Namen enthalten (z.B. "Dr. Müller" als Label → [PERSON 1])
-13. Die Sprecherzuordnung (Absätze, Zeitstempel) bleibt nach der Anonymisierung erhalten
+12. Die Sprecherzuordnung (Absätze, Zeitstempel) bleibt nach der Anonymisierung erhalten
 14. Das SYSTEM versucht **best-effort** auch gesprochene Kontaktdaten in Transkripten zu erkennen (z.B. "null sieben neun...") — ohne Garantie auf vollständige Erkennung
-15. Im Review-Modus (Epic 6) sind die **Originalwerte hinter den Platzhaltern sichtbar** (z.B. Hover/Tooltip), damit der USER die Korrektheit prüfen kann. Originale werden erst bei Sitzungslöschung (US-0 AC 5) endgültig entfernt
-16. Die Anonymisierung erfolgt komplett lokal
-17. Die Anonymisierung ist innerhalb von **30 Sekunden** abgeschlossen — auch bei langen Texten (ca. 10'000 Wörter)
+15. Die Anonymisierung erfolgt komplett lokal
 
 **Nachbedingungen:**
 1. Der Text enthält keine identifizierenden Informationen mehr (im Rahmen der definierten Entitätstypen)
-2. Das Platzhalter-Mapping (Original → Platzhalter) bleibt bis zur Sitzungslöschung (US-0 AC 5) gespeichert — der USER kann jederzeit zurück in den Review
+2. Das Platzhalter-Mapping (Original → Platzhalter) ist intern gespeichert, damit False Positives rückgängig gemacht werden können (US-6 AC 5). Es wird bei Sitzungslöschung (US-0 AC 5) entfernt
 
 **Out of Scope:**
 - ICD-Diagnose-Codes und ausgeschriebene Diagnosenamen werden NICHT anonymisiert (klinisch relevant, kein Identifikationsrisiko)
 - Relative Zeitangaben ("letzte Woche", "vor drei Tagen") werden NICHT anonymisiert
-- Institutionsnamen (Spitäler, Schulen, Arbeitgeber) werden NICHT anonymisiert
+- Institutionsnamen (Spitäler, Schulen) werden NICHT anonymisiert
 - Sonstige Datumsangaben ausser Geburtsdaten werden NICHT anonymisiert
 - Sitzungsübergreifende Platzhalter-Konsistenz — kein globales Entitäts-Mapping zwischen Sitzungen
 - Automatische Re-Anonymisierung nach Text-Editierung im Review — User markiert neue Entitäten manuell (Epic 6)
@@ -290,9 +228,8 @@
 
 **Constraints & Randbedingungen:**
 1. Coreference-Resolution für Namens-Varianten ist best-effort — Qualität hängt vom gewählten NER-Modell ab (NFR-9)
-2. Platzhalter-Mapping muss bis zur Sitzungslöschung (US-0 AC 5) persistiert werden (für Review-Modus, Epic 6)
+2. Platzhalter-Mapping muss intern persistiert werden (für False-Positive-Undo im Review, Epic 6), wird bei Sitzungslöschung entfernt
 3. Anonymisierung muss Sprecherzuordnung, Zeitstempel und Absatzstruktur unangetastet lassen
-4. Speaker-Label-Anonymisierung erfordert Koordination mit US-2b (Labels können nach Anonymisierung nicht mehr auf Klarnamen gesetzt werden)
 
 ---
 
@@ -352,16 +289,14 @@
 **Akzeptanzkriterien:**
 1. Der Text ist als **freier Texteditor** verfügbar — der USER kann den gesamten Text frei bearbeiten (Cursor setzen, tippen, löschen, Copy-Paste)
 2. Alle Platzhalter ([PERSON 1], [ORT 1] etc.) sind als **spezielle Elemente farblich hervorgehoben** (nach Entitätstyp)
-3. Der USER kann auf einen Platzhalter klicken/hovern, um den **Originalwert** dahinter zu sehen (z.B. [PERSON 1] → "Dr. Müller")
-4. Die **Herkunft jedes Treffers** ist visuell erkennbar — ob die Anonymisierung von NER oder Sperrliste stammt (z.B. kleines Icon)
+3. Die **Herkunft jedes Treffers** ist visuell erkennbar — ob die Anonymisierung von NER oder Sperrliste stammt (z.B. kleines Icon)
 5. Der USER kann einen Platzhalter **rückgängig machen** (False Positive: Platzhalter wird durch Originaltext ersetzt)
 6. Der USER kann nicht erkannten Text markieren und als **neue Entität anonymisieren** (False Negative: Text wird durch Platzhalter ersetzt, mit Typ-Auswahl)
 7. Bei False-Negative-Markierung bietet das SYSTEM eine Schnellaktion **"zur Sperrliste hinzufügen"** an (US-5 AC 10) — sofort auf alle weiteren Vorkommen in der aktuellen Sitzung angewendet
 8. Der Review-Modus ist **jederzeit unterbrechbar** — alle Änderungen werden automatisch gespeichert. Der USER kann später fortsetzen
-9. Es gibt **keinen expliziten Finalisierungs-Schritt** — der USER exportiert den Text wenn er zufrieden ist (Epic 7). Originale werden erst bei Sitzungslöschung (US-0 AC 5) entfernt
+9. Es gibt **keinen expliziten Finalisierungs-Schritt** — der USER exportiert den Text wenn er zufrieden ist (Epic 7)
 10. Der Review-Modus ist für **Audio- und PDF-Sitzungen identisch** — bei PDF-Sitzungen fehlen lediglich Zeitstempel und Speaker-Labels
-11. Speaker-Labels (aus US-2b) können im Review-Modus **umbenannt** werden
-12. Bei Text-Editierung im Review erfolgt **KEINE automatische Re-Anonymisierung** — der USER markiert neue Entitäten manuell (AC 6)
+11. Bei Text-Editierung im Review erfolgt **KEINE automatische Re-Anonymisierung** — der USER markiert neue Entitäten manuell (AC 6)
 
 **Nachbedingungen:**
 1. Der Text ist bereit zum Export (kein separater Finalisierungs-Schritt nötig)
@@ -375,12 +310,12 @@
 **Constraints & Randbedingungen:**
 1. Freies Text-Editieren muss mit speziellen Platzhalter-Elementen koexistieren (Platzhalter dürfen nicht versehentlich gelöscht/zerstückelt werden)
 2. Auto-Save muss alle Änderungen (Text + Anonymisierungs-Korrekturen) zwischen App-Neustarts persistieren
-3. Originale bleiben bis zur Sitzungslöschung (US-0 AC 5) gespeichert — es gibt keinen separaten Finalisierungs-Zeitpunkt
+3. Platzhalter-Mapping (für Undo) wird intern gespeichert und bei Sitzungslöschung entfernt
 4. Review-Modus für PDF- und Audio-Sitzungen teilt die gleiche Funktionalität, nur mit/ohne Zeitstempel + Speaker-Labels
 
 ---
 
-### Epic 7: Export & Datenverwaltung
+### Epic 7: Export
 
 #### US-7: Anonymisierten Text exportieren
 **Als** Psychotherapeut/in
@@ -407,14 +342,16 @@
 
 **Out of Scope:**
 - Automatische Löschfrage nach dem Export — Datenverwaltung passiert unabhängig über die Sitzungsverwaltung (Epic 0, US-0 AC 5)
-- Export mit Metadaten (Titel, Datum, Dauer) — nur reiner Text
+- Export mit Metadaten (Titel, Datum, Dauer) — bewusste Datenschutz-Entscheidung: weniger Kontext im exportierten Dokument = weniger Identifizierbarkeit des Patienten (Entscheidung #113)
 - Word-/PDF-Export — nur Plaintext (.txt) und Zwischenablage (Entscheidung #7)
+- Batch-Export (mehrere Sitzungen gleichzeitig exportieren) — nicht MVP (Entscheidung #116)
+- Teil-Export (Bereich markieren + exportieren) — ganzer Text via Export-Button, Teil-Export via normales Copy-Paste im Editor (Entscheidung #114)
 
 **Constraints & Randbedingungen:**
 1. Export muss den aktuellen Stand des Review-Textes widerspiegeln (inkl. aller User-Editierungen)
 2. Bei PDF-Sitzungen: gleicher Export, aber ohne Zeitstempel und Speaker-Labels (nur Fliesstext mit Platzhaltern)
 
-**Hinweis:** ~~US-7b (Rohdaten nach Export löschen)~~ wurde gestrichen. Die Datenverwaltung (Löschen von Sitzungen inkl. aller Daten) erfolgt ausschliesslich über die Sitzungsverwaltung (Epic 0, US-0 AC 5). Beim Löschen einer Sitzung werden ALLE zugehörigen Daten entfernt (Audio, Originaltext, Mapping, anonymisierter Text).
+**Hinweis:** ~~US-7b (Rohdaten nach Export löschen)~~ wurde gestrichen. Die Datenverwaltung erfolgt über: (1) Manuelle Löschung via Sitzungsverwaltung (Epic 0, US-0 AC 5) und (2) Auto-Löschung nach 30 Tagen (US-0 AC 8). Beim Löschen werden ALLE zugehörigen Daten entfernt (Audio, Originaltext, Mapping, anonymisierter Text).
 
 ---
 
@@ -423,11 +360,11 @@
 | ID | Kategorie | Anforderung | Ziel | Priorität |
 |----|-----------|-------------|------|-----------|
 | NFR-1 | Datenschutz | Alle Verarbeitung komplett lokal | 0 Netzwerk-Requests für Datenverarbeitung | Kritisch |
-| NFR-2 | Datenschutz | Löschung von Sitzungsdaten | USER kann Sitzungen jederzeit komplett löschen (alle Daten: Audio, Text, Mapping) über Sitzungsverwaltung | Hoch |
-| NFR-3 | Performance | Transkription in akzeptabler Zeit | Sequenziell: Max. 2x Echtzeit (10 Min Audio → max. 20 Min). Mit Parallel-Transkription: < 5 Min nach Aufnahme-Stop | Hoch |
+| NFR-2 | Datenschutz | Löschung von Sitzungsdaten | USER kann Sitzungen jederzeit manuell löschen + SYSTEM löscht automatisch nach 30 Tagen ab Erstellung (alle Daten: Audio, Text, Mapping). Stille Löschung, nicht konfigurierbar | Hoch |
+| NFR-3 | Performance | Transkription in akzeptabler Zeit | Sequenziell: Max. 2x Echtzeit (10 Min Audio → max. 20 Min Verarbeitung). Verarbeitung startet nach Aufnahme-Stop | Hoch |
 | NFR-4 | Usability | Einfache, intuitive Bedienung | Ohne technische Vorkenntnisse bedienbar | Hoch |
 | NFR-5 | Sprache | Deutsch allgemein (Hochdeutsch + CH-Dialekte) | Verständlicher Hochdeutsch-Output aus allen gängigen Schweizerdeutschen Dialekten | Hoch |
-| NFR-6 | Plattform | macOS Desktop-Applikation | Electron-basiert, macOS 13+ | Hoch |
+| NFR-6 | Plattform | macOS Desktop-Applikation | Electron-basiert, macOS 14+, Apple Silicon, **8 GB RAM Minimum** | Hoch |
 | NFR-7 | Qualität | NER-Genauigkeit für Anonymisierung | >90% Recall für Namen und Orte; Best-effort für Kontaktdaten in gesprochener Sprache | Hoch |
 | NFR-8 | Persistenz | Sperrliste überlebt App-Neustart | Lokale Speicherung der Benutzerdaten (Sperrliste) | Hoch |
 | NFR-9 | Flexibilität | Alle ML-Modelle austauschbar (Transkription, Diarization, NER, OCR) | Globale Einstellung in Settings; User wählt aus verfügbaren Modellen (technische Modellnamen) | Hoch |
@@ -445,13 +382,13 @@
 | NFR-21 | Performance | App-Startzeit (Cold Start) | < 5 Sekunden bis Dashboard sichtbar und interaktiv — ohne Modell-Loading (Modelle werden on-demand geladen) | Hoch |
 | NFR-22 | Performance | Modell-Loading on-demand | ML-Modelle werden erst bei erster Nutzung geladen (nicht beim App-Start). Ladezeit wird dem User mit Indikator angezeigt | Hoch |
 | NFR-23 | Performance | UI-Responsiveness während ML-Verarbeitung | Mac bleibt für andere Arbeit flüssig benutzbar; ML-Tasks (Whisper, pyannote, flair) werden bei Bedarf gedrosselt (QoS/Nice-Level); Transkription darf dafür etwas länger dauern | Hoch |
-| NFR-24 | Performance | Recording-Overhead | Audio-Aufnahme allein (ohne Parallel-Transkription) verursacht < 5% CPU-Last — andere Apps dürfen nicht spürbar beeinträchtigt werden | Hoch |
+| NFR-24 | Performance | Recording-Overhead | Audio-Aufnahme verursacht < 5% CPU-Last — andere Apps dürfen nicht spürbar beeinträchtigt werden. Keine ML-Verarbeitung während laufender Aufnahme | Hoch |
 | NFR-25 | Performance | Review-Editor flüssig bis 90 Min Transkript | Editor muss bei Texten bis ~15'000 Wörter mit ~100+ Platzhalter-Elementen ohne spürbare Verzögerung beim Tippen, Scrollen und Hover funktionieren | Hoch |
 | NFR-26 | Performance | OCR-Verarbeitungszeit | Text-PDF: < 5 Sekunden (bis 50 Seiten); Scan-PDF via OCR: < 3 Sekunden pro Seite (Apple Vision). 50-Seiten-Scan: < 3 Minuten gesamt | Mittel |
 | NFR-27 | Performance | Sperrliste retroaktive Anwendung | Beim Hinzufügen eines Begriffs im Review wird der gesamte Text der Sitzung in < 2 Sekunden neu gescannt und alle Treffer anonymisiert | Hoch |
 | NFR-28 | Performance | First-Launch Modell-Download | ~4.5 GB Download beim ersten Start mit Fortschrittsanzeige (pro Modell); kein Resume bei Abbruch (Neustart des Downloads). App ist erst nach vollständigem Download einsatzbereit | Mittel |
 | NFR-29 | Performance | Sitzungslöschung | Löschen einer Sitzung (inkl. Audio, Texte, SQLite-Cleanup, VACUUM) in < 5 Sekunden — auch bei 60-Min-Sitzungen (~115 MB Daten) | Mittel |
-| NFR-30 | Performance | Maximale Sitzungsanzahl | Dashboard performant bis ~100 Sitzungen (typische Nutzung: User löscht regelmässig nach Export) | Mittel |
+| NFR-30 | Performance | Maximale Sitzungsanzahl | Dashboard performant bis ~100 Sitzungen (typische Nutzung: Auto-Löschung nach 30 Tagen + manuelle Löschung limitieren die Anzahl) | Mittel |
 
 ---
 
@@ -461,15 +398,10 @@
 flowchart TD
     A[App starten] --> B{Eingabequelle wählen}
     B -->|Aufnahme| C[Gespräch aufnehmen]
-    B -->|Audio importieren| C2[Audio-Datei laden]
     B -->|PDF Import| D[PDF importieren]
     C --> E[Transkription starten]
-    C2 --> E
     E --> E2[Speaker Diarization: bis 4 Sprecher]
-    E2 --> E3{Speaker-Labels benennen?}
-    E3 -->|Ja| E4[Labels umbenennen]
-    E3 -->|Nein| I
-    E4 --> I
+    E2 --> I
     D --> F{PDF-Typ?}
     F -->|Text-PDF| G[Text extrahieren]
     F -->|Scan| H[OCR durchführen]
@@ -494,7 +426,7 @@ flowchart TD
 
 - **Nutzungskontext:** App wird sowohl während der Sitzung (Hintergrund-Aufnahme) als auch nachträglich (Audio-Import) genutzt
 - **Aufnahmedauer:** Typisch 45-60 Minuten (Standard-Therapiesitzung), Max. 3 Stunden (Auto-Stop)
-- **Sitzungsverwaltung:** Mehrere Sitzungen parallel möglich, Dashboard mit Auto-Titel, persistiert bis manuell gelöscht
+- **Sitzungsverwaltung:** Mehrere Sitzungen parallel möglich, Dashboard mit Auto-Titel, persistiert bis manuell gelöscht oder automatisch nach 30 Tagen ab Erstellung; chronologisch absteigend sortiert (fest); gruppiert nach "Heute", "Gestern", "Diese Woche", "Letzte Woche", "Älter"; kein Filter
 - **Hintergrund-Modus:** Menu Bar Icon mit Status, Standby-Unterdrückung, Auto-Recovery (max. 60s Verlust)
 - **Import:** Dateiauswahl + Drag-and-Drop + Batch, Queue-basierte Verarbeitung
 - **Einwilligung:** Hinweis beim ersten Aufnahmestart, kein Zwang
@@ -504,13 +436,14 @@ flowchart TD
 - **Transkription:** Bereinigt (nur Äh/Ähm entfernt), volle Interpunktion, Zeitstempel bei Sprecherwechsel
 - **Sprecheranzahl:** Auto-Erkennung; 1 Sprecher = kein Label; 5+ = best-effort
 - **Workflow:** Transkription → Anonymisierung automatisch, kein Zwischenschritt; Transkription non-blocking
-- **Review:** Freier Texteditor mit farblich hervorgehobenen Platzhaltern; Original per Hover/Klick sichtbar; Herkunft (NER/Sperrliste) erkennbar; False Positives rückgängig, False Negatives markieren + zur Sperrliste; kein Finalisierungs-Schritt (Export wenn fertig); jederzeit unterbrechbar (Auto-Save); kein Audio-Player; identisch für Audio + PDF; kein Typ-Ändern; nur Scrollen
+- **Review:** Freier Texteditor mit farblich hervorgehobenen Platzhaltern; Herkunft (NER/Sperrliste) erkennbar; False Positives rückgängig, False Negatives markieren + zur Sperrliste; kein Finalisierungs-Schritt (Export wenn fertig); jederzeit unterbrechbar (Auto-Save); kein Audio-Player; identisch für Audio + PDF; kein Typ-Ändern; nur Scrollen
 - **Modellauswahl:** Alle ML-Modelle (Transkription, Diarization, NER, OCR) austauschbar in globalen Settings; technische Modellnamen; User kann eigene Modelle hinzufügen (Plugin-Architektur)
-- **PDF-Import:** Nur PDF-Format; Batch + non-blocking; Mixed-PDF auto pro Seite (Text vs. OCR); Passwort-Eingabe; max. 50 Seiten (Warnung); linearer Fliesstext; nur gedruckter Text (keine Handschrift); nur Deutsch-OCR
+- **PDF-Import:** Nur PDF-Format; Batch + non-blocking; Mixed-PDF auto pro Seite (Text vs. OCR); Passwort-Eingabe; linearer Fliesstext; nur gedruckter Text (keine Handschrift); nur Deutsch-OCR
 - **Sitzungstypen:** Audio-Sitzungen und PDF-Sitzungen in gleicher Liste, visuell unterscheidbar; PDF hat kürzeren Workflow (kein Transkriptions-Schritt)
-- **Parallel-Transkription:** Bei Live-Aufnahmen wird im Hintergrund bereits transkribiert (ohne Anzeige); nach Stop finaler Qualitäts-/Diarization-Pass; Ergebnis innerhalb 5 Minuten nach Stop; optional in Settings (Standard: an); erfordert mehr CPU/RAM
-- **Anonymisierung:** Typ-spezifische Platzhalter ([PERSON 1], [ORT 1] etc.); Konsistenz nur pro Sitzung; Coreference-Resolution für Namens-Varianten (best-effort); NER hat Vorrang vor Sperrliste; nur ganze Wörter (keine Teilstrings); Speaker-Labels werden mitanonymisiert; Originale im Review sichtbar (Hover/Tooltip), erst bei Sitzungslöschung (US-0 AC 5) entfernt; < 30 Sekunden Performance; keine Re-Anonymisierung nach Text-Edit im Review
-- **Export:** Zwischenablage (ein Klick) und .txt-Export (macOS Speichern-Dialog); Vorgeschlagener Dateiname = Sitzungstitel; nur anonymisierter Text (keine Metadaten); Formatierung mit Speaker-Labels erhalten; jederzeit + mehrfach exportierbar (kein Voraussetzung); Bestätigung nach Export; kein separater Lösch-Schritt — Sitzungslöschung erfolgt über Sitzungsverwaltung (US-0 AC 5)
+- **Verarbeitung:** Strikt sequenziell — immer nur ein ML-Modell gleichzeitig geladen (8 GB RAM-Constraint). Keine Parallel-Transkription während Aufnahme. Verarbeitung startet nach Aufnahme-Stop. ML-Jobs werden über Task Queue serialisiert (FIFO)
+- **Anonymisierung:** Typ-spezifische Platzhalter ([PERSON 1], [ORT 1] etc.); Konsistenz nur pro Sitzung; Coreference-Resolution für Namens-Varianten (best-effort); NER hat Vorrang vor Sperrliste; nur ganze Wörter (keine Teilstrings); Platzhalter-Mapping intern gespeichert (für False-Positive-Undo), bei Sitzungslöschung entfernt; < 30 Sekunden Performance; keine Re-Anonymisierung nach Text-Edit im Review
+- **Export:** Zwischenablage (ein Klick) und .txt-Export (macOS Speichern-Dialog); Vorgeschlagener Dateiname = Sitzungstitel; nur anonymisierter Text (keine Metadaten — bewusste Datenschutz-Entscheidung); Formatierung mit Speaker-Labels erhalten; jederzeit + mehrfach exportierbar; Bestätigung nach Export; immer ganzer Text (Teil-Export via Copy-Paste im Editor); kein Batch-Export (nicht MVP); kein Export-Status/Flag in Sitzungsliste
+- **Datenretention:** Auto-Löschung aller Sitzungen 30 Tage nach Erstellung — inklusive aller Daten (Audio, Texte, Mapping). Stille Löschung ohne Vorwarnung. Nicht konfigurierbar. Unabhängig vom Export-Status. App ist kein Langzeit-Archiv — exportierte .txt ist die Archivkopie
 
 ---
 
@@ -518,7 +451,7 @@ flowchart TD
 1. Cloud-basierte Verarbeitung oder Synchronisation
 2. Automatische Pseudonymisierung (fiktive Namen statt Platzhalter)
 3. Anonymisierung von Bildinhalten in PDFs (z.B. Gesichtserkennung)
-4. Anzeige des Transkripts WÄHREND der laufenden Aufnahme (inhaltlich unerwünscht — therapeutische Beziehung). Hinweis: Hintergrund-Transkription ohne Anzeige ist IN Scope (Parallel-Transkription, siehe US-1 AC 13-14)
+4. Jegliche ML-Verarbeitung WÄHREND der laufenden Aufnahme — weder Transkription noch andere Modelle laufen parallel zur Aufnahme (8 GB RAM-Constraint, Entscheidung #125)
 5. Nutzerverwaltung / Multi-User-Betrieb
 6. Mobile Version (iOS/Android)
 7. ~~Archivierung/Verwaltung vergangener Transkripte~~ → Ersetzt durch Epic 0: Sitzungsverwaltung
@@ -529,6 +462,11 @@ flowchart TD
 12. Varianten-/Fuzzy-Matching in der Sperrliste
 13. Fallbasierte Sperrlisten (nur eine globale Liste)
 14. Word-/PDF-Export (nur Plaintext und Zwischenablage)
+15. Batch-Export (mehrere Sitzungen gleichzeitig exportieren) — nicht MVP
+16. Konfigurierbare Datenretention — fixer 30-Tage-Default, nicht änderbar
+17. Export-Status/Flag in der Sitzungsliste — kein visueller Marker für "wurde exportiert"
+18. Parallel-Transkription (Hintergrund-Transkription während laufender Aufnahme) — gestrichen wegen 8 GB RAM-Minimum (Entscheidung #125)
+19. Gleichzeitige ML-Workloads (mehrere Modelle parallel) — immer nur ein Modell gleichzeitig geladen
 
 ---
 
@@ -548,7 +486,7 @@ flowchart TD
 | 10 | Welche Dialekte? | Deutsch allgemein — Hochdeutsch + Schweizerdeutsch breit | 2026-02-07 |
 | 11 | Datenlöschung nach Export? | User entscheidet — wird gefragt | 2026-02-07 |
 | 12 | Teilnehmerzahl? | Bis 3-4 Personen (Paartherapie, Angehörige) | 2026-02-07 |
-| 13 | Speaker-Labels benennbar? | Ja — Therapeut/in kann Labels umbenennen | 2026-02-07 |
+| 13 | ~~Speaker-Labels benennbar?~~ | ~~Ja — Therapeut/in kann Labels umbenennen~~ → **GESTRICHEN** (US-2b entfernt, Labels bleiben Person A/B/C/D) | 2026-02-07 |
 | 14 | Gesprochene Kontaktdaten? | Best-effort — System versucht es, keine Garantie | 2026-02-07 |
 | 15 | ICD-Codes anonymisieren? | Nein — Diagnosen bleiben im Text | 2026-02-07 |
 | 16 | Sperrliste pro Therapeut oder pro Fall? | Eine globale Liste pro Therapeut/in | 2026-02-07 |
@@ -570,7 +508,7 @@ flowchart TD
 | 32 | Audio-Import UX? | Dateiauswahl + Drag-and-Drop + Batch | 2026-02-07 |
 | 33 | Bereinigung — was genau? | Nur Äh/Ähm entfernen; Füllwörter, Satzabbrüche, Wiederholungen bleiben | 2026-02-07 |
 | 34 | Schweizerdeutsch-Begriffe? | Nur Hochdeutsch-Output, bestmöglich übersetzt, kein Original verfügbar | 2026-02-07 |
-| 35 | Sprecherzuordnung korrigierbar? | Out of Scope für MVP — nur Label-Umbenennung | 2026-02-07 |
+| 35 | Sprecherzuordnung korrigierbar? | Out of Scope für MVP — Labels bleiben Person A/B/C/D (keine Umbenennung) | 2026-02-07 |
 | 36 | Transkript editierbar? | Ja, im Review-Modus (Epic 6), kein separater Schritt | 2026-02-07 |
 | 37 | Zeitstempel im Transkript? | Ja — bei jedem Sprecherwechsel (z.B. [00:23:40]) | 2026-02-07 |
 | 38 | Sprecheranzahl-Handling? | Auto-Erkennung; 1 Sprecher = kein Label; 5+ = best-effort | 2026-02-07 |
@@ -591,25 +529,25 @@ flowchart TD
 | 53 | Handschrift-OCR? | Nein — nur gedruckter Text | 2026-02-07 |
 | 54 | PDF-Layout? | Linearer Fliesstext, keine Layout-Erhaltung | 2026-02-07 |
 | 55 | Auto-Anonymisierung bei PDF? | Ja — automatisch nach Textextraktion, wie bei Audio | 2026-02-07 |
-| 56 | PDF-Seitenlimit? | Max. 50 Seiten, darüber Warnung (Verarbeitung trotzdem möglich) | 2026-02-07 |
+| 56 | ~~PDF-Seitenlimit?~~ | ~~Max. 50 Seiten, darüber Warnung~~ → **GESTRICHEN** (kein Seitenlimit, keine Warnung) | 2026-02-07 |
 | 57 | Dokumentformate? | Nur PDF — kein Word, keine Bilder | 2026-02-07 |
 | 58 | Passwortgeschützte PDFs? | Passwort-Eingabe ermöglichen | 2026-02-07 |
 | 59 | Mixed-PDFs (Text + Scan)? | Automatisch pro Seite erkennen (Text → direkte Extraktion, Scan → OCR) | 2026-02-07 |
 | 60 | OCR-Sprache? | Nur Deutsch | 2026-02-07 |
 | 61 | PDF Batch & Blocking? | Batch-Import + non-blocking (Queue, FIFO) — konsistent mit Audio | 2026-02-07 |
-| 62 | Parallel-Transkription: Was genau? | Hintergrund-Transkription während Live-Aufnahme — OHNE Anzeige des Transkripts (inhaltliche Entscheidung #26 bleibt) | 2026-02-07 |
-| 63 | Qualität vs. Geschwindigkeit? | Qualität hat Priorität — nach Aufnahme-Stop finaler Diarization-/Qualitäts-Pass | 2026-02-07 |
-| 64 | Ziel-Wartezeit nach Stop? | < 5 Minuten nach Aufnahme-Stop (statt 20-40 Min bei sequenzieller Verarbeitung) | 2026-02-07 |
-| 65 | Parallel-Transkription obligatorisch? | Optional in Settings (Standard: an) — da deutlich mehr CPU/RAM benötigt wird | 2026-02-07 |
+| 62 | ~~Parallel-Transkription: Was genau?~~ | ~~Hintergrund-Transkription während Live-Aufnahme~~ → **ÜBERHOLT durch #126** (gestrichen wegen 8 GB RAM) | 2026-02-07 |
+| 63 | ~~Qualität vs. Geschwindigkeit?~~ | ~~Qualität hat Priorität~~ → **ÜBERHOLT durch #126** (nur noch sequenziell) | 2026-02-07 |
+| 64 | ~~Ziel-Wartezeit nach Stop?~~ | ~~< 5 Minuten nach Stop~~ → **ÜBERHOLT durch #126** (sequenziell: max. 2x Echtzeit gemäss NFR-3) | 2026-02-07 |
+| 65 | ~~Parallel-Transkription obligatorisch?~~ | ~~Optional in Settings~~ → **ÜBERHOLT durch #126** (Feature gestrichen) | 2026-02-07 |
 | 66 | Platzhalter-Konsistenz Scope? | Nur pro Sitzung — jede Sitzung hat eigene Platzhalter-Nummerierung, kein sitzungsübergreifendes Mapping | 2026-02-07 |
-| 67 | Originale nach Anonymisierung sichtbar? | Im Review sichtbar (Hover/Tooltip), erst bei Sitzungslöschung (US-0 AC 5) endgültig entfernt (kein Finalisierungs-Schritt, siehe #87) | 2026-02-07 |
+| 67 | ~~Originale nach Anonymisierung sichtbar?~~ | ~~Im Review sichtbar (Hover/Tooltip)~~ → **GESTRICHEN** (nicht MVP; Platzhalter-Mapping intern für False-Positive-Undo, bei Sitzungslöschung entfernt) | 2026-02-07 |
 | 68 | NER vs. Sperrliste Priorität? | NER hat Vorrang; Sperrliste ergänzt was NER nicht findet; bei Typ-Konflikt gilt NER | 2026-02-07 |
 | 69 | Umgang mit Mehrdeutigkeiten? | Auto-Anonymisierung + Review bei Bedarf (kein Bestätigungs-Zwang pro Fund) | 2026-02-07 |
 | 70 | Namens-Varianten erkennen? | Intelligente Zuordnung (best-effort Coreference): "Dr. Müller" = "Müller" = "Herr Müller" → [PERSON 1] | 2026-02-07 |
 | 71 | Re-Anonymisierung nach Text-Edit? | Nein — im Review ist der User verantwortlich; neue Entitäten manuell markieren | 2026-02-07 |
 | 72 | Anonymisierungs-Performance? | < 30 Sekunden, auch bei langen Texten (ca. 10'000 Wörter) | 2026-02-07 |
 | 73 | Teilstrings anonymisieren? | Nein — nur ganze Wörter/eigenständige Entitäten. "Müller" in "Müllerstrasse" bleibt | 2026-02-07 |
-| 74 | Speaker-Labels anonymisieren? | Ja — Labels werden wie jeder andere Text anonymisiert, wenn sie erkannte Namen enthalten | 2026-02-07 |
+| 74 | ~~Speaker-Labels anonymisieren?~~ | ~~Ja — Labels werden wie jeder andere Text anonymisiert~~ → **ENTFÄLLT** (Labels sind immer Person A/B/C/D, enthalten keine Namen) | 2026-02-07 |
 | 75 | Platzhalter-Nummerierung? | Typ-spezifisch: [PERSON 1], [ORT 1], [TELEFON 1] etc. (nicht global fortlaufend) | 2026-02-07 |
 | 76 | Sperrliste Zugangspunkt? | Settings (volle CRUD-Verwaltung) + Review-Modus (Schnellaktion: Begriff zur Sperrliste hinzufügen) | 2026-02-08 |
 | 77 | Sperrliste Case-Sensitivity? | Case-insensitive — Gross-/Kleinschreibung wird ignoriert (präzisiert Entscheidung #17) | 2026-02-08 |
@@ -622,7 +560,7 @@ flowchart TD
 | 84 | Review: Text-Editierung? | Freies Editieren wie in einem Texteditor (Cursor, Tippen, Löschen, Copy-Paste) | 2026-02-08 |
 | 85 | Review: Audio-Player? | Nein — kein Audio-Player im Review. User nutzt externen Player für Audio-Abgleich | 2026-02-08 |
 | 86 | Review: Zwischenspeicherung? | Jederzeit unterbrechbar — alle Änderungen werden automatisch gespeichert | 2026-02-08 |
-| 87 | Review: Finalisierung? | Kein expliziter Finalisierungs-Schritt — User exportiert wenn zufrieden. Originale erst bei Sitzungslöschung (US-0 AC 5) entfernt | 2026-02-08 |
+| 87 | Review: Finalisierung? | Kein expliziter Finalisierungs-Schritt — User exportiert wenn zufrieden | 2026-02-08 |
 | 88 | Review-Modell? | Mittlerer Weg: Freier Texteditor + farblich hervorgehobene Platzhalter + Klick für Original. Keine komplexen Werkzeuge wie Typ-Ändern | 2026-02-08 |
 | 89 | Review: Entitäten-Navigation? | Nur Scrollen — kein Springen zum nächsten/vorherigen Platzhalter | 2026-02-08 |
 | 90 | Review: Herkunft (NER/Sperrliste)? | Bestätigt: Herkunft bleibt sichtbar (Entscheidung #82 gilt) | 2026-02-08 |
@@ -646,6 +584,22 @@ flowchart TD
 | 108 | App-Startzeit? | < 5 Sekunden bis Dashboard interaktiv (Cold Start ohne Modell-Loading) | 2026-02-08 |
 | 109 | Modell-Download Resume? | Nein — kein Resume bei Abbruch, Download muss in einem Durchgang abgeschlossen werden | 2026-02-08 |
 | 110 | Editor-Performance Zielgrösse? | Bis 90 Min Transkript (~15'000 Wörter) muss der Editor flüssig bleiben | 2026-02-08 |
+| 111 | Epic 7 Name? | Umbenennen zu "Export" — Datenverwaltung ist vollständig in Epic 0 abgedeckt | 2026-02-13 |
+| 112 | .txt reicht für alle Exportziele? | Ja — Supervision, Dokumentation, Praxissoftware akzeptieren Plaintext | 2026-02-13 |
+| 113 | Keine Metadaten im Export? | Bewusste Datenschutz-Entscheidung — weniger Kontext = weniger Identifizierbarkeit des Patienten | 2026-02-13 |
+| 114 | Teil-Export? | Nein — Export = immer ganzer Text. Teil-Export via normales Copy-Paste im Editor | 2026-02-13 |
+| 115 | Status "Exportiert"? | Entfernt — kein echter Statuswechsel, da beliebig oft exportierbar ohne Finalisierung | 2026-02-13 |
+| 116 | Batch-Export? | Nice-to-have, nicht MVP — einzeln exportieren reicht zunächst | 2026-02-13 |
+| 117 | Datenretention? | Auto-Löschung nach 30 Tagen ab Erstellung — App ist kein Langzeit-Archiv, exportierte .txt ist Archivkopie | 2026-02-13 |
+| 118 | Auch nicht-exportierte Sitzungen löschen? | Ja — Datenschutz hat Vorrang vor Komfort. Auch nie exportierte Sitzungen werden nach 30 Tagen gelöscht | 2026-02-13 |
+| 119 | Lösch-Warnung bei Auto-Löschung? | Nein — stille Löschung, kein Hinweis. Therapeut weiss das, weil es ein fixer Default ist | 2026-02-13 |
+| 120 | Export-Flag in Sitzungsliste? | Nein — kein visueller Marker für "wurde exportiert" | 2026-02-13 |
+| 121 | Encoding .txt-Export? | Plattform-konform — UTF-8 + LF ist macOS-Standard, kein explizites Requirement nötig | 2026-02-13 |
+| 122 | Sitzungsliste sortierbar? | Feste Sortierung: chronologisch absteigend (neueste zuerst). Kein Umschalten | 2026-02-13 |
+| 123 | Sitzungsliste gruppiert? | Relative Zeiträume: "Heute", "Gestern", "Diese Woche", "Letzte Woche", "Älter". Leere Gruppen ausgeblendet | 2026-02-13 |
+| 124 | Sitzungsliste filterbar? | Nein — bei max. 30 Tagen und typisch wenigen Sitzungen ist Filtern unnötig | 2026-02-13 |
+| 125 | Minimum-RAM? | **8 GB ist Minimum UND Zielgerät** (MacBook Air M3 8 GB = typisches Therapeuten-Gerät). Parallel-Transkription fällt weg, ML-Verarbeitung strikt sequenziell | 2026-02-13 |
+| 126 | Parallel-Transkription? | **Gestrichen** — passt nicht ins 8 GB RAM-Budget. Immer sequenziell nach Aufnahme-Stop. Entscheidungen #62-#65 sind damit überholt | 2026-02-13 |
 
 ---
 

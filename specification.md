@@ -170,11 +170,7 @@ const whisper = spawn('./bin/whisper-cpp', [
 - MIT-Lizenz
 - Ideal für User, die Speed priorisieren
 
-**Streaming-Modus (Parallel-Transkription): Diart**
-- Echtzeit-Diarization basierend auf pyannote-Modellen
-- DER: 20-30% (Streaming-Tradeoff)
-- Liefert vorläufige Speaker-Labels während Live-Aufnahme
-- Finaler Offline-Pass nach Stop mit pyannote community-1
+~~**Streaming-Modus: Diart** — gestrichen (Entscheidung #126: Parallel-Transkription entfällt wegen 8 GB RAM-Minimum)~~
 
 ### 3.2 Alignment-Strategie
 
@@ -194,17 +190,19 @@ Merge: Word-Midpoint ∈ Speaker-Segment → Sprecher-Zuordnung
 3. Konsekutive Wörter desselben Sprechers → ein Absatz
 4. Bei Sprecherwechsel → neuer Absatz mit Zeitstempel `[HH:MM:SS]`
 
-### 3.3 Performance-Budget (60 Min Sitzung, M1 16 GB)
+### 3.3 Performance-Budget (60 Min Sitzung, sequenziell)
 
-| Schritt | Sequenziell | Mit Parallel-Transkription |
-|---------|-------------|---------------------------|
-| ASR (whisper.cpp, Q5_0) | ~20-30 Min | Bereits während Aufnahme erledigt |
-| Diarization (pyannote) | ~6-18 Min | ~6-18 Min (nach Stop) |
+> **Hinweis:** Alle ML-Verarbeitung erfolgt strikt sequenziell — immer nur ein Modell gleichzeitig geladen (8 GB RAM-Constraint, Entscheidung #125/#126). Keine Parallel-Transkription während Aufnahme.
+
+| Schritt | M3 8 GB (Zielgerät) | M1 Pro 16 GB |
+|---------|---------------------|--------------|
+| ASR (whisper.cpp, Q5_0) | ~15-25 Min | ~20-30 Min |
+| Diarization (pyannote) | ~6-15 Min | ~6-18 Min |
 | Alignment + Filler-Removal | ~5 Sek | ~5 Sek |
-| **Total** | **~26-48 Min** | **~6-18 Min nach Stop** |
+| **Total nach Stop** | **~21-40 Min** | **~26-48 Min** |
 
-→ Sequenziell: Erfüllt NFR-3 (max 2x Echtzeit = 120 Min)
-→ Parallel: Erfüllt Ziel < 5 Min nach Stop für kürzere Sitzungen
+→ Erfüllt NFR-3 (max 2x Echtzeit = 120 Min) auf allen unterstützten Geräten
+→ Modelle werden nach jedem Schritt entladen, bevor das nächste geladen wird
 
 ---
 
@@ -382,7 +380,7 @@ CREATE TABLE sessions (
     type TEXT NOT NULL CHECK(type IN ('audio', 'pdf')),
     status TEXT NOT NULL CHECK(status IN (
         'recording', 'transcribing', 'diarizing',
-        'anonymizing', 'review', 'exported', 'error'
+        'anonymizing', 'review', 'error'
     )),
     audio_path TEXT,
     transcript_path TEXT,
@@ -442,7 +440,7 @@ CREATE TABLE model_registry (
     "ner": "flair-ner-german-large",
     "ocr": "apple-vision"
   },
-  "parallelTranscription": true,
+  "sequentialProcessing": true,
   "firstLaunchDone": false,
   "consentReminderShown": false
 }
@@ -548,34 +546,42 @@ interface ModelProvider {
 
 ## 9. Verarbeitungs-Pipelines
 
-### 9.1 Audio-Pipeline (Live-Aufnahme mit Parallel-Transkription)
+### 9.1 Audio-Pipeline (Live-Aufnahme, sequenziell nach Stop)
+
+> Keine ML-Verarbeitung während Aufnahme (8 GB RAM-Constraint).
 
 ```
 ┌─ Aufnahme läuft ─────────────────────────────────────┐
 │                                                       │
 │  Mikrofon → AudioWorklet → PCM-Chunks → Disk (WAV)  │
-│                              │                        │
-│                              └─→ whisper.cpp (chunked)│
-│                                  Partial Transcript   │
-│                                  (nicht angezeigt)    │
+│  (Nur Recording, keine ML-Last, < 5% CPU)            │
+│                                                       │
 └──── User drückt STOP ────────────────────────────────┘
                     │
                     ▼
          ┌──────────────────┐
-         │ Finaler Pass     │
-         │                  │
-         │ 1. pyannote      │  ← Volle Audiodatei
-         │    Diarization   │
-         │ 2. Alignment     │  ← Words + Speaker Segments
-         │ 3. Filler-Remove │
-         │ 4. Formatierung  │
+         │ 1. whisper.cpp   │  ← Volle Audiodatei
+         │    ASR (Q5_0)    │     (Modell laden → transkribieren → entladen)
          └────────┬─────────┘
                   │
                   ▼
          ┌──────────────────┐
-         │ Auto-Anonymis.   │
-         │ (NER + Regex     │
-         │  + Sperrliste)   │
+         │ 2. pyannote      │  ← Volle Audiodatei
+         │    Diarization   │     (Modell laden → diarisieren → entladen)
+         └────────┬─────────┘
+                  │
+                  ▼
+         ┌──────────────────┐
+         │ 3. Alignment     │
+         │    + Filler-Rem. │  ← Words + Speaker Segments
+         │    + Formatierung│     (kein ML-Modell nötig)
+         └────────┬─────────┘
+                  │
+                  ▼
+         ┌──────────────────┐
+         │ 4. Anonymisierung│  ← flair NER + Regex + Sperrliste
+         │    (NER laden    │     (Modell laden → anonymisieren → entladen)
+         │     → entladen)  │
          └────────┬─────────┘
                   │
                   ▼
@@ -625,21 +631,25 @@ PDF-Import → Queue (FIFO)
 
 ## 10. Ressourcen-Budget
 
-### 10.1 RAM-Verbrauch (gleichzeitig)
+### 10.1 RAM-Verbrauch (strikt sequenziell)
 
-| Komponente | RAM |
-|------------|-----|
-| Electron App | ~500 MB |
-| whisper.cpp (large-v3-turbo Q5_0) | ~1.8 GB |
-| pyannote.audio | ~1.5 GB |
-| flair NER (bei Anonymisierung) | ~2.2 GB |
-| Audio-Buffer (60 Min) | ~300 MB |
-| OS Overhead | ~2 GB |
-| **Total (Peak)** | **~8.3 GB** |
+> **Zielgerät:** MacBook Air M3 8 GB (Entscheidung #125). Alle ML-Modelle laufen nacheinander — immer nur eines gleichzeitig geladen.
 
-**Hinweis:** Whisper und flair NER laufen nie gleichzeitig (sequentielle Pipeline). Peak ist Whisper + pyannote bei Parallel-Transkription.
+| Phase | Aktive Komponenten | RAM |
+|-------|-------------------|-----|
+| **Aufnahme** | Electron + Audio-Buffer | ~800 MB |
+| **ASR** | Electron + whisper.cpp Q5_0 | ~2.3 GB |
+| **Diarization** | Electron + pyannote | ~2.0 GB |
+| **Anonymisierung** | Electron + flair NER large | ~2.7 GB |
+| **Review/Export** | Electron + Text im Editor | ~600 MB |
+| OS Overhead (macOS 14) | | ~2.5 GB |
+| **Peak (Anonymisierung)** | Electron + flair + OS | **~5.2 GB** |
 
-**Empfohlenes Minimum:** 16 GB RAM (Standard bei allen Apple Silicon Macs)
+**Headroom auf 8 GB:** ~2.8 GB für andere Apps (Safari, Praxis-SW)
+
+**Minimum:** 8 GB RAM (Apple Silicon). Strikt sequenzielle Pipeline — Modell wird nach jedem Schritt entladen.
+
+**Wichtig:** Zwischen jedem Pipeline-Schritt muss das vorherige Modell explizit entladen werden, bevor das nächste geladen wird.
 
 ### 10.2 Disk-Verbrauch
 
