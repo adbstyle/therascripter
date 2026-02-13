@@ -427,6 +427,82 @@
 
 ---
 
+### Epic 8: Distribution & Installation
+
+#### US-8a: App als .dmg installieren
+**Als** Psychotherapeut/in
+**möchte ich** die App als .dmg-Datei herunterladen und per Drag-and-Drop installieren können,
+**damit** ich Therascript ohne technische Vorkenntnisse auf meinem Mac einrichten kann.
+
+**Vorbedingungen:**
+1. Der USER hat einen Mac mit Apple Silicon (M1-M4) und macOS 14+
+2. Der USER hat Internetzugang (für Modell-Download beim ersten Start)
+
+**Akzeptanzkriterien:**
+1. Das SYSTEM wird als **.dmg-Datei** verteilt (~250 MB ohne ML-Modelle)
+2. Die .dmg enthält ein Standard-macOS-Installationsfenster mit Drag-to-Applications-Anweisung
+3. Die App ist **ausschliesslich als ARM64-Binary** gebaut — auf Intel-Macs ist die App nicht startbar
+4. Nach Drag-and-Drop in den Applications-Ordner startet die App ohne weitere Installationsschritte
+5. Das SYSTEM zeigt beim **ersten Start** eine Fortschrittsanzeige für den Modell-Download (~4 GB) mit Meldung was geladen wird und warum
+6. Der Modell-Download ist **resume-fähig** — bei Netzwerk-Abbruch wird der Download beim nächsten Start fortgesetzt (nicht von vorne)
+7. Die App ist erst **nach vollständigem Modell-Download** einsatzbereit für Verarbeitungsaufgaben
+8. Das SYSTEM prüft beim Start, ob **ausreichend Speicherplatz** vorhanden ist (~5 GB frei) und zeigt eine verständliche Fehlermeldung wenn nicht
+
+**Nachbedingungen:**
+1. Die App ist im Applications-Ordner installiert und startbereit
+2. Alle ML-Modelle sind lokal heruntergeladen und verifiziert (SHA-256, siehe NFR-16)
+
+**Out of Scope:**
+- Automatische Updates (kein Auto-Updater im MVP — neue Version = neue .dmg, Entscheidung #131)
+- Mac App Store Distribution (Entscheidung #128, #129)
+- Intel (x86_64) Unterstützung (Entscheidung #130)
+- Offline-Installation (Modelle müssen beim First-Launch heruntergeladen werden)
+- Universal Binary (ARM64 + x86_64 Hybrid)
+
+**Offene Fragen:**
+1. **Code Signing & Notarization**: Wird ein Apple Developer Account (99€/Jahr) verwendet? Ohne Notarization zeigt macOS Gatekeeper eine Warnung, die nicht-technische Nutzer blockiert. Entscheidung #104 sagt "Pflicht", aber Kosten wurden als Hindernis genannt — **muss vor Distribution an Dritte entschieden werden**
+2. Wo wird die .dmg gehostet? (GitHub Releases? Eigene Website?)
+3. Soll die Downloadseite Systemvoraussetzungen (Apple Silicon, macOS 14+, 5 GB freier Speicher, Internet) klar kommunizieren?
+
+**Constraints & Randbedingungen:**
+1. Entscheidung #109 (kein Resume) wird hiermit revidiert → Resume-fähiger Download
+2. NFR-1 (keine Cloud-Verarbeitung) bleibt unberührt — der Modell-Download ist einmalig und enthält keine Nutzerdaten
+3. NFR-16 (Modell-Integritätsprüfung per SHA-256) gilt auch für heruntergeladene Modelle
+4. Ohne Code Signing müssen Nutzer Gatekeeper manuell umgehen (Rechtsklick → Öffnen)
+
+---
+
+#### US-8b: App sauber deinstallieren
+**Als** Psychotherapeut/in
+**möchte ich** die App vollständig deinstallieren können, inklusive aller heruntergeladenen Modelle und gespeicherten Daten,
+**damit** nach der Deinstallation keine sensiblen Therapiedaten auf meinem Mac verbleiben.
+
+**Vorbedingungen:**
+1. Die App ist installiert
+
+**Akzeptanzkriterien:**
+1. Das SYSTEM bietet einen Deinstallations-Menüpunkt (z.B. im App-Menü: "Therascript vollständig entfernen")
+2. Der USER erhält einen **Bestätigungsdialog** vor der Deinstallation mit Hinweis, dass alle Daten unwiderruflich gelöscht werden
+3. Die Deinstallation entfernt: ML-Modelle (~4 GB), SQLite-Datenbank (Sitzungen + Sperrliste), Audio-Dateien, Settings, Temp-Dateien, Log-Dateien
+4. Nach der Deinstallation verbleiben **keine Therascript-Dateien** im Benutzerverzeichnis (kein `~/.therascript/`, kein Application Support Ordner)
+5. Die .app-Datei im Applications-Ordner wird dem USER zum manuellen Löschen empfohlen (die App kann sich nicht selbst löschen)
+
+**Nachbedingungen:**
+1. Alle Therascript-Daten sind vom System entfernt (ausser der .app-Datei selbst)
+
+**Out of Scope:**
+- Automatische Entfernung der .app-Datei aus /Applications (macOS-Limitation)
+- Remote-Wipe oder Management-Funktionen
+
+**Offene Fragen:**
+1. Reicht ein In-App-Menüpunkt, oder braucht es ein separates Uninstaller-Script für den Fall, dass die App nicht mehr startet?
+
+**Constraints & Randbedingungen:**
+1. NFR-17 (Sichere Datenlöschung: SQLite VACUUM, Temp-Cleanup) gilt auch für die Deinstallation
+2. App Sandbox (NFR-18) beschränkt, welche Verzeichnisse die App löschen kann
+
+---
+
 ## 4. Nicht-funktionale Anforderungen
 
 | ID | Kategorie | Anforderung | Ziel | Priorität |
@@ -458,9 +534,12 @@
 | NFR-25 | Performance | Review-Editor flüssig bis 90 Min Transkript | Editor muss bei Texten bis ~15'000 Wörter mit ~100+ Platzhalter-Elementen ohne spürbare Verzögerung beim Tippen, Scrollen und Hover funktionieren | Hoch |
 | NFR-26 | Performance | OCR-Verarbeitungszeit | Text-PDF: < 5 Sekunden (bis 50 Seiten); Scan-PDF via OCR: < 3 Sekunden pro Seite (Apple Vision). 50-Seiten-Scan: < 3 Minuten gesamt | Mittel |
 | NFR-27 | Performance | Sperrliste retroaktive Anwendung | Beim Hinzufügen eines Begriffs im Review wird der gesamte Text der Sitzung in < 2 Sekunden neu gescannt und alle Treffer anonymisiert | Hoch |
-| NFR-28 | Performance | First-Launch Modell-Download | ~4.5 GB Download beim ersten Start mit Fortschrittsanzeige (pro Modell); kein Resume bei Abbruch (Neustart des Downloads). App ist erst nach vollständigem Download einsatzbereit | Mittel |
+| NFR-28 | Performance | First-Launch Modell-Download | ~4.5 GB Download beim ersten Start mit Fortschrittsanzeige (pro Modell); **resume-fähig bei Abbruch** (Entscheidung #109 revidiert). App ist erst nach vollständigem Download einsatzbereit. Speicherplatz-Prüfung vor Download (~5 GB frei) | Mittel |
 | NFR-29 | Performance | Sitzungslöschung | Löschen einer Sitzung (inkl. Audio, Texte, SQLite-Cleanup, VACUUM) in < 5 Sekunden — auch bei 60-Min-Sitzungen (~115 MB Daten) | Mittel |
 | NFR-30 | Performance | Maximale Sitzungsanzahl | Dashboard performant bis ~100 Sitzungen (typische Nutzung: Auto-Löschung nach 30 Tagen + manuelle Löschung limitieren die Anzahl) | Mittel |
+| NFR-31 | Distribution | .dmg-Packaging für macOS | ARM64-only .dmg mit Drag-to-Applications; ~250 MB Installer-Grösse (ohne ML-Modelle) | Hoch |
+| NFR-32 | Usability | Saubere Deinstallation | In-App-Uninstaller entfernt alle Daten und Modelle (~4.7 GB); keine Rückstände im Benutzerverzeichnis | Mittel |
+| NFR-33 | Lizenz | Open Source Lizenz | MIT-Lizenz; kompatibel mit allen verwendeten Dependencies (siehe Lizenz-Tabelle Kap. 19) | Hoch |
 
 ---
 
@@ -514,6 +593,7 @@ flowchart TD
 - **Anonymisierung:** Typ-spezifische Platzhalter ([PERSON 1], [ORT 1] etc.); Konsistenz nur pro Sitzung; Coreference-Resolution für Namens-Varianten (best-effort); NER hat Vorrang vor Sperrliste; nur ganze Wörter (keine Teilstrings); Platzhalter-Mapping intern gespeichert (für False-Positive-Undo), bei Sitzungslöschung entfernt; < 30 Sekunden Performance; keine Re-Anonymisierung nach Text-Edit im Review
 - **Export:** Nur Zwischenablage (ein Klick); nur anonymisierter Text (keine Metadaten — bewusste Datenschutz-Entscheidung); Formatierung mit Speaker-Labels erhalten; jederzeit + mehrfach kopierbar; Bestätigung nach Kopieren; immer ganzer Text (Teil-Export via Copy-Paste im Editor); kein .txt-Dateiexport (nicht MVP); kein Batch-Export (nicht MVP); kein Export-Status/Flag in Sitzungsliste
 - **Datenretention:** Auto-Löschung aller Sitzungen 30 Tage nach Erstellung — inklusive aller Daten (Audio, Texte, Mapping). Stille Löschung ohne Vorwarnung. Nicht konfigurierbar. Unabhängig vom Export-Status. App ist kein Langzeit-Archiv — der USER ist verantwortlich, den kopierten Text extern zu sichern
+- **Distribution:** .dmg via Direktdownload (kein Mac App Store); ARM64-only; ~250 MB Installer + ~4 GB Modell-Download beim First-Launch (resume-fähig); manuelles Update (neue .dmg); kostenlos / MIT-Lizenz; In-App-Uninstaller für saubere Entfernung; Code Signing/Notarization noch offen (Entscheidung #104 vs. Kosten)
 
 ---
 
@@ -652,7 +732,7 @@ flowchart TD
 | 106 | Modell-Loading-Strategie? | On-demand — Modelle werden erst bei erster Nutzung geladen, nicht beim App-Start. App startet sofort | 2026-02-08 |
 | 107 | CPU-Budget bei Hintergrund-Transkription? | Mac muss flüssig bleiben — ML-Tasks werden bei Bedarf gedrosselt, Transkription darf dafür länger dauern | 2026-02-08 |
 | 108 | App-Startzeit? | < 5 Sekunden bis Dashboard interaktiv (Cold Start ohne Modell-Loading) | 2026-02-08 |
-| 109 | Modell-Download Resume? | Nein — kein Resume bei Abbruch, Download muss in einem Durchgang abgeschlossen werden | 2026-02-08 |
+| 109 | ~~Modell-Download Resume?~~ | ~~Nein — kein Resume bei Abbruch~~ → **REVIDIERT**: Ja — resume-fähiger Download bei Abbruch (Zielgruppe sind nicht-technische Nutzer mit evtl. instabiler Verbindung) | 2026-02-13 |
 | 110 | Editor-Performance Zielgrösse? | Bis 90 Min Transkript (~15'000 Wörter) muss der Editor flüssig bleiben | 2026-02-08 |
 | 111 | Epic 7 Name? | Umbenennen zu "Export" — Datenverwaltung ist vollständig in Epic 0 abgedeckt | 2026-02-13 |
 | 112 | ~~.txt reicht für alle Exportziele?~~ | ~~Ja — Supervision, Dokumentation, Praxissoftware akzeptieren Plaintext~~ → **ENTFÄLLT** (.txt-Export gestrichen, nur Zwischenablage, Entscheidung #127) | 2026-02-13 |
@@ -695,6 +775,12 @@ flowchart TD
 | 149 | Sperrliste: Kernproblem? | **Begriffe die NER prinzipiell nicht erkennt** — Spitznamen, Firmennamen, Therapie-spezifische Codes. Nicht primär für NER-Fehler (False Negatives) | 2026-02-13 |
 | 150 | Sperrliste: Erwartete Grösse? | **< 50 Einträge** — einfache Liste reicht, keine Suche/Filter/Pagination nötig | 2026-02-13 |
 | 151 | MEDIZINISCH/SONSTIGES im Review? | **Nein** — Extra-Typen nur in der Sperrliste verfügbar. Manuelle False-Negative-Markierung im Review bleibt bei 5 NER-Typen (PERSON, ORT, DATUM, KONTAKT, ORGANISATION) | 2026-02-13 |
+| 152 | Distributionsformat? | **.dmg via Direktdownload** — kein Mac App Store | 2026-02-13 |
+| 153 | Warum kein Mac App Store? | **Kontrolle + Kosten** — unabhängig von Apple verteilen, Apple Developer Program (99€/Jahr) + Review-Prozess vermeiden | 2026-02-13 |
+| 154 | Architektur ARM64/Universal? | **Nur ARM64** (Apple Silicon) — kein Intel-Support, kein Universal Binary | 2026-02-13 |
+| 155 | Update-Mechanismus? | **Manuell** — neue Version = neue .dmg herunterladen und installieren. Kein Auto-Updater im MVP | 2026-02-13 |
+| 156 | Geschäftsmodell? | **Kostenlos / Open Source (MIT-Lizenz)** — kein Lizenzschlüssel, kein Bezahlmodell | 2026-02-13 |
+| 157 | Deinstallation? | **In-App-Uninstaller nötig** — Menüpunkt entfernt Modelle, Daten, Settings. .app muss USER manuell löschen | 2026-02-13 |
 
 ---
 
