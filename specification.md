@@ -1032,6 +1032,8 @@ macOS App Sandbox Entitlements (`entitlements.mac.plist`):
 - Notarization via `xcrun notarytool` für Gatekeeper-Kompatibilität
 - Konfiguriert in `electron-builder.yml`
 
+**⚠️ Offene Entscheidung:** Code Signing erfordert Apple Developer Account (99€/Jahr). Entscheidung #104 sagt "Pflicht", aber Kosten wurden als Hindernis genannt (Entscheidung #153). Ohne Notarization zeigt Gatekeeper nicht-technischen Nutzern eine Blockier-Warnung. **Muss vor Distribution an Dritte entschieden werden.**
+
 ### 12.9 Supply-Chain-Hygiene (NFR-20)
 
 - `npm audit` in CI-Pipeline
@@ -1086,17 +1088,18 @@ macOS App Sandbox Entitlements (`entitlements.mac.plist`):
 ### 14.1 Flow
 
 1. App startet zum ersten Mal (`firstLaunchDone === false`)
-2. Dashboard zeigt "Ersteinrichtung" mit Download-Übersicht:
+2. **Speicherplatz-Prüfung**: System prüft ob ~5 GB freier Speicher vorhanden sind; bei zu wenig Platz verständliche Fehlermeldung
+3. Dashboard zeigt "Ersteinrichtung" mit Download-Übersicht:
    - whisper-large-v3-turbo Q5_0 (~1.6 GB)
    - pyannote-community-1 (~200 MB)
    - flair-ner-german-large (~2.2 GB)
    - **Total: ~4.0 GB**
-3. Fortschrittsanzeige pro Modell + gesamt
-4. Download sequenziell (ein Modell nach dem anderen)
-5. SHA-256-Verification nach jedem Download (NFR-16)
-6. Bei Abbruch: Kein Resume — Download muss komplett neu gestartet werden (Entscheidung #109)
-7. App ist erst nach vollständigem Download einsatzbereit
-8. `firstLaunchDone = true` + `modelsDownloaded = true` setzen
+4. Fortschrittsanzeige pro Modell + gesamt
+5. Download sequenziell (ein Modell nach dem anderen)
+6. SHA-256-Verification nach jedem Download (NFR-16)
+7. Bei Abbruch: **Resume-fähig** — unterbrochener Download wird beim nächsten Start fortgesetzt (Entscheidung #109, revidiert)
+8. App ist erst nach vollständigem Download einsatzbereit
+9. `firstLaunchDone = true` + `modelsDownloaded = true` setzen
 
 ### 14.2 Download-Quellen
 
@@ -1342,9 +1345,57 @@ PDF-Import → Queue (FIFO)
 | pdfjs-dist | ~3 MB |
 | **Total (App + Modelle)** | **~4.7 GB** |
 
-**Strategie:** App-Installer ~250 MB, Modelle werden beim ersten Start heruntergeladen (~4.0 GB).
+**Strategie:** ARM64-only .dmg-Installer ~250 MB, Modelle werden beim ersten Start heruntergeladen (~4.0 GB, resume-fähig). Mindestens ~5 GB freier Speicherplatz erforderlich.
 
-### 18.3 Performance-Zielwerte (NFR-Zusammenfassung)
+### 18.3 Distribution & Packaging (NFR-31, Epic 8)
+
+**Format:** macOS .dmg mit Drag-to-Applications-Fenster (Standard-macOS-Installationskonvention)
+
+**Build-Konfiguration (electron-builder):**
+
+```yaml
+# electron-builder.yml
+mac:
+  target:
+    - target: dmg
+      arch: arm64          # Nur Apple Silicon (Entscheidung #154)
+  category: public.app-category.medical
+  # Code Signing: siehe offene Entscheidung in 12.8
+
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+```
+
+**Architektur:** Ausschliesslich ARM64 (Apple Silicon M1-M4). Kein Intel-Support, kein Universal Binary (Entscheidung #154).
+
+**Vertriebskanal:** Direktdownload (kein Mac App Store). Gründe: Kontrolle über Distribution, Vermeidung von MAS Sandbox-Einschränkungen und Apple Developer Program Kosten (Entscheidung #152, #153).
+
+**Update-Mechanismus:** Manuell — neue Version = neue .dmg herunterladen und installieren. Electron Auto-Updater bleibt deaktiviert (Entscheidung #155). Kein Sparkle/electron-updater.
+
+**Lizenz:** MIT (Open Source, kostenlos) — Entscheidung #156. Kompatibel mit allen Dependencies (siehe Kap. 19).
+
+### 18.4 Deinstallation (NFR-32, US-8b)
+
+In-App-Menüpunkt "Therascript vollständig entfernen" mit Bestätigungsdialog.
+
+**Entfernt:**
+- `~/.therascript/models/` (~4 GB ML-Modelle)
+- `~/.therascript/data/` (SQLite, Audio, Transkripte, Recovery)
+- `~/Library/Application Support/therascript/` (electron-store Settings)
+- Temp-Dateien und Logs
+
+**Nicht entfernbar durch die App:**
+- `/Applications/Therascript.app` (macOS-Limitation — User muss .app manuell in Papierkorb ziehen)
+
+**Sichere Löschung:** SQLite VACUUM + Temp-Cleanup gemäss NFR-17. Kein Byte-Level-Overwrite (ineffektiv bei SSD TRIM).
+
+### 18.5 Performance-Zielwerte (NFR-Zusammenfassung)
 
 | NFR | Zielwert |
 |-----|----------|
@@ -1380,6 +1431,8 @@ PDF-Import → Queue (FIFO)
 
 **Nicht verwendbar (NC-Lizenz):** Meta MMS (CC-BY-NC), SeamlessM4T (CC-BY-NC), Piiranha (CC-BY-NC-ND), UniNER-7B (CC-BY-NC)
 
+**Therascript-Lizenz:** MIT (Entscheidung #156) — alle obigen Dependencies sind MIT-kompatibel. Attribution erforderlich für pyannote community-1 (CC-BY-4.0).
+
 ---
 
 ## 20. Risiken & Mitigationen
@@ -1395,7 +1448,7 @@ PDF-Import → Queue (FIFO)
 | flair NER RAM-Konflikt mit Whisper | Mittel | Mittel | Strikt sequenzielle Pipeline — Modell vor nächstem Schritt entladen |
 | pyannote CPU-Geschwindigkeit auf Apple Silicon knapp | Mittel | Mittel | Senko als schnelle Alternative anbieten |
 | TipTap-Performance bei ~15'000 Wörtern | Mittel | Niedrig | Lazy Rendering; Virtualisierung bei Bedarf |
-| Modell-Download bei First-Launch bricht ab | Mittel | Mittel | Klare Fehlermeldung; Neustart des Downloads; kein Resume (Entscheidung #109) |
+| Modell-Download bei First-Launch bricht ab | Mittel | Mittel | Resume-fähiger Download; Fortschritt wird gespeichert; Fehlermeldung mit Retry-Option (Entscheidung #109, revidiert) |
 
 ---
 
@@ -1410,8 +1463,8 @@ PDF-Import → Queue (FIFO)
 - Epic 5: Sperrliste (CRUD in SQLite + Matching-Engine)
 - Epic 6: Review-Modus (TipTap Editor + False Positive/Negative + Sperrliste-Schnellaktion)
 - Epic 7: Export (Clipboard)
+- Epic 8: Distribution (.dmg ARM64-only, First-Launch Modell-Download, Uninstaller)
 - Security: Electron Hardening + CSP + IPC-Validierung + FileVault-Check
-- First-Launch: Modell-Download mit Fortschrittsanzeige
 
 ### Phase 2: Erweiterungen
 - GLiNER PII als ergänzende NER-Schicht
@@ -1432,7 +1485,7 @@ PDF-Import → Queue (FIFO)
 |---|-------|----------|------------|
 | T1 | Python-Bundling-Strategie? | PyInstaller vs. conda-pack vs. embedded Python | PyInstaller (kleinster Footprint) |
 | T2 | whisper.cpp als N-API Addon oder Subprocess? | Addon (tighter integration) vs. Subprocess (einfacher) | Subprocess für MVP, Addon für v2 |
-| T3 | Modell-Download: Installer oder First-Launch? | Alles im Installer vs. On-Demand | On-Demand (kleinerer Installer) — Entscheidung #109 |
+| T3 | Modell-Download: Installer oder First-Launch? | Alles im Installer vs. On-Demand | On-Demand (kleinerer Installer, ~250 MB .dmg); resume-fähiger Download — Entscheidung #109 (revidiert) |
 | T4 | Minimum macOS-Version? | macOS 13 vs. 14 | macOS 14 (für Apple Vision + CoreML Features) |
 | T5 | Audio-Format auf Disk? | WAV (unkomprimiert) vs. FLAC (komprimiert) | WAV (einfacher, Auto-Recovery-freundlich) |
 | T6 | TipTap Version? | TipTap v2 (stable) vs. v3 (beta) | v2 (stable, production-ready) |
