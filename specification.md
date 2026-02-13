@@ -341,7 +341,7 @@ User-sichtbare Platzhalter-Typen (7 Typen, Entscheidung #146):
 | ORT | flair LOC + Regex PLZ + Sperrliste | `[ORT 1]`, `[ORT 2]` |
 | DATUM | Regex Geburtsdatum + Sperrliste | `[DATUM 1]`, `[DATUM 2]` |
 | KONTAKT | Regex (Telefon, Email, Adresse, Social Media, AHV-Nr, Vers-Nr) + Sperrliste | `[KONTAKT 1]`, `[KONTAKT 2]` |
-| ORGANISATION | flair ORG + Sperrliste | `[ORGANISATION 1]`, `[ORGANISATION 2]` |
+| ORGANISATION | nur Sperrliste + manuell (flair ORG wird ignoriert — Institutionsnamen sind Out of Scope, Entscheidung #5/#158) | `[ORGANISATION 1]`, `[ORGANISATION 2]` |
 | MEDIZINISCH | nur Sperrliste | `[MEDIZINISCH 1]`, `[MEDIZINISCH 2]` |
 | SONSTIGES | flair MISC + Sperrliste | `[SONSTIGES 1]`, `[SONSTIGES 2]` |
 
@@ -350,7 +350,7 @@ User-sichtbare Platzhalter-Typen (7 Typen, Entscheidung #146):
 |-----------------|-----------|
 | PER | PERSON |
 | LOC | ORT |
-| ORG | ORGANISATION |
+| ORG | **ignoriert** (Institutionsnamen Out of Scope, Entscheidung #5/#158) |
 | MISC | SONSTIGES |
 | Regex: Geburtsdatum | DATUM |
 | Regex: Telefon, Email, Adresse, Social Media, AHV-Nr, Vers-Nr, Fall-Nr | KONTAKT |
@@ -372,7 +372,6 @@ User-sichtbare Platzhalter-Typen (7 Typen, Entscheidung #146):
 |-------------|------|
 | Typ | JavaScript PDF-Parser (Mozilla) |
 | Text-Extraktion | `page.getTextContent()` |
-| Passwort-PDFs | `getDocument({ data, password })` |
 | Lizenz | Apache 2.0 |
 | Bundle-Grösse | ~3 MB |
 | Integration | Nativ in Electron (kein Python) |
@@ -405,14 +404,6 @@ Algorithmus pro Seite:
 1. Text extrahieren mit pdfjs-dist
 2. Wenn `text.trim().length > 50` → Text-Seite (direkte Extraktion)
 3. Sonst → Scan-Seite (Seite als Bild rendern → OCR)
-
-### 5.4 Passwort-PDFs (Entscheidung #58)
-
-Bei passwortgeschützten PDFs:
-1. `pdfjs-dist` meldet `PasswordException`
-2. App zeigt Passwort-Eingabe-Dialog
-3. Erneuter Versuch mit `getDocument({ data, password })`
-4. Bei falschem Passwort: Fehlermeldung + erneute Eingabe
 
 ---
 
@@ -841,7 +832,7 @@ Benachrichtigungen bei: Transkription fertig, PDF-Verarbeitung fertig, Auto-Stop
 
 ## 11. Sitzungsverwaltung (Epic 0)
 
-### 11.1 Dashboard-Gruppierung (US-0, AC 9-10)
+### 11.1 Dashboard-Gruppierung (US-0, AC 8-9)
 
 Sitzungen chronologisch absteigend sortiert (fest, nicht umschaltbar) und nach relativen Zeiträumen gruppiert:
 
@@ -869,7 +860,7 @@ function groupSessions(sessions: Session[]): Map<TimeGroup, Session[]> {
 }
 ```
 
-### 11.2 Auto-Löschung (US-0, AC 8)
+### 11.2 Auto-Löschung (US-0, AC 7)
 
 **30 Tage nach Erstellung** — stille Löschung ohne Vorwarnung (Entscheidung #119).
 
@@ -1059,7 +1050,6 @@ macOS App Sandbox Entitlements (`entitlements.mac.plist`):
 | `session:export-clipboard` | `{ sessionId }` | — | In Zwischenablage kopieren |
 | `import:audio` | `{ filePaths }` | `{ sessionIds }` | Audio importieren |
 | `import:pdf` | `{ filePaths }` | `{ sessionIds }` | PDF importieren |
-| `import:pdf-password` | `{ sessionId, password }` | `{ success }` | Passwort für PDF |
 | `blocklist:list` | — | `BlocklistEntry[]` | Sperrliste laden |
 | `blocklist:add` | `{ term, type }` | `{ id }` | Eintrag hinzufügen |
 | `blocklist:update` | `{ id, term, type }` | — | Eintrag bearbeiten |
