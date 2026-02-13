@@ -278,10 +278,6 @@
 4. NER hat Vorrang vor Sperrliste (Entscheidung #68) — Sperrliste ergänzt nur was NER nicht erkennt
 5. Platzhalter-Typen der Sperrliste (7 Typen) sind ein Superset der NER-Typen (5 Typen) + MEDIZINISCH + SONSTIGES
 
-**Offene Fragen:**
-1. Sollen MEDIZINISCH und SONSTIGES auch bei der manuellen False-Negative-Markierung im Review verfügbar sein (US-6b AC 3)? Aktuell nur PERSON, ORT, DATUM, KONTAKT, ORGANISATION
-2. Umlaut-Normalisierung: gilt sie auch für NER-Matching oder nur für Sperrlisten-Matching?
-
 ---
 
 ### Epic 6: Review & Korrektur
@@ -372,7 +368,7 @@
 **Akzeptanzkriterien:**
 1. Beim **Anonymisieren eines False Negative** (US-6b AC 3) bietet das Kontextmenü zusätzlich die Option **"zur Sperrliste hinzufügen"** an
 2. Bei Auswahl dieser Option wird der selektierte Text zur **globalen Sperrliste** hinzugefügt (US-5) UND als Platzhalter-Chip anonymisiert
-3. Das SYSTEM wendet den neuen Sperrlisten-Eintrag **sofort retroaktiv** auf den gesamten Text der aktuellen Sitzung an — alle weiteren Vorkommen (exakter String, case-insensitive) werden automatisch anonymisiert
+3. Das SYSTEM wendet den neuen Sperrlisten-Eintrag **sofort retroaktiv** auf den gesamten Text der aktuellen Sitzung an — alle weiteren Vorkommen (case-insensitive + Umlaut-Normalisierung, siehe US-5 AC 10) werden automatisch anonymisiert
 4. Die retroaktiv anonymisierten Platzhalter erhalten die Herkunft **"Sperrliste"** (US-6b AC 5)
 5. Die retroaktive Anwendung erfolgt in **< 2 Sekunden** (NFR-27), auch bei langen Texten (~15'000 Wörter)
 6. **Undo einer Sperrlisten-Schnellaktion** (Cmd+Z) macht die **gesamte Aktion rückgängig**: Eintrag wird aus der Sperrliste entfernt UND alle retroaktiv anonymisierten Chips werden durch Originaltext ersetzt — zählt als **ein** Undo-Schritt
@@ -383,7 +379,7 @@
 
 **Out of Scope:**
 - Feedback über Anzahl der retroaktiv anonymisierten Treffer — das SYSTEM zeigt keine Meldung wie "3 weitere Treffer anonymisiert"
-- Fuzzy-Matching oder Varianten-Erkennung — nur exakter String (case-insensitive), wie in US-5 definiert
+- Fuzzy-Matching oder Varianten-Erkennung über Umlaut-Normalisierung hinaus — Matching wie in US-5 AC 10 definiert
 - Sperrliste verwalten (CRUD) — dafür gibt es die Settings-Ansicht (US-5)
 
 **Constraints & Randbedingungen:**
@@ -506,7 +502,7 @@ flowchart TD
 - **Einwilligung:** Hinweis beim ersten Aufnahmestart, kein Zwang
 - **Therapieformen:** Einzeltherapie (2 Sprecher) UND Paartherapie/Angehörigengespräche (bis 4 Sprecher)
 - **Exportziele:** Supervision/Intervision, eigene Dokumentation, Praxissoftware — je nach Situation
-- **Sperrliste:** Global pro Therapeut/in, exaktes Matching (case-insensitive), Mehrwort-Phrasen erlaubt, Longest Match bei Überlappung, persistiert lokal; Zugang via Settings + Review-Schnellaktion; retroaktive Anwendung in aktueller Sitzung; Herkunft (NER vs. Sperrliste) im Review sichtbar; kein Import/Export; keine Eingabe-Validierung
+- **Sperrliste:** Global pro Therapeut/in (< 50 Einträge erwartet); case-insensitive + Umlaut-Normalisierung (ü↔ue, ä↔ae, ö↔oe, ß↔ss); Mehrwort-Phrasen erlaubt; Longest Match bei Überlappung; persistiert lokal; 7 Platzhalter-Typen (PERSON, ORT, DATUM, KONTAKT, ORGANISATION, MEDIZINISCH, SONSTIGES); Bestätigungsdialog beim Hinzufügen; Löschen/Bearbeiten wirkt nur zukünftig; Zugang via Settings (CRUD) + Review-Schnellaktion (US-6c); kein Import/Export; keine Eingabe-Validierung
 - **Transkription:** Bereinigt (nur Äh/Ähm entfernt), volle Interpunktion, Zeitstempel bei Sprecherwechsel
 - **Sprecheranzahl:** Auto-Erkennung; 1 Sprecher = kein Label; 5+ = best-effort
 - **Workflow:** Transkription → Anonymisierung automatisch, kein Zwischenschritt; Transkription non-blocking
@@ -533,7 +529,7 @@ flowchart TD
 9. Institutionsnamen (Spitäler, Schulen, Arbeitgeber, Behörden)
 10. Relative Zeitangaben ("letzte Woche", "vor drei Tagen")
 11. Sonstige Datumsangaben ausser expliziten Geburtsdaten
-12. Varianten-/Fuzzy-Matching in der Sperrliste
+12. Varianten-/Fuzzy-Matching in der Sperrliste über Umlaut-Normalisierung hinaus
 13. Fallbasierte Sperrlisten (nur eine globale Liste)
 14. Word-/PDF-/.txt-Dateiexport — nur Zwischenablage (Entscheidung #127)
 15. Batch-Export (mehrere Sitzungen gleichzeitig exportieren) — nicht MVP
@@ -564,7 +560,7 @@ flowchart TD
 | 14 | Gesprochene Kontaktdaten? | Best-effort — System versucht es, keine Garantie | 2026-02-07 |
 | 15 | ICD-Codes anonymisieren? | Nein — Diagnosen bleiben im Text | 2026-02-07 |
 | 16 | Sperrliste pro Therapeut oder pro Fall? | Eine globale Liste pro Therapeut/in | 2026-02-07 |
-| 17 | Varianten-Matching in Sperrliste? | Exakte Treffer — keine Fuzzy-Erkennung | 2026-02-07 |
+| 17 | ~~Varianten-Matching in Sperrliste?~~ | ~~Exakte Treffer — keine Fuzzy-Erkennung~~ → **ERWEITERT durch #147**: Umlaut-Normalisierung (ü↔ue etc.) im MVP; darüber hinaus kein Fuzzy | 2026-02-07 |
 | 18 | Mikrofon-Auswahl nötig? | Nein — Standard-Mikrofon (OS-Default) reicht | 2026-02-07 |
 | 19 | Auto-Recovery bei Absturz? | Pflicht — max. 60 Sekunden Datenverlust, Wiederherstellung beim Start | 2026-02-07 |
 | 20 | Auto-Transkription nach Import? | Immer automatisch, Queue bei Batch-Import | 2026-02-07 |
@@ -624,7 +620,7 @@ flowchart TD
 | 74 | ~~Speaker-Labels anonymisieren?~~ | ~~Ja — Labels werden wie jeder andere Text anonymisiert~~ → **ENTFÄLLT** (Labels sind immer Person A/B/C/D, enthalten keine Namen) | 2026-02-07 |
 | 75 | Platzhalter-Nummerierung? | Typ-spezifisch: [PERSON 1], [ORT 1], [TELEFON 1] etc. (nicht global fortlaufend) | 2026-02-07 |
 | 76 | Sperrliste Zugangspunkt? | Settings (volle CRUD-Verwaltung) + Review-Modus (Schnellaktion: Begriff zur Sperrliste hinzufügen) | 2026-02-08 |
-| 77 | Sperrliste Case-Sensitivity? | Case-insensitive — Gross-/Kleinschreibung wird ignoriert (präzisiert Entscheidung #17) | 2026-02-08 |
+| 77 | Sperrliste Case-Sensitivity? | Case-insensitive + Umlaut-Normalisierung (ü↔ue, ä↔ae, ö↔oe, ß↔ss) — erweitert durch Entscheidung #147 | 2026-02-08 |
 | 78 | Mehrwort-Einträge in Sperrliste? | Ja — beliebige Phrasen als ein Eintrag (z.B. "Dr. Hans Müller", "Bahnhofstrasse 42") | 2026-02-08 |
 | 79 | Sperrliste Import/Export? | Nein — kein Import/Export, nur lokale Verwaltung | 2026-02-08 |
 | 80 | Retroaktive Anwendung im Review? | Sofort — hinzugefügter Begriff wird auf gesamten Text der aktuellen Sitzung angewendet | 2026-02-08 |
@@ -690,6 +686,15 @@ flowchart TD
 | 140 | Review: Nummerierung bei Lücken? | **Fortlaufend** — immer nächste Nummer, Lücken werden NICHT gefüllt (z.B. [PERSON 1]+[PERSON 3] → nächster wird [PERSON 4]) | 2026-02-13 |
 | 141 | Review: Sperrliste-Undo? | **Vollständiges Undo** — Cmd+Z macht gesamte Sperrlisten-Schnellaktion rückgängig (Eintrag aus Sperrliste + alle retroaktiven Anonymisierungen) als ein Schritt | 2026-02-13 |
 | 142 | Review: Batch-Rückgängig? | **Immer Batch** — Rückgängig-Machen eines Chips (Delete/Backspace) macht ALLE Chips derselben Identität rückgängig (z.B. alle [PERSON 1]). Kein einzelnes Rückgängig möglich | 2026-02-13 |
+| 143 | Sperrliste: Bestätigungsdialog? | **Ja** — einfache Bestätigung beim Hinzufügen: "[Begriff] als [Typ] hinzufügen?" mit [Abbrechen] und [Hinzufügen]. Keine Treffer-Vorschau | 2026-02-13 |
+| 144 | Sperrliste: Bearbeiten-Verhalten? | **Wie Löschen + Neuanlegen** — bestehende Platzhalter in vergangenen Sitzungen bleiben, geänderter Begriff wirkt nur auf zukünftige Anonymisierungen | 2026-02-13 |
+| 145 | Sperrliste: Löschen-Verhalten? | **Nur zukünftig** — Löschung eines Eintrags wirkt nur auf zukünftige Anonymisierungen. Bestehende Platzhalter in vergangenen Sitzungen bleiben unverändert | 2026-02-13 |
+| 146 | Sperrliste: Extra-Platzhalter-Typen? | **MEDIZINISCH + SONSTIGES** zusätzlich zu NER-Typen (PERSON, ORT, DATUM, KONTAKT, ORGANISATION) — insgesamt 7 Typen | 2026-02-13 |
+| 147 | Sperrliste: Umlaut-Normalisierung? | **MVP-Feature** — bidirektionale Normalisierung: ü↔ue, ä↔ae, ö↔oe, ß↔ss. "Müller" findet "Mueller" und umgekehrt. CH-Varianten zu häufig für exaktes Matching | 2026-02-13 |
+| 148 | Sperrliste: US-5 Scope? | **Entschlackt** — US-5 = nur CRUD + Matching-Logik + Settings-UI. Review-Integration (Schnellaktion, retroaktive Anwendung, Herkunft) bleibt in US-6c/US-6b | 2026-02-13 |
+| 149 | Sperrliste: Kernproblem? | **Begriffe die NER prinzipiell nicht erkennt** — Spitznamen, Firmennamen, Therapie-spezifische Codes. Nicht primär für NER-Fehler (False Negatives) | 2026-02-13 |
+| 150 | Sperrliste: Erwartete Grösse? | **< 50 Einträge** — einfache Liste reicht, keine Suche/Filter/Pagination nötig | 2026-02-13 |
+| 151 | MEDIZINISCH/SONSTIGES im Review? | **Nein** — Extra-Typen nur in der Sperrliste verfügbar. Manuelle False-Negative-Markierung im Review bleibt bei 5 NER-Typen (PERSON, ORT, DATUM, KONTAKT, ORGANISATION) | 2026-02-13 |
 
 ---
 
