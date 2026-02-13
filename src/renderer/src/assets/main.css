@@ -28,7 +28,12 @@
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
 }
 
-/* macOS-style frameless window: make titlebar area draggable */
-body {
+/* titleBarStyle: 'hiddenInset' removes the native title bar drag region.
+   We must define our own drag regions via -webkit-app-region: drag. */
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+
+.titlebar-no-drag {
   -webkit-app-region: no-drag;
 }
