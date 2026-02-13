@@ -1,5 +1,6 @@
-import { app, BrowserWindow, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, session, shell } from 'electron'
 import { join } from 'path'
+import { initDatabase, closeDatabase } from './db/connection'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -60,6 +61,17 @@ function setupCSP(): void {
 }
 
 app.whenReady().then(() => {
+  try {
+    initDatabase()
+  } catch (error) {
+    dialog.showErrorBox(
+      'Therascript – Datenbankfehler',
+      `Die Datenbank konnte nicht geöffnet werden.\n\n${error instanceof Error ? error.message : String(error)}`
+    )
+    app.quit()
+    return
+  }
+
   setupCSP()
   createWindow()
 
@@ -76,4 +88,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('quit', () => {
+  closeDatabase()
 })

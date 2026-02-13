@@ -10,7 +10,10 @@
     "dev": "env -u ELECTRON_RUN_AS_NODE electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "start": "electron-vite preview",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "predev": "electron-rebuild -f -w better-sqlite3",
+    "pretest": "npm rebuild better-sqlite3",
+    "pretest:watch": "npm rebuild better-sqlite3",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
@@ -21,14 +24,17 @@
     "package": "npm run build && electron-builder --mac --config"
   },
   "dependencies": {
-    "@electron-toolkit/preload": "^3.0.2"
+    "@electron-toolkit/preload": "^3.0.2",
+    "better-sqlite3": "^12.6.2"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",
+    "@electron/rebuild": "^4.0.3",
     "@eslint/js": "^9.39.0",
     "@tailwindcss/vite": "^4.1.18",
     "@testing-library/jest-dom": "^6.9.0",
     "@testing-library/react": "^16.3.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.1.0",
