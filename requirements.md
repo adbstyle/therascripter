@@ -20,7 +20,7 @@
 - **Kontext:** Führt Therapiesitzungen durch (Einzel- und Paartherapie), muss Gespräche für Dokumentation und Supervision anonymisiert festhalten
 - **Technisches Level:** Durchschnittlich — App muss einfach und intuitiv sein
 - **Kritische Anforderung:** Absolute Vertraulichkeit der Patientendaten
-- **Typische Nutzung:** Manchmal Live-Aufnahme während der Sitzung (App im Hintergrund), manchmal nachträglicher Audio-Import
+- **Typische Nutzung:** Live-Aufnahme während der Sitzung (App im Hintergrund)
 - **Exportziele:** Supervision/Intervision, eigene Dokumentation, Praxissoftware — je nach Situation
 
 ---
@@ -40,7 +40,7 @@
 
 **Akzeptanzkriterien:**
 1. Das SYSTEM zeigt eine Sitzungsliste (Dashboard) als zentrale Übersicht
-2. Jede neue Sitzung (Aufnahme oder Import) erhält automatisch einen Titel basierend auf Datum und Uhrzeit (z.B. "Sitzung 07.02.2026 14:30")
+2. Jede neue Sitzung (Aufnahme oder PDF-Import) erhält automatisch einen Titel basierend auf Datum und Uhrzeit (z.B. "Sitzung 07.02.2026 14:30")
 3. Der USER kann den Titel einer Sitzung nachträglich umbenennen
 4. Jede Sitzung zeigt ihren aktuellen Status (Aufnahme läuft, Transkription, Anonymisierung, Review, Fehler)
 5. Der USER kann eine Sitzung manuell löschen (mit Bestätigungsdialog). Beim Löschen werden **ALLE zugehörigen Daten** entfernt: Audiodatei, Originaltext, Platzhalter-Mapping, anonymisierter Text — die Sitzung verschwindet vollständig
@@ -52,7 +52,7 @@
 **Nachbedingungen:**
 1. Alle Sitzungen sind in der Liste sichtbar, chronologisch absteigend sortiert und nach Zeiträumen gruppiert
 
-**Hinweis:** Die Sitzungsliste enthält zwei Typen: Audio-Sitzungen (Aufnahme/Import → Transkription → Anonymisierung → Review → Export) und PDF-Sitzungen (Import → Textextraktion → Anonymisierung → Review → Export). Beide Typen sind visuell unterscheidbar (Typ-Icon).
+**Hinweis:** Die Sitzungsliste enthält zwei Typen: Audio-Sitzungen (Aufnahme → Transkription → Anonymisierung → Review → Export) und PDF-Sitzungen (Import → Textextraktion → Anonymisierung → Review → Export). Beide Typen sind visuell unterscheidbar (Typ-Icon).
 
 **Offene Fragen:**
 *Alle geklärt (siehe Entscheidungen #122-#124)*
@@ -108,7 +108,7 @@
 **damit** ich ein lesbares Protokoll mit klarer Zuordnung erhalte.
 
 **Vorbedingungen:**
-1. Eine Audioaufnahme oder importierte Audiodatei ist vorhanden
+1. Eine Audioaufnahme ist vorhanden
 
 **Akzeptanzkriterien:**
 1. Das SYSTEM transkribiert die Aufnahme komplett lokal (keine Cloud-Verarbeitung)
@@ -124,7 +124,7 @@
 11. Der USER kann die App während der Transkription für andere Sitzungen nutzen (nicht-blockierend)
 12. Das SYSTEM zeigt eine macOS-Benachrichtigung, wenn die Transkription abgeschlossen ist
 13. Nach Abschluss der Transkription startet das SYSTEM automatisch die Anonymisierung (kein manueller Zwischenschritt)
-14. Die Verarbeitung erfolgt immer sequenziell nach Aufnahme-Stop oder Import: Transkription → Diarization → Anonymisierung (max. 2x Echtzeit gemäss NFR-3)
+14. Die Verarbeitung erfolgt immer sequenziell nach Aufnahme-Stop: Transkription → Diarization → Anonymisierung (max. 2x Echtzeit gemäss NFR-3)
 
 **Nachbedingungen:**
 1. Ein strukturierter Text mit Sprecherzuordnung und Zeitstempeln liegt vor
@@ -572,11 +572,11 @@ flowchart TD
 
 ## 6. Zusätzliche Anforderungen (aus Klärung)
 
-- **Nutzungskontext:** App wird sowohl während der Sitzung (Hintergrund-Aufnahme) als auch nachträglich (Audio-Import) genutzt
+- **Nutzungskontext:** App wird während der Sitzung genutzt (Hintergrund-Aufnahme)
 - **Aufnahmedauer:** Typisch 45-60 Minuten (Standard-Therapiesitzung), Max. 2 Stunden (Auto-Stop)
 - **Sitzungsverwaltung:** Mehrere Sitzungen parallel möglich, Dashboard mit Auto-Titel, persistiert bis manuell gelöscht oder automatisch nach 30 Tagen ab Erstellung; chronologisch absteigend sortiert (fest); gruppiert nach "Heute", "Gestern", "Diese Woche", "Letzte Woche", "Älter"; kein Filter
 - **Hintergrund-Modus:** Menu Bar Icon mit Status, Standby-Unterdrückung, Auto-Recovery (max. 60s Verlust)
-- **Import:** Dateiauswahl + Drag-and-Drop + Batch, Queue-basierte Verarbeitung
+- **PDF-Import:** Dateiauswahl + Drag-and-Drop + Batch, Queue-basierte Verarbeitung
 - **Einwilligung:** Hinweis beim ersten Aufnahmestart, kein Zwang
 - **Therapieformen:** Einzeltherapie (2 Sprecher) UND Paartherapie/Angehörigengespräche (bis 4 Sprecher)
 - **Exportziele:** Supervision/Intervision, eigene Dokumentation, Praxissoftware — je nach Situation
@@ -623,7 +623,7 @@ flowchart TD
 
 | # | Frage | Entscheidung | Datum |
 |---|-------|-------------|-------|
-| 1 | Wann wird die App genutzt? | Beides: Live-Aufnahme (Hintergrund) + nachträglicher Import | 2026-02-07 |
+| 1 | Wann wird die App genutzt? | Live-Aufnahme (Hintergrund) — kein externer Audio-Import, nur In-App-Aufnahme | 2026-02-07 |
 | 2 | Anonymisierungsumfang? | Umfassend: Namen, Orte, Kontaktdaten, Med. Identifikatoren, Geburtsdaten | 2026-02-07 |
 | 3 | Exportziele? | Mehrere: Supervision, Dokumentation, Praxissoftware | 2026-02-07 |
 | 4 | MVP-Scope? | Alles inkl. PDF — beide Eingabepfade von Anfang an | 2026-02-07 |
@@ -642,7 +642,7 @@ flowchart TD
 | 17 | ~~Varianten-Matching in Sperrliste?~~ | ~~Exakte Treffer — keine Fuzzy-Erkennung~~ → **ERWEITERT durch #147**: Umlaut-Normalisierung (ü↔ue etc.) im MVP; darüber hinaus kein Fuzzy | 2026-02-07 |
 | 18 | Mikrofon-Auswahl nötig? | Nein — Standard-Mikrofon (OS-Default) reicht | 2026-02-07 |
 | 19 | Auto-Recovery bei Absturz? | Pflicht — max. 60 Sekunden Datenverlust, Wiederherstellung beim Start | 2026-02-07 |
-| 20 | Auto-Transkription nach Import? | Immer automatisch, Queue bei Batch-Import | 2026-02-07 |
+| 20 | ~~Auto-Transkription nach Import?~~ | ~~Immer automatisch, Queue bei Batch-Import~~ → **GESTRICHEN** (kein externer Audio-Import; Transkription startet automatisch nach Aufnahme-Stop) | 2026-02-07 |
 | 21 | Parallele Sitzungen? | Ja — mehrere Sitzungen gleichzeitig in verschiedenen Stadien | 2026-02-07 |
 | 22 | Sitzungsliste/Dashboard? | Ja — mit Auto-Titel (Datum+Uhrzeit), User kann umbenennen | 2026-02-07 |
 | 23 | Hintergrund-Feedback? | Menu Bar Icon mit Status (rot=läuft), Dauer, Stop/Pause | 2026-02-07 |
@@ -651,10 +651,10 @@ flowchart TD
 | 26 | Warum keine Echtzeit-Transkription? | Inhaltlich unerwünscht — stört therapeutische Beziehung | 2026-02-07 |
 | 27 | Einwilligungs-Dialog? | Hinweis beim ersten Mal, kein Zwang (Therapeut verantwortlich) | 2026-02-07 |
 | 28 | Maximale Aufnahmedauer? | **2 Stunden**, dann Auto-Stop mit Benachrichtigung (korrigiert: konsistent mit US-1 AC 11) | 2026-02-07 |
-| 29 | Import-Fehler & Preview? | Klare Fehlermeldung, kein Audio-Player (User nutzt Standard-Player) | 2026-02-07 |
+| 29 | ~~Import-Fehler & Preview?~~ | ~~Klare Fehlermeldung, kein Audio-Player~~ → **GESTRICHEN** (kein externer Audio-Import) | 2026-02-07 |
 | 30 | Sitzungsverwaltung als Epic? | Ja — neues Epic 0 (Grundlage für alle Workflows) | 2026-02-07 |
 | 31 | Lebenszyklus Sitzungen? | Bleiben bis manuell gelöscht — auch nach Export | 2026-02-07 |
-| 32 | Audio-Import UX? | Dateiauswahl + Drag-and-Drop + Batch | 2026-02-07 |
+| 32 | ~~Audio-Import UX?~~ | ~~Dateiauswahl + Drag-and-Drop + Batch~~ → **GESTRICHEN** (kein externer Audio-Import; Audio nur via In-App-Aufnahme) | 2026-02-07 |
 | 33 | Bereinigung — was genau? | Nur Äh/Ähm entfernen; Füllwörter, Satzabbrüche, Wiederholungen bleiben | 2026-02-07 |
 | 34 | Schweizerdeutsch-Begriffe? | Nur Hochdeutsch-Output, bestmöglich übersetzt, kein Original verfügbar | 2026-02-07 |
 | 35 | Sprecherzuordnung korrigierbar? | Out of Scope für MVP — Labels bleiben Person A/B/C/D (keine Umbenennung) | 2026-02-07 |
@@ -683,7 +683,7 @@ flowchart TD
 | 58 | ~~Passwortgeschützte PDFs?~~ | ~~Passwort-Eingabe ermöglichen~~ → **GESTRICHEN** (nicht MVP, Spec Sektion 5.4 entfernt) | 2026-02-07 |
 | 59 | Mixed-PDFs (Text + Scan)? | Automatisch pro Seite erkennen (Text → direkte Extraktion, Scan → OCR) | 2026-02-07 |
 | 60 | OCR-Sprache? | Nur Deutsch | 2026-02-07 |
-| 61 | PDF Batch & Blocking? | Batch-Import + non-blocking (Queue, FIFO) — konsistent mit Audio | 2026-02-07 |
+| 61 | PDF Batch & Blocking? | Batch-Import + non-blocking (Queue, FIFO) | 2026-02-07 |
 | 62 | ~~Parallel-Transkription: Was genau?~~ | ~~Hintergrund-Transkription während Live-Aufnahme~~ → **ÜBERHOLT durch #126** (gestrichen wegen 8 GB RAM) | 2026-02-07 |
 | 63 | ~~Qualität vs. Geschwindigkeit?~~ | ~~Qualität hat Priorität~~ → **ÜBERHOLT durch #126** (nur noch sequenziell) | 2026-02-07 |
 | 64 | ~~Ziel-Wartezeit nach Stop?~~ | ~~< 5 Minuten nach Stop~~ → **ÜBERHOLT durch #126** (sequenziell: max. 2x Echtzeit gemäss NFR-3) | 2026-02-07 |

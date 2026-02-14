@@ -75,7 +75,7 @@ flowchart TB
     App --> Tray[Menu Bar Icon]
 
     Dash --> Rec[Aufnahme<br/>Audio Recording]
-    Dash --> Import[Import<br/>Audio / PDF]
+    Dash --> Import[Import<br/>PDF]
     Dash --> Session[Sitzung öffnen<br/>→ Review Editor]
 
     Session --> Review[Review Editor<br/>TipTap]

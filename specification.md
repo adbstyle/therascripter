@@ -1048,7 +1048,6 @@ macOS App Sandbox Entitlements (`entitlements.mac.plist`):
 | `session:save-review` | `{ sessionId, document, entityMap }` | — | Review-State speichern |
 | `session:load-review` | `{ sessionId }` | `{ document, entityMap }` | Review-State laden |
 | `session:export-clipboard` | `{ sessionId }` | — | In Zwischenablage kopieren |
-| `import:audio` | `{ filePaths }` | `{ sessionIds }` | Audio importieren |
 | `import:pdf` | `{ filePaths }` | `{ sessionIds }` | PDF importieren |
 | `blocklist:list` | — | `BlocklistEntry[]` | Sperrliste laden |
 | `blocklist:add` | `{ term, type }` | `{ id }` | Eintrag hinzufügen |
@@ -1150,7 +1149,7 @@ class TaskQueue {
 
 ### 15.2 Audio-Pipeline (Tasks)
 
-Nach Recording-Stop oder Audio-Import werden folgende Tasks eingereiht:
+Nach Recording-Stop werden folgende Tasks eingereiht:
 1. `transcription` — whisper.cpp (laden → transkribieren → entladen)
 2. `diarization` — pyannote (laden → diarisieren → entladen)
 3. `alignment` — Word-Midpoint-Alignment + Filler-Removal (kein ML-Modell)
@@ -1464,7 +1463,7 @@ In-App-Menüpunkt "Therascript vollständig entfernen" mit Bestätigungsdialog.
 ### Phase 3: Polish & Plugins
 - Plugin-Architektur (NFR-9, NFR-10) — Modell-Management UI
 - Senko als alternative Diarization-Engine
-- Batch-Import mit Queue-UI
+- PDF-Batch-Import mit Queue-UI
 - Performance-Optimierungen (Editor-Virtualisierung, etc.)
 
 ---
