@@ -1,6 +1,8 @@
 import { app, BrowserWindow, dialog, session, shell } from 'electron'
 import { join } from 'path'
 import { initDatabase, closeDatabase } from './db/connection'
+import { initSettings } from './services/SettingsService'
+import { registerSessionHandlers } from './ipc/session-handlers'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -71,6 +73,9 @@ app.whenReady().then(() => {
     app.quit()
     return
   }
+
+  initSettings()
+  registerSessionHandlers()
 
   setupCSP()
   createWindow()

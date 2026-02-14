@@ -4,8 +4,20 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  main: {},
-  preload: {},
+  main: {
+    build: {
+      externalizeDeps: {
+        exclude: ['electron-store']
+      }
+    }
+  },
+  preload: {
+    build: {
+      externalizeDeps: {
+        exclude: ['@electron-toolkit/preload']
+      }
+    }
+  },
   renderer: {
     resolve: {
       alias: {

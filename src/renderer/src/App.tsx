@@ -1,3 +1,5 @@
+import SessionDashboard from './components/SessionDashboard'
+
 export default function App(): React.JSX.Element {
   return (
     <div className="flex h-screen">
@@ -22,15 +24,7 @@ export default function App(): React.JSX.Element {
           <h2 className="text-2xl font-bold text-gray-900">Sitzungen</h2>
         </header>
 
-        {/* Empty state */}
-        <div className="flex flex-1 items-center justify-center">
-          <div className="text-center">
-            <p className="mb-1 text-lg font-medium text-gray-600">Keine Sitzungen</p>
-            <p className="mb-6 text-sm text-gray-400">
-              Starten Sie eine Aufnahme oder importieren Sie ein PDF-Dokument.
-            </p>
-          </div>
-        </div>
+        <SessionDashboard />
       </main>
     </div>
   )
