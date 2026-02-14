@@ -76,7 +76,16 @@ const mockSessions = {
 }
 
 beforeEach(() => {
-  window.api = { sessions: mockSessions } as typeof window.api
+  window.api = {
+    sessions: mockSessions,
+    recording: {
+      start: vi.fn(),
+      stop: vi.fn(),
+      sendData: vi.fn(),
+      onDuration: vi.fn().mockReturnValue(() => {}),
+      onError: vi.fn().mockReturnValue(() => {})
+    }
+  } as typeof window.api
   vi.clearAllMocks()
 })
 

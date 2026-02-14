@@ -7,6 +7,28 @@ const api: IpcApi = {
     list: () => ipcRenderer.invoke('session:list'),
     delete: (sessionId) => ipcRenderer.invoke('session:delete', { sessionId }),
     rename: (sessionId, title) => ipcRenderer.invoke('session:rename', { sessionId, title })
+  },
+  recording: {
+    start: () => ipcRenderer.invoke('recording:start'),
+    stop: (sessionId) => ipcRenderer.invoke('recording:stop', { sessionId }),
+    sendData: (sessionId, samples) =>
+      ipcRenderer.send('recording:data', { sessionId, samples }),
+    onDuration: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { seconds: number }): void =>
+        callback(data)
+      ipcRenderer.on('recording:duration', handler)
+      return () => {
+        ipcRenderer.removeListener('recording:duration', handler)
+      }
+    },
+    onError: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { message: string }): void =>
+        callback(data)
+      ipcRenderer.on('recording:error', handler)
+      return () => {
+        ipcRenderer.removeListener('recording:error', handler)
+      }
+    }
   }
 }
 

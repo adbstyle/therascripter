@@ -3,6 +3,7 @@ import { join } from 'path'
 import { initDatabase, closeDatabase } from './db/connection'
 import { initSettings } from './services/SettingsService'
 import { registerSessionHandlers } from './ipc/session-handlers'
+import { registerRecordingHandlers, cleanupRecordingOnQuit } from './ipc/recording-handlers'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -76,6 +77,7 @@ app.whenReady().then(() => {
 
   initSettings()
   registerSessionHandlers()
+  registerRecordingHandlers()
 
   setupCSP()
   createWindow()
@@ -96,5 +98,6 @@ app.on('window-all-closed', () => {
 })
 
 app.on('quit', () => {
+  cleanupRecordingOnQuit()
   closeDatabase()
 })

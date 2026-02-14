@@ -1,6 +1,10 @@
 import SessionDashboard from './components/SessionDashboard'
+import RecordingView from './components/RecordingView'
+import { useRecording } from './hooks/useRecording'
 
 export default function App(): React.JSX.Element {
+  const { isRecording, duration, level, error, startRecording, stopRecording } = useRecording()
+
   return (
     <div className="flex h-screen">
       {/* Sidebar */}
@@ -21,10 +25,29 @@ export default function App(): React.JSX.Element {
       <main className="flex flex-1 flex-col">
         {/* Header — draggable titlebar region */}
         <header className="titlebar-drag flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 className="text-2xl font-bold text-gray-900">Sitzungen</h2>
+          <h2 className="text-2xl font-bold text-gray-900">
+            {isRecording ? 'Aufnahme läuft' : 'Sitzungen'}
+          </h2>
+          {!isRecording && (
+            <button
+              className="titlebar-no-drag rounded-lg bg-recording px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+              onClick={startRecording}
+            >
+              &#9679; Aufnahme starten
+            </button>
+          )}
         </header>
 
-        <SessionDashboard />
+        {isRecording ? (
+          <RecordingView
+            duration={duration}
+            level={level}
+            error={error}
+            onStop={stopRecording}
+          />
+        ) : (
+          <SessionDashboard />
+        )}
       </main>
     </div>
   )

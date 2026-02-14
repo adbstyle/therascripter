@@ -8,6 +8,13 @@ beforeEach(() => {
       list: vi.fn().mockResolvedValue([]),
       delete: vi.fn(),
       rename: vi.fn()
+    },
+    recording: {
+      start: vi.fn(),
+      stop: vi.fn(),
+      sendData: vi.fn(),
+      onDuration: vi.fn().mockReturnValue(() => {}),
+      onError: vi.fn().mockReturnValue(() => {})
     }
   } as typeof window.api
 })
