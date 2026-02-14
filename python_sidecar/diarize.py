@@ -102,30 +102,34 @@ def main() -> None:
         if args.max_speakers > 0:
             diarization_params["max_speakers"] = args.max_speakers
 
-        # Hook into pyannote progress if available
-        # pyannote 3.x uses a hook system for progress tracking
+        # Progress hook matching pyannote.audio 4.x protocol
         class ProgressHook:
             def __init__(self):
-                self.current_step = 0
-                self.total_steps = 4  # segmentation, embedding, clustering, discrete
+                self.steps_seen: list[str] = []
 
-            def __call__(self, step_name: str, step: int, total: int, **kwargs):
-                # Map internal steps to 20-95% range
-                progress = 20 + int((step / max(total, 1)) * 75 / self.total_steps)
-                progress += int(self.current_step * 75 / self.total_steps)
-                report_progress(min(progress, 95))
+            def __enter__(self):
+                return self
 
-        # Attempt to use progress hook (pyannote >= 3.1)
-        try:
-            hook = ProgressHook()
-            diarization = pipeline(args.audio, hook=hook, **diarization_params)
-        except TypeError as e:
-            if "hook" in str(e) or "unexpected keyword argument" in str(e):
-                # Fallback: pyannote version without progress hook support
-                report_progress(50)
-                diarization = pipeline(args.audio, **diarization_params)
-            else:
-                raise
+            def __exit__(self, *args):
+                pass
+
+            def __call__(self, step_name, step_artifact, file=None,
+                         total=None, completed=None):
+                if step_name not in self.steps_seen:
+                    self.steps_seen.append(step_name)
+
+                if completed is None or total is None:
+                    return
+
+                step_index = self.steps_seen.index(step_name)
+                n_steps = max(len(self.steps_seen), 4)
+                # Map to 20-95% range
+                base = 20 + int(step_index * 75 / n_steps)
+                step_progress = int((completed / max(total, 1)) * 75 / n_steps)
+                report_progress(min(base + step_progress, 95))
+
+        hook = ProgressHook()
+        diarization = pipeline(args.audio, hook=hook, **diarization_params)
 
         report_progress(95)
 
@@ -133,9 +137,15 @@ def main() -> None:
         print(f"Fehler: Diarization fehlgeschlagen: {e}", file=sys.stderr)
         sys.exit(3)
 
+    # Extract Annotation from DiarizeOutput (pyannote 4.x returns a dataclass)
+    if hasattr(diarization, 'speaker_diarization'):
+        annotation = diarization.speaker_diarization
+    else:
+        annotation = diarization
+
     # Output RTTM format to stdout
     file_id = os.path.splitext(os.path.basename(args.audio))[0]
-    for turn, _, speaker in diarization.itertracks(yield_label=True):
+    for turn, _, speaker in annotation.itertracks(yield_label=True):
         start = turn.start
         duration = turn.duration
         # RTTM format: SPEAKER <file> <channel> <start> <duration> <NA> <NA> <label> <NA> <NA>
