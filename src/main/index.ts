@@ -3,7 +3,13 @@ import { join } from 'path'
 import { initDatabase, closeDatabase } from './db/connection'
 import { initSettings } from './services/SettingsService'
 import { registerSessionHandlers } from './ipc/session-handlers'
-import { registerRecordingHandlers, cleanupRecordingOnQuit } from './ipc/recording-handlers'
+import {
+  registerRecordingHandlers,
+  cleanupRecordingOnQuit,
+  stopRecordingFromTray
+} from './ipc/recording-handlers'
+import { registerSettingsHandlers } from './ipc/settings-handlers'
+import { initTray, getTray } from './services/TrayService'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -78,9 +84,14 @@ app.whenReady().then(() => {
   initSettings()
   registerSessionHandlers()
   registerRecordingHandlers()
+  registerSettingsHandlers()
 
   setupCSP()
   createWindow()
+
+  // Initialize tray after window is created
+  const tray = initTray()
+  tray.onStop(() => stopRecordingFromTray())
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -97,7 +108,12 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('quit', () => {
+app.on('before-quit', () => {
   cleanupRecordingOnQuit()
+  try {
+    getTray().destroy()
+  } catch {
+    // Tray may not have been initialized
+  }
   closeDatabase()
 })

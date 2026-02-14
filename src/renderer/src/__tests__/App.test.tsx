@@ -14,7 +14,12 @@ beforeEach(() => {
       stop: vi.fn(),
       sendData: vi.fn(),
       onDuration: vi.fn().mockReturnValue(() => {}),
-      onError: vi.fn().mockReturnValue(() => {})
+      onError: vi.fn().mockReturnValue(() => {}),
+      onAutoStopped: vi.fn().mockReturnValue(() => {})
+    },
+    settings: {
+      get: vi.fn().mockResolvedValue(false),
+      set: vi.fn().mockResolvedValue(undefined)
     }
   } as typeof window.api
 })

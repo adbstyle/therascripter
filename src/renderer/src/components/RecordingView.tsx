@@ -1,4 +1,5 @@
 import { VUMeter } from './VUMeter'
+import { ConsentBanner } from './ConsentBanner'
 
 interface RecordingViewProps {
   duration: number
@@ -25,7 +26,9 @@ export default function RecordingView({
   const remaining = Math.max(0, AUTO_STOP_SECONDS - duration)
 
   return (
-    <div className="flex flex-1 items-center justify-center">
+    <div className="flex flex-1 flex-col">
+      <ConsentBanner />
+      <div className="flex flex-1 items-center justify-center">
       <div className="flex flex-col items-center">
         {/* Recording indicator */}
         <div className="mb-6 flex items-center gap-2">
@@ -70,6 +73,7 @@ export default function RecordingView({
             {error}
           </p>
         )}
+      </div>
       </div>
     </div>
   )

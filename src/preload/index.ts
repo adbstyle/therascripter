@@ -28,7 +28,18 @@ const api: IpcApi = {
       return () => {
         ipcRenderer.removeListener('recording:error', handler)
       }
+    },
+    onAutoStopped: (callback) => {
+      const handler = (): void => callback()
+      ipcRenderer.on('recording:auto-stopped', handler)
+      return () => {
+        ipcRenderer.removeListener('recording:auto-stopped', handler)
+      }
     }
+  },
+  settings: {
+    get: (key) => ipcRenderer.invoke('settings:get', { key }),
+    set: (key, value) => ipcRenderer.invoke('settings:set', { key, value })
   }
 }
 

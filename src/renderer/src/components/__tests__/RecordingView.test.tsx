@@ -1,7 +1,16 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import RecordingView from '../RecordingView'
+
+beforeEach(() => {
+  window.api = {
+    settings: {
+      get: vi.fn().mockResolvedValue(true),
+      set: vi.fn().mockResolvedValue(undefined)
+    }
+  } as unknown as typeof window.api
+})
 
 describe('RecordingView', () => {
   const defaultProps = {

@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AudioRecorder } from '../services/AudioRecorder'
 
-const AUTO_STOP_SECONDS = 7200 // 2 hours
-
 interface UseRecordingResult {
   isRecording: boolean
   duration: number
@@ -95,12 +93,27 @@ export function useRecording(): UseRecordingResult {
     return cleanup
   }, [isRecording])
 
-  // Auto-stop at 2 hours
+  // Listen for auto-stop from main process (authoritative 2h timer)
   useEffect(() => {
-    if (isRecording && duration >= AUTO_STOP_SECONDS) {
-      stopRecording()
-    }
-  }, [isRecording, duration, stopRecording])
+    if (!isRecording) return
+
+    const cleanup = window.api.recording.onAutoStopped(() => {
+      if (stoppingRef.current) return
+      stoppingRef.current = true
+
+      // Main process already stopped recording — clean up renderer-side resources
+      if (recorderRef.current) {
+        recorderRef.current.stop().catch(() => {})
+        recorderRef.current = null
+      }
+      setIsRecording(false)
+      setDuration(0)
+      setLevel(0)
+      stoppingRef.current = false
+    })
+
+    return cleanup
+  }, [isRecording])
 
   // Cleanup on unmount
   useEffect(() => {

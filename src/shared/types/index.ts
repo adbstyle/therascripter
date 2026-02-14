@@ -13,4 +13,4 @@ export type {
   UpdateSessionInput
 } from './Session'
 
-export type { SessionApi, RecordingApi, IpcApi } from './IpcApi'
+export type { SessionApi, RecordingApi, SettingsApi, IpcApi } from './IpcApi'

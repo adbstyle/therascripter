@@ -1,13 +1,18 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { BrowserWindow, ipcMain, Notification, powerSaveBlocker } from 'electron'
 import { getDatabase } from '../db/connection'
 import { SessionService } from '../services/SessionService'
 import { AudioFileService } from '../services/AudioFileService'
+import { getTray } from '../services/TrayService'
 import { RecordingStopSchema, RecordingDataSchema } from '../../shared/validation/recording-schemas'
+
+const AUTO_STOP_MS = 7200 * 1000 // 2 hours
 
 const audioFileService = new AudioFileService()
 let durationInterval: ReturnType<typeof setInterval> | null = null
 let recordingStartTime: number | null = null
 let activeSessionId: string | null = null
+let powerBlockerId: number | null = null
+let autoStopTimer: ReturnType<typeof setTimeout> | null = null
 
 function generateTitle(): string {
   const now = new Date()
@@ -19,10 +24,30 @@ function generateTitle(): string {
   return `Sitzung ${day}.${month}.${year} ${hours}:${minutes}`
 }
 
-function sendToRenderer(channel: string, data: unknown): void {
+function sendToRenderer(channel: string, data?: unknown): void {
   const windows = BrowserWindow.getAllWindows()
   for (const win of windows) {
     win.webContents.send(channel, data)
+  }
+}
+
+function startPowerBlocker(): void {
+  if (powerBlockerId !== null) return
+  try {
+    powerBlockerId = powerSaveBlocker.start('prevent-app-suspension')
+  } catch {
+    // Non-critical: log but don't block recording
+  }
+}
+
+function stopPowerBlocker(): void {
+  if (powerBlockerId !== null) {
+    try {
+      powerSaveBlocker.stop(powerBlockerId)
+    } catch {
+      // Best effort cleanup
+    }
+    powerBlockerId = null
   }
 }
 
@@ -32,7 +57,58 @@ function stopDurationTimer(): void {
     durationInterval = null
   }
   recordingStartTime = null
+}
+
+function clearAutoStopTimer(): void {
+  if (autoStopTimer !== null) {
+    clearTimeout(autoStopTimer)
+    autoStopTimer = null
+  }
+}
+
+function stopRecordingInternal(sessionId: string): { durationSeconds: number } {
+  stopDurationTimer()
+  clearAutoStopTimer()
+  stopPowerBlocker()
+
+  const { durationSeconds } = audioFileService.finalizeWavFile(sessionId)
+
+  const service = new SessionService(getDatabase())
+  service.updateSession(sessionId, { status: 'transcribing' })
+
   activeSessionId = null
+
+  try {
+    getTray().setRecordingState(false)
+  } catch {
+    // Tray may not be initialized in tests
+  }
+
+  return { durationSeconds }
+}
+
+function autoStopRecording(): void {
+  if (!activeSessionId) return
+
+  const sessionId = activeSessionId
+  try {
+    stopRecordingInternal(sessionId)
+  } catch {
+    // Best effort
+  }
+
+  // Notify renderer
+  sendToRenderer('recording:auto-stopped')
+
+  // Show macOS notification
+  try {
+    new Notification({
+      title: 'Aufnahme gestoppt',
+      body: 'Die Aufnahme wurde automatisch nach 2 Stunden gestoppt.'
+    }).show()
+  } catch {
+    // Notifications may be disabled by user
+  }
 }
 
 export function getActiveSessionId(): string | null {
@@ -59,12 +135,30 @@ export function registerRecordingHandlers(): void {
     activeSessionId = session.id
     recordingStartTime = Date.now()
 
-    // Start duration timer (1 Hz)
+    // Start power save blocker (NFR-24)
+    startPowerBlocker()
+
+    // Start duration timer (1 Hz) — updates renderer + tray
     durationInterval = setInterval(() => {
       if (recordingStartTime === null) return
       const seconds = Math.floor((Date.now() - recordingStartTime) / 1000)
       sendToRenderer('recording:duration', { seconds })
+      try {
+        getTray().updateDuration(seconds)
+      } catch {
+        // Tray may not be initialized in tests
+      }
     }, 1000)
+
+    // Start 2h auto-stop timer (main process safety net)
+    autoStopTimer = setTimeout(autoStopRecording, AUTO_STOP_MS)
+
+    // Update tray icon
+    try {
+      getTray().setRecordingState(true)
+    } catch {
+      // Tray may not be initialized in tests
+    }
 
     return { sessionId: session.id }
   })
@@ -76,14 +170,7 @@ export function registerRecordingHandlers(): void {
       throw new Error(`Session ${sessionId} is not the active recording`)
     }
 
-    stopDurationTimer()
-
-    const { durationSeconds } = audioFileService.finalizeWavFile(sessionId)
-
-    const service = new SessionService(getDatabase())
-    service.updateSession(sessionId, { status: 'transcribing' })
-
-    return { durationSeconds }
+    return stopRecordingInternal(sessionId)
   })
 
   ipcMain.on('recording:data', (_event, args: unknown) => {
@@ -99,7 +186,6 @@ export function registerRecordingHandlers(): void {
       })
     }
   })
-
 }
 
 export function cleanupRecordingOnQuit(): void {
@@ -115,6 +201,19 @@ export function cleanupRecordingOnQuit(): void {
       // Best effort cleanup on quit
     }
     stopDurationTimer()
+    clearAutoStopTimer()
+    stopPowerBlocker()
+    activeSessionId = null
+  }
+}
+
+export function stopRecordingFromTray(): void {
+  if (!activeSessionId) return
+  try {
+    stopRecordingInternal(activeSessionId)
+    sendToRenderer('recording:auto-stopped')
+  } catch {
+    // Best effort
   }
 }
 
