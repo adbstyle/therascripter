@@ -111,14 +111,14 @@ npm run dev                   → Record-Button klicken → sprechen → Stop
 
 ## Iteration 5: Menu Bar, Standby-Schutz & Auto-Stop (Epic 1 — US-1 Teil 2)
 
-**Scope:** Tray-Icon, powerSaveBlocker, 3h Auto-Stop, Einwilligungshinweis
+**Scope:** Tray-Icon, powerSaveBlocker, 2h Auto-Stop, Einwilligungshinweis
 
 **Deliverables:**
 - `src/main/services/TrayService.ts` — Menu Bar Icon (rot=Aufnahme, grau=idle)
 - Tray-Kontextmenü: Stop, Fenster zeigen
 - Timer-Tooltip im Tray
 - `powerSaveBlocker` während Aufnahme (NFR-24)
-- 3h Auto-Stop mit Benachrichtigung
+- 2h Auto-Stop mit Benachrichtigung
 - Einwilligungshinweis beim ersten Aufnahmestart (electron-store Flag)
 
 **Verifikation:**
