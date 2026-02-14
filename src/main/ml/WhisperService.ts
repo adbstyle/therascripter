@@ -1,6 +1,6 @@
 import { spawn } from 'child_process'
 import { existsSync, readFileSync, writeFileSync, statSync, unlinkSync } from 'fs'
-import { join, dirname } from 'path'
+import { join } from 'path'
 import { cpus } from 'os'
 import { app } from 'electron'
 import type { Task } from '../../shared/types'
@@ -38,7 +38,7 @@ export class WhisperService implements TaskExecutor {
     if (app.isPackaged) {
       return join(process.resourcesPath, 'bin', 'whisper-cli')
     }
-    return join(dirname(app.getAppPath()), 'resources', 'bin', 'whisper-cli')
+    return join(app.getAppPath(), 'resources', 'bin', 'whisper-cli')
   }
 
   private getModelPath(): string {
@@ -51,7 +51,7 @@ export class WhisperService implements TaskExecutor {
 
     if (!existsSync(binaryPath)) {
       throw new Error(
-        `whisper-cli binary nicht gefunden: ${binaryPath}. Bitte führen Sie scripts/build-whisper.sh aus.`
+        `whisper-cli binary nicht gefunden: ${binaryPath}. Bitte führen Sie scripts/setup-whisper.sh aus.`
       )
     }
 

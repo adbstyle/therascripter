@@ -20,7 +20,8 @@ npm run lint          # ESLint with cache
 npm run format        # Prettier formatting
 npm run typecheck     # TypeScript check (both node + web configs)
 npm run package       # Build + electron-builder → macOS DMG (arm64 only)
-scripts/build-whisper.sh  # Clone + build whisper.cpp (ARM64 Metal) → resources/bin/whisper-cli
+scripts/setup-whisper.sh          # Install whisper-cli via Homebrew → resources/bin/ + resources/lib/
+scripts/setup-whisper.sh --model  # Also download ASR model (~547 MB)
 ```
 
 ## Architecture

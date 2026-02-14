@@ -12,6 +12,15 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   - '!{vitest.config.*}'
   - '!{*.md,LICENSE}'
+extraResources:
+  - from: resources/bin
+    to: bin
+    filter:
+      - '**/*'
+  - from: resources/lib
+    to: lib
+    filter:
+      - '**/*'
 mac:
   target:
     - target: dmg

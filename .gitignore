@@ -36,6 +36,7 @@ coverage/
 # Therascript data (never commit user data)
 .therascript/
 
-# whisper.cpp build artifacts
+# whisper.cpp build artifacts and binaries
 .whisper-build/
-resources/bin/whisper-cli
+resources/bin/
+resources/lib/
