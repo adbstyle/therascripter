@@ -89,6 +89,12 @@ beforeEach(() => {
     settings: {
       get: vi.fn().mockResolvedValue(false),
       set: vi.fn().mockResolvedValue(undefined)
+    },
+    tasks: {
+      getSessionTasks: vi.fn().mockResolvedValue([]),
+      onProgress: vi.fn().mockReturnValue(() => {}),
+      onCompleted: vi.fn().mockReturnValue(() => {}),
+      onError: vi.fn().mockReturnValue(() => {})
     }
   } as typeof window.api
   vi.clearAllMocks()

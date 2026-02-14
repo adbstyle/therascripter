@@ -31,6 +31,20 @@ export function useSessions(): UseSessionsResult {
     refresh()
   }, [refresh])
 
+  // Refresh session list when tasks complete or fail (session status changes)
+  useEffect(() => {
+    const cleanupCompleted = window.api.tasks.onCompleted(() => {
+      refresh()
+    })
+    const cleanupError = window.api.tasks.onError(() => {
+      refresh()
+    })
+    return () => {
+      cleanupCompleted()
+      cleanupError()
+    }
+  }, [refresh])
+
   const deleteSession = useCallback(
     async (sessionId: string): Promise<boolean> => {
       const result = await window.api.sessions.delete(sessionId)

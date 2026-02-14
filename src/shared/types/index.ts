@@ -13,4 +13,21 @@ export type {
   UpdateSessionInput
 } from './Session'
 
-export type { SessionApi, RecordingApi, SettingsApi, IpcApi } from './IpcApi'
+export type {
+  TaskType,
+  TaskStatus,
+  Task,
+  CreateTaskInput,
+  UpdateTaskInput
+} from './Task'
+
+export type {
+  SessionApi,
+  RecordingApi,
+  SettingsApi,
+  TasksApi,
+  TaskProgressData,
+  TaskCompletedData,
+  TaskErrorData,
+  IpcApi
+} from './IpcApi'

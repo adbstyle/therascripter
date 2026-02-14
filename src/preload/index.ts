@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { IpcApi } from '../shared/types'
+import type {
+  IpcApi,
+  TaskProgressData,
+  TaskCompletedData,
+  TaskErrorData
+} from '../shared/types'
 
 const api: IpcApi = {
   sessions: {
@@ -40,6 +45,34 @@ const api: IpcApi = {
   settings: {
     get: (key) => ipcRenderer.invoke('settings:get', { key }),
     set: (key, value) => ipcRenderer.invoke('settings:set', { key, value })
+  },
+  tasks: {
+    getSessionTasks: (sessionId) =>
+      ipcRenderer.invoke('task:getSessionTasks', { sessionId }),
+    onProgress: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: TaskProgressData): void =>
+        callback(data)
+      ipcRenderer.on('task:progress', handler)
+      return () => {
+        ipcRenderer.removeListener('task:progress', handler)
+      }
+    },
+    onCompleted: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: TaskCompletedData): void =>
+        callback(data)
+      ipcRenderer.on('task:completed', handler)
+      return () => {
+        ipcRenderer.removeListener('task:completed', handler)
+      }
+    },
+    onError: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: TaskErrorData): void =>
+        callback(data)
+      ipcRenderer.on('task:error', handler)
+      return () => {
+        ipcRenderer.removeListener('task:error', handler)
+      }
+    }
   }
 }
 

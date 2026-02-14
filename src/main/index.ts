@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, session, shell } from 'electron'
 import { join } from 'path'
-import { initDatabase, closeDatabase } from './db/connection'
+import { initDatabase, getDatabase, closeDatabase } from './db/connection'
 import { initSettings } from './services/SettingsService'
+import { initTaskQueue, getTaskQueue } from './services/TaskQueueService'
 import { registerSessionHandlers } from './ipc/session-handlers'
 import {
   registerRecordingHandlers,
@@ -9,6 +10,7 @@ import {
   stopRecordingFromTray
 } from './ipc/recording-handlers'
 import { registerSettingsHandlers } from './ipc/settings-handlers'
+import { registerTaskHandlers } from './ipc/task-handlers'
 import { initTray, getTray } from './services/TrayService'
 
 function createWindow(): void {
@@ -82,9 +84,18 @@ app.whenReady().then(() => {
   }
 
   initSettings()
+
+  // Initialize task queue + crash recovery (before IPC handlers that may enqueue tasks)
+  const taskQueue = initTaskQueue(getDatabase())
+  const recovered = taskQueue.recoverStuckTasks()
+  if (recovered > 0) {
+    console.log(`Task Queue: ${recovered} stuck task(s) reset to pending`)
+  }
+
   registerSessionHandlers()
   registerRecordingHandlers()
   registerSettingsHandlers()
+  registerTaskHandlers()
 
   setupCSP()
   createWindow()
@@ -92,6 +103,9 @@ app.whenReady().then(() => {
   // Initialize tray after window is created
   const tray = initTray()
   tray.onStop(() => stopRecordingFromTray())
+
+  // Start task queue processing
+  taskQueue.start()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -110,6 +124,11 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   cleanupRecordingOnQuit()
+  try {
+    getTaskQueue().stop()
+  } catch {
+    // TaskQueue may not have been initialized
+  }
   try {
     getTray().destroy()
   } catch {

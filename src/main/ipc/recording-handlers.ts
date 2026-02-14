@@ -1,9 +1,11 @@
-import { BrowserWindow, ipcMain, Notification, powerSaveBlocker } from 'electron'
+import { ipcMain, Notification, powerSaveBlocker } from 'electron'
 import { getDatabase } from '../db/connection'
 import { SessionService } from '../services/SessionService'
 import { AudioFileService } from '../services/AudioFileService'
 import { getTray } from '../services/TrayService'
+import { getTaskQueue } from '../services/TaskQueueService'
 import { RecordingStopSchema, RecordingDataSchema } from '../../shared/validation/recording-schemas'
+import { sendToRenderer } from '../utils/ipc-helpers'
 
 const AUTO_STOP_MS = 7200 * 1000 // 2 hours
 
@@ -22,13 +24,6 @@ function generateTitle(): string {
   const hours = now.getHours().toString().padStart(2, '0')
   const minutes = now.getMinutes().toString().padStart(2, '0')
   return `Sitzung ${day}.${month}.${year} ${hours}:${minutes}`
-}
-
-function sendToRenderer(channel: string, data?: unknown): void {
-  const windows = BrowserWindow.getAllWindows()
-  for (const win of windows) {
-    win.webContents.send(channel, data)
-  }
 }
 
 function startPowerBlocker(): void {
@@ -75,6 +70,13 @@ function stopRecordingInternal(sessionId: string): { durationSeconds: number } {
 
   const service = new SessionService(getDatabase())
   service.updateSession(sessionId, { status: 'transcribing' })
+
+  // Enqueue ML pipeline tasks for sequential processing
+  try {
+    getTaskQueue().enqueuePipeline(sessionId, 'audio')
+  } catch {
+    // TaskQueue may not be initialized in tests
+  }
 
   activeSessionId = null
 

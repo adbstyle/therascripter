@@ -1,4 +1,5 @@
 import type { Session } from './Session'
+import type { Task, TaskType } from './Task'
 
 export interface SessionApi {
   list(): Promise<Session[]>
@@ -20,8 +21,33 @@ export interface SettingsApi {
   set(key: string, value: unknown): Promise<void>
 }
 
+export interface TaskProgressData {
+  sessionId: string
+  taskType: TaskType
+  progress: number
+}
+
+export interface TaskCompletedData {
+  sessionId: string
+  taskType: TaskType
+}
+
+export interface TaskErrorData {
+  sessionId: string
+  taskType: TaskType
+  error: string
+}
+
+export interface TasksApi {
+  getSessionTasks(sessionId: string): Promise<Task[]>
+  onProgress(callback: (data: TaskProgressData) => void): () => void
+  onCompleted(callback: (data: TaskCompletedData) => void): () => void
+  onError(callback: (data: TaskErrorData) => void): () => void
+}
+
 export interface IpcApi {
   sessions: SessionApi
   recording: RecordingApi
   settings: SettingsApi
+  tasks: TasksApi
 }
