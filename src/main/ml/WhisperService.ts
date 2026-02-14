@@ -4,20 +4,13 @@ import { join } from 'path'
 import { cpus } from 'os'
 import { app } from 'electron'
 import type { Task } from '../../shared/types'
-import type { TranscriptData, TranscriptWord } from '../../shared/types'
+import type { TranscriptData } from '../../shared/types'
 import type { TaskExecutor } from '../services/task-executors'
 import { SessionService } from '../services/SessionService'
 import { getDatabase, getDataDir } from '../db/connection'
 import { removeFillerWords, rebuildSegments } from './filler-removal'
-
-// whisper.cpp --output-json-full format
-interface WhisperToken {
-  text: string
-  timestamps?: { from: string; to: string }
-  offsets?: { from: number; to: number }
-  id: number
-  p: number
-}
+import { filterSpecialTokens, mergeSubTokens } from './token-processing'
+import type { WhisperToken } from './token-processing'
 
 interface WhisperSegment {
   timestamps: { from: string; to: string }
@@ -184,39 +177,18 @@ export class WhisperService implements TaskExecutor {
   }
 
   private processOutput(output: WhisperJsonOutput): TranscriptData {
-    // Extract words from whisper.cpp tokens
-    const words: TranscriptWord[] = []
-
+    // Collect all tokens across segments
+    const allTokens: WhisperToken[] = []
     for (const segment of output.transcription) {
-      for (const token of segment.tokens) {
-        const text = token.text.trim()
-        if (!text) continue
-
-        // Use token offsets (milliseconds) for word timestamps
-        if (token.offsets) {
-          words.push({
-            text,
-            start: token.offsets.from / 1000,
-            end: token.offsets.to / 1000
-          })
-        } else if (token.timestamps) {
-          // Fallback: parse timestamp strings "HH:MM:SS,mmm"
-          words.push({
-            text,
-            start: parseTimestamp(token.timestamps.from),
-            end: parseTimestamp(token.timestamps.to)
-          })
-        }
-      }
+      allTokens.push(...segment.tokens)
     }
 
-    // Apply filler word removal
+    // Pipeline: filter specials → merge sub-tokens → remove fillers → rebuild segments
+    const filtered = filterSpecialTokens(allTokens)
+    const words = mergeSubTokens(filtered)
     const cleanedWords = removeFillerWords(words)
-
-    // Rebuild sentence-level segments
     const segments = rebuildSegments(cleanedWords)
 
-    // Calculate duration from the last word
     const duration = cleanedWords.length > 0 ? cleanedWords[cleanedWords.length - 1].end : 0
 
     return {

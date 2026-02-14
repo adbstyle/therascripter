@@ -13,6 +13,8 @@ import { registerSettingsHandlers } from './ipc/settings-handlers'
 import { registerTaskHandlers } from './ipc/task-handlers'
 import { initTray, getTray } from './services/TrayService'
 import { WhisperService } from './ml/WhisperService'
+import { PyannoteSidecar } from './ml/PyannoteSidecar'
+import { AlignmentService } from './ml/AlignmentService'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -95,6 +97,8 @@ app.whenReady().then(() => {
 
   // Register real ML executors (replacing stubs)
   taskQueue.registerExecutor('transcription', new WhisperService())
+  taskQueue.registerExecutor('diarization', new PyannoteSidecar())
+  taskQueue.registerExecutor('alignment', new AlignmentService())
 
   registerSessionHandlers()
   registerRecordingHandlers()

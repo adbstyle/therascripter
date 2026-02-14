@@ -38,3 +38,9 @@ export type {
   TranscriptMetadata,
   TranscriptData
 } from './Transcript'
+
+export type {
+  SpeakerSegment,
+  DiarizationMetadata,
+  DiarizationData
+} from './Diarization'

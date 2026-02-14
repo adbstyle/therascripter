@@ -22,6 +22,8 @@ npm run typecheck     # TypeScript check (both node + web configs)
 npm run package       # Build + electron-builder → macOS DMG (arm64 only)
 scripts/setup-whisper.sh          # Install whisper-cli via Homebrew → resources/bin/ + resources/lib/
 scripts/setup-whisper.sh --model  # Also download ASR model (~547 MB)
+scripts/setup-pyannote.sh         # Create Python venv with pyannote.audio → python_sidecar/venv/
+scripts/setup-pyannote.sh --model # Also download diarization model
 ```
 
 ## Architecture
@@ -35,10 +37,13 @@ scripts/setup-whisper.sh --model  # Also download ASR model (~547 MB)
 
 **ML pipeline** (strictly sequential, one model at a time):
 1. whisper.cpp subprocess — ASR (Whisper Large V3 Turbo Q5_0, Metal GPU) ✓ implemented
-2. Python sidecar — pyannote.audio diarization + flair NER
-3. Swift CLI helper — Apple Vision OCR
+2. Python sidecar — pyannote.audio diarization (speaker-diarization-3.1) + alignment ✓ implemented
+3. Python sidecar — flair NER (planned)
+4. Swift CLI helper — Apple Vision OCR (planned)
 
 **ML models:** Stored in `~/.therascript/models/<type>/` (e.g. `models/asr/`, `models/diarization/`, `models/ner/`). Directories created at startup by `initDatabase()`.
+
+**Python sidecar:** Uses a venv at `python_sidecar/venv/` (gitignored). One-time setup after fresh clone: `scripts/setup-pyannote.sh --model`. Requires HuggingFace token (`huggingface-cli login`) and accepted terms for `pyannote/speaker-diarization-3.1` + `pyannote/speaker-diarization-community-1`. The venv and models persist across builds — no re-setup needed for `npm run dev/build`.
 
 **Storage:** better-sqlite3 (sessions, blocklist) + electron-store (settings).
 

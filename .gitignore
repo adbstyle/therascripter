@@ -40,3 +40,8 @@ coverage/
 .whisper-build/
 resources/bin/
 resources/lib/
+
+# Python sidecar virtual environment and cache
+python_sidecar/venv/
+python_sidecar/__pycache__/
+*.pyc

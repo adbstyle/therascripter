@@ -19,6 +19,7 @@ export interface Session {
   audioPath: string | null
   transcriptPath: string | null
   anonymizedPath: string | null
+  diarizationPath: string | null
   pdfPath: string | null
   entityMap: EntityMap | null
   errorMessage: string | null
@@ -40,6 +41,7 @@ export interface UpdateSessionInput {
   audioPath?: string | null
   transcriptPath?: string | null
   anonymizedPath?: string | null
+  diarizationPath?: string | null
   pdfPath?: string | null
   entityMap?: EntityMap | null
   errorMessage?: string | null

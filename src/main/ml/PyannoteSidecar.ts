@@ -1,0 +1,222 @@
+import { spawn } from 'child_process'
+import { existsSync, statSync, writeFileSync } from 'fs'
+import { join } from 'path'
+import { app } from 'electron'
+import type { Task } from '../../shared/types'
+import type { DiarizationData, SpeakerSegment } from '../../shared/types'
+import type { TaskExecutor } from '../services/task-executors'
+import { SessionService } from '../services/SessionService'
+import { getDatabase, getDataDir } from '../db/connection'
+
+// Progress line format: "[PROGRESS] 42"
+const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
+
+export class PyannoteSidecar implements TaskExecutor {
+  private getPythonPath(): string {
+    const venvPython = join(app.getAppPath(), 'python_sidecar', 'venv', 'bin', 'python3')
+    if (existsSync(venvPython)) return venvPython
+    // Fallback: system Python
+    return 'python3'
+  }
+
+  private getScriptPath(): string {
+    return join(app.getAppPath(), 'python_sidecar', 'diarize.py')
+  }
+
+  private getModelDir(): string {
+    return join(getDataDir(), 'models', 'diarization')
+  }
+
+  async execute(task: Task, onProgress: (progress: number) => void): Promise<void> {
+    const scriptPath = this.getScriptPath()
+    const pythonPath = this.getPythonPath()
+
+    if (!existsSync(scriptPath)) {
+      throw new Error(
+        `Diarization-Script nicht gefunden: ${scriptPath}. Bitte prüfen Sie die Installation.`
+      )
+    }
+
+    const db = getDatabase()
+    const sessionService = new SessionService(db)
+    const session = sessionService.getSession(task.sessionId)
+
+    if (!session?.audioPath) {
+      throw new Error(`Session ${task.sessionId} hat keinen Audio-Pfad`)
+    }
+
+    if (!existsSync(session.audioPath)) {
+      throw new Error(`Audiodatei nicht gefunden: ${session.audioPath}`)
+    }
+
+    // Calculate timeout: 4x audio duration (pyannote is slower than whisper)
+    const audioStats = statSync(session.audioPath)
+    const WAV_HEADER_SIZE = 44
+    const audioDurationEstimate =
+      Math.max(0, audioStats.size - WAV_HEADER_SIZE) / (48000 * 2) // 48kHz 16-bit mono
+    const timeoutMs = Math.max(audioDurationEstimate * 4 * 1000, 120_000) // min 2 minutes
+
+    // Run pyannote diarization
+    const rttmOutput = await this.runPyannote(
+      pythonPath,
+      scriptPath,
+      session.audioPath,
+      timeoutMs,
+      onProgress
+    )
+
+    // Parse RTTM output
+    const segments = parseRTTM(rttmOutput)
+
+    // Build diarization data
+    const diarization = buildDiarizationData(segments, audioDurationEstimate)
+
+    // Save diarization results
+    const diarizationPath = sessionService.generateDiarizationPath(task.sessionId)
+    writeFileSync(diarizationPath, JSON.stringify(diarization, null, 2))
+
+    sessionService.updateSession(task.sessionId, { diarizationPath })
+  }
+
+  private runPyannote(
+    pythonPath: string,
+    scriptPath: string,
+    audioPath: string,
+    timeoutMs: number,
+    onProgress: (progress: number) => void
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const modelDir = this.getModelDir()
+      const args = [
+        scriptPath,
+        '--audio',
+        audioPath,
+        '--model-dir',
+        modelDir,
+        '--min-speakers',
+        '1',
+        '--max-speakers',
+        '4'
+      ]
+
+      // QoS: nice -n 10 (NFR-23)
+      const proc = spawn('nice', ['-n', '10', pythonPath, ...args], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          // Prevent PyTorch from using all cores
+          OMP_NUM_THREADS: '4',
+          MKL_NUM_THREADS: '4'
+        }
+      })
+
+      let stdout = ''
+      let stderr = ''
+      const timeout = setTimeout(() => {
+        proc.kill('SIGTERM')
+        reject(
+          new Error(`Diarization abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`)
+        )
+      }, timeoutMs)
+
+      proc.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+      })
+
+      proc.stderr?.on('data', (data: Buffer) => {
+        const chunk = data.toString()
+        stderr += chunk
+
+        // Parse progress from stderr
+        const match = PROGRESS_REGEX.exec(chunk)
+        if (match) {
+          const pct = parseInt(match[1], 10)
+          onProgress(pct / 100)
+        }
+      })
+
+      proc.on('error', (error) => {
+        clearTimeout(timeout)
+        if (error.message.includes('ENOENT')) {
+          reject(
+            new Error(
+              `Python 3 nicht gefunden. Bitte installieren Sie Python 3.10+ oder führen Sie scripts/setup-pyannote.sh aus.`
+            )
+          )
+        } else {
+          reject(new Error(`Diarization konnte nicht gestartet werden: ${error.message}`))
+        }
+      })
+
+      proc.on('close', (code) => {
+        clearTimeout(timeout)
+
+        if (code !== 0) {
+          const errorLines = stderr
+            .split('\n')
+            .filter(
+              (line) =>
+                line.startsWith('Error:') ||
+                line.includes('error') ||
+                line.includes('Error') ||
+                line.includes('failed')
+            )
+          const errorDetail =
+            errorLines.length > 0 ? errorLines.join('; ') : stderr.slice(-500)
+          reject(new Error(`Diarization Fehler (Exit Code ${code}): ${errorDetail}`))
+          return
+        }
+
+        resolve(stdout)
+      })
+    })
+  }
+}
+
+// Exported for testing
+export function parseRTTM(rttm: string): SpeakerSegment[] {
+  const segments: SpeakerSegment[] = []
+
+  for (const line of rttm.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || !trimmed.startsWith('SPEAKER')) continue
+
+    const parts = trimmed.split(/\s+/)
+    // RTTM format: SPEAKER <file> <channel> <start> <duration> <NA> <NA> <label> <NA> <NA>
+    if (parts.length < 8) continue
+
+    const start = parseFloat(parts[3])
+    const duration = parseFloat(parts[4])
+    const label = parts[7]
+
+    if (isNaN(start) || isNaN(duration)) continue
+
+    segments.push({
+      label,
+      start,
+      end: start + duration
+    })
+  }
+
+  // Sort by start time
+  segments.sort((a, b) => a.start - b.start)
+
+  return segments
+}
+
+// Exported for testing
+export function buildDiarizationData(
+  segments: SpeakerSegment[],
+  duration: number
+): DiarizationData {
+  const uniqueSpeakers = new Set(segments.map((s) => s.label))
+
+  return {
+    speakers: segments,
+    speakerCount: uniqueSpeakers.size,
+    metadata: {
+      model: 'pyannote-community-1',
+      duration
+    }
+  }
+}

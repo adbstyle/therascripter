@@ -14,6 +14,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     audioPath: null,
     transcriptPath: null,
     anonymizedPath: null,
+    diarizationPath: null,
     pdfPath: null,
     entityMap: null,
     errorMessage: null,
