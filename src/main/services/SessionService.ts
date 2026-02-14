@@ -76,6 +76,10 @@ export class SessionService {
     return join(getDataDir(), 'transcripts', `${sessionId}.json`)
   }
 
+  generateDiarizationPath(sessionId: string): string {
+    return join(getDataDir(), 'diarization', `${sessionId}.json`)
+  }
+
   generateAnonymizedPath(sessionId: string): string {
     return join(getDataDir(), 'anonymized', `${sessionId}.json`)
   }

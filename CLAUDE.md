@@ -22,6 +22,8 @@ npm run typecheck     # TypeScript check (both node + web configs)
 npm run package       # Build + electron-builder → macOS DMG (arm64 only)
 scripts/setup-whisper.sh          # Install whisper-cli via Homebrew → resources/bin/ + resources/lib/
 scripts/setup-whisper.sh --model  # Also download ASR model (~547 MB)
+scripts/setup-pyannote.sh         # Create Python venv with pyannote.audio → python_sidecar/venv/
+scripts/setup-pyannote.sh --model # Also download diarization model
 ```
 
 ## Architecture

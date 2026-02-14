@@ -17,6 +17,7 @@ interface SessionRow {
   audio_path: string | null
   transcript_path: string | null
   anonymized_path: string | null
+  diarization_path: string | null
   pdf_path: string | null
   entity_map: string | null
   error_message: string | null
@@ -43,6 +44,7 @@ function rowToSession(row: SessionRow): Session {
     audioPath: row.audio_path,
     transcriptPath: row.transcript_path,
     anonymizedPath: row.anonymized_path,
+    diarizationPath: row.diarization_path,
     pdfPath: row.pdf_path,
     entityMap: parseEntityMap(row.entity_map, row.id),
     errorMessage: row.error_message,
@@ -108,6 +110,10 @@ export class SessionRepository {
     if (input.anonymizedPath !== undefined) {
       sets.push('anonymized_path = ?')
       values.push(input.anonymizedPath)
+    }
+    if (input.diarizationPath !== undefined) {
+      sets.push('diarization_path = ?')
+      values.push(input.diarizationPath)
     }
     if (input.pdfPath !== undefined) {
       sets.push('pdf_path = ?')
