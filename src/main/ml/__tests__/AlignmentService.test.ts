@@ -206,7 +206,7 @@ describe('rebuildSegmentsWithSpeakers', () => {
     expect(segments[2]).toEqual({ text: 'Tschüss.', start: 4, end: 5, speaker: 'Person A' })
   })
 
-  it('breaks segments at sentence-ending punctuation within same speaker', () => {
+  it('merges consecutive same-speaker words into one segment regardless of punctuation', () => {
     const words = [
       word('Hallo.', 0, 1, 'Person A'),
       word('Wie', 1, 2, 'Person A'),
@@ -215,9 +215,9 @@ describe('rebuildSegmentsWithSpeakers', () => {
 
     const segments = rebuildSegmentsWithSpeakers(words, 2)
 
-    expect(segments).toHaveLength(2)
-    expect(segments[0].text).toBe('Hallo.')
-    expect(segments[1].text).toBe('Wie gehts?')
+    expect(segments).toHaveLength(1)
+    expect(segments[0].text).toBe('Hallo. Wie gehts?')
+    expect(segments[0].speaker).toBe('Person A')
   })
 
   it('strips speaker labels for single speaker (speakerCount <= 1)', () => {

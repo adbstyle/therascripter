@@ -155,8 +155,7 @@ export function findSpeakerForTime(
   return nearest
 }
 
-// Rebuild segments with speaker labels, breaking at speaker changes
-// and at sentence-ending punctuation
+// Rebuild segments with speaker labels, breaking only at speaker changes
 export function rebuildSegmentsWithSpeakers(
   words: TranscriptWord[],
   speakerCount: number
@@ -185,12 +184,6 @@ export function rebuildSegmentsWithSpeakers(
     }
 
     currentWords.push(word)
-
-    // Also break on sentence-ending punctuation (within same speaker)
-    if (/[.!?]$/.test(word.text)) {
-      segments.push(buildSegment(currentWords, currentSpeaker))
-      currentWords = []
-    }
   }
 
   // Final segment
