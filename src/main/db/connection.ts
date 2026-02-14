@@ -28,7 +28,8 @@ export function initDatabase(dbPath?: string): Database.Database {
     join(dataDir, 'anonymized'),
     join(dataDir, 'pdf'),
     join(dataDir, 'recovery'),
-    join(dataDir, 'models')
+    join(dataDir, 'models'),
+    join(dataDir, 'models', 'asr')
   ]
 
   for (const dir of dirs) {

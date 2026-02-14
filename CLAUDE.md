@@ -20,6 +20,7 @@ npm run lint          # ESLint with cache
 npm run format        # Prettier formatting
 npm run typecheck     # TypeScript check (both node + web configs)
 npm run package       # Build + electron-builder → macOS DMG (arm64 only)
+scripts/build-whisper.sh  # Clone + build whisper.cpp (ARM64 Metal) → resources/bin/whisper-cli
 ```
 
 ## Architecture
@@ -31,10 +32,12 @@ npm run package       # Build + electron-builder → macOS DMG (arm64 only)
 - **Preload** (`src/preload/`) — Context bridge exposing APIs to renderer. All IPC channels will use Zod schema validation.
 - **Renderer** (`src/renderer/`) — React 19 + Tailwind CSS UI. Path alias: `@renderer` → `src/renderer/src`.
 
-**Planned ML pipeline** (strictly sequential, one model at a time):
-1. whisper.cpp subprocess — ASR (Whisper Large V3 Turbo Q5_0, Metal GPU)
+**ML pipeline** (strictly sequential, one model at a time):
+1. whisper.cpp subprocess — ASR (Whisper Large V3 Turbo Q5_0, Metal GPU) ✓ implemented
 2. Python sidecar — pyannote.audio diarization + flair NER
 3. Swift CLI helper — Apple Vision OCR
+
+**ML models:** Stored in `~/.therascript/models/<type>/` (e.g. `models/asr/`, `models/diarization/`, `models/ner/`). Directories created at startup by `initDatabase()`.
 
 **Storage:** better-sqlite3 (sessions, blocklist) + electron-store (settings).
 

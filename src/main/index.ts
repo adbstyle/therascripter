@@ -12,6 +12,7 @@ import {
 import { registerSettingsHandlers } from './ipc/settings-handlers'
 import { registerTaskHandlers } from './ipc/task-handlers'
 import { initTray, getTray } from './services/TrayService'
+import { WhisperService } from './ml/WhisperService'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -91,6 +92,9 @@ app.whenReady().then(() => {
   if (recovered > 0) {
     console.log(`Task Queue: ${recovered} stuck task(s) reset to pending`)
   }
+
+  // Register real ML executors (replacing stubs)
+  taskQueue.registerExecutor('transcription', new WhisperService())
 
   registerSessionHandlers()
   registerRecordingHandlers()

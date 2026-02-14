@@ -31,3 +31,10 @@ export type {
   TaskErrorData,
   IpcApi
 } from './IpcApi'
+
+export type {
+  TranscriptWord,
+  TranscriptSegment,
+  TranscriptMetadata,
+  TranscriptData
+} from './Transcript'
