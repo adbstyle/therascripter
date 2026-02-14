@@ -134,24 +134,20 @@ npm run dev                   → Aufnahme starten → rotes Tray-Icon sichtbar
 
 ---
 
-## Iteration 6: Audio-Import & Task Queue (Epic 1 Erweiterung)
+## Iteration 6: Task Queue (Epic 1 Erweiterung)
 
-**Scope:** Drag-Drop + Dateidialog, Batch-Import, Task-Queue-Grundgerüst
+**Scope:** Task-Queue-Grundgerüst für sequenzielle ML-Pipeline
 
 **Deliverables:**
-- `src/renderer/components/AudioImportZone.tsx` — Drag-Drop + Dateiauswahl
-- `src/main/services/AudioImportService.ts` — Validierung (WAV/MP3/M4A/FLAC), Kopie
-- Batch-Import (mehrere Dateien → mehrere Sessions)
 - `src/main/services/TaskQueue.ts` — FIFO-Queue mit SQLite-Persistenz (task_queue Tabelle)
 - Queue verarbeitet Tasks sequenziell, überlebt Crashes (Recovery beim Start)
 - IPC: `task:progress`, `task:completed`, `task:error` Events an Renderer
 
 **Verifikation:**
 ```
-npm run dev                   → WAV-Datei per Drag-Drop importieren → Session erstellt
-                              → 3 Dateien gleichzeitig importieren → 3 Sessions
-                              → Ungültige Datei (.txt) → Fehlermeldung
-                              → Task-Queue-Status in DevTools prüfen
+npm run dev                   → Task-Queue-Status in DevTools prüfen
+                              → Queue verarbeitet Tasks sequenziell
+                              → Nach App-Neustart: unerledigte Tasks werden fortgesetzt
 ```
 
 ---
@@ -168,12 +164,12 @@ npm run dev                   → WAV-Datei per Drag-Drop importieren → Sessio
 - Fortschrittsanzeige (stdout-Parsing)
 - JSON-Output mit Wort-Zeitstempeln
 - Filler-Wort-Entfernung ("äh", "ähm") als Regex-Postprocessing
-- Task-Queue-Integration: Transkription startet automatisch nach Aufnahme-Stop/Import
+- Task-Queue-Integration: Transkription startet automatisch nach Aufnahme-Stop
 - QoS: `nice -n 10` für Subprocess (NFR-23)
 
 **Verifikation:**
 ```
-npm run dev                   → Audio aufnehmen/importieren → Transkription startet
+npm run dev                   → Audio aufnehmen → Transkription startet
                               → Fortschritt im Dashboard sichtbar
                               → Nach Abschluss: Transkript-JSON mit Zeitstempeln prüfen
                               → Filler-Wörter entfernt
@@ -449,7 +445,7 @@ Iter 1 (Scaffold)
     → Iter 3 (Dashboard UI)          ← Epic 0 komplett
       → Iter 4 (Audio Basis)
         → Iter 5 (Menu Bar)
-          → Iter 6 (Import + Queue)  ← Epic 1 komplett
+          → Iter 6 (Task Queue)      ← Epic 1 komplett
             → Iter 7 (whisper.cpp)
               → Iter 8 (Diarization) ← Epic 2 komplett
                 → Iter 9 (NER)       ← Epic 4 komplett
@@ -501,15 +497,15 @@ git add <files> && git commit # Nur wenn alles grün
 | 3 Dashboard | 2 | 4 |
 | 4 Audio Basis | 2 | 6 |
 | 5 Menu Bar | 1 | 7 |
-| 6 Import + Queue | 1-2 | 9 |
-| 7 whisper.cpp | 2-3 | 12 |
-| 8 Diarization | 2-3 | 15 |
-| 9 Anonymisierung | 2-3 | 18 |
-| 10 Sperrliste | 2 | 20 |
-| 11 PDF/OCR | 2-3 | 23 |
-| 12 Review Editor | 2 | 25 |
-| 13 FP/FN | 2 | 27 |
-| 14 Blocklist Quick-Add | 2 | 29 |
-| 15 Export | 1 | 30 |
-| 16 Distribution | 2 | 32 |
-| **Total** | **~32 Tage** | **~6-7 Wochen** |
+| 6 Task Queue | 1 | 8 |
+| 7 whisper.cpp | 2-3 | 11 |
+| 8 Diarization | 2-3 | 14 |
+| 9 Anonymisierung | 2-3 | 17 |
+| 10 Sperrliste | 2 | 19 |
+| 11 PDF/OCR | 2-3 | 22 |
+| 12 Review Editor | 2 | 24 |
+| 13 FP/FN | 2 | 26 |
+| 14 Blocklist Quick-Add | 2 | 28 |
+| 15 Export | 1 | 29 |
+| 16 Distribution | 2 | 31 |
+| **Total** | **~31 Tage** | **~6 Wochen** |
