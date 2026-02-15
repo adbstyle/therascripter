@@ -7,10 +7,25 @@ import { SpeakerLabel } from '../extensions/speakerLabel'
 import { Timestamp } from '../extensions/timestamp'
 import { useAutoSave } from '../hooks/useAutoSave'
 import { EditorContextMenu, type ContextMenuState } from '../components/editor/EditorContextMenu'
-import { batchRemovePlaceholder, anonymizeSelection } from '../utils/editorCommands'
+import { BlocklistConfirmDialog } from '../components/editor/BlocklistConfirmDialog'
+import {
+  batchRemovePlaceholder,
+  anonymizeSelection,
+  addToBlocklistRetroactive,
+  hasChipsWithEntityId,
+  extendSelectionAndExtractText
+} from '../utils/editorCommands'
 import type { EntityMap, PlaceholderType, ReviewData, SessionType } from '../../../shared/types'
 import type { TipTapDocument } from '../../../shared/types/TipTapDocument'
 import type { Editor } from '@tiptap/core'
+
+interface BlocklistUndoEntry {
+  entryId: string
+  entityId: string
+  term: string
+  placeholderType: PlaceholderType
+  undone: boolean
+}
 
 interface ReviewEditorProps {
   sessionId: string
@@ -25,8 +40,13 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const [_entityMap, setEntityMap] = useState<EntityMap>({})
   const [updateCounter, setUpdateCounter] = useState(0)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [blocklistConfirm, setBlocklistConfirm] = useState<{
+    term: string
+    type: PlaceholderType
+  } | null>(null)
   const entityMapRef = useRef<EntityMap>({})
   const editorRef = useRef<Editor | null>(null)
+  const blocklistUndoStackRef = useRef<BlocklistUndoEntry[]>([])
 
   /** Update entityMap in both state and ref, and trigger auto-save */
   const updateEntityMap = useCallback((updated: EntityMap) => {
@@ -74,6 +94,65 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
             return true // Prevent default single-node deletion
           }
         }
+
+        // Track undo/redo for blocklist operations (Cmd+Z / Cmd+Shift+Z)
+        if ((event.metaKey || event.ctrlKey) && event.key === 'z') {
+          const stack = blocklistUndoStackRef.current
+          if (stack.length > 0) {
+            // Snapshot chip presence before ProseMirror processes the undo/redo
+            const snapshot = stack.map((entry, i) => ({
+              index: i,
+              entityId: entry.entityId,
+              hadChips: hasChipsWithEntityId(view.state.doc, entry.entityId)
+            }))
+
+            // After ProseMirror processes, compare chip presence
+            queueMicrotask(() => {
+              if (!editorRef.current) return
+              const doc = editorRef.current.state.doc
+
+              for (const snap of snapshot) {
+                const hasChipsNow = hasChipsWithEntityId(doc, snap.entityId)
+                const stackEntry = stack[snap.index]
+
+                if (snap.hadChips && !hasChipsNow && !stackEntry.undone) {
+                  // Undo: chips removed → delete blocklist entry from SQLite
+                  stackEntry.undone = true
+                  window.api.blocklist.delete(stackEntry.entryId)
+                  const updated = { ...entityMapRef.current }
+                  delete updated[stackEntry.entityId]
+                  entityMapRef.current = updated
+                  setEntityMap(updated)
+                  setUpdateCounter((c) => c + 1)
+                } else if (!snap.hadChips && hasChipsNow && stackEntry.undone) {
+                  // Redo: chips reappeared → re-add blocklist entry to SQLite
+                  stackEntry.undone = false
+                  window.api.blocklist
+                    .add(stackEntry.term, stackEntry.placeholderType)
+                    .then((newEntry) => {
+                      stackEntry.entryId = newEntry.id
+                      // Update entityMap after entryId is set to avoid race condition
+                      const number = parseInt(
+                        stackEntry.entityId.split('-').pop() ?? '0',
+                        10
+                      )
+                      const updated = { ...entityMapRef.current }
+                      updated[stackEntry.entityId] = {
+                        original: stackEntry.term,
+                        placeholder: `[${stackEntry.placeholderType} ${number}]`,
+                        type: stackEntry.placeholderType,
+                        source: 'blocklist'
+                      }
+                      entityMapRef.current = updated
+                      setEntityMap(updated)
+                      setUpdateCounter((c) => c + 1)
+                    })
+                }
+              }
+            })
+          }
+        }
+
         return false
       },
       clipboardTextSerializer: (slice) => {
@@ -237,6 +316,45 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     [editor, updateEntityMap]
   )
 
+  /** Handle "Zur Sperrliste hinzufügen" from context menu — extract term and show confirm dialog */
+  const handleAddToBlocklist = useCallback(
+    (type: PlaceholderType) => {
+      if (!editor) return
+      const { from, to, empty } = editor.state.selection
+      if (empty) return
+
+      const { originalText } = extendSelectionAndExtractText(editor.state, from, to)
+      if (!originalText.trim()) return
+      setBlocklistConfirm({ term: originalText.trim(), type })
+    },
+    [editor]
+  )
+
+  /** Handle blocklist confirm dialog — add to SQLite + retroactive scan */
+  const handleBlocklistConfirm = useCallback(async () => {
+    if (!editor || !blocklistConfirm) return
+    const { term, type } = blocklistConfirm
+    setBlocklistConfirm(null)
+
+    // 1. Add to SQLite blocklist via IPC
+    const entry = await window.api.blocklist.add(term, type)
+
+    // 2. Retroactive application in document
+    const result = addToBlocklistRetroactive(editor, term, type, entityMapRef.current)
+    if (result) {
+      updateEntityMap(result.entityMap)
+
+      // 3. Track for undo/redo
+      blocklistUndoStackRef.current.push({
+        entryId: entry.id,
+        entityId: result.entityId,
+        term,
+        placeholderType: type,
+        undone: false
+      })
+    }
+  }, [editor, blocklistConfirm, updateEntityMap])
+
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -289,6 +407,17 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           onClose={() => setContextMenu(null)}
           onBatchRemove={handleBatchRemove}
           onAnonymize={handleAnonymize}
+          onAddToBlocklist={handleAddToBlocklist}
+        />
+      )}
+
+      {/* Blocklist confirm dialog */}
+      {blocklistConfirm && (
+        <BlocklistConfirmDialog
+          term={blocklistConfirm.term}
+          type={blocklistConfirm.type}
+          onConfirm={handleBlocklistConfirm}
+          onCancel={() => setBlocklistConfirm(null)}
         />
       )}
 

@@ -10,6 +10,17 @@ const ANONYMIZE_TYPES: Array<{ value: PlaceholderType; label: string }> = [
   { value: 'ORGANISATION', label: 'Organisation' }
 ]
 
+/** Types available for blocklist quick-add (all 7 types including MEDIZINISCH/SONSTIGES) */
+const BLOCKLIST_TYPES: Array<{ value: PlaceholderType; label: string }> = [
+  { value: 'PERSON', label: 'Person' },
+  { value: 'ORT', label: 'Ort' },
+  { value: 'DATUM', label: 'Datum' },
+  { value: 'KONTAKT', label: 'Kontakt' },
+  { value: 'ORGANISATION', label: 'Organisation' },
+  { value: 'MEDIZINISCH', label: 'Medizinisch' },
+  { value: 'SONSTIGES', label: 'Sonstiges' }
+]
+
 export interface ContextMenuState {
   x: number
   y: number
@@ -29,13 +40,15 @@ interface EditorContextMenuProps {
   onClose: () => void
   onBatchRemove: (entityId: string) => void
   onAnonymize: (type: PlaceholderType) => void
+  onAddToBlocklist: (type: PlaceholderType) => void
 }
 
 export function EditorContextMenu({
   state,
   onClose,
   onBatchRemove,
-  onAnonymize
+  onAnonymize,
+  onAddToBlocklist
 }: EditorContextMenuProps): React.JSX.Element {
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -71,7 +84,7 @@ export function EditorContextMenu({
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 min-w-[200px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+      className="fixed z-50 min-w-[220px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
       style={style}
     >
       {/* Chip context: "Rückgängig machen" */}
@@ -100,10 +113,30 @@ export function EditorContextMenu({
           <div className="px-3 py-1.5 text-xs font-medium text-gray-400">Anonymisieren als...</div>
           {ANONYMIZE_TYPES.map((type) => (
             <button
-              key={type.value}
+              key={`anon-${type.value}`}
               className="w-full px-3 py-1.5 text-left text-sm text-gray-900 hover:bg-gray-50"
               onClick={() => {
                 onAnonymize(type.value)
+                onClose()
+              }}
+            >
+              {type.label}
+            </button>
+          ))}
+
+          {/* Separator before blocklist section */}
+          <div className="my-1 border-t border-gray-100" />
+
+          {/* Blocklist quick-add: "Zur Sperrliste hinzufügen..." (US-6c) */}
+          <div className="px-3 py-1.5 text-xs font-medium text-gray-400">
+            Zur Sperrliste hinzufügen...
+          </div>
+          {BLOCKLIST_TYPES.map((type) => (
+            <button
+              key={`bl-${type.value}`}
+              className="w-full px-3 py-1.5 text-left text-sm text-gray-900 hover:bg-gray-50"
+              onClick={() => {
+                onAddToBlocklist(type.value)
                 onClose()
               }}
             >
@@ -119,7 +152,7 @@ export function EditorContextMenu({
 /** Calculate menu position ensuring it stays within the viewport */
 function getMenuPosition(x: number, y: number): React.CSSProperties {
   const menuWidth = 220
-  const menuHeight = 300 // Estimate max height
+  const menuHeight = 500 // Increased to account for blocklist section
   const padding = 8
 
   const adjustedX =
