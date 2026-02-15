@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3'
 import { join } from 'path'
 import { SessionRepository } from '../db/repositories/SessionRepository'
 import { getDataDir } from '../db/connection'
+import { removeFile } from '../utils/file-ops'
 import type { Session, SessionStatus, UpdateSessionInput } from '../../shared/types'
 
 const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
@@ -56,6 +57,10 @@ export class SessionService {
   }
 
   deleteSession(id: string): boolean {
+    const session = this.repository.findById(id)
+    if (!session) return false
+
+    this.cleanupSessionFiles(session)
     return this.repository.delete(id)
   }
 
@@ -63,9 +68,29 @@ export class SessionService {
     const expired = this.repository.findOlderThan(30)
     let deleted = 0
     for (const session of expired) {
+      this.cleanupSessionFiles(session)
       if (this.repository.delete(session.id)) deleted++
     }
     return deleted
+  }
+
+  private cleanupSessionFiles(session: Session): void {
+    const dataDir = getDataDir()
+    const filePaths = [
+      session.audioPath,
+      session.transcriptPath,
+      session.anonymizedPath,
+      session.diarizationPath,
+      session.pdfPath,
+      join(dataDir, 'extracted', `${session.id}.json`),
+      join(dataDir, 'recovery', `${session.id}.pcm`)
+    ]
+
+    for (const filePath of filePaths) {
+      if (filePath) {
+        removeFile(filePath)
+      }
+    }
   }
 
   generateAudioPath(sessionId: string): string {

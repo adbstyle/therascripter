@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import BlocklistManager from '../components/BlocklistManager'
+import AboutPage from '../components/AboutPage'
 
 type Tab = 'sperrliste' | 'modelle' | 'ueber'
 
@@ -41,11 +42,7 @@ export default function Settings(): React.JSX.Element {
             <p className="text-sm text-gray-400">Modell-Verwaltung — noch nicht implementiert</p>
           </div>
         )}
-        {currentTab === 'ueber' && (
-          <div className="flex flex-1 items-center justify-center p-8">
-            <p className="text-sm text-gray-400">Über Therascript — noch nicht implementiert</p>
-          </div>
-        )}
+        {currentTab === 'ueber' && <AboutPage />}
       </div>
     </div>
   )

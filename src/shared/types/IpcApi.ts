@@ -74,6 +74,58 @@ export interface ReviewApi {
   exportClipboard(text: string): Promise<void>
 }
 
+export interface AboutInfo {
+  version: string
+  electronVersion: string
+  osVersion: string
+  chip: string
+  totalMemoryGB: number
+  fileVaultActive: boolean | null
+  storageModelsBytes: number
+  storageSessionsBytes: number
+}
+
+export interface SystemApi {
+  aboutInfo(): Promise<AboutInfo>
+  uninstall(): Promise<boolean>
+}
+
+export interface ModelDownloadProgress {
+  currentModel: string
+  currentModelLabel: string
+  currentModelProgress: number
+  currentModelDownloaded: number
+  currentModelTotal: number
+  overallDownloaded: number
+  overallTotal: number
+  overallPercent: number
+}
+
+export type ModelDownloadStatus =
+  | { state: 'idle' }
+  | { state: 'downloading'; progress: ModelDownloadProgress }
+  | { state: 'verifying'; modelId: string }
+  | { state: 'complete' }
+  | { state: 'error'; error: string; modelId: string }
+
+export interface ModelStatusInfo {
+  modelsReady: boolean
+  models: Array<{ id: string; label: string; sizeBytes: number }>
+}
+
+export interface DiskSpaceInfo {
+  sufficient: boolean
+  availableBytes: number
+  requiredBytes: number
+}
+
+export interface ModelDownloadApi {
+  status(): Promise<ModelStatusInfo>
+  checkDiskSpace(): Promise<DiskSpaceInfo>
+  start(): Promise<void>
+  onStatus(callback: (status: ModelDownloadStatus) => void): () => void
+}
+
 export interface IpcApi {
   sessions: SessionApi
   recording: RecordingApi
@@ -82,4 +134,6 @@ export interface IpcApi {
   blocklist: BlocklistApi
   import: ImportApi
   review: ReviewApi
+  system: SystemApi
+  modelDownload: ModelDownloadApi
 }

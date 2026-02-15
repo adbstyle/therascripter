@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { IpcApi, TaskProgressData, TaskCompletedData, TaskErrorData } from '../shared/types'
+import type {
+  IpcApi,
+  TaskProgressData,
+  TaskCompletedData,
+  TaskErrorData,
+  ModelDownloadStatus
+} from '../shared/types'
 
 const api: IpcApi = {
   sessions: {
@@ -84,6 +90,23 @@ const api: IpcApi = {
     save: (sessionId, document, entityMap) =>
       ipcRenderer.invoke('review:save', { sessionId, document, entityMap }),
     exportClipboard: (text) => ipcRenderer.invoke('review:exportClipboard', { text })
+  },
+  system: {
+    aboutInfo: () => ipcRenderer.invoke('system:aboutInfo'),
+    uninstall: () => ipcRenderer.invoke('system:uninstall')
+  },
+  modelDownload: {
+    status: () => ipcRenderer.invoke('modelDownload:status'),
+    checkDiskSpace: () => ipcRenderer.invoke('modelDownload:checkDiskSpace'),
+    start: () => ipcRenderer.invoke('modelDownload:start'),
+    onStatus: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: ModelDownloadStatus): void =>
+        callback(data)
+      ipcRenderer.on('modelDownload:status', handler)
+      return () => {
+        ipcRenderer.removeListener('modelDownload:status', handler)
+      }
+    }
   }
 }
 

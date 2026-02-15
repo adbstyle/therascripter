@@ -14,7 +14,15 @@ import { registerTaskHandlers } from './ipc/task-handlers'
 import { registerBlocklistHandlers } from './ipc/blocklist-handlers'
 import { registerPDFHandlers } from './ipc/pdf-handlers'
 import { registerReviewHandlers } from './ipc/review-handlers'
+import { registerSystemHandlers } from './ipc/system-handlers'
+import { registerModelDownloadHandlers } from './ipc/model-download-handlers'
 import { initTray, getTray } from './services/TrayService'
+import {
+  startAutoDeletion,
+  stopAutoDeletion,
+  ensureSpotlightExclusion
+} from './services/AutoDeletionService'
+import { checkFileVaultOnStartup } from './services/FileVaultService'
 import { WhisperService } from './ml/WhisperService'
 import { PyannoteSidecar } from './ml/PyannoteSidecar'
 import { AlignmentService } from './ml/AlignmentService'
@@ -113,6 +121,8 @@ app.whenReady().then(() => {
   taskQueue.registerExecutor('extraction', new PDFExtractionExecutor())
   taskQueue.registerExecutor('ocr', new VisionOCRService())
 
+  ensureSpotlightExclusion()
+
   registerSessionHandlers()
   registerRecordingHandlers()
   registerSettingsHandlers()
@@ -120,9 +130,12 @@ app.whenReady().then(() => {
   registerBlocklistHandlers()
   registerPDFHandlers()
   registerReviewHandlers()
+  registerSystemHandlers()
+  registerModelDownloadHandlers()
 
   setupCSP()
   createWindow()
+  checkFileVaultOnStartup()
 
   // Initialize tray after window is created
   const tray = initTray()
@@ -130,6 +143,9 @@ app.whenReady().then(() => {
 
   // Start task queue processing
   taskQueue.start()
+
+  // Start auto-deletion (30-day cleanup at startup + every 6h)
+  startAutoDeletion()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -148,6 +164,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   cleanupRecordingOnQuit()
+  stopAutoDeletion()
   try {
     getTaskQueue().stop()
   } catch {

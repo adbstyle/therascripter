@@ -22,6 +22,13 @@ export type {
   ImportApi,
   ReviewApi,
   ReviewData,
+  AboutInfo,
+  SystemApi,
+  ModelDownloadProgress,
+  ModelDownloadStatus,
+  ModelStatusInfo,
+  DiskSpaceInfo,
+  ModelDownloadApi,
   IpcApi
 } from './IpcApi'
 

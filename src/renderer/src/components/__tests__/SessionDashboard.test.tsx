@@ -112,6 +112,16 @@ beforeEach(() => {
       load: vi.fn(),
       save: vi.fn(),
       exportClipboard: vi.fn()
+    },
+    system: {
+      aboutInfo: vi.fn().mockResolvedValue({}),
+      uninstall: vi.fn()
+    },
+    modelDownload: {
+      status: vi.fn().mockResolvedValue({ modelsReady: true, models: [] }),
+      checkDiskSpace: vi.fn().mockResolvedValue({ sufficient: true, availableBytes: 0, requiredBytes: 0 }),
+      start: vi.fn(),
+      onStatus: vi.fn().mockReturnValue(() => {})
     }
   } as typeof window.api
   vi.clearAllMocks()

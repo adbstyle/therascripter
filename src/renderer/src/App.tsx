@@ -1,6 +1,7 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import SessionDashboard from './components/SessionDashboard'
 import RecordingView from './components/RecordingView'
+import FirstLaunchScreen from './components/FirstLaunchScreen'
 import Settings from './views/Settings'
 import ReviewEditor from './views/ReviewEditor'
 import { useRecording } from './hooks/useRecording'
@@ -9,6 +10,7 @@ type View = 'sessions' | 'settings' | 'review'
 
 export default function App(): React.JSX.Element {
   const { isRecording, duration, level, error, startRecording, stopRecording } = useRecording()
+  const [modelsReady, setModelsReady] = useState<boolean | null>(null)
   const [currentView, setCurrentView] = useState<View>('sessions')
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [isImporting, setIsImporting] = useState(false)
@@ -32,6 +34,14 @@ export default function App(): React.JSX.Element {
     setCurrentView('review')
   }, [])
 
+  useEffect(() => {
+    window.api.modelDownload.status().then((info) => setModelsReady(info.modelsReady))
+  }, [])
+
+  const handleModelsComplete = useCallback(() => {
+    setModelsReady(true)
+  }, [])
+
   const handleCloseReview = useCallback(() => {
     setReviewSessionId(null)
     setCurrentView('sessions')
@@ -48,6 +58,16 @@ export default function App(): React.JSX.Element {
       : currentView === 'settings'
         ? 'Einstellungen'
         : ''
+
+  // Show loading state while checking models
+  if (modelsReady === null) {
+    return <div className="flex h-screen items-center justify-center bg-white" />
+  }
+
+  // First launch: show model download screen
+  if (!modelsReady) {
+    return <FirstLaunchScreen onComplete={handleModelsComplete} />
+  }
 
   return (
     <div className="flex h-screen">
