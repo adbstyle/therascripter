@@ -55,7 +55,7 @@ scripts/setup-ner.sh --model      # Also download NER model (~1.1 GB)
 
 **PDF import:** Drag-and-drop or button in SessionDashboard. Files copied to `~/.therascript/pdf/`. Import guard prevents duplicate imports. Copy failure triggers session rollback. Orphaned sessions (stuck in processing with no tasks) are recovered at startup.
 
-**UI navigation:** Simple view state (`'sessions' | 'settings'`) in App.tsx — no router. Settings view has tabbed layout (Sperrliste/Modelle/Über). Navigation disabled during recording.
+**UI navigation:** Simple view state (`'sessions' | 'settings' | 'review'`) in App.tsx — no router. Settings view has tabbed layout (Sperrliste/Modelle/Über). Review editor opened by clicking a session card in `review` status. Navigation disabled during recording and review.
 
 **Key constraints:**
 - 8 GB minimum RAM budget (~5.2 GB peak during flair NER)
