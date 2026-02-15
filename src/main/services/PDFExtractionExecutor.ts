@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { createRequire } from 'module'
+import { dirname, join } from 'path'
 import type { Task } from '../../shared/types'
 import type { ExtractionResult, PageData } from '../../shared/types/PDFTypes'
 import type { TaskExecutor } from './task-executors'
@@ -28,11 +29,16 @@ export class PDFExtractionExecutor implements TaskExecutor {
     // Load pdfjs-dist (dynamic import for ESM compatibility)
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
 
+    // Resolve standard font data path for correct text extraction
+    const require = createRequire(import.meta.url)
+    const pdfjsDir = dirname(require.resolve('pdfjs-dist/package.json'))
+    const standardFontDataUrl = join(pdfjsDir, 'standard_fonts') + '/'
+
     const data = new Uint8Array(readFileSync(session.pdfPath))
 
     let doc
     try {
-      doc = await pdfjs.getDocument({ data }).promise
+      doc = await pdfjs.getDocument({ data, standardFontDataUrl, useSystemFonts: false }).promise
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.includes('password') || msg.includes('encrypted')) {

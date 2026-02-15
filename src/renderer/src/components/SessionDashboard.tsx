@@ -8,10 +8,14 @@ import { RenameDialog } from './RenameDialog'
 
 interface SessionDashboardProps {
   refreshTrigger?: number
+  isImporting?: boolean
+  onImportingChange?: (importing: boolean) => void
 }
 
 export default function SessionDashboard({
-  refreshTrigger
+  refreshTrigger,
+  isImporting,
+  onImportingChange
 }: SessionDashboardProps): React.JSX.Element {
   const { sessions, loading, error, refresh, deleteSession, renameSession } = useSessions()
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
@@ -30,6 +34,8 @@ export default function SessionDashboard({
       e.preventDefault()
       setIsDragOver(false)
 
+      if (isImporting) return
+
       const files = Array.from(e.dataTransfer.files)
       const pdfPaths = files
         .filter((f) => f.name.toLowerCase().endsWith('.pdf'))
@@ -38,10 +44,15 @@ export default function SessionDashboard({
 
       if (pdfPaths.length === 0) return
 
-      await window.api.import.pdf(pdfPaths)
-      refresh()
+      onImportingChange?.(true)
+      try {
+        await window.api.import.pdf(pdfPaths)
+        refresh()
+      } finally {
+        onImportingChange?.(false)
+      }
     },
-    [refresh]
+    [refresh, isImporting, onImportingChange]
   )
 
   const handleDragOver = useCallback((e: React.DragEvent) => {

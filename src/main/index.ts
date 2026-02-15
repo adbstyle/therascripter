@@ -99,6 +99,10 @@ app.whenReady().then(() => {
   if (recovered > 0) {
     console.log(`Task Queue: ${recovered} stuck task(s) reset to pending`)
   }
+  const orphaned = taskQueue.recoverOrphanedSessions()
+  if (orphaned > 0) {
+    console.log(`Task Queue: ${orphaned} orphaned session(s) marked as error`)
+  }
 
   // Register real ML executors (replacing stubs)
   taskQueue.registerExecutor('transcription', new WhisperService())

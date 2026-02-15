@@ -58,6 +58,42 @@ export class TaskQueueService {
     return this.repository.resetRunningToPending()
   }
 
+  /** Find sessions stuck in a processing state with no pending/running tasks and mark as error */
+  recoverOrphanedSessions(): number {
+    const processingStatuses: SessionStatus[] = [
+      'extracting',
+      'transcribing',
+      'diarizing',
+      'anonymizing'
+    ]
+    let recovered = 0
+
+    const allSessions = this.sessionService.getAllSessions()
+
+    for (const session of allSessions) {
+      if (!processingStatuses.includes(session.status)) continue
+
+      const tasks = this.repository.findBySession(session.id)
+      const hasPendingOrRunning = tasks.some(
+        (t) => t.status === 'pending' || t.status === 'running'
+      )
+
+      if (!hasPendingOrRunning) {
+        try {
+          this.sessionService.updateSession(session.id, {
+            status: 'error',
+            errorMessage: 'Verarbeitung wurde unerwartet abgebrochen.'
+          })
+          recovered++
+        } catch {
+          // Best effort
+        }
+      }
+    }
+
+    return recovered
+  }
+
   start(): void {
     this.shouldStop = false
     this.scheduleNext()

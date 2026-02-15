@@ -10,13 +10,20 @@ export default function App(): React.JSX.Element {
   const { isRecording, duration, level, error, startRecording, stopRecording } = useRecording()
   const [currentView, setCurrentView] = useState<View>('sessions')
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [isImporting, setIsImporting] = useState(false)
 
   const handleImportPDF = useCallback(async () => {
+    if (isImporting) return
     const filePaths = await window.api.import.showPDFDialog()
     if (filePaths.length === 0) return
-    await window.api.import.pdf(filePaths)
-    setRefreshTrigger((v) => v + 1)
-  }, [])
+    setIsImporting(true)
+    try {
+      await window.api.import.pdf(filePaths)
+      setRefreshTrigger((v) => v + 1)
+    } finally {
+      setIsImporting(false)
+    }
+  }, [isImporting])
 
   const headerTitle = isRecording
     ? 'Aufnahme läuft'
@@ -67,8 +74,9 @@ export default function App(): React.JSX.Element {
           {!isRecording && currentView === 'sessions' && (
             <div className="flex items-center gap-2">
               <button
-                className="titlebar-no-drag rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                className={`titlebar-no-drag rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
                 onClick={handleImportPDF}
+                disabled={isImporting}
               >
                 PDF importieren
               </button>
@@ -90,7 +98,11 @@ export default function App(): React.JSX.Element {
             onStop={stopRecording}
           />
         ) : currentView === 'sessions' ? (
-          <SessionDashboard refreshTrigger={refreshTrigger} />
+          <SessionDashboard
+            refreshTrigger={refreshTrigger}
+            isImporting={isImporting}
+            onImportingChange={setIsImporting}
+          />
         ) : (
           <Settings />
         )}

@@ -1,5 +1,5 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
-import { existsSync, copyFileSync } from 'fs'
+import { existsSync, copyFileSync, unlinkSync } from 'fs'
 import { basename, join } from 'path'
 import { getDatabase, getDataDir } from '../db/connection'
 import { SessionService } from '../services/SessionService'
@@ -49,7 +49,22 @@ export function registerPDFHandlers(): void {
 
       const pdfDir = join(getDataDir(), 'pdf')
       const pdfPath = join(pdfDir, `${session.id}.pdf`)
-      copyFileSync(sourcePath, pdfPath)
+
+      try {
+        copyFileSync(sourcePath, pdfPath)
+      } catch (err) {
+        // Rollback: remove orphaned session and partial file
+        sessionService.deleteSession(session.id)
+        try {
+          unlinkSync(pdfPath)
+        } catch {
+          // File may not have been created
+        }
+        const msg = err instanceof Error ? err.message : String(err)
+        throw new Error(
+          `PDF konnte nicht kopiert werden. Bitte stellen Sie sicher, dass die Datei lokal verfügbar ist.\n${basename(sourcePath)}: ${msg}`
+        )
+      }
 
       sessionService.updateSession(session.id, { pdfPath })
 
