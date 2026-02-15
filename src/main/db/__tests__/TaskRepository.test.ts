@@ -6,10 +6,7 @@ import { TaskRepository } from '../repositories/TaskRepository'
 import { SessionRepository } from '../repositories/SessionRepository'
 
 function applySchema(db: Database.Database): void {
-  const sql = readFileSync(
-    join(__dirname, '..', 'migrations', '001-initial-schema.sql'),
-    'utf-8'
-  )
+  const sql = readFileSync(join(__dirname, '..', 'migrations', '001-initial-schema.sql'), 'utf-8')
   db.exec(sql)
 }
 
@@ -39,9 +36,7 @@ describe('TaskRepository', () => {
     it('creates a task with pending status and zero progress', () => {
       const task = taskRepo.create({ sessionId, type: 'transcription' })
 
-      expect(task.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-      )
+      expect(task.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
       expect(task.sessionId).toBe(sessionId)
       expect(task.type).toBe('transcription')
       expect(task.status).toBe('pending')

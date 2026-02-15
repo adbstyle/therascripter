@@ -1,11 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type {
-  IpcApi,
-  TaskProgressData,
-  TaskCompletedData,
-  TaskErrorData
-} from '../shared/types'
+import type { IpcApi, TaskProgressData, TaskCompletedData, TaskErrorData } from '../shared/types'
 
 const api: IpcApi = {
   sessions: {
@@ -16,8 +11,7 @@ const api: IpcApi = {
   recording: {
     start: () => ipcRenderer.invoke('recording:start'),
     stop: (sessionId) => ipcRenderer.invoke('recording:stop', { sessionId }),
-    sendData: (sessionId, samples) =>
-      ipcRenderer.send('recording:data', { sessionId, samples }),
+    sendData: (sessionId, samples) => ipcRenderer.send('recording:data', { sessionId, samples }),
     onDuration: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, data: { seconds: number }): void =>
         callback(data)
@@ -47,8 +41,7 @@ const api: IpcApi = {
     set: (key, value) => ipcRenderer.invoke('settings:set', { key, value })
   },
   tasks: {
-    getSessionTasks: (sessionId) =>
-      ipcRenderer.invoke('task:getSessionTasks', { sessionId }),
+    getSessionTasks: (sessionId) => ipcRenderer.invoke('task:getSessionTasks', { sessionId }),
     onProgress: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, data: TaskProgressData): void =>
         callback(data)
@@ -76,8 +69,7 @@ const api: IpcApi = {
   },
   blocklist: {
     list: () => ipcRenderer.invoke('blocklist:list'),
-    add: (term, placeholderType) =>
-      ipcRenderer.invoke('blocklist:add', { term, placeholderType }),
+    add: (term, placeholderType) => ipcRenderer.invoke('blocklist:add', { term, placeholderType }),
     update: (id, term, placeholderType) =>
       ipcRenderer.invoke('blocklist:update', { id, term, placeholderType }),
     delete: (id) => ipcRenderer.invoke('blocklist:delete', { id })

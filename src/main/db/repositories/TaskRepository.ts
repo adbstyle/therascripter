@@ -1,6 +1,12 @@
 import type Database from 'better-sqlite3'
 import { randomUUID } from 'crypto'
-import type { Task, TaskStatus, TaskType, CreateTaskInput, UpdateTaskInput } from '../../../shared/types'
+import type {
+  Task,
+  TaskStatus,
+  TaskType,
+  CreateTaskInput,
+  UpdateTaskInput
+} from '../../../shared/types'
 
 interface TaskRow {
   id: string
@@ -61,9 +67,7 @@ export class TaskRepository {
 
   findPending(): Task | null {
     const row = this.db
-      .prepare(
-        `SELECT * FROM task_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1`
-      )
+      .prepare(`SELECT * FROM task_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1`)
       .get() as TaskRow | undefined
     return row ? rowToTask(row) : null
   }

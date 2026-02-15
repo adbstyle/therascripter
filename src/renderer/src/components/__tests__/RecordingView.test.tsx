@@ -63,9 +63,7 @@ describe('RecordingView', () => {
   it('shows hint text', () => {
     render(<RecordingView {...defaultProps} />)
     expect(
-      screen.getByText(
-        'Die App kann minimiert werden — die Aufnahme läuft im Hintergrund weiter.'
-      )
+      screen.getByText('Die App kann minimiert werden — die Aufnahme läuft im Hintergrund weiter.')
     ).toBeInTheDocument()
   })
 

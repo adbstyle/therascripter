@@ -5,10 +5,7 @@ import { join } from 'path'
 import type { Migration } from '../migrations'
 
 function loadMigrations(): Migration[] {
-  const sql = readFileSync(
-    join(__dirname, '..', 'migrations', '001-initial-schema.sql'),
-    'utf-8'
-  )
+  const sql = readFileSync(join(__dirname, '..', 'migrations', '001-initial-schema.sql'), 'utf-8')
   return [{ version: 1, sql }]
 }
 
@@ -20,9 +17,9 @@ function runMigrations(database: Database.Database, migrations: Migration[]): vo
     )
   `)
 
-  const row = database
-    .prepare('SELECT MAX(version) as version FROM schema_version')
-    .get() as { version: number | null } | undefined
+  const row = database.prepare('SELECT MAX(version) as version FROM schema_version').get() as
+    | { version: number | null }
+    | undefined
   const currentVersion = row?.version ?? 0
 
   for (const migration of migrations) {

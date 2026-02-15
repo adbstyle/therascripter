@@ -111,12 +111,7 @@ export default function App(): React.JSX.Element {
         )}
 
         {isRecording ? (
-          <RecordingView
-            duration={duration}
-            level={level}
-            error={error}
-            onStop={stopRecording}
-          />
+          <RecordingView duration={duration} level={level} error={error} onStop={stopRecording} />
         ) : currentView === 'review' && reviewSessionId ? (
           <ReviewEditor sessionId={reviewSessionId} onBack={handleCloseReview} />
         ) : currentView === 'sessions' ? (

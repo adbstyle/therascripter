@@ -22,11 +22,13 @@ export function ConsentBanner(): React.JSX.Element | null {
   return (
     <div className="mx-6 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 text-lg text-warning" aria-hidden="true">&#9888;</span>
+        <span className="mt-0.5 text-lg text-warning" aria-hidden="true">
+          &#9888;
+        </span>
         <div className="flex-1">
           <p className="text-sm text-amber-900">
-            Bitte stellen Sie sicher, dass die aufgenommene Person der Aufnahme zugestimmt hat
-            (StGB Art. 179bis).
+            Bitte stellen Sie sicher, dass die aufgenommene Person der Aufnahme zugestimmt hat (StGB
+            Art. 179bis).
           </p>
           <label className="mt-2 flex items-center gap-2">
             <input

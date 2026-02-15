@@ -62,9 +62,7 @@ export function useRecording(): UseRecordingResult {
       } else if (err instanceof DOMException && err.name === 'NotFoundError') {
         setError('Kein Mikrofon gefunden. Bitte schliessen Sie ein Mikrofon an.')
       } else {
-        setError(
-          err instanceof Error ? err.message : 'Aufnahme konnte nicht gestartet werden'
-        )
+        setError(err instanceof Error ? err.message : 'Aufnahme konnte nicht gestartet werden')
       }
     } finally {
       startingRef.current = false

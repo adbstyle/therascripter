@@ -69,10 +69,7 @@ describe('getCanonicalName', () => {
 
 describe('resolveCoreferences', () => {
   it('groups same-name PERSON entities', () => {
-    const entities = [
-      person('Müller'),
-      person('Müller', 1)
-    ]
+    const entities = [person('Müller'), person('Müller', 1)]
     const result = resolveCoreferences(entities)
     const persons = result.filter((e) => e.type === 'PERSON')
     expect(persons).toHaveLength(2)
@@ -81,11 +78,7 @@ describe('resolveCoreferences', () => {
   })
 
   it('groups title variants with same surname', () => {
-    const entities = [
-      person('Dr. Müller'),
-      person('Herr Müller', 1),
-      person('Müller', 2)
-    ]
+    const entities = [person('Dr. Müller'), person('Herr Müller', 1), person('Müller', 2)]
     const result = resolveCoreferences(entities)
     const persons = result.filter((e) => e.type === 'PERSON')
     expect(persons).toHaveLength(3)
@@ -96,10 +89,7 @@ describe('resolveCoreferences', () => {
   })
 
   it('groups surname with full name', () => {
-    const entities = [
-      person('Peter Schmidt'),
-      person('Schmidt', 1)
-    ]
+    const entities = [person('Peter Schmidt'), person('Schmidt', 1)]
     const result = resolveCoreferences(entities)
     const persons = result.filter((e) => e.type === 'PERSON')
     expect(persons).toHaveLength(2)
@@ -108,10 +98,7 @@ describe('resolveCoreferences', () => {
   })
 
   it('keeps different persons separate', () => {
-    const entities = [
-      person('Dr. Müller'),
-      person('Frau Schmidt', 1)
-    ]
+    const entities = [person('Dr. Müller'), person('Frau Schmidt', 1)]
     const result = resolveCoreferences(entities)
     const persons = result.filter((e) => e.type === 'PERSON')
     expect(persons).toHaveLength(2)
@@ -119,10 +106,7 @@ describe('resolveCoreferences', () => {
   })
 
   it('does not touch non-PERSON entities', () => {
-    const entities = [
-      person('Müller'),
-      location('Zürich')
-    ]
+    const entities = [person('Müller'), location('Zürich')]
     const result = resolveCoreferences(entities)
     const locations = result.filter((e) => e.type === 'ORT')
     expect(locations).toHaveLength(1)
@@ -137,11 +121,7 @@ describe('resolveCoreferences', () => {
   })
 
   it('uses longest variant as canonical representative', () => {
-    const entities = [
-      person('Schmidt'),
-      person('Peter Schmidt', 1),
-      person('Dr. Peter Schmidt', 2)
-    ]
+    const entities = [person('Schmidt'), person('Peter Schmidt', 1), person('Dr. Peter Schmidt', 2)]
     const result = resolveCoreferences(entities)
     const persons = result.filter((e) => e.type === 'PERSON')
     // "Dr. Peter Schmidt" is longest

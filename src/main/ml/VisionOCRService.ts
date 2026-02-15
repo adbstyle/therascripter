@@ -75,7 +75,7 @@ export class VisionOCRService implements TaskExecutor {
         extractionPage.text = ocrText
       }
 
-      onProgress(0.05 + ((i + 1) / scannedPages.length) * 0.90)
+      onProgress(0.05 + ((i + 1) / scannedPages.length) * 0.9)
     }
 
     // Build transcript from all pages (text + OCR results merged)
@@ -141,5 +141,4 @@ export class VisionOCRService implements TaskExecutor {
       })
     })
   }
-
 }

@@ -52,8 +52,7 @@ export class PyannoteSidecar implements TaskExecutor {
     // Calculate timeout: 4x audio duration (pyannote is slower than whisper)
     const audioStats = statSync(session.audioPath)
     const WAV_HEADER_SIZE = 44
-    const audioDurationEstimate =
-      Math.max(0, audioStats.size - WAV_HEADER_SIZE) / (48000 * 2) // 48kHz 16-bit mono
+    const audioDurationEstimate = Math.max(0, audioStats.size - WAV_HEADER_SIZE) / (48000 * 2) // 48kHz 16-bit mono
     const timeoutMs = Math.max(audioDurationEstimate * 4 * 1000, 120_000) // min 2 minutes
 
     // Run pyannote diarization
@@ -114,9 +113,7 @@ export class PyannoteSidecar implements TaskExecutor {
       let stderr = ''
       const timeout = setTimeout(() => {
         proc.kill('SIGTERM')
-        reject(
-          new Error(`Diarization abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`)
-        )
+        reject(new Error(`Diarization abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`))
       }, timeoutMs)
 
       proc.stdout?.on('data', (data: Buffer) => {
@@ -161,8 +158,7 @@ export class PyannoteSidecar implements TaskExecutor {
                 line.includes('Error') ||
                 line.includes('failed')
             )
-          const errorDetail =
-            errorLines.length > 0 ? errorLines.join('; ') : stderr.slice(-500)
+          const errorDetail = errorLines.length > 0 ? errorLines.join('; ') : stderr.slice(-500)
           reject(new Error(`Diarization Fehler (Exit Code ${code}): ${errorDetail}`))
           return
         }

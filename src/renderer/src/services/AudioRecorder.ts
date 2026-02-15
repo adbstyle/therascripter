@@ -89,7 +89,11 @@ export class AudioRecorder {
     return this.sessionId
   }
 
-  private handleWorkletMessage(data: { type: string; value?: number; samples?: Float32Array }): void {
+  private handleWorkletMessage(data: {
+    type: string
+    value?: number
+    samples?: Float32Array
+  }): void {
     if (data.type === 'level' && data.value !== undefined) {
       this.onLevel?.(data.value)
       return

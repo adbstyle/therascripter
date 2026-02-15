@@ -82,9 +82,7 @@ const ALL_PATTERNS: PatternDef[] = [
 /**
  * Map regex types to Therascript placeholder types.
  */
-export function mapRegexTypeToPlaceholder(
-  regexType: string
-): 'KONTAKT' | 'ORT' | 'DATUM' {
+export function mapRegexTypeToPlaceholder(regexType: string): 'KONTAKT' | 'ORT' | 'DATUM' {
   switch (regexType) {
     case 'TELEFON':
     case 'EMAIL':

@@ -19,14 +19,18 @@ function createPngBuffer(pixels: Buffer): Buffer {
   const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 
   // IHDR chunk: width, height, bit depth (8), color type (6 = RGBA)
-  const ihdr = createChunk('IHDR', Buffer.from([
-    ...uint32(SIZE), ...uint32(SIZE),
-    8, // bit depth
-    6, // color type: RGBA
-    0, // compression
-    0, // filter
-    0  // interlace
-  ]))
+  const ihdr = createChunk(
+    'IHDR',
+    Buffer.from([
+      ...uint32(SIZE),
+      ...uint32(SIZE),
+      8, // bit depth
+      6, // color type: RGBA
+      0, // compression
+      0, // filter
+      0 // interlace
+    ])
+  )
 
   // IDAT chunk: filtered + deflated pixel data
   // Each row is prefixed with filter byte (0 = None)
@@ -67,7 +71,7 @@ const crcTable = new Uint32Array(256)
 for (let n = 0; n < 256; n++) {
   let c = n
   for (let k = 0; k < 8; k++) {
-    c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1)
+    c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
   }
   crcTable[n] = c
 }
@@ -84,7 +88,7 @@ function setPixel(pixels: Buffer, x: number, y: number, alpha: number): void {
   if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) return
   const offset = (y * SIZE + x) * 4
   // Template images: macOS uses alpha channel with black pixels
-  pixels[offset] = 0     // R
+  pixels[offset] = 0 // R
   pixels[offset + 1] = 0 // G
   pixels[offset + 2] = 0 // B
   pixels[offset + 3] = Math.min(255, Math.max(0, Math.round(alpha)))

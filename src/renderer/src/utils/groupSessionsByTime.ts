@@ -2,13 +2,7 @@ import type { Session } from '../../../shared/types'
 
 export type TimeGroup = 'Heute' | 'Gestern' | 'Diese Woche' | 'Letzte Woche' | 'Älter'
 
-export const GROUP_ORDER: TimeGroup[] = [
-  'Heute',
-  'Gestern',
-  'Diese Woche',
-  'Letzte Woche',
-  'Älter'
-]
+export const GROUP_ORDER: TimeGroup[] = ['Heute', 'Gestern', 'Diese Woche', 'Letzte Woche', 'Älter']
 
 function startOfDay(date: Date): Date {
   const d = new Date(date)

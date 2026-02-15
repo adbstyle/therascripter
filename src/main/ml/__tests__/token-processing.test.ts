@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  isSpecialToken,
-  filterSpecialTokens,
-  mergeSubTokens
-} from '../token-processing'
+import { isSpecialToken, filterSpecialTokens, mergeSubTokens } from '../token-processing'
 import type { WhisperToken } from '../token-processing'
 
 function tok(text: string, from: number, to: number): WhisperToken {
@@ -122,11 +118,7 @@ describe('mergeSubTokens', () => {
   })
 
   it('handles tokens that are already whole words (all have leading space)', () => {
-    const tokens = [
-      tok(' Guten', 0, 500),
-      tok(' Tag,', 500, 1000),
-      tok(' wie', 1000, 1500)
-    ]
+    const tokens = [tok(' Guten', 0, 500), tok(' Tag,', 500, 1000), tok(' wie', 1000, 1500)]
 
     const words = mergeSubTokens(tokens)
 
@@ -137,10 +129,7 @@ describe('mergeSubTokens', () => {
   })
 
   it('treats first token as new word even without leading space', () => {
-    const tokens = [
-      tok('Hallo', 0, 500),
-      tok(' Welt', 500, 1000)
-    ]
+    const tokens = [tok('Hallo', 0, 500), tok(' Welt', 500, 1000)]
 
     const words = mergeSubTokens(tokens)
 
@@ -151,11 +140,7 @@ describe('mergeSubTokens', () => {
 
   it('merges "wissenschaftlich" from sub-tokens', () => {
     // "wissenschaftlich" = " w" + "issenschaft" + "lich"
-    const tokens = [
-      tok(' w', 7700, 7800),
-      tok('issenschaft', 7800, 8530),
-      tok('lich', 8680, 8840)
-    ]
+    const tokens = [tok(' w', 7700, 7800), tok('issenschaft', 7800, 8530), tok('lich', 8680, 8840)]
 
     const words = mergeSubTokens(tokens)
 
@@ -183,11 +168,7 @@ describe('mergeSubTokens', () => {
   })
 
   it('skips whitespace-only tokens', () => {
-    const tokens = [
-      tok(' Hallo', 0, 500),
-      tok('  ', 500, 500),
-      tok(' Welt', 500, 1000)
-    ]
+    const tokens = [tok(' Hallo', 0, 500), tok('  ', 500, 500), tok(' Welt', 500, 1000)]
 
     const words = mergeSubTokens(tokens)
 
@@ -197,10 +178,7 @@ describe('mergeSubTokens', () => {
   })
 
   it('skips empty text tokens', () => {
-    const tokens = [
-      tok('', 0, 0),
-      tok(' Hallo', 0, 500)
-    ]
+    const tokens = [tok('', 0, 0), tok(' Hallo', 0, 500)]
 
     const words = mergeSubTokens(tokens)
 
@@ -220,11 +198,7 @@ describe('mergeSubTokens', () => {
   })
 
   it('preserves punctuation attached to tokens', () => {
-    const tokens = [
-      tok(' Tag,', 500, 1000),
-      tok(' wie', 1000, 1500),
-      tok(' gehts?', 1500, 2000)
-    ]
+    const tokens = [tok(' Tag,', 500, 1000), tok(' wie', 1000, 1500), tok(' gehts?', 1500, 2000)]
 
     const words = mergeSubTokens(tokens)
 

@@ -2,10 +2,10 @@ import type { TranscriptWord, TranscriptSegment } from '../../shared/types'
 
 // Filler patterns per spec section 2.3 (Entscheidung #33: only "äh"/"ähm", real filler words stay)
 const FILLER_PATTERNS = [
-  /^[AaÄä]h+m?$/,  // äh, ähm, ah, ahm
-  /^[Uu]h+m?$/,     // uh, uhm
-  /^[Hh]m+$/,       // hm, hmm
-  /^[Mm]h+m?$/      // mhm, mh
+  /^[AaÄä]h+m?$/, // äh, ähm, ah, ahm
+  /^[Uu]h+m?$/, // uh, uhm
+  /^[Hh]m+$/, // hm, hmm
+  /^[Mm]h+m?$/ // mhm, mh
 ]
 
 function isFillerWord(word: string): boolean {

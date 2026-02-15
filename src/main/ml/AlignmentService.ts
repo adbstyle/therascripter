@@ -35,9 +35,7 @@ export class AlignmentService implements TaskExecutor {
     onProgress(0.1)
 
     // Load transcript and diarization data
-    const transcript = JSON.parse(
-      readFileSync(session.transcriptPath, 'utf-8')
-    ) as TranscriptData
+    const transcript = JSON.parse(readFileSync(session.transcriptPath, 'utf-8')) as TranscriptData
     const diarization = JSON.parse(
       readFileSync(session.diarizationPath, 'utf-8')
     ) as DiarizationData
@@ -57,10 +55,7 @@ export class AlignmentService implements TaskExecutor {
     onProgress(0.6)
 
     // Rebuild segments with speaker labels and paragraph breaks at speaker changes
-    const alignedSegments = rebuildSegmentsWithSpeakers(
-      alignedWords,
-      diarization.speakerCount
-    )
+    const alignedSegments = rebuildSegmentsWithSpeakers(alignedWords, diarization.speakerCount)
 
     onProgress(0.9)
 
@@ -83,9 +78,7 @@ export class AlignmentService implements TaskExecutor {
 
 // Build a mapping from raw pyannote speaker labels (e.g., "SPEAKER_00") to
 // consistent labels ("A", "B", "C", ...) ordered by first appearance
-export function buildSpeakerLabelMap(
-  segments: SpeakerSegment[]
-): Map<string, string> {
+export function buildSpeakerLabelMap(segments: SpeakerSegment[]): Map<string, string> {
   const labelMap = new Map<string, string>()
   let nextIndex = 0
 
@@ -223,10 +216,7 @@ function rebuildSegmentsPlainText(words: TranscriptWord[]): TranscriptSegment[] 
   return segments
 }
 
-function buildSegment(
-  words: TranscriptWord[],
-  speaker: string | undefined
-): TranscriptSegment {
+function buildSegment(words: TranscriptWord[], speaker: string | undefined): TranscriptSegment {
   return {
     text: words.map((w) => w.text).join(' '),
     start: words[0].start,

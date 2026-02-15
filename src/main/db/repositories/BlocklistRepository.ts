@@ -41,9 +41,7 @@ export class BlocklistRepository {
     const now = new Date().toISOString()
 
     this.db
-      .prepare(
-        'INSERT INTO blocklist (id, term, placeholder_type, created_at) VALUES (?, ?, ?, ?)'
-      )
+      .prepare('INSERT INTO blocklist (id, term, placeholder_type, created_at) VALUES (?, ?, ?, ?)')
       .run(id, term, placeholderType, now)
 
     return this.findById(id)!

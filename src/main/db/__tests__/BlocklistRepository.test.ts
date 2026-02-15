@@ -5,10 +5,7 @@ import { join } from 'path'
 import { BlocklistRepository } from '../repositories/BlocklistRepository'
 
 function applySchema(db: Database.Database): void {
-  const sql = readFileSync(
-    join(__dirname, '..', 'migrations', '001-initial-schema.sql'),
-    'utf-8'
-  )
+  const sql = readFileSync(join(__dirname, '..', 'migrations', '001-initial-schema.sql'), 'utf-8')
   db.exec(sql)
 }
 
@@ -61,9 +58,7 @@ describe('BlocklistRepository', () => {
     it('creates an entry with a UUID', () => {
       const entry = repo.create('Zürich', 'ORT')
 
-      expect(entry.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-      )
+      expect(entry.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
       expect(entry.term).toBe('Zürich')
       expect(entry.placeholderType).toBe('ORT')
       expect(entry.createdAt).toBeTruthy()

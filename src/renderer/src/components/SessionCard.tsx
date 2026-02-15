@@ -47,7 +47,12 @@ function isProcessingStatus(status: SessionStatus): boolean {
   )
 }
 
-export function SessionCard({ session, onRename, onDelete, onClick }: SessionCardProps): React.JSX.Element {
+export function SessionCard({
+  session,
+  onRename,
+  onDelete,
+  onClick
+}: SessionCardProps): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const showProgress = isProcessingStatus(session.status)
@@ -72,7 +77,13 @@ export function SessionCard({ session, onRename, onDelete, onClick }: SessionCar
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
-      onKeyDown={onClick ? (e) => { if (e.key === 'Enter') onClick() } : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === 'Enter') onClick()
+            }
+          : undefined
+      }
     >
       <span className="text-lg" aria-hidden="true">
         {typeIcon}

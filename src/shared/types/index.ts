@@ -1,9 +1,4 @@
-export type {
-  PlaceholderType,
-  EntitySource,
-  EntityMapEntry,
-  EntityMap
-} from './EntityMap'
+export type { PlaceholderType, EntitySource, EntityMapEntry, EntityMap } from './EntityMap'
 
 export type {
   SessionType,
@@ -13,13 +8,7 @@ export type {
   UpdateSessionInput
 } from './Session'
 
-export type {
-  TaskType,
-  TaskStatus,
-  Task,
-  CreateTaskInput,
-  UpdateTaskInput
-} from './Task'
+export type { TaskType, TaskStatus, Task, CreateTaskInput, UpdateTaskInput } from './Task'
 
 export type {
   SessionApi,
@@ -43,11 +32,7 @@ export type {
   TranscriptData
 } from './Transcript'
 
-export type {
-  SpeakerSegment,
-  DiarizationMetadata,
-  DiarizationData
-} from './Diarization'
+export type { SpeakerSegment, DiarizationMetadata, DiarizationData } from './Diarization'
 
 export type {
   NerEntity,

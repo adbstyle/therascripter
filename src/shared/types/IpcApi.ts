@@ -51,11 +51,7 @@ export interface TasksApi {
 export interface BlocklistApi {
   list(): Promise<BlocklistEntry[]>
   add(term: string, placeholderType: PlaceholderType): Promise<BlocklistEntry>
-  update(
-    id: string,
-    term: string,
-    placeholderType: PlaceholderType
-  ): Promise<BlocklistEntry | null>
+  update(id: string, term: string, placeholderType: PlaceholderType): Promise<BlocklistEntry | null>
   delete(id: string): Promise<boolean>
 }
 

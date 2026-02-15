@@ -59,7 +59,10 @@ export function BlocklistDialog({
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label htmlFor="blocklist-term" className="mb-1 block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="blocklist-term"
+              className="mb-1 block text-sm font-medium text-gray-700"
+            >
               Begriff
             </label>
             <input

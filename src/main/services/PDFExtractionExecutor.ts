@@ -47,7 +47,7 @@ export class PDFExtractionExecutor implements TaskExecutor {
       throw new Error(`PDF konnte nicht geöffnet werden: ${msg}`)
     }
 
-    onProgress(0.10)
+    onProgress(0.1)
 
     const totalPages = doc.numPages
 
@@ -76,7 +76,7 @@ export class PDFExtractionExecutor implements TaskExecutor {
         text: contentType === 'text' ? text : ''
       })
 
-      onProgress(0.10 + (i / totalPages) * 0.85)
+      onProgress(0.1 + (i / totalPages) * 0.85)
     }
 
     // Save extraction result
@@ -99,12 +99,7 @@ export class PDFExtractionExecutor implements TaskExecutor {
     const hasScannedPages = pages.some((p) => p.contentType === 'scanned')
 
     if (!hasScannedPages) {
-      const transcriptPath = buildPDFTranscript(
-        task.sessionId,
-        pages,
-        'pdfjs-dist',
-        sessionService
-      )
+      const transcriptPath = buildPDFTranscript(task.sessionId, pages, 'pdfjs-dist', sessionService)
       sessionService.updateSession(task.sessionId, { transcriptPath })
     }
 
