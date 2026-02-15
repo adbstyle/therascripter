@@ -22,11 +22,7 @@ function seg(label: string, start: number, end: number): SpeakerSegment {
 
 describe('buildSpeakerLabelMap', () => {
   it('maps speakers in order of first appearance', () => {
-    const segments = [
-      seg('SPEAKER_02', 0, 5),
-      seg('SPEAKER_00', 5, 10),
-      seg('SPEAKER_02', 10, 15)
-    ]
+    const segments = [seg('SPEAKER_02', 0, 5), seg('SPEAKER_00', 5, 10), seg('SPEAKER_02', 10, 15)]
 
     const map = buildSpeakerLabelMap(segments)
 
@@ -45,9 +41,7 @@ describe('buildSpeakerLabelMap', () => {
   })
 
   it('handles many speakers beyond predefined labels', () => {
-    const segments = Array.from({ length: 10 }, (_, i) =>
-      seg(`SPK_${i}`, i * 10, (i + 1) * 10)
-    )
+    const segments = Array.from({ length: 10 }, (_, i) => seg(`SPK_${i}`, i * 10, (i + 1) * 10))
 
     const map = buildSpeakerLabelMap(segments)
 
@@ -66,10 +60,7 @@ describe('buildSpeakerLabelMap', () => {
 
   it('sorts by start time before assigning labels', () => {
     // Segments out of order — should still assign A to earliest
-    const segments = [
-      seg('SPEAKER_01', 10, 15),
-      seg('SPEAKER_00', 0, 5)
-    ]
+    const segments = [seg('SPEAKER_01', 10, 15), seg('SPEAKER_00', 0, 5)]
 
     const map = buildSpeakerLabelMap(segments)
 
@@ -81,11 +72,7 @@ describe('buildSpeakerLabelMap', () => {
 // --- findSpeakerForTime ---
 
 describe('findSpeakerForTime', () => {
-  const segments = [
-    seg('A', 0, 5),
-    seg('B', 5, 10),
-    seg('A', 12, 18)
-  ]
+  const segments = [seg('A', 0, 5), seg('B', 5, 10), seg('A', 12, 18)]
 
   it('returns segment containing the time point', () => {
     expect(findSpeakerForTime(2.5, segments)).toEqual(seg('A', 0, 5))
@@ -132,15 +119,11 @@ describe('findSpeakerForTime', () => {
 describe('alignWords', () => {
   it('assigns speaker labels based on word midpoint', () => {
     const words = [
-      word('Hallo', 0, 2),    // midpoint 1 → in A (0-5)
-      word('wie', 6, 8),      // midpoint 7 → in B (5-10)
-      word('gehts?', 13, 16)  // midpoint 14.5 → in A (12-18)
+      word('Hallo', 0, 2), // midpoint 1 → in A (0-5)
+      word('wie', 6, 8), // midpoint 7 → in B (5-10)
+      word('gehts?', 13, 16) // midpoint 14.5 → in A (12-18)
     ]
-    const speakers = [
-      seg('SPEAKER_00', 0, 5),
-      seg('SPEAKER_01', 5, 10),
-      seg('SPEAKER_00', 12, 18)
-    ]
+    const speakers = [seg('SPEAKER_00', 0, 5), seg('SPEAKER_01', 5, 10), seg('SPEAKER_00', 12, 18)]
     const labelMap = new Map([
       ['SPEAKER_00', 'A'],
       ['SPEAKER_01', 'B']
@@ -175,11 +158,11 @@ describe('alignWords', () => {
 
   it('handles words in gaps (nearest segment fallback)', () => {
     const words = [word('gap', 10.5, 11.5)] // midpoint 11, falls in gap
-    const speakers = [
-      seg('A', 0, 5),
-      seg('B', 15, 20)
-    ]
-    const labelMap = new Map([['A', 'A'], ['B', 'B']])
+    const speakers = [seg('A', 0, 5), seg('B', 15, 20)]
+    const labelMap = new Map([
+      ['A', 'A'],
+      ['B', 'B']
+    ])
 
     const result = alignWords(words, speakers, labelMap)
 
@@ -221,10 +204,7 @@ describe('rebuildSegmentsWithSpeakers', () => {
   })
 
   it('strips speaker labels for single speaker (speakerCount <= 1)', () => {
-    const words = [
-      word('Hallo.', 0, 1, 'Person A'),
-      word('Tschüss.', 2, 3, 'Person A')
-    ]
+    const words = [word('Hallo.', 0, 1, 'Person A'), word('Tschüss.', 2, 3, 'Person A')]
 
     const segments = rebuildSegmentsWithSpeakers(words, 1)
 
@@ -249,10 +229,7 @@ describe('rebuildSegmentsWithSpeakers', () => {
   })
 
   it('handles words without sentence-ending punctuation', () => {
-    const words = [
-      word('Hallo', 0, 1, 'Person A'),
-      word('Welt', 1, 2, 'Person A')
-    ]
+    const words = [word('Hallo', 0, 1, 'Person A'), word('Welt', 1, 2, 'Person A')]
 
     const segments = rebuildSegmentsWithSpeakers(words, 2)
 

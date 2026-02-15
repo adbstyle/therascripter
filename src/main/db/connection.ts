@@ -78,9 +78,9 @@ function runMigrations(database: Database.Database): void {
     )
   `)
 
-  const row = database
-    .prepare('SELECT MAX(version) as version FROM schema_version')
-    .get() as { version: number | null } | undefined
+  const row = database.prepare('SELECT MAX(version) as version FROM schema_version').get() as
+    | { version: number | null }
+    | undefined
   const currentVersion = row?.version ?? 0
 
   for (const migration of migrations) {

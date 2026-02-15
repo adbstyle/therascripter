@@ -135,8 +135,7 @@ export class AudioFileService {
     writeFileSync(wavPath, Buffer.concat([header, pcmData]))
     unlinkSync(recoveryPath)
 
-    const durationSeconds =
-      pcmData.length / (SAMPLE_RATE * NUM_CHANNELS * (BITS_PER_SAMPLE / 8))
+    const durationSeconds = pcmData.length / (SAMPLE_RATE * NUM_CHANNELS * (BITS_PER_SAMPLE / 8))
     return { durationSeconds }
   }
 
@@ -149,7 +148,8 @@ export class AudioFileService {
 
     // Keep only last 60 seconds of PCM data
     const maxBytes = SAMPLE_RATE * NUM_CHANNELS * (BITS_PER_SAMPLE / 8) * 60
-    const trimmed = combined.length > maxBytes ? combined.subarray(combined.length - maxBytes) : combined
+    const trimmed =
+      combined.length > maxBytes ? combined.subarray(combined.length - maxBytes) : combined
 
     writeFileSync(recoveryPath, trimmed)
 

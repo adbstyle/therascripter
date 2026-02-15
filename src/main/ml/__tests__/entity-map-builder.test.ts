@@ -21,10 +21,7 @@ function entity(
 
 describe('buildEntityMap', () => {
   it('creates entries for each unique entity', () => {
-    const entities = [
-      entity('Müller', 'PERSON'),
-      entity('Zürich', 'ORT')
-    ]
+    const entities = [entity('Müller', 'PERSON'), entity('Zürich', 'ORT')]
     const map = buildEntityMap(entities)
     expect(Object.keys(map)).toHaveLength(2)
     expect(map['person-1']).toBeDefined()
@@ -32,10 +29,7 @@ describe('buildEntityMap', () => {
   })
 
   it('assigns correct placeholders', () => {
-    const entities = [
-      entity('Müller', 'PERSON'),
-      entity('Zürich', 'ORT')
-    ]
+    const entities = [entity('Müller', 'PERSON'), entity('Zürich', 'ORT')]
     const map = buildEntityMap(entities)
     expect(map['person-1'].placeholder).toBe('[PERSON 1]')
     expect(map['ort-1'].placeholder).toBe('[ORT 1]')
@@ -66,7 +60,14 @@ describe('buildEntityMap', () => {
 
   it('preserves source from first occurrence', () => {
     const entities: MergedEntity[] = [
-      { text: 'Zürich', type: 'ORT', source: 'blocklist', segmentIndex: 0, charStart: 0, charEnd: 6 }
+      {
+        text: 'Zürich',
+        type: 'ORT',
+        source: 'blocklist',
+        segmentIndex: 0,
+        charStart: 0,
+        charEnd: 6
+      }
     ]
     const map = buildEntityMap(entities)
     expect(map['ort-1'].source).toBe('blocklist')

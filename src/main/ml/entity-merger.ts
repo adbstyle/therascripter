@@ -30,11 +30,7 @@ function mapNerType(nerType: string): PlaceholderType | null {
  * ü→ue, ä→ae, ö→oe, ß→ss
  */
 export function normalizeUmlaut(text: string): string {
-  return text
-    .replace(/ä/g, 'ae')
-    .replace(/ö/g, 'oe')
-    .replace(/ü/g, 'ue')
-    .replace(/ß/g, 'ss')
+  return text.replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
 }
 
 /**
@@ -56,10 +52,7 @@ function overlapsWithExisting(
   end: number
 ): boolean {
   return entities.some(
-    (e) =>
-      e.segmentIndex === segmentIndex &&
-      e.charStart < end &&
-      e.charEnd > start
+    (e) => e.segmentIndex === segmentIndex && e.charStart < end && e.charEnd > start
   )
 }
 
@@ -182,11 +175,21 @@ function normalizeWithPositionMap(text: string): NormalizedWithMap {
     const ch = text[i]
     let replacement: string
     switch (ch) {
-      case 'ä': replacement = 'ae'; break
-      case 'ö': replacement = 'oe'; break
-      case 'ü': replacement = 'ue'; break
-      case 'ß': replacement = 'ss'; break
-      default: replacement = ch; break
+      case 'ä':
+        replacement = 'ae'
+        break
+      case 'ö':
+        replacement = 'oe'
+        break
+      case 'ü':
+        replacement = 'ue'
+        break
+      case 'ß':
+        replacement = 'ss'
+        break
+      default:
+        replacement = ch
+        break
     }
     for (let j = 0; j < replacement.length; j++) {
       toOriginal.push(i)

@@ -13,15 +13,7 @@ describe('BlocklistAddSchema', () => {
   })
 
   it('accepts all 7 placeholder types', () => {
-    const types = [
-      'PERSON',
-      'ORT',
-      'DATUM',
-      'KONTAKT',
-      'ORGANISATION',
-      'MEDIZINISCH',
-      'SONSTIGES'
-    ]
+    const types = ['PERSON', 'ORT', 'DATUM', 'KONTAKT', 'ORGANISATION', 'MEDIZINISCH', 'SONSTIGES']
     for (const type of types) {
       const result = BlocklistAddSchema.parse({ term: 'Test', placeholderType: type })
       expect(result.placeholderType).toBe(type)
@@ -47,9 +39,7 @@ describe('BlocklistAddSchema', () => {
   })
 
   it('rejects invalid placeholder type', () => {
-    expect(() =>
-      BlocklistAddSchema.parse({ term: 'Test', placeholderType: 'INVALID' })
-    ).toThrow()
+    expect(() => BlocklistAddSchema.parse({ term: 'Test', placeholderType: 'INVALID' })).toThrow()
   })
 
   it('rejects missing term', () => {
@@ -100,9 +90,7 @@ describe('BlocklistUpdateSchema', () => {
   })
 
   it('rejects missing id', () => {
-    expect(() =>
-      BlocklistUpdateSchema.parse({ term: 'Test', placeholderType: 'PERSON' })
-    ).toThrow()
+    expect(() => BlocklistUpdateSchema.parse({ term: 'Test', placeholderType: 'PERSON' })).toThrow()
   })
 })
 

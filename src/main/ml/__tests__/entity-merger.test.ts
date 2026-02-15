@@ -69,7 +69,14 @@ describe('mergeEntities', () => {
 
   it('includes NER PER entities', () => {
     const nerEntities: NerEntity[] = [
-      { text: 'Dr. Müller', type: 'PER', segmentIndex: 0, charStart: 0, charEnd: 10, confidence: 0.95 }
+      {
+        text: 'Dr. Müller',
+        type: 'PER',
+        segmentIndex: 0,
+        charStart: 0,
+        charEnd: 10,
+        confidence: 0.95
+      }
     ]
     const result = mergeEntities(nerEntities, [], [], segments)
     expect(result).toHaveLength(1)
@@ -80,7 +87,7 @@ describe('mergeEntities', () => {
 
   it('includes NER LOC entities', () => {
     const nerEntities: NerEntity[] = [
-      { text: 'Zürich', type: 'LOC', segmentIndex: 0, charStart: 20, charEnd: 26, confidence: 0.90 }
+      { text: 'Zürich', type: 'LOC', segmentIndex: 0, charStart: 20, charEnd: 26, confidence: 0.9 }
     ]
     const result = mergeEntities(nerEntities, [], [], segments)
     expect(result).toHaveLength(1)
@@ -89,7 +96,7 @@ describe('mergeEntities', () => {
 
   it('includes NER MISC entities as SONSTIGES', () => {
     const nerEntities: NerEntity[] = [
-      { text: 'test', type: 'MISC', segmentIndex: 0, charStart: 0, charEnd: 4, confidence: 0.80 }
+      { text: 'test', type: 'MISC', segmentIndex: 0, charStart: 0, charEnd: 4, confidence: 0.8 }
     ]
     const testSegments = [seg('test entity here')]
     const result = mergeEntities(nerEntities, [], [], testSegments)
@@ -99,7 +106,14 @@ describe('mergeEntities', () => {
 
   it('ignores NER ORG entities (Decision #5/#158)', () => {
     const nerEntities: NerEntity[] = [
-      { text: 'Universität', type: 'ORG', segmentIndex: 0, charStart: 0, charEnd: 11, confidence: 0.90 }
+      {
+        text: 'Universität',
+        type: 'ORG',
+        segmentIndex: 0,
+        charStart: 0,
+        charEnd: 11,
+        confidence: 0.9
+      }
     ]
     const testSegments = [seg('Universität Bern ist gut')]
     const result = mergeEntities(nerEntities, [], [], testSegments)
@@ -108,7 +122,13 @@ describe('mergeEntities', () => {
 
   it('merges regex entities when no NER overlap', () => {
     const regexEntities: RegexEntity[] = [
-      { text: '15.03.1985', regexType: 'DATUM_STANDALONE', segmentIndex: 0, charStart: 32, charEnd: 42 }
+      {
+        text: '15.03.1985',
+        regexType: 'DATUM_STANDALONE',
+        segmentIndex: 0,
+        charStart: 32,
+        charEnd: 42
+      }
     ]
     const result = mergeEntities([], regexEntities, [], segments)
     expect(result).toHaveLength(1)
@@ -127,7 +147,7 @@ describe('mergeEntities', () => {
 
   it('NER takes priority over blocklist (no overlap)', () => {
     const nerEntities: NerEntity[] = [
-      { text: 'Zürich', type: 'LOC', segmentIndex: 0, charStart: 20, charEnd: 26, confidence: 0.90 }
+      { text: 'Zürich', type: 'LOC', segmentIndex: 0, charStart: 20, charEnd: 26, confidence: 0.9 }
     ]
     const blocklistEntries: BlocklistEntry[] = [
       { id: '1', term: 'Zürich', placeholderType: 'ORT', createdAt: '' }
@@ -152,7 +172,7 @@ describe('mergeEntities', () => {
 
   it('regex entities are skipped when they overlap with NER', () => {
     const nerEntities: NerEntity[] = [
-      { text: 'Zürich', type: 'LOC', segmentIndex: 0, charStart: 20, charEnd: 26, confidence: 0.90 }
+      { text: 'Zürich', type: 'LOC', segmentIndex: 0, charStart: 20, charEnd: 26, confidence: 0.9 }
     ]
     const regexEntities: RegexEntity[] = [
       { text: 'Zürich', regexType: 'PLZ_ORT', segmentIndex: 0, charStart: 20, charEnd: 26 }
@@ -164,10 +184,7 @@ describe('mergeEntities', () => {
   })
 
   it('results are sorted by segment index then position', () => {
-    const testSegments = [
-      seg('Peter in Bern'),
-      seg('Anna in Zürich')
-    ]
+    const testSegments = [seg('Peter in Bern'), seg('Anna in Zürich')]
     const nerEntities: NerEntity[] = [
       { text: 'Bern', type: 'LOC', segmentIndex: 0, charStart: 9, charEnd: 13, confidence: 0.9 },
       { text: 'Peter', type: 'PER', segmentIndex: 0, charStart: 0, charEnd: 5, confidence: 0.9 },

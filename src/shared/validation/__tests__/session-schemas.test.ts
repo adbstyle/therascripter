@@ -32,9 +32,7 @@ describe('SessionRenameSchema', () => {
   })
 
   it('rejects title over 200 chars', () => {
-    expect(() =>
-      SessionRenameSchema.parse({ sessionId: 'abc', title: 'x'.repeat(201) })
-    ).toThrow()
+    expect(() => SessionRenameSchema.parse({ sessionId: 'abc', title: 'x'.repeat(201) })).toThrow()
   })
 
   it('accepts title at exactly 200 chars', () => {

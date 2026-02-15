@@ -32,12 +32,8 @@ export function mergeSubTokens(tokens: WhisperToken[]): TranscriptWord[] {
 
     const startsNewWord = raw.startsWith(' ') || words.length === 0
 
-    const start = token.offsets
-      ? token.offsets.from / 1000
-      : 0
-    const end = token.offsets
-      ? token.offsets.to / 1000
-      : 0
+    const start = token.offsets ? token.offsets.from / 1000 : 0
+    const end = token.offsets ? token.offsets.to / 1000 : 0
 
     if (startsNewWord) {
       words.push({

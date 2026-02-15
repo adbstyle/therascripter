@@ -47,9 +47,7 @@ export class AnonymizationService implements TaskExecutor {
     onProgress(0.02)
 
     // 1. Load transcript
-    const transcript = JSON.parse(
-      readFileSync(session.transcriptPath, 'utf-8')
-    ) as TranscriptData
+    const transcript = JSON.parse(readFileSync(session.transcriptPath, 'utf-8')) as TranscriptData
 
     if (!transcript.segments || transcript.segments.length === 0) {
       throw new Error('Transkript enthält keine Segmente für die Anonymisierung')
@@ -58,12 +56,11 @@ export class AnonymizationService implements TaskExecutor {
     onProgress(0.05)
 
     // 2. Run Python NER sidecar (0.05 → 0.50)
-    const nerEntities = await this.runNerSidecar(
-      session.transcriptPath,
-      (nerProgress) => onProgress(0.05 + nerProgress * 0.45)
+    const nerEntities = await this.runNerSidecar(session.transcriptPath, (nerProgress) =>
+      onProgress(0.05 + nerProgress * 0.45)
     )
 
-    onProgress(0.50)
+    onProgress(0.5)
 
     // 3. Run regex engine
     const regexEntities = runRegexEngine(transcript.segments)
@@ -74,17 +71,12 @@ export class AnonymizationService implements TaskExecutor {
     const blocklistRepo = new BlocklistRepository(db)
     const blocklistEntries = blocklistRepo.findAll()
 
-    onProgress(0.60)
+    onProgress(0.6)
 
     // 5. Merge entities (NER > Blocklist > Regex)
-    const merged = mergeEntities(
-      nerEntities,
-      regexEntities,
-      blocklistEntries,
-      transcript.segments
-    )
+    const merged = mergeEntities(nerEntities, regexEntities, blocklistEntries, transcript.segments)
 
-    onProgress(0.70)
+    onProgress(0.7)
 
     // 6. Resolve coreferences (PERSON entities)
     const resolved = resolveCoreferences(merged)
@@ -94,23 +86,16 @@ export class AnonymizationService implements TaskExecutor {
     // 7. Build EntityMap
     const entityMap = buildEntityMap(resolved)
 
-    onProgress(0.80)
+    onProgress(0.8)
 
     // 8. Determine speaker count for TipTap document
-    const uniqueSpeakers = new Set(
-      transcript.segments.map((s) => s.speaker).filter(Boolean)
-    )
+    const uniqueSpeakers = new Set(transcript.segments.map((s) => s.speaker).filter(Boolean))
     const speakerCount = uniqueSpeakers.size
 
     // 9. Build TipTap document
-    const tiptapDoc = buildTipTapDocument(
-      transcript.segments,
-      entityMap,
-      resolved,
-      speakerCount
-    )
+    const tiptapDoc = buildTipTapDocument(transcript.segments, entityMap, resolved, speakerCount)
 
-    onProgress(0.90)
+    onProgress(0.9)
 
     // 10. Save results
     const anonymizedPath = sessionService.generateAnonymizedPath(task.sessionId)
@@ -134,9 +119,7 @@ export class AnonymizationService implements TaskExecutor {
 
       if (!existsSync(scriptPath)) {
         reject(
-          new Error(
-            `NER-Script nicht gefunden: ${scriptPath}. Bitte prüfen Sie die Installation.`
-          )
+          new Error(`NER-Script nicht gefunden: ${scriptPath}. Bitte prüfen Sie die Installation.`)
         )
         return
       }
@@ -162,9 +145,7 @@ export class AnonymizationService implements TaskExecutor {
       const timeout = setTimeout(() => {
         proc.kill('SIGTERM')
         reject(
-          new Error(
-            `NER-Verarbeitung abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`
-          )
+          new Error(`NER-Verarbeitung abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`)
         )
       }, timeoutMs)
 
@@ -209,8 +190,7 @@ export class AnonymizationService implements TaskExecutor {
                 line.includes('error') ||
                 line.includes('failed')
             )
-          const errorDetail =
-            errorLines.length > 0 ? errorLines.join('; ') : stderr.slice(-500)
+          const errorDetail = errorLines.length > 0 ? errorLines.join('; ') : stderr.slice(-500)
           reject(new Error(`NER Fehler (Exit Code ${code}): ${errorDetail}`))
           return
         }

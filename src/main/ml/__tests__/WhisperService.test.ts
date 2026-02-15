@@ -38,12 +38,48 @@ describe('whisper.cpp JSON output parsing', () => {
           offsets: { from: 0, to: 5000 },
           text: ' Guten Tag, wie geht es Ihnen?',
           tokens: [
-            { text: ' Guten', timestamps: { from: '00:00:00,000', to: '00:00:00,500' }, offsets: { from: 0, to: 500 }, id: 1, p: 0.95 },
-            { text: ' Tag,', timestamps: { from: '00:00:00,500', to: '00:00:01,000' }, offsets: { from: 500, to: 1000 }, id: 2, p: 0.92 },
-            { text: ' wie', timestamps: { from: '00:00:01,000', to: '00:00:01,500' }, offsets: { from: 1000, to: 1500 }, id: 3, p: 0.97 },
-            { text: ' geht', timestamps: { from: '00:00:01,500', to: '00:00:02,000' }, offsets: { from: 1500, to: 2000 }, id: 4, p: 0.91 },
-            { text: ' es', timestamps: { from: '00:00:02,000', to: '00:00:02,300' }, offsets: { from: 2000, to: 2300 }, id: 5, p: 0.88 },
-            { text: ' Ihnen?', timestamps: { from: '00:00:02,300', to: '00:00:03,000' }, offsets: { from: 2300, to: 3000 }, id: 6, p: 0.93 }
+            {
+              text: ' Guten',
+              timestamps: { from: '00:00:00,000', to: '00:00:00,500' },
+              offsets: { from: 0, to: 500 },
+              id: 1,
+              p: 0.95
+            },
+            {
+              text: ' Tag,',
+              timestamps: { from: '00:00:00,500', to: '00:00:01,000' },
+              offsets: { from: 500, to: 1000 },
+              id: 2,
+              p: 0.92
+            },
+            {
+              text: ' wie',
+              timestamps: { from: '00:00:01,000', to: '00:00:01,500' },
+              offsets: { from: 1000, to: 1500 },
+              id: 3,
+              p: 0.97
+            },
+            {
+              text: ' geht',
+              timestamps: { from: '00:00:01,500', to: '00:00:02,000' },
+              offsets: { from: 1500, to: 2000 },
+              id: 4,
+              p: 0.91
+            },
+            {
+              text: ' es',
+              timestamps: { from: '00:00:02,000', to: '00:00:02,300' },
+              offsets: { from: 2000, to: 2300 },
+              id: 5,
+              p: 0.88
+            },
+            {
+              text: ' Ihnen?',
+              timestamps: { from: '00:00:02,300', to: '00:00:03,000' },
+              offsets: { from: 2300, to: 3000 },
+              id: 6,
+              p: 0.93
+            }
           ]
         }
       ]

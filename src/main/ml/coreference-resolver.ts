@@ -92,9 +92,7 @@ export function resolveCoreferences(entities: MergedEntity[]): MergedEntity[] {
 
   for (const group of groups) {
     // Use the longest text variant as canonical representative
-    const canonical = group
-      .map((e) => e.text)
-      .sort((a, b) => b.length - a.length)[0]
+    const canonical = group.map((e) => e.text).sort((a, b) => b.length - a.length)[0]
 
     for (const entity of group) {
       resolved.push({

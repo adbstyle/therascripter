@@ -50,21 +50,13 @@ describe('removeFillerWords', () => {
   })
 
   it('preserves real words that look similar', () => {
-    const words = [
-      word('Uhr', 0, 0.3),
-      word('Ahnung', 0.4, 0.7),
-      word('Humor', 0.8, 1.1)
-    ]
+    const words = [word('Uhr', 0, 0.3), word('Ahnung', 0.4, 0.7), word('Humor', 0.8, 1.1)]
     const result = removeFillerWords(words)
     expect(result).toEqual(words)
   })
 
   it('preserves real filler words like also, eigentlich (Entscheidung #33)', () => {
-    const words = [
-      word('also', 0, 0.3),
-      word('eigentlich', 0.4, 0.8),
-      word('sozusagen', 0.9, 1.3)
-    ]
+    const words = [word('also', 0, 0.3), word('eigentlich', 0.4, 0.8), word('sozusagen', 0.9, 1.3)]
     const result = removeFillerWords(words)
     expect(result).toEqual(words)
   })

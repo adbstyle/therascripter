@@ -66,7 +66,16 @@ export class SessionRepository {
         `INSERT INTO sessions (id, title, type, status, audio_path, pdf_path, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(id, input.title, input.type, status, input.audioPath ?? null, input.pdfPath ?? null, now, now)
+      .run(
+        id,
+        input.title,
+        input.type,
+        status,
+        input.audioPath ?? null,
+        input.pdfPath ?? null,
+        now,
+        now
+      )
 
     return this.findById(id)!
   }

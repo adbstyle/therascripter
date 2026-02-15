@@ -106,10 +106,7 @@ describe('runRegexEngine', () => {
   })
 
   it('handles multiple segments', () => {
-    const segments = [
-      seg('Nummer: +41 79 111 22 33'),
-      seg('Email: foo@bar.ch')
-    ]
+    const segments = [seg('Nummer: +41 79 111 22 33'), seg('Email: foo@bar.ch')]
     const entities = runRegexEngine(segments)
     expect(entities).toHaveLength(2)
     expect(entities[0].segmentIndex).toBe(0)

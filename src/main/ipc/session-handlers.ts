@@ -1,10 +1,7 @@
 import { ipcMain } from 'electron'
 import { getDatabase } from '../db/connection'
 import { SessionService } from '../services/SessionService'
-import {
-  SessionDeleteSchema,
-  SessionRenameSchema
-} from '../../shared/validation/session-schemas'
+import { SessionDeleteSchema, SessionRenameSchema } from '../../shared/validation/session-schemas'
 
 export function registerSessionHandlers(): void {
   ipcMain.handle('session:list', () => {

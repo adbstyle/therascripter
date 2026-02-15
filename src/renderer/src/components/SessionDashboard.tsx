@@ -121,7 +121,9 @@ export default function SessionDashboard({
           {isDragOver ? (
             <>
               <p className="mb-1 text-lg font-medium text-primary">PDF hier ablegen</p>
-              <p className="text-sm text-gray-400">Lassen Sie die Datei los, um sie zu importieren.</p>
+              <p className="text-sm text-gray-400">
+                Lassen Sie die Datei los, um sie zu importieren.
+              </p>
             </>
           ) : (
             <>
@@ -167,9 +169,7 @@ export default function SessionDashboard({
                     onRename={() => setRenameTarget(session)}
                     onDelete={() => setDeleteTarget(session)}
                     onClick={
-                      session.status === 'review'
-                        ? () => onOpenReview?.(session.id)
-                        : undefined
+                      session.status === 'review' ? () => onOpenReview?.(session.id) : undefined
                     }
                   />
                 ))}

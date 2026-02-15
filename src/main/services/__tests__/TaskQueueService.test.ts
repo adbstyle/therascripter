@@ -134,12 +134,7 @@ describe('TaskQueueService', () => {
       // Wait for all tasks to process
       await new Promise((resolve) => setTimeout(resolve, 200))
 
-      expect(executionOrder).toEqual([
-        'transcription',
-        'diarization',
-        'alignment',
-        'anonymization'
-      ])
+      expect(executionOrder).toEqual(['transcription', 'diarization', 'alignment', 'anonymization'])
     })
 
     it('marks tasks as completed after execution', async () => {

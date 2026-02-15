@@ -101,12 +101,16 @@ export class WhisperService implements TaskExecutor {
       // whisper.cpp writes JSON to {audioPath}.json when using -ojf
       const threadCount = Math.min(8, Math.max(1, cpus().length))
       const args = [
-        '-m', modelPath,
-        '-f', audioPath,
-        '-l', 'de',
-        '-pp',   // --print-progress
-        '-ojf',  // --output-json-full (includes word-level timestamps)
-        '-t', String(threadCount)
+        '-m',
+        modelPath,
+        '-f',
+        audioPath,
+        '-l',
+        'de',
+        '-pp', // --print-progress
+        '-ojf', // --output-json-full (includes word-level timestamps)
+        '-t',
+        String(threadCount)
       ]
 
       // QoS: nice -n 10 (NFR-23) — spawn via nice
@@ -117,7 +121,9 @@ export class WhisperService implements TaskExecutor {
       let stderr = ''
       const timeout = setTimeout(() => {
         proc.kill('SIGTERM')
-        reject(new Error(`Transkription abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`))
+        reject(
+          new Error(`Transkription abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`)
+        )
       }, timeoutMs)
 
       proc.stderr?.on('data', (data: Buffer) => {
@@ -144,7 +150,9 @@ export class WhisperService implements TaskExecutor {
           // Extract useful error from stderr
           const errorLines = stderr
             .split('\n')
-            .filter((line) => line.includes('error') || line.includes('Error') || line.includes('failed'))
+            .filter(
+              (line) => line.includes('error') || line.includes('Error') || line.includes('failed')
+            )
           const errorDetail = errorLines.length > 0 ? errorLines.join('; ') : stderr.slice(-500)
           reject(new Error(`whisper-cli Fehler (Exit Code ${code}): ${errorDetail}`))
           return
@@ -164,7 +172,11 @@ export class WhisperService implements TaskExecutor {
           resolve(output)
 
           // Clean up the temporary JSON file created by whisper.cpp (after resolve)
-          try { unlinkSync(jsonPath) } catch { /* cleanup failure is non-fatal */ }
+          try {
+            unlinkSync(jsonPath)
+          } catch {
+            /* cleanup failure is non-fatal */
+          }
         } catch (error) {
           reject(
             new Error(

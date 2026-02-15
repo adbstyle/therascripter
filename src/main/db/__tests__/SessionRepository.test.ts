@@ -6,10 +6,7 @@ import { SessionRepository } from '../repositories/SessionRepository'
 import type { EntityMap } from '../../../shared/types'
 
 function applySchema(db: Database.Database): void {
-  const sql = readFileSync(
-    join(__dirname, '..', 'migrations', '001-initial-schema.sql'),
-    'utf-8'
-  )
+  const sql = readFileSync(join(__dirname, '..', 'migrations', '001-initial-schema.sql'), 'utf-8')
   db.exec(sql)
 }
 
@@ -93,8 +90,7 @@ describe('SessionRepository', () => {
 
     it('handles corrupted entity_map JSON gracefully', () => {
       const session = repo.create({ title: 'Test', type: 'audio' })
-      db.prepare('UPDATE sessions SET entity_map = ? WHERE id = ?')
-        .run('{invalid json', session.id)
+      db.prepare('UPDATE sessions SET entity_map = ? WHERE id = ?').run('{invalid json', session.id)
 
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       const retrieved = repo.findById(session.id)
@@ -176,7 +172,9 @@ describe('SessionRepository', () => {
     it('clears entity_map when set to null', () => {
       const session = repo.create({ title: 'Test', type: 'audio' })
       repo.update(session.id, {
-        entityMap: { 'p-1': { original: 'X', placeholder: '[PERSON 1]', type: 'PERSON', source: 'ner' } }
+        entityMap: {
+          'p-1': { original: 'X', placeholder: '[PERSON 1]', type: 'PERSON', source: 'ner' }
+        }
       })
       const cleared = repo.update(session.id, { entityMap: null })
 

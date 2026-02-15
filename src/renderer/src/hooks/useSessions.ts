@@ -45,16 +45,13 @@ export function useSessions(): UseSessionsResult {
     }
   }, [refresh])
 
-  const deleteSession = useCallback(
-    async (sessionId: string): Promise<boolean> => {
-      const result = await window.api.sessions.delete(sessionId)
-      if (result) {
-        setSessions((prev) => prev.filter((s) => s.id !== sessionId))
-      }
-      return result
-    },
-    []
-  )
+  const deleteSession = useCallback(async (sessionId: string): Promise<boolean> => {
+    const result = await window.api.sessions.delete(sessionId)
+    if (result) {
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId))
+    }
+    return result
+  }, [])
 
   const renameSession = useCallback(
     async (sessionId: string, title: string): Promise<Session | null> => {

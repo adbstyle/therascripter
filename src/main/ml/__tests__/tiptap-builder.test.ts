@@ -53,9 +53,7 @@ describe('buildTipTapDocument', () => {
 
   it('replaces entity spans with placeholderChip nodes', () => {
     const segments = [seg('Dr. Müller wohnt hier', 'Person A')]
-    const entities: MergedEntity[] = [
-      entity('Dr. Müller', 'PERSON', 0, 0, 10, 'Dr. Müller')
-    ]
+    const entities: MergedEntity[] = [entity('Dr. Müller', 'PERSON', 0, 0, 10, 'Dr. Müller')]
     const entityMap = buildEntityMap(entities)
     const doc = buildTipTapDocument(segments, entityMap, entities, 1)
 
@@ -74,9 +72,7 @@ describe('buildTipTapDocument', () => {
 
   it('handles entity in middle of text', () => {
     const segments = [seg('Wir sind in Zürich geblieben', 'Person A')]
-    const entities: MergedEntity[] = [
-      entity('Zürich', 'ORT', 0, 12, 18)
-    ]
+    const entities: MergedEntity[] = [entity('Zürich', 'ORT', 0, 12, 18)]
     const entityMap = buildEntityMap(entities)
     const doc = buildTipTapDocument(segments, entityMap, entities, 1)
 
@@ -90,10 +86,7 @@ describe('buildTipTapDocument', () => {
   })
 
   it('adds speaker labels for multi-speaker transcripts', () => {
-    const segments = [
-      seg('Hallo', 'Person A', 10, 15),
-      seg('Hi zurück', 'Person B', 16, 20)
-    ]
+    const segments = [seg('Hallo', 'Person A', 10, 15), seg('Hi zurück', 'Person B', 16, 20)]
     const doc = buildTipTapDocument(segments, {}, [], 2)
 
     const content = doc.content[0].content

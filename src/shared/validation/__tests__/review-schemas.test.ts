@@ -24,7 +24,7 @@ describe('ReviewSaveSchema', () => {
       content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }]
     },
     entityMap: {
-      'e1': {
+      e1: {
         original: 'Max',
         placeholder: '[PERSON 1]',
         type: 'PERSON' as const,

@@ -119,9 +119,7 @@ describe('buildDiarizationData', () => {
   })
 
   it('handles single speaker', () => {
-    const segments: SpeakerSegment[] = [
-      { label: 'SPEAKER_00', start: 0, end: 10 }
-    ]
+    const segments: SpeakerSegment[] = [{ label: 'SPEAKER_00', start: 0, end: 10 }]
 
     const result = buildDiarizationData(segments, 10)
 

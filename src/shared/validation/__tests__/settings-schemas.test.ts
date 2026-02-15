@@ -48,9 +48,7 @@ describe('SettingsSetSchema', () => {
   })
 
   it('rejects unknown keys', () => {
-    expect(() =>
-      SettingsSetSchema.parse({ key: 'badKey', value: true })
-    ).toThrow()
+    expect(() => SettingsSetSchema.parse({ key: 'badKey', value: true })).toThrow()
   })
 
   it('accepts missing value (z.unknown() allows undefined)', () => {
