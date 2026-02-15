@@ -82,7 +82,8 @@ const api: IpcApi = {
   review: {
     load: (sessionId) => ipcRenderer.invoke('review:load', { sessionId }),
     save: (sessionId, document, entityMap) =>
-      ipcRenderer.invoke('review:save', { sessionId, document, entityMap })
+      ipcRenderer.invoke('review:save', { sessionId, document, entityMap }),
+    exportClipboard: (text) => ipcRenderer.invoke('review:exportClipboard', { text })
   }
 }
 

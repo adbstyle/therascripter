@@ -29,5 +29,10 @@ export const ReviewSaveSchema = z.object({
   )
 })
 
+export const ReviewExportClipboardSchema = z.object({
+  text: z.string()
+})
+
 export type ReviewLoadInput = z.infer<typeof ReviewLoadSchema>
 export type ReviewSaveInput = z.infer<typeof ReviewSaveSchema>
+export type ReviewExportClipboardInput = z.infer<typeof ReviewExportClipboardSchema>

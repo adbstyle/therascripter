@@ -1,7 +1,11 @@
-import { ipcMain } from 'electron'
+import { clipboard, ipcMain } from 'electron'
 import { getDatabase } from '../db/connection'
 import { ReviewService } from '../services/ReviewService'
-import { ReviewLoadSchema, ReviewSaveSchema } from '../../shared/validation/review-schemas'
+import {
+  ReviewLoadSchema,
+  ReviewSaveSchema,
+  ReviewExportClipboardSchema
+} from '../../shared/validation/review-schemas'
 import type { EntityMap } from '../../shared/types'
 
 export function registerReviewHandlers(): void {
@@ -15,5 +19,10 @@ export function registerReviewHandlers(): void {
     const { sessionId, document, entityMap } = ReviewSaveSchema.parse(args)
     const service = new ReviewService(getDatabase())
     service.save(sessionId, document, entityMap as EntityMap)
+  })
+
+  ipcMain.handle('review:exportClipboard', (_event, args: unknown) => {
+    const { text } = ReviewExportClipboardSchema.parse(args)
+    clipboard.writeText(text)
   })
 }

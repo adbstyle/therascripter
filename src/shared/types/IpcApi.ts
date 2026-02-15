@@ -71,6 +71,7 @@ export interface ReviewData {
 export interface ReviewApi {
   load(sessionId: string): Promise<ReviewData>
   save(sessionId: string, document: TipTapDocument, entityMap: EntityMap): Promise<void>
+  exportClipboard(text: string): Promise<void>
 }
 
 export interface IpcApi {
