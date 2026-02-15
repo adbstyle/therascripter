@@ -49,6 +49,8 @@ scripts/setup-ner.sh --model      # Also download NER model (~1.1 GB)
 
 **Storage:** better-sqlite3 (sessions, blocklist) + electron-store (settings).
 
+**UI navigation:** Simple view state (`'sessions' | 'settings'`) in App.tsx — no router. Settings view has tabbed layout (Sperrliste/Modelle/Über). Navigation disabled during recording.
+
 **Key constraints:**
 - 8 GB minimum RAM budget (~5.2 GB peak during flair NER)
 - Production CSP: `connect-src 'none'` (zero network access)
@@ -65,7 +67,7 @@ scripts/setup-ner.sh --model      # Also download NER model (~1.1 GB)
 
 ## Domain-Specific Rules
 
-- **Sperrliste (blocklist):** 7 user-visible entity types, bidirectional Umlaut normalization, longest-match-first replacement
+- **Sperrliste (blocklist):** 7 user-visible entity types, bidirectional Umlaut normalization, longest-match-first replacement. CRUD via Settings UI ✓ implemented
 - **Placeholder format:** `[PERSON 1]`, `[ORT 1]`, etc. — numeric, type-specific
 - **flair ORG entities:** Ignored (institutions only via Sperrliste/manual)
 - **Auto-deletion:** Sessions deleted 30 days after creation, silent

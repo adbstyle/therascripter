@@ -73,6 +73,14 @@ const api: IpcApi = {
         ipcRenderer.removeListener('task:error', handler)
       }
     }
+  },
+  blocklist: {
+    list: () => ipcRenderer.invoke('blocklist:list'),
+    add: (term, placeholderType) =>
+      ipcRenderer.invoke('blocklist:add', { term, placeholderType }),
+    update: (id, term, placeholderType) =>
+      ipcRenderer.invoke('blocklist:update', { id, term, placeholderType }),
+    delete: (id) => ipcRenderer.invoke('blocklist:delete', { id })
   }
 }
 

@@ -96,6 +96,12 @@ beforeEach(() => {
       onProgress: vi.fn().mockReturnValue(() => {}),
       onCompleted: vi.fn().mockReturnValue(() => {}),
       onError: vi.fn().mockReturnValue(() => {})
+    },
+    blocklist: {
+      list: vi.fn().mockResolvedValue([]),
+      add: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn()
     }
   } as typeof window.api
   vi.clearAllMocks()
