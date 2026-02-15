@@ -11,6 +11,7 @@ import {
 } from './ipc/recording-handlers'
 import { registerSettingsHandlers } from './ipc/settings-handlers'
 import { registerTaskHandlers } from './ipc/task-handlers'
+import { registerBlocklistHandlers } from './ipc/blocklist-handlers'
 import { initTray, getTray } from './services/TrayService'
 import { WhisperService } from './ml/WhisperService'
 import { PyannoteSidecar } from './ml/PyannoteSidecar'
@@ -106,6 +107,7 @@ app.whenReady().then(() => {
   registerRecordingHandlers()
   registerSettingsHandlers()
   registerTaskHandlers()
+  registerBlocklistHandlers()
 
   setupCSP()
   createWindow()

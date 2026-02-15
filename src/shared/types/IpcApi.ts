@@ -1,5 +1,7 @@
 import type { Session } from './Session'
 import type { Task, TaskType } from './Task'
+import type { BlocklistEntry } from './NerTypes'
+import type { PlaceholderType } from './EntityMap'
 
 export interface SessionApi {
   list(): Promise<Session[]>
@@ -45,9 +47,21 @@ export interface TasksApi {
   onError(callback: (data: TaskErrorData) => void): () => void
 }
 
+export interface BlocklistApi {
+  list(): Promise<BlocklistEntry[]>
+  add(term: string, placeholderType: PlaceholderType): Promise<BlocklistEntry>
+  update(
+    id: string,
+    term: string,
+    placeholderType: PlaceholderType
+  ): Promise<BlocklistEntry | null>
+  delete(id: string): Promise<boolean>
+}
+
 export interface IpcApi {
   sessions: SessionApi
   recording: RecordingApi
   settings: SettingsApi
   tasks: TasksApi
+  blocklist: BlocklistApi
 }

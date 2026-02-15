@@ -26,6 +26,7 @@ export type {
   RecordingApi,
   SettingsApi,
   TasksApi,
+  BlocklistApi,
   TaskProgressData,
   TaskCompletedData,
   TaskErrorData,
