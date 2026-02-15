@@ -47,34 +47,46 @@ export default function BlocklistManager(): React.JSX.Element {
   }, [refresh])
 
   const handleAdd = useCallback(async (term: string, placeholderType: PlaceholderType) => {
-    const newEntry = await window.api.blocklist.add(term, placeholderType)
-    setEntries((prev) => [...prev, newEntry])
-    setDialogMode(null)
+    try {
+      const newEntry = await window.api.blocklist.add(term, placeholderType)
+      setEntries((prev) => [...prev, newEntry])
+      setDialogMode(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Eintrag konnte nicht hinzugefügt werden')
+    }
   }, [])
 
   const handleEdit = useCallback(
     async (term: string, placeholderType: PlaceholderType) => {
       if (!dialogMode || dialogMode.type !== 'edit') return
-      const updated = await window.api.blocklist.update(
-        dialogMode.entry.id,
-        term,
-        placeholderType
-      )
-      if (updated) {
-        setEntries((prev) => prev.map((e) => (e.id === updated.id ? updated : e)))
+      try {
+        const updated = await window.api.blocklist.update(
+          dialogMode.entry.id,
+          term,
+          placeholderType
+        )
+        if (updated) {
+          setEntries((prev) => prev.map((e) => (e.id === updated.id ? updated : e)))
+        }
+        setDialogMode(null)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Eintrag konnte nicht aktualisiert werden')
       }
-      setDialogMode(null)
     },
     [dialogMode]
   )
 
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) return
-    const success = await window.api.blocklist.delete(deleteTarget.id)
-    if (success) {
-      setEntries((prev) => prev.filter((e) => e.id !== deleteTarget.id))
+    try {
+      const success = await window.api.blocklist.delete(deleteTarget.id)
+      if (success) {
+        setEntries((prev) => prev.filter((e) => e.id !== deleteTarget.id))
+      }
+      setDeleteTarget(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Eintrag konnte nicht gelöscht werden')
     }
-    setDeleteTarget(null)
   }, [deleteTarget])
 
   if (loading) {

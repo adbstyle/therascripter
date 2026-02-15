@@ -27,8 +27,9 @@ export default function App(): React.JSX.Element {
               currentView === 'sessions'
                 ? 'bg-gray-100 text-gray-900'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-            }`}
+            } ${isRecording ? 'pointer-events-none opacity-50' : ''}`}
             onClick={() => setCurrentView('sessions')}
+            disabled={isRecording}
           >
             Sitzungen
           </button>
@@ -37,8 +38,9 @@ export default function App(): React.JSX.Element {
               currentView === 'settings'
                 ? 'bg-gray-100 text-gray-900'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-            }`}
+            } ${isRecording ? 'pointer-events-none opacity-50' : ''}`}
             onClick={() => setCurrentView('settings')}
+            disabled={isRecording}
           >
             Einstellungen
           </button>
