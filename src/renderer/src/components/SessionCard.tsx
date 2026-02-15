@@ -148,7 +148,10 @@ export function SessionCard({ session, onRename, onDelete, onClick }: SessionCar
         </button>
 
         {menuOpen && (
-          <div className="absolute right-0 top-full z-10 mt-1 w-40 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+          <div
+            className="absolute right-0 top-full z-10 mt-1 w-40 rounded-md border border-gray-200 bg-white py-1 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               className="w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50"
               onClick={() => {
