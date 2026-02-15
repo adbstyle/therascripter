@@ -84,8 +84,15 @@ def main() -> None:
 
     # Import flair (heavy import, ~3-5s)
     try:
+        import logging
+
+        import flair
         from flair.data import Sentence
         from flair.nn import Classifier
+
+        # Redirect flair's logger from stdout to stderr so JSON output stays clean
+        flair.logger.handlers.clear()
+        flair.logger.addHandler(logging.StreamHandler(sys.stderr))
     except ImportError as e:
         print(f"Fehler: Benötigtes Paket nicht installiert: {e}", file=sys.stderr)
         print(
