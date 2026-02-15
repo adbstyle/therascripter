@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
-import { NodeSelection } from '@tiptap/pm/state'
+import { EditorState, NodeSelection } from '@tiptap/pm/state'
 import StarterKit from '@tiptap/starter-kit'
 import { PlaceholderChip } from '../extensions/placeholderChip'
 import { SpeakerLabel } from '../extensions/speakerLabel'
@@ -120,6 +120,13 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
         entityMapRef.current = data.entityMap
 
         editor?.commands.setContent(data.document)
+
+        // Reset undo history so initial content is not undoable
+        const freshState = EditorState.create({
+          doc: editor!.state.doc,
+          plugins: editor!.state.plugins
+        })
+        editor!.view.updateState(freshState)
       } catch (err) {
         if (!cancelled) {
           setLoadError(err instanceof Error ? err.message : 'Dokument konnte nicht geladen werden')
