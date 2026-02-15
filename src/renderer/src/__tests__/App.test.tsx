@@ -40,7 +40,8 @@ beforeEach(() => {
     },
     review: {
       load: vi.fn(),
-      save: vi.fn()
+      save: vi.fn(),
+      exportClipboard: vi.fn()
     }
   } as typeof window.api
 })

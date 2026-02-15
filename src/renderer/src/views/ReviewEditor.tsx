@@ -6,6 +6,7 @@ import { PlaceholderChip } from '../extensions/placeholderChip'
 import { SpeakerLabel } from '../extensions/speakerLabel'
 import { Timestamp } from '../extensions/timestamp'
 import { useAutoSave } from '../hooks/useAutoSave'
+import { useToast } from '../hooks/useToast'
 import { EditorContextMenu, type ContextMenuState } from '../components/editor/EditorContextMenu'
 import { BlocklistConfirmDialog } from '../components/editor/BlocklistConfirmDialog'
 import {
@@ -15,6 +16,7 @@ import {
   hasChipsWithEntityId,
   extendSelectionAndExtractText
 } from '../utils/editorCommands'
+import { serializeDocument } from '../../../shared/utils/serializeDocument'
 import type { EntityMap, PlaceholderType, ReviewData, SessionType } from '../../../shared/types'
 import type { TipTapDocument } from '../../../shared/types/TipTapDocument'
 import type { Editor } from '@tiptap/core'
@@ -33,6 +35,7 @@ interface ReviewEditorProps {
 }
 
 export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Element {
+  const toast = useToast()
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [sessionTitle, setSessionTitle] = useState('')
@@ -355,6 +358,19 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     }
   }, [editor, blocklistConfirm, updateEntityMap])
 
+  /** Export current editor content to clipboard (US-7) */
+  const handleExportClipboard = useCallback(async () => {
+    if (!editor) return
+    try {
+      const doc = editor.getJSON() as TipTapDocument
+      const text = serializeDocument(doc, sessionType)
+      await window.api.review.exportClipboard(text)
+      toast.success('In Zwischenablage kopiert')
+    } catch {
+      toast.error('Kopieren fehlgeschlagen')
+    }
+  }, [editor, sessionType, toast])
+
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -393,6 +409,12 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           </span>
           <h2 className="text-lg font-semibold text-gray-900">{sessionTitle}</h2>
         </div>
+        <button
+          className="titlebar-no-drag flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+          onClick={handleExportClipboard}
+        >
+          &#128203; Kopieren
+        </button>
       </header>
 
       {/* Editor */}
