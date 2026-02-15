@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Session } from '../../../shared/types'
 import { useSessions } from '../hooks/useSessions'
 import { groupSessionsByTime, GROUP_ORDER } from '../utils/groupSessionsByTime'
@@ -6,10 +6,53 @@ import { SessionCard } from './SessionCard'
 import { ConfirmDialog } from './ConfirmDialog'
 import { RenameDialog } from './RenameDialog'
 
-export default function SessionDashboard(): React.JSX.Element {
-  const { sessions, loading, error, deleteSession, renameSession } = useSessions()
+interface SessionDashboardProps {
+  refreshTrigger?: number
+}
+
+export default function SessionDashboard({
+  refreshTrigger
+}: SessionDashboardProps): React.JSX.Element {
+  const { sessions, loading, error, refresh, deleteSession, renameSession } = useSessions()
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
   const [renameTarget, setRenameTarget] = useState<Session | null>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
+
+  // Refresh sessions when parent triggers (e.g. after PDF import from header button)
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      refresh()
+    }
+  }, [refreshTrigger, refresh])
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault()
+      setIsDragOver(false)
+
+      const files = Array.from(e.dataTransfer.files)
+      const pdfPaths = files
+        .filter((f) => f.name.toLowerCase().endsWith('.pdf'))
+        .map((f) => window.api.import.getPathForFile(f))
+        .filter((p) => p.length > 0)
+
+      if (pdfPaths.length === 0) return
+
+      await window.api.import.pdf(pdfPaths)
+      refresh()
+    },
+    [refresh]
+  )
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+  }, [])
 
   const grouped = groupSessionsByTime(sessions)
 
@@ -27,7 +70,12 @@ export default function SessionDashboard(): React.JSX.Element {
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div
+        className="flex flex-1 items-center justify-center"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <p className="text-sm text-gray-400">Laden...</p>
       </div>
     )
@@ -35,7 +83,12 @@ export default function SessionDashboard(): React.JSX.Element {
 
   if (error) {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div
+        className="flex flex-1 items-center justify-center"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <p className="text-sm text-red-500">{error}</p>
       </div>
     )
@@ -43,12 +96,26 @@ export default function SessionDashboard(): React.JSX.Element {
 
   if (sessions.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div
+        className={`flex flex-1 items-center justify-center transition-colors ${isDragOver ? 'bg-blue-50' : ''}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <div className="text-center">
-          <p className="mb-1 text-lg font-medium text-gray-600">Keine Sitzungen</p>
-          <p className="text-sm text-gray-400">
-            Starten Sie eine Aufnahme oder importieren Sie ein PDF-Dokument.
-          </p>
+          {isDragOver ? (
+            <>
+              <p className="mb-1 text-lg font-medium text-primary">PDF hier ablegen</p>
+              <p className="text-sm text-gray-400">Lassen Sie die Datei los, um sie zu importieren.</p>
+            </>
+          ) : (
+            <>
+              <p className="mb-1 text-lg font-medium text-gray-600">Keine Sitzungen</p>
+              <p className="text-sm text-gray-400">
+                Starten Sie eine Aufnahme oder importieren Sie ein PDF-Dokument.
+              </p>
+            </>
+          )}
         </div>
       </div>
     )
@@ -56,7 +123,18 @@ export default function SessionDashboard(): React.JSX.Element {
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto px-6 py-4">
+      <div
+        className={`relative flex-1 overflow-y-auto px-6 py-4 transition-colors ${isDragOver ? 'bg-blue-50' : ''}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {isDragOver && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-blue-50/80">
+            <p className="text-lg font-medium text-primary">PDF hier ablegen</p>
+          </div>
+        )}
+
         {GROUP_ORDER.map((group) => {
           const groupSessions = grouped.get(group)
           if (!groupSessions || groupSessions.length === 0) return null

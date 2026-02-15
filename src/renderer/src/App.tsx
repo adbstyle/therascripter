@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import SessionDashboard from './components/SessionDashboard'
 import RecordingView from './components/RecordingView'
 import Settings from './views/Settings'
@@ -9,6 +9,14 @@ type View = 'sessions' | 'settings'
 export default function App(): React.JSX.Element {
   const { isRecording, duration, level, error, startRecording, stopRecording } = useRecording()
   const [currentView, setCurrentView] = useState<View>('sessions')
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+
+  const handleImportPDF = useCallback(async () => {
+    const filePaths = await window.api.import.showPDFDialog()
+    if (filePaths.length === 0) return
+    await window.api.import.pdf(filePaths)
+    setRefreshTrigger((v) => v + 1)
+  }, [])
 
   const headerTitle = isRecording
     ? 'Aufnahme läuft'
@@ -57,12 +65,20 @@ export default function App(): React.JSX.Element {
         <header className="titlebar-drag flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <h2 className="text-2xl font-bold text-gray-900">{headerTitle}</h2>
           {!isRecording && currentView === 'sessions' && (
-            <button
-              className="titlebar-no-drag rounded-lg bg-recording px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
-              onClick={startRecording}
-            >
-              &#9679; Aufnahme starten
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                className="titlebar-no-drag rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                onClick={handleImportPDF}
+              >
+                PDF importieren
+              </button>
+              <button
+                className="titlebar-no-drag rounded-lg bg-recording px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+                onClick={startRecording}
+              >
+                &#9679; Aufnahme starten
+              </button>
+            </div>
           )}
         </header>
 
@@ -74,7 +90,7 @@ export default function App(): React.JSX.Element {
             onStop={stopRecording}
           />
         ) : currentView === 'sessions' ? (
-          <SessionDashboard />
+          <SessionDashboard refreshTrigger={refreshTrigger} />
         ) : (
           <Settings />
         )}

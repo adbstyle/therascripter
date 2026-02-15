@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
   IpcApi,
@@ -81,6 +81,11 @@ const api: IpcApi = {
     update: (id, term, placeholderType) =>
       ipcRenderer.invoke('blocklist:update', { id, term, placeholderType }),
     delete: (id) => ipcRenderer.invoke('blocklist:delete', { id })
+  },
+  import: {
+    pdf: (filePaths) => ipcRenderer.invoke('import:pdf', { filePaths }),
+    showPDFDialog: () => ipcRenderer.invoke('import:showPDFDialog'),
+    getPathForFile: (file) => webUtils.getPathForFile(file)
   }
 }
 
