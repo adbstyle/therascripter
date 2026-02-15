@@ -44,3 +44,24 @@ export type {
   DiarizationMetadata,
   DiarizationData
 } from './Diarization'
+
+export type {
+  NerEntity,
+  RegexEntity,
+  MergedEntity,
+  NerServiceOutput,
+  BlocklistEntry
+} from './NerTypes'
+
+export type {
+  TipTapDocument,
+  TipTapParagraph,
+  TipTapInlineNode,
+  TipTapTextNode,
+  TipTapPlaceholderChip,
+  TipTapPlaceholderChipAttrs,
+  TipTapSpeakerLabel,
+  TipTapSpeakerLabelAttrs,
+  TipTapTimestamp,
+  TipTapTimestampAttrs
+} from './TipTapDocument'
