@@ -101,8 +101,19 @@ export function anonymizeSelection(
     }
   })
 
-  // Extract the original text from the extended range
-  const originalText = state.doc.textBetween(extendedFrom, extendedTo, '', '')
+  // Extract the original text from the extended range.
+  // Cannot use textBetween() because atom nodes (chips) produce empty strings.
+  // Instead, manually read attrs.original from chips and text from text nodes.
+  let originalText = ''
+  state.doc.nodesBetween(extendedFrom, extendedTo, (node, pos) => {
+    if (node.type.name === 'placeholderChip') {
+      originalText += (node.attrs.original as string) || ''
+    } else if (node.isText) {
+      const start = Math.max(pos, extendedFrom) - pos
+      const end = Math.min(pos + node.nodeSize, extendedTo) - pos
+      originalText += (node.text ?? '').slice(start, end)
+    }
+  })
 
   if (!originalText.trim()) return null
 
