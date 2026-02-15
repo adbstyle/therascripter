@@ -58,10 +58,17 @@ export interface BlocklistApi {
   delete(id: string): Promise<boolean>
 }
 
+export interface ImportApi {
+  pdf(filePaths: string[]): Promise<Session[]>
+  showPDFDialog(): Promise<string[]>
+  getPathForFile(file: File): string
+}
+
 export interface IpcApi {
   sessions: SessionApi
   recording: RecordingApi
   settings: SettingsApi
   tasks: TasksApi
   blocklist: BlocklistApi
+  import: ImportApi
 }

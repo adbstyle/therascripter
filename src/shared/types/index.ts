@@ -30,6 +30,7 @@ export type {
   TaskProgressData,
   TaskCompletedData,
   TaskErrorData,
+  ImportApi,
   IpcApi
 } from './IpcApi'
 
@@ -66,3 +67,5 @@ export type {
   TipTapTimestamp,
   TipTapTimestampAttrs
 } from './TipTapDocument'
+
+export type { PageData, ExtractionResult } from './PDFTypes'

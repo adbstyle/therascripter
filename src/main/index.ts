@@ -12,11 +12,14 @@ import {
 import { registerSettingsHandlers } from './ipc/settings-handlers'
 import { registerTaskHandlers } from './ipc/task-handlers'
 import { registerBlocklistHandlers } from './ipc/blocklist-handlers'
+import { registerPDFHandlers } from './ipc/pdf-handlers'
 import { initTray, getTray } from './services/TrayService'
 import { WhisperService } from './ml/WhisperService'
 import { PyannoteSidecar } from './ml/PyannoteSidecar'
 import { AlignmentService } from './ml/AlignmentService'
 import { AnonymizationService } from './ml/AnonymizationService'
+import { PDFExtractionExecutor } from './services/PDFExtractionExecutor'
+import { VisionOCRService } from './ml/VisionOCRService'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -96,18 +99,25 @@ app.whenReady().then(() => {
   if (recovered > 0) {
     console.log(`Task Queue: ${recovered} stuck task(s) reset to pending`)
   }
+  const orphaned = taskQueue.recoverOrphanedSessions()
+  if (orphaned > 0) {
+    console.log(`Task Queue: ${orphaned} orphaned session(s) marked as error`)
+  }
 
   // Register real ML executors (replacing stubs)
   taskQueue.registerExecutor('transcription', new WhisperService())
   taskQueue.registerExecutor('diarization', new PyannoteSidecar())
   taskQueue.registerExecutor('alignment', new AlignmentService())
   taskQueue.registerExecutor('anonymization', new AnonymizationService())
+  taskQueue.registerExecutor('extraction', new PDFExtractionExecutor())
+  taskQueue.registerExecutor('ocr', new VisionOCRService())
 
   registerSessionHandlers()
   registerRecordingHandlers()
   registerSettingsHandlers()
   registerTaskHandlers()
   registerBlocklistHandlers()
+  registerPDFHandlers()
 
   setupCSP()
   createWindow()

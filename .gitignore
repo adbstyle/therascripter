@@ -45,3 +45,6 @@ resources/lib/
 python_sidecar/venv/
 python_sidecar/__pycache__/
 *.pyc
+
+# Swift CLI build artifacts
+swift_cli/vision_ocr/.build/

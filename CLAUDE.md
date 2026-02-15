@@ -37,17 +37,23 @@ scripts/setup-ner.sh --model      # Also download NER model (~1.1 GB)
 - **Preload** (`src/preload/`) — Context bridge exposing APIs to renderer. All IPC channels will use Zod schema validation.
 - **Renderer** (`src/renderer/`) — React 19 + Tailwind CSS UI. Path alias: `@renderer` → `src/renderer/src`.
 
-**ML pipeline** (strictly sequential, one model at a time):
+**ML pipeline — Audio** (strictly sequential, one model at a time):
 1. whisper.cpp subprocess — ASR (Whisper Large V3 Turbo Q5_0, Metal GPU) ✓ implemented
 2. Python sidecar — pyannote.audio diarization (speaker-diarization-3.1) + alignment ✓ implemented
 3. Python sidecar — flair NER (flair/ner-german-large) + Regex + Blocklist → TipTap document ✓ implemented
-4. Swift CLI helper — Apple Vision OCR (planned)
+
+**ML pipeline — PDF** (extraction → ocr → anonymization):
+1. pdfjs-dist — Text extraction per page (with `standardFontDataUrl` configured) ✓ implemented
+2. Swift CLI helper — Apple Vision OCR for scanned pages (skipped if all text) ✓ implemented
+3. Python sidecar — flair NER + Regex + Blocklist → TipTap document (shared with audio) ✓ implemented
 
 **ML models:** Stored in `~/.therascript/models/<type>/` (e.g. `models/asr/`, `models/diarization/`, `models/ner/`). Directories created at startup by `initDatabase()`.
 
 **Python sidecar:** Uses a venv at `python_sidecar/venv/` (gitignored). One-time setup after fresh clone: `scripts/setup-pyannote.sh --model` then `scripts/setup-ner.sh --model`. Pyannote requires HuggingFace token (`huggingface-cli login`) and accepted terms for `pyannote/speaker-diarization-3.1` + `pyannote/speaker-diarization-community-1`. The venv and models persist across builds — no re-setup needed for `npm run dev/build`.
 
 **Storage:** better-sqlite3 (sessions, blocklist) + electron-store (settings).
+
+**PDF import:** Drag-and-drop or button in SessionDashboard. Files copied to `~/.therascript/pdf/`. Import guard prevents duplicate imports. Copy failure triggers session rollback. Orphaned sessions (stuck in processing with no tasks) are recovered at startup.
 
 **UI navigation:** Simple view state (`'sessions' | 'settings'`) in App.tsx — no router. Settings view has tabbed layout (Sperrliste/Modelle/Über). Navigation disabled during recording.
 

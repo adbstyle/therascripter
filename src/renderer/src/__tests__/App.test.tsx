@@ -32,6 +32,11 @@ beforeEach(() => {
       add: vi.fn(),
       update: vi.fn(),
       delete: vi.fn()
+    },
+    import: {
+      pdf: vi.fn().mockResolvedValue([]),
+      showPDFDialog: vi.fn().mockResolvedValue([]),
+      getPathForFile: vi.fn().mockReturnValue('')
     }
   } as typeof window.api
 })
