@@ -7,6 +7,7 @@ interface SessionCardProps {
   session: Session
   onRename: () => void
   onDelete: () => void
+  onClick?: () => void
 }
 
 const STATUS_CONFIG: Record<SessionStatus, { label: string; color: string }> = {
@@ -46,7 +47,7 @@ function isProcessingStatus(status: SessionStatus): boolean {
   )
 }
 
-export function SessionCard({ session, onRename, onDelete }: SessionCardProps): React.JSX.Element {
+export function SessionCard({ session, onRename, onDelete, onClick }: SessionCardProps): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const showProgress = isProcessingStatus(session.status)
@@ -66,7 +67,13 @@ export function SessionCard({ session, onRename, onDelete }: SessionCardProps): 
   }
 
   return (
-    <div className="group relative flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 transition-colors hover:border-gray-300">
+    <div
+      className={`group relative flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 transition-colors hover:border-gray-300 ${onClick ? 'cursor-pointer hover:shadow-sm' : ''}`}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter') onClick() } : undefined}
+    >
       <span className="text-lg" aria-hidden="true">
         {typeIcon}
       </span>
@@ -127,7 +134,10 @@ export function SessionCard({ session, onRename, onDelete }: SessionCardProps): 
       <div className="relative" ref={menuRef}>
         <button
           className="rounded p-1 text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-600 group-hover:opacity-100"
-          onClick={() => setMenuOpen(!menuOpen)}
+          onClick={(e) => {
+            e.stopPropagation()
+            setMenuOpen(!menuOpen)
+          }}
           aria-label="Sitzungsoptionen"
         >
           <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 16 16">

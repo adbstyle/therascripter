@@ -1,7 +1,8 @@
-import type { Session } from './Session'
+import type { Session, SessionType } from './Session'
 import type { Task, TaskType } from './Task'
 import type { BlocklistEntry } from './NerTypes'
-import type { PlaceholderType } from './EntityMap'
+import type { EntityMap, PlaceholderType } from './EntityMap'
+import type { TipTapDocument } from './TipTapDocument'
 
 export interface SessionApi {
   list(): Promise<Session[]>
@@ -64,6 +65,18 @@ export interface ImportApi {
   getPathForFile(file: File): string
 }
 
+export interface ReviewData {
+  document: TipTapDocument
+  entityMap: EntityMap
+  sessionType: SessionType
+  sessionTitle: string
+}
+
+export interface ReviewApi {
+  load(sessionId: string): Promise<ReviewData>
+  save(sessionId: string, document: TipTapDocument, entityMap: EntityMap): Promise<void>
+}
+
 export interface IpcApi {
   sessions: SessionApi
   recording: RecordingApi
@@ -71,4 +84,5 @@ export interface IpcApi {
   tasks: TasksApi
   blocklist: BlocklistApi
   import: ImportApi
+  review: ReviewApi
 }

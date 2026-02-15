@@ -37,6 +37,10 @@ beforeEach(() => {
       pdf: vi.fn().mockResolvedValue([]),
       showPDFDialog: vi.fn().mockResolvedValue([]),
       getPathForFile: vi.fn().mockReturnValue('')
+    },
+    review: {
+      load: vi.fn(),
+      save: vi.fn()
     }
   } as typeof window.api
 })

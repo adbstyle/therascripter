@@ -10,12 +10,14 @@ interface SessionDashboardProps {
   refreshTrigger?: number
   isImporting?: boolean
   onImportingChange?: (importing: boolean) => void
+  onOpenReview?: (sessionId: string) => void
 }
 
 export default function SessionDashboard({
   refreshTrigger,
   isImporting,
-  onImportingChange
+  onImportingChange,
+  onOpenReview
 }: SessionDashboardProps): React.JSX.Element {
   const { sessions, loading, error, refresh, deleteSession, renameSession } = useSessions()
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
@@ -164,6 +166,11 @@ export default function SessionDashboard({
                     session={session}
                     onRename={() => setRenameTarget(session)}
                     onDelete={() => setDeleteTarget(session)}
+                    onClick={
+                      session.status === 'review'
+                        ? () => onOpenReview?.(session.id)
+                        : undefined
+                    }
                   />
                 ))}
               </div>

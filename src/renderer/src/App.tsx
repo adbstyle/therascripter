@@ -2,15 +2,17 @@ import { useCallback, useState } from 'react'
 import SessionDashboard from './components/SessionDashboard'
 import RecordingView from './components/RecordingView'
 import Settings from './views/Settings'
+import ReviewEditor from './views/ReviewEditor'
 import { useRecording } from './hooks/useRecording'
 
-type View = 'sessions' | 'settings'
+type View = 'sessions' | 'settings' | 'review'
 
 export default function App(): React.JSX.Element {
   const { isRecording, duration, level, error, startRecording, stopRecording } = useRecording()
   const [currentView, setCurrentView] = useState<View>('sessions')
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [isImporting, setIsImporting] = useState(false)
+  const [reviewSessionId, setReviewSessionId] = useState<string | null>(null)
 
   const handleImportPDF = useCallback(async () => {
     if (isImporting) return
@@ -25,11 +27,27 @@ export default function App(): React.JSX.Element {
     }
   }, [isImporting])
 
+  const handleOpenReview = useCallback((sessionId: string) => {
+    setReviewSessionId(sessionId)
+    setCurrentView('review')
+  }, [])
+
+  const handleCloseReview = useCallback(() => {
+    setReviewSessionId(null)
+    setCurrentView('sessions')
+    setRefreshTrigger((v) => v + 1)
+  }, [])
+
+  const isInReview = currentView === 'review'
+  const sidebarDisabled = isRecording || isInReview
+
   const headerTitle = isRecording
     ? 'Aufnahme läuft'
     : currentView === 'sessions'
       ? 'Sitzungen'
-      : 'Einstellungen'
+      : currentView === 'settings'
+        ? 'Einstellungen'
+        : ''
 
   return (
     <div className="flex h-screen">
@@ -42,9 +60,9 @@ export default function App(): React.JSX.Element {
               currentView === 'sessions'
                 ? 'bg-gray-100 text-gray-900'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-            } ${isRecording ? 'pointer-events-none opacity-50' : ''}`}
+            } ${sidebarDisabled ? 'pointer-events-none opacity-50' : ''}`}
             onClick={() => setCurrentView('sessions')}
-            disabled={isRecording}
+            disabled={sidebarDisabled}
           >
             Sitzungen
           </button>
@@ -53,9 +71,9 @@ export default function App(): React.JSX.Element {
               currentView === 'settings'
                 ? 'bg-gray-100 text-gray-900'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-            } ${isRecording ? 'pointer-events-none opacity-50' : ''}`}
+            } ${sidebarDisabled ? 'pointer-events-none opacity-50' : ''}`}
             onClick={() => setCurrentView('settings')}
-            disabled={isRecording}
+            disabled={sidebarDisabled}
           >
             Einstellungen
           </button>
@@ -68,27 +86,29 @@ export default function App(): React.JSX.Element {
 
       {/* Main content */}
       <main className="flex flex-1 flex-col">
-        {/* Header — draggable titlebar region */}
-        <header className="titlebar-drag flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 className="text-2xl font-bold text-gray-900">{headerTitle}</h2>
-          {!isRecording && currentView === 'sessions' && (
-            <div className="flex items-center gap-2">
-              <button
-                className={`titlebar-no-drag rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
-                onClick={handleImportPDF}
-                disabled={isImporting}
-              >
-                PDF importieren
-              </button>
-              <button
-                className="titlebar-no-drag rounded-lg bg-recording px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
-                onClick={startRecording}
-              >
-                &#9679; Aufnahme starten
-              </button>
-            </div>
-          )}
-        </header>
+        {/* Header — only for non-review views (review has its own header) */}
+        {!isInReview && (
+          <header className="titlebar-drag flex items-center justify-between border-b border-gray-200 px-6 py-4">
+            <h2 className="text-2xl font-bold text-gray-900">{headerTitle}</h2>
+            {!isRecording && currentView === 'sessions' && (
+              <div className="flex items-center gap-2">
+                <button
+                  className={`titlebar-no-drag rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
+                  onClick={handleImportPDF}
+                  disabled={isImporting}
+                >
+                  PDF importieren
+                </button>
+                <button
+                  className="titlebar-no-drag rounded-lg bg-recording px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+                  onClick={startRecording}
+                >
+                  &#9679; Aufnahme starten
+                </button>
+              </div>
+            )}
+          </header>
+        )}
 
         {isRecording ? (
           <RecordingView
@@ -97,11 +117,14 @@ export default function App(): React.JSX.Element {
             error={error}
             onStop={stopRecording}
           />
+        ) : currentView === 'review' && reviewSessionId ? (
+          <ReviewEditor sessionId={reviewSessionId} onBack={handleCloseReview} />
         ) : currentView === 'sessions' ? (
           <SessionDashboard
             refreshTrigger={refreshTrigger}
             isImporting={isImporting}
             onImportingChange={setIsImporting}
+            onOpenReview={handleOpenReview}
           />
         ) : (
           <Settings />

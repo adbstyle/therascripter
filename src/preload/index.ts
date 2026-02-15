@@ -86,6 +86,11 @@ const api: IpcApi = {
     pdf: (filePaths) => ipcRenderer.invoke('import:pdf', { filePaths }),
     showPDFDialog: () => ipcRenderer.invoke('import:showPDFDialog'),
     getPathForFile: (file) => webUtils.getPathForFile(file)
+  },
+  review: {
+    load: (sessionId) => ipcRenderer.invoke('review:load', { sessionId }),
+    save: (sessionId, document, entityMap) =>
+      ipcRenderer.invoke('review:save', { sessionId, document, entityMap })
   }
 }
 

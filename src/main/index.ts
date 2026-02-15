@@ -13,6 +13,7 @@ import { registerSettingsHandlers } from './ipc/settings-handlers'
 import { registerTaskHandlers } from './ipc/task-handlers'
 import { registerBlocklistHandlers } from './ipc/blocklist-handlers'
 import { registerPDFHandlers } from './ipc/pdf-handlers'
+import { registerReviewHandlers } from './ipc/review-handlers'
 import { initTray, getTray } from './services/TrayService'
 import { WhisperService } from './ml/WhisperService'
 import { PyannoteSidecar } from './ml/PyannoteSidecar'
@@ -118,6 +119,7 @@ app.whenReady().then(() => {
   registerTaskHandlers()
   registerBlocklistHandlers()
   registerPDFHandlers()
+  registerReviewHandlers()
 
   setupCSP()
   createWindow()

@@ -25,6 +25,10 @@
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
+    "@tiptap/core": "^3.19.0",
+    "@tiptap/pm": "^3.19.0",
+    "@tiptap/react": "^3.19.0",
+    "@tiptap/starter-kit": "^3.19.0",
     "better-sqlite3": "^12.6.2",
     "electron-store": "^11.0.2",
     "pdfjs-dist": "^5.4.624",
