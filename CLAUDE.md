@@ -19,6 +19,7 @@ vitest run src/path/to/file.test.ts  # Run a single test file
 npm run lint          # ESLint with cache
 npm run format        # Prettier formatting
 npm run typecheck     # TypeScript check (both node + web configs)
+npm run start         # Preview production build (electron-vite preview)
 npm run package       # Build + electron-builder → macOS DMG (arm64 only)
 scripts/setup-whisper.sh          # Install whisper-cli via Homebrew → resources/bin/ + resources/lib/
 scripts/setup-whisper.sh --model  # Also download ASR model (~547 MB)
@@ -34,8 +35,10 @@ scripts/setup-ner.sh --model      # Also download NER model (~1.1 GB)
 
 **Three Electron processes:**
 - **Main** (`src/main/`) — App lifecycle, window creation, CSP injection, IPC handlers. Security-hardened: navigation blocked, popups denied, sandbox enabled.
-- **Preload** (`src/preload/`) — Context bridge exposing APIs to renderer. All IPC channels will use Zod schema validation.
+- **Preload** (`src/preload/`) — Context bridge exposing APIs to renderer. All IPC channels use Zod schema validation (schemas in `src/shared/validation/`).
 - **Renderer** (`src/renderer/`) — React 19 + Tailwind CSS UI. Path alias: `@renderer` → `src/renderer/src`.
+
+**Shared** (`src/shared/`) — Types and Zod validation schemas used by both main and renderer processes.
 
 **ML pipeline — Audio** (strictly sequential, one model at a time):
 1. whisper.cpp subprocess — ASR (Whisper Large V3 Turbo Q5_0, Metal GPU) ✓ implemented
@@ -49,19 +52,25 @@ scripts/setup-ner.sh --model      # Also download NER model (~1.1 GB)
 
 **ML models:** Stored in `~/.therascript/models/<type>/` (e.g. `models/asr/`, `models/diarization/`, `models/ner/`). Directories created at startup by `initDatabase()`.
 
+**First launch:** FirstLaunchScreen checks for models, validates disk space (5 GB minimum), downloads ~4.1 GB (Whisper 1.7 GB + Pyannote 0.2 GB + flair NER 2.2 GB) with progress tracking. Models persist across app updates.
+
 **Python sidecar:** Uses a venv at `python_sidecar/venv/` (gitignored). One-time setup after fresh clone: `scripts/setup-pyannote.sh --model` then `scripts/setup-ner.sh --model`. Pyannote requires HuggingFace token (`huggingface-cli login`) and accepted terms for `pyannote/speaker-diarization-3.1` + `pyannote/speaker-diarization-community-1`. The venv and models persist across builds — no re-setup needed for `npm run dev/build`.
 
 **Storage:** better-sqlite3 (sessions, blocklist) + electron-store (settings).
 
+**System tray:** TrayService provides macOS menu bar icon with stop-recording action. App keeps running in background when window is closed.
+
 **PDF import:** Drag-and-drop or button in SessionDashboard. Files copied to `~/.therascript/pdf/`. Import guard prevents duplicate imports. Copy failure triggers session rollback. Orphaned sessions (stuck in processing with no tasks) are recovered at startup.
 
-**UI navigation:** Simple view state (`'sessions' | 'settings' | 'review'`) in App.tsx — no router. Settings view has tabbed layout (Sperrliste/Modelle/Über). Review editor opened by clicking a session card in `review` status. Navigation disabled during recording and review.
+**UI navigation:** Simple view state (`'sessions' | 'settings' | 'review' | 'first-launch'`) in App.tsx — no router. Settings view has tabbed layout (Sperrliste/Modelle/Über). Review editor opened by clicking a session card in `review` status. Navigation disabled during recording and review. First-launch screen shown when models are not yet downloaded.
 
 **Key constraints:**
 - 8 GB minimum RAM budget (~5.2 GB peak during flair NER)
 - Production CSP: `connect-src 'none'` (zero network access)
 - Context isolation + sandbox always enabled
 - All ML models must be swappable (plugin architecture, NFR-9/10)
+- Electron Fuses hardened at build time (RunAsNode disabled, OnlyLoadAppFromAsar, cookie encryption)
+- FileVault check at startup — warns user if disk encryption is not enabled
 
 ## Code Conventions
 
@@ -78,4 +87,6 @@ scripts/setup-ner.sh --model      # Also download NER model (~1.1 GB)
 - **flair ORG entities:** Ignored (institutions only via Sperrliste/manual)
 - **Auto-deletion:** Sessions deleted 30 days after creation, silent
 - **Auto-stop recording:** 2 hours max
+- **Clipboard export:** Anonymized text can be exported to clipboard from Review Editor (toast confirmation)
+- **Quick-add to Sperrliste:** Selected text in Review Editor can be added to blocklist with retroactive re-anonymization
 - **Password-protected PDFs:** Not supported
