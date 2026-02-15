@@ -65,8 +65,8 @@ export function registerPDFHandlers(): void {
   })
 
   ipcMain.handle('import:showPDFDialog', async () => {
-    const window = BrowserWindow.getFocusedWindow()
-    const result = await dialog.showOpenDialog(window!, {
+    const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const result = await dialog.showOpenDialog(window, {
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'PDF-Dokumente', extensions: ['pdf'] }],
       message: 'PDF-Dokumente zum Anonymisieren auswählen'

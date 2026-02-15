@@ -51,7 +51,9 @@ export default function SessionDashboard({
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    setIsDragOver(false)
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOver(false)
+    }
   }, [])
 
   const grouped = groupSessionsByTime(sessions)
