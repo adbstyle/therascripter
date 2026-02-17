@@ -21,7 +21,11 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package": "npm run build && electron-builder --mac --config"
+    "package": "npm run build && electron-builder --mac --config",
+    "sidecar:build": "scripts/build-sidecar.sh",
+    "sidecar:package": "scripts/package-sidecar.sh",
+    "sidecar:upload": "scripts/upload-r2.sh",
+    "sidecar:deploy": "npm run sidecar:build && npm run sidecar:package && npm run sidecar:upload"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",

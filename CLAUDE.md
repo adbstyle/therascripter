@@ -27,6 +27,11 @@ scripts/setup-pyannote.sh         # Create Python venv with pyannote.audio → p
 scripts/setup-pyannote.sh --model # Also download diarization model
 scripts/setup-ner.sh              # Install flair into existing Python venv
 scripts/setup-ner.sh --model      # Also download NER model (~1.1 GB)
+scripts/setup-vision-ocr.sh       # Build Swift Vision OCR CLI helper → resources/bin/
+npm run sidecar:build              # PyInstaller-bundle Python sidecar → python_sidecar/dist/
+npm run sidecar:package            # Package models for R2 upload
+npm run sidecar:upload             # Upload model packages to Cloudflare R2
+npm run sidecar:deploy             # Build + package + upload (full pipeline)
 ```
 
 ## Architecture
@@ -54,7 +59,9 @@ scripts/setup-ner.sh --model      # Also download NER model (~1.1 GB)
 
 **First launch:** FirstLaunchScreen checks for models, validates disk space (5 GB minimum), downloads ~4.1 GB (Whisper 1.7 GB + Pyannote 0.2 GB + flair NER 2.2 GB) with progress tracking. Models persist across app updates.
 
-**Python sidecar:** Uses a venv at `python_sidecar/venv/` (gitignored). One-time setup after fresh clone: `scripts/setup-pyannote.sh --model` then `scripts/setup-ner.sh --model`. Pyannote requires HuggingFace token (`huggingface-cli login`) and accepted terms for `pyannote/speaker-diarization-3.1` + `pyannote/speaker-diarization-community-1`. The venv and models persist across builds — no re-setup needed for `npm run dev/build`.
+**Python sidecar:** Two modes: (1) **Dev**: Python venv at `python_sidecar/venv/` — one-time setup after fresh clone: `scripts/setup-pyannote.sh --model` then `scripts/setup-ner.sh --model`. (2) **Production**: PyInstaller-bundled binaries at `python_sidecar/dist/` (no venv needed). Build with `npm run sidecar:build`. Pyannote requires HuggingFace token (`huggingface-cli login`) and accepted terms for `pyannote/speaker-diarization-3.1` + `pyannote/speaker-diarization-community-1`. The venv and models persist across builds — no re-setup needed for `npm run dev/build`.
+
+**Review Editor extensions:** 3 custom TipTap node extensions in `src/renderer/src/extensions/` — `placeholderChip` (anonymized entity chips), `speakerLabel` (speaker diarization labels), `timestamp` (time markers). Corresponding NodeViews in `components/editor/`.
 
 **Storage:** better-sqlite3 (sessions, blocklist) + electron-store (settings).
 
@@ -62,7 +69,7 @@ scripts/setup-ner.sh --model      # Also download NER model (~1.1 GB)
 
 **PDF import:** Drag-and-drop or button in SessionDashboard. Files copied to `~/.therascript/pdf/`. Import guard prevents duplicate imports. Copy failure triggers session rollback. Orphaned sessions (stuck in processing with no tasks) are recovered at startup.
 
-**UI navigation:** Simple view state (`'sessions' | 'settings' | 'review' | 'first-launch'`) in App.tsx — no router. Settings view has tabbed layout (Sperrliste/Modelle/Über). Review editor opened by clicking a session card in `review` status. Navigation disabled during recording and review. First-launch screen shown when models are not yet downloaded.
+**UI navigation:** Simple view state (`'sessions' | 'settings' | 'review'`) in App.tsx — no router. First-launch screen is shown conditionally via `modelsReady` state (not a view). Settings view has tabbed layout (Sperrliste/Modelle/Über). Review editor opened by clicking a session card in `review` status. Navigation disabled during recording and review. First-launch screen shown when models are not yet downloaded.
 
 **Key constraints:**
 - 8 GB minimum RAM budget (~5.2 GB peak during flair NER)
@@ -71,6 +78,13 @@ scripts/setup-ner.sh --model      # Also download NER model (~1.1 GB)
 - All ML models must be swappable (plugin architecture, NFR-9/10)
 - Electron Fuses hardened at build time (RunAsNode disabled, OnlyLoadAppFromAsar, cookie encryption)
 - FileVault check at startup — warns user if disk encryption is not enabled
+
+## Gotchas
+
+- **better-sqlite3 native rebuild:** `postinstall`, `predev`, `pretest` scripts auto-run `electron-rebuild` with `SDKROOT`. If native module errors occur, run `npm run postinstall` manually.
+- **`env -u ELECTRON_RUN_AS_NODE`:** The `dev` script unsets this env var because Electron Fuses disable RunAsNode — without this workaround, `electron-vite dev` fails.
+- **`.env` file:** Contains Cloudflare R2 credentials for model uploads. Gitignored — never commit.
+- **Vitest setup:** Requires `tests/setup.ts` (jsdom environment). Referenced in `vitest.config.ts`.
 
 ## Code Conventions
 

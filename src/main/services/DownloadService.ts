@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import { execFile } from 'child_process'
 import { createReadStream, createWriteStream, existsSync, renameSync, statSync, unlinkSync } from 'fs'
 import { get as httpsGet } from 'https'
 import { get as httpGet, type IncomingMessage } from 'http'
@@ -129,4 +130,22 @@ export function cleanupPartial(targetPath: string): void {
   } catch {
     // Ignore cleanup errors
   }
+}
+
+export function extractTarGz(archivePath: string, targetDir: string): Promise<DownloadResult> {
+  return new Promise((resolve) => {
+    execFile('tar', ['-xzf', archivePath, '-C', targetDir], (error) => {
+      if (error) {
+        resolve({ success: false, error: `Extraction fehlgeschlagen: ${error.message}` })
+        return
+      }
+      // Clean up archive after successful extraction
+      try {
+        unlinkSync(archivePath)
+      } catch {
+        // Non-fatal
+      }
+      resolve({ success: true })
+    })
+  })
 }

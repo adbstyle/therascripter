@@ -104,6 +104,7 @@ export interface ModelDownloadProgress {
 export type ModelDownloadStatus =
   | { state: 'idle' }
   | { state: 'downloading'; progress: ModelDownloadProgress }
+  | { state: 'extracting'; modelId: string }
   | { state: 'verifying'; modelId: string }
   | { state: 'complete' }
   | { state: 'error'; error: string; modelId: string }

@@ -12,15 +12,22 @@ import { getDatabase, getDataDir } from '../db/connection'
 const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
 
 export class PyannoteSidecar implements TaskExecutor {
-  private getPythonPath(): string {
+  /**
+   * Resolve the diarize binary/script path.
+   * Production: PyInstaller binary bundled in extraResources (no Python needed).
+   * Dev: venv Python + diarize.py script.
+   */
+  private getCommand(): { bin: string; args: string[] } {
+    if (app.isPackaged) {
+      // Production: PyInstaller binary in extraResources/ml_sidecar/
+      const binary = join(process.resourcesPath, 'ml_sidecar', 'diarize')
+      return { bin: binary, args: [] }
+    }
+    // Dev: use venv Python + script
     const venvPython = join(app.getAppPath(), 'python_sidecar', 'venv', 'bin', 'python3')
-    if (existsSync(venvPython)) return venvPython
-    // Fallback: system Python
-    return 'python3'
-  }
-
-  private getScriptPath(): string {
-    return join(app.getAppPath(), 'python_sidecar', 'diarize.py')
+    const pythonPath = existsSync(venvPython) ? venvPython : 'python3'
+    const scriptPath = join(app.getAppPath(), 'python_sidecar', 'diarize.py')
+    return { bin: pythonPath, args: [scriptPath] }
   }
 
   private getModelDir(): string {
@@ -28,12 +35,11 @@ export class PyannoteSidecar implements TaskExecutor {
   }
 
   async execute(task: Task, onProgress: (progress: number) => void): Promise<void> {
-    const scriptPath = this.getScriptPath()
-    const pythonPath = this.getPythonPath()
+    const { bin, args: prefixArgs } = this.getCommand()
 
-    if (!existsSync(scriptPath)) {
+    if (!existsSync(bin)) {
       throw new Error(
-        `Diarization-Script nicht gefunden: ${scriptPath}. Bitte prüfen Sie die Installation.`
+        `Diarization-Binary nicht gefunden: ${bin}. Bitte prüfen Sie die Installation.`
       )
     }
 
@@ -57,8 +63,8 @@ export class PyannoteSidecar implements TaskExecutor {
 
     // Run pyannote diarization
     const rttmOutput = await this.runPyannote(
-      pythonPath,
-      scriptPath,
+      bin,
+      prefixArgs,
       session.audioPath,
       timeoutMs,
       onProgress
@@ -78,8 +84,8 @@ export class PyannoteSidecar implements TaskExecutor {
   }
 
   private runPyannote(
-    pythonPath: string,
-    scriptPath: string,
+    bin: string,
+    prefixArgs: string[],
     audioPath: string,
     timeoutMs: number,
     onProgress: (progress: number) => void
@@ -87,7 +93,7 @@ export class PyannoteSidecar implements TaskExecutor {
     return new Promise((resolve, reject) => {
       const modelDir = this.getModelDir()
       const args = [
-        scriptPath,
+        ...prefixArgs,
         '--audio',
         audioPath,
         '--model-dir',
@@ -99,7 +105,7 @@ export class PyannoteSidecar implements TaskExecutor {
       ]
 
       // QoS: nice -n 10 (NFR-23)
-      const proc = spawn('nice', ['-n', '10', pythonPath, ...args], {
+      const proc = spawn('nice', ['-n', '10', bin, ...args], {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: {
           ...process.env,
@@ -135,11 +141,10 @@ export class PyannoteSidecar implements TaskExecutor {
       proc.on('error', (error) => {
         clearTimeout(timeout)
         if (error.message.includes('ENOENT')) {
-          reject(
-            new Error(
-              `Python 3 nicht gefunden. Bitte installieren Sie Python 3.10+ oder führen Sie scripts/setup-pyannote.sh aus.`
-            )
-          )
+          const msg = app.isPackaged
+            ? `Diarization-Binary nicht ausführbar: ${bin}. Bitte prüfen Sie die Installation.`
+            : `Python 3 nicht gefunden. Bitte installieren Sie Python 3.10+ oder führen Sie scripts/setup-pyannote.sh aus.`
+          reject(new Error(msg))
         } else {
           reject(new Error(`Diarization konnte nicht gestartet werden: ${error.message}`))
         }

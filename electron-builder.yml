@@ -21,6 +21,10 @@ extraResources:
     to: lib
     filter:
       - '**/*'
+  - from: python_sidecar/dist/ml_sidecar
+    to: ml_sidecar
+    filter:
+      - '**/*'
 afterPack: build-scripts/afterPack.js
 mac:
   target:

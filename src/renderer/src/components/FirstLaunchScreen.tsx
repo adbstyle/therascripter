@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
+  ModelDownloadProgress,
   ModelDownloadStatus,
   ModelStatusInfo,
   DiskSpaceInfo
@@ -22,12 +23,16 @@ export default function FirstLaunchScreen({
   const [diskSpace, setDiskSpace] = useState<DiskSpaceInfo | null>(null)
   const [status, setStatus] = useState<ModelDownloadStatus>({ state: 'idle' })
   const [started, setStarted] = useState(false)
+  const lastProgressRef = useRef<ModelDownloadProgress | null>(null)
 
   useEffect(() => {
     window.api.modelDownload.status().then(setModelInfo)
     window.api.modelDownload.checkDiskSpace().then(setDiskSpace)
 
     const unsub = window.api.modelDownload.onStatus((s) => {
+      if (s.state === 'downloading') {
+        lastProgressRef.current = s.progress
+      }
       setStatus(s)
       if (s.state === 'complete') {
         onComplete()
@@ -77,12 +82,18 @@ export default function FirstLaunchScreen({
   }
 
   const isDownloading = status.state === 'downloading'
+  const isExtracting = status.state === 'extracting'
   const isVerifying = status.state === 'verifying'
   const isError = status.state === 'error'
   const progress = isDownloading ? status.progress : null
+  // Keep overall progress bar visible during extracting/verifying states
+  const displayProgress = progress ?? lastProgressRef.current
 
-  // Find which model is currently being downloaded
-  const currentModelId = progress?.currentModel || (isVerifying ? status.modelId : null)
+  // Find which model is currently being processed
+  const currentModelId =
+    progress?.currentModel ||
+    (isExtracting ? status.modelId : null) ||
+    (isVerifying ? status.modelId : null)
 
   return (
     <div className="flex h-screen flex-col items-center justify-center bg-white">
@@ -100,7 +111,7 @@ export default function FirstLaunchScreen({
         {!started && (
           <div className="mb-8 text-center">
             <p className="mb-6 text-sm text-gray-600">
-              Für die erste Einrichtung werden ML-Modelle heruntergeladen (~4.0 GB). Dies ist der
+              Für die erste Einrichtung werden ML-Modelle heruntergeladen (~2.2 GB). Dies ist der
               einzige Zeitpunkt, an dem eine Internetverbindung nötig ist.
             </p>
             <button
@@ -118,7 +129,7 @@ export default function FirstLaunchScreen({
             {modelInfo?.models.map((model) => {
               const isCurrent = model.id === currentModelId
               const isCompleted =
-                progress &&
+                currentModelId &&
                 modelInfo.models.indexOf(model) <
                   modelInfo.models.findIndex((m) => m.id === currentModelId)
 
@@ -141,6 +152,9 @@ export default function FirstLaunchScreen({
                       />
                     </div>
                   )}
+                  {isCurrent && isExtracting && (
+                    <p className="text-xs text-gray-400">Wird entpackt…</p>
+                  )}
                   {isCurrent && isVerifying && (
                     <p className="text-xs text-gray-400">Wird überprüft…</p>
                   )}
@@ -149,18 +163,19 @@ export default function FirstLaunchScreen({
             })}
 
             {/* Overall progress */}
-            {progress && (
+            {displayProgress && (
               <div className="mt-4 border-t border-gray-100 pt-3">
                 <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
                   <span>Gesamt</span>
                   <span>
-                    {formatBytes(progress.overallDownloaded)} / {formatBytes(progress.overallTotal)}
+                    {formatBytes(displayProgress.overallDownloaded)} /{' '}
+                    {formatBytes(displayProgress.overallTotal)}
                   </span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-gray-200">
                   <div
                     className="h-full rounded-full bg-primary transition-all duration-300"
-                    style={{ width: `${progress.overallPercent}%` }}
+                    style={{ width: `${displayProgress.overallPercent}%` }}
                   />
                 </div>
               </div>

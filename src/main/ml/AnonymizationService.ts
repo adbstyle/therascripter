@@ -18,14 +18,20 @@ import { buildTipTapDocument } from './tiptap-builder'
 const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
 
 export class AnonymizationService implements TaskExecutor {
-  private getPythonPath(): string {
+  /**
+   * Resolve the ner_service binary/script path.
+   * Production: PyInstaller binary bundled in extraResources (no Python needed).
+   * Dev: venv Python + ner_service.py script.
+   */
+  private getCommand(): { bin: string; args: string[] } {
+    if (app.isPackaged) {
+      const binary = join(process.resourcesPath, 'ml_sidecar', 'ner_service')
+      return { bin: binary, args: [] }
+    }
     const venvPython = join(app.getAppPath(), 'python_sidecar', 'venv', 'bin', 'python3')
-    if (existsSync(venvPython)) return venvPython
-    return 'python3'
-  }
-
-  private getScriptPath(): string {
-    return join(app.getAppPath(), 'python_sidecar', 'ner_service.py')
+    const pythonPath = existsSync(venvPython) ? venvPython : 'python3'
+    const scriptPath = join(app.getAppPath(), 'python_sidecar', 'ner_service.py')
+    return { bin: pythonPath, args: [scriptPath] }
   }
 
   private getModelDir(): string {
@@ -114,21 +120,20 @@ export class AnonymizationService implements TaskExecutor {
     onProgress: (progress: number) => void
   ): Promise<NerServiceOutput['entities']> {
     return new Promise((resolve, reject) => {
-      const scriptPath = this.getScriptPath()
-      const pythonPath = this.getPythonPath()
+      const { bin, args: prefixArgs } = this.getCommand()
 
-      if (!existsSync(scriptPath)) {
+      if (!existsSync(bin)) {
         reject(
-          new Error(`NER-Script nicht gefunden: ${scriptPath}. Bitte prüfen Sie die Installation.`)
+          new Error(`NER-Binary nicht gefunden: ${bin}. Bitte prüfen Sie die Installation.`)
         )
         return
       }
 
       const modelDir = this.getModelDir()
-      const args = [scriptPath, '--transcript', transcriptPath, '--model-dir', modelDir]
+      const args = [...prefixArgs, '--transcript', transcriptPath, '--model-dir', modelDir]
 
       // QoS: nice -n 10 (NFR-23)
-      const proc = spawn('nice', ['-n', '10', pythonPath, ...args], {
+      const proc = spawn('nice', ['-n', '10', bin, ...args], {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: {
           ...process.env,
@@ -167,11 +172,10 @@ export class AnonymizationService implements TaskExecutor {
       proc.on('error', (error) => {
         clearTimeout(timeout)
         if (error.message.includes('ENOENT')) {
-          reject(
-            new Error(
-              'Python 3 nicht gefunden. Bitte installieren Sie Python 3.10+ oder führen Sie scripts/setup-ner.sh aus.'
-            )
-          )
+          const msg = app.isPackaged
+            ? `NER-Binary nicht ausführbar: ${bin}. Bitte prüfen Sie die Installation.`
+            : 'Python 3 nicht gefunden. Bitte installieren Sie Python 3.10+ oder führen Sie scripts/setup-ner.sh aus.'
+          reject(new Error(msg))
         } else {
           reject(new Error(`NER konnte nicht gestartet werden: ${error.message}`))
         }

@@ -1,17 +1,25 @@
-import { existsSync, statSync } from 'fs'
+import { existsSync, mkdirSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { BrowserWindow } from 'electron'
 import { getDataDir } from '../db/connection'
 import { getSettings } from './SettingsService'
-import { downloadFile, verifyFileSha256, cleanupPartial } from './DownloadService'
+import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
+
+const R2_CDN = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev'
 
 export interface ModelDefinition {
   id: string
   label: string
   url: string
-  relativePath: string
   sizeBytes: number
   sha256: string
+  // For flat files: relative path to the final file (e.g., 'asr/ggml-large-v3-turbo-q5_0.bin')
+  // For archives: relative path of the extraction directory (e.g., 'diarization')
+  relativePath: string
+  // If true, download is a tar.gz that needs extraction into relativePath
+  archive?: boolean
+  // Path to check for existence (relative to modelsDir). Used by checkModelsExist().
+  checkPath: string
 }
 
 export interface ModelDownloadProgress {
@@ -28,35 +36,41 @@ export interface ModelDownloadProgress {
 export type ModelDownloadStatus =
   | { state: 'idle' }
   | { state: 'downloading'; progress: ModelDownloadProgress }
+  | { state: 'extracting'; modelId: string }
   | { state: 'verifying'; modelId: string }
   | { state: 'complete' }
   | { state: 'error'; error: string; modelId: string }
 
-// Model definitions — these URLs point to HuggingFace model files
+// Model definitions — downloads from Cloudflare R2 CDN
 const MODEL_DEFINITIONS: ModelDefinition[] = [
   {
     id: 'whisper-large-v3-turbo',
     label: 'Spracherkennung (whisper-large-v3-turbo)',
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin',
+    url: `${R2_CDN}/whisper-ggml-large-v3-turbo-q5_0.bin`,
     relativePath: 'asr/ggml-large-v3-turbo-q5_0.bin',
-    sizeBytes: 1_700_000_000,
-    sha256: '' // To be filled with actual hash
+    checkPath: 'asr/ggml-large-v3-turbo-q5_0.bin',
+    sizeBytes: 574_041_195,
+    sha256: '' // To be filled after packaging
   },
   {
     id: 'pyannote-community-1',
     label: 'Sprechererkennung (pyannote-community-1)',
-    url: 'https://huggingface.co/pyannote/speaker-diarization-3.1/resolve/main/pytorch_model.bin',
-    relativePath: 'diarization/pytorch_model.bin',
-    sizeBytes: 200_000_000,
-    sha256: '' // To be filled with actual hash
+    url: `${R2_CDN}/pyannote-models.tar.gz`,
+    relativePath: 'diarization',
+    checkPath: 'diarization/models--pyannote--speaker-diarization-3.1',
+    sizeBytes: 30_461_576,
+    sha256: '', // To be filled after packaging
+    archive: true
   },
   {
     id: 'flair-ner-german-large',
     label: 'Anonymisierung (flair-ner-german-large)',
-    url: 'https://huggingface.co/flair/ner-german-large/resolve/main/pytorch-model.bin',
-    relativePath: 'ner/pytorch-model.bin',
-    sizeBytes: 2_200_000_000,
-    sha256: '' // To be filled with actual hash
+    url: `${R2_CDN}/flair-ner-german-large.tar.gz`,
+    relativePath: 'ner',
+    checkPath: 'ner/models/ner-german-large',
+    sizeBytes: 1_741_705_629,
+    sha256: '', // To be filled after packaging
+    archive: true
   }
 ]
 
@@ -73,8 +87,8 @@ export function getModelsDir(): string {
 export function checkModelsExist(): boolean {
   const modelsDir = getModelsDir()
   return MODEL_DEFINITIONS.every((model) => {
-    const targetPath = join(modelsDir, model.relativePath)
-    return existsSync(targetPath)
+    const checkTarget = join(modelsDir, model.checkPath)
+    return existsSync(checkTarget)
   })
 }
 
@@ -86,11 +100,13 @@ export function getAlreadyDownloadedBytes(): number {
   const modelsDir = getModelsDir()
   let total = 0
   for (const model of MODEL_DEFINITIONS) {
-    const targetPath = join(modelsDir, model.relativePath)
-    if (existsSync(targetPath)) {
-      total += statSync(targetPath).size
-    } else {
-      const partialPath = targetPath + '.partial'
+    const checkTarget = join(modelsDir, model.checkPath)
+    if (existsSync(checkTarget)) {
+      // Model already extracted/downloaded — count full size
+      total += model.sizeBytes
+    } else if (!model.archive) {
+      // Check for partial download of flat file
+      const partialPath = join(modelsDir, model.relativePath) + '.partial'
       if (existsSync(partialPath)) {
         total += statSync(partialPath).size
       }
@@ -115,10 +131,10 @@ export async function startModelDownload(): Promise<void> {
   let overallDownloaded = 0
 
   for (const model of MODEL_DEFINITIONS) {
-    const targetPath = join(modelsDir, model.relativePath)
+    const checkTarget = join(modelsDir, model.checkPath)
 
-    // Skip already downloaded models
-    if (existsSync(targetPath)) {
+    // Skip already downloaded/extracted models
+    if (existsSync(checkTarget)) {
       overallDownloaded += model.sizeBytes
       continue
     }
@@ -127,6 +143,12 @@ export async function startModelDownload(): Promise<void> {
       sendProgress({ state: 'error', error: 'Download abgebrochen', modelId: model.id })
       return
     }
+
+    // For archives: download to a temp .tar.gz file, then extract
+    // For flat files: download directly to the target path
+    const targetPath = model.archive
+      ? join(modelsDir, `${model.id}.tar.gz`)
+      : join(modelsDir, model.relativePath)
 
     const baseOverall = overallDownloaded
 
@@ -152,7 +174,11 @@ export async function startModelDownload(): Promise<void> {
     )
 
     if (!result.success) {
-      sendProgress({ state: 'error', error: result.error ?? 'Download fehlgeschlagen', modelId: model.id })
+      sendProgress({
+        state: 'error',
+        error: result.error ?? 'Download fehlgeschlagen',
+        modelId: model.id
+      })
       abortSignal = null
       return
     }
@@ -162,16 +188,28 @@ export async function startModelDownload(): Promise<void> {
       sendProgress({ state: 'verifying', modelId: model.id })
       const valid = await verifyFileSha256(targetPath, model.sha256)
       if (!valid) {
-        cleanupPartial(targetPath)
-        try {
-          const { unlinkSync } = await import('fs')
-          unlinkSync(targetPath)
-        } catch {
-          // Ignore
-        }
+        try { unlinkSync(targetPath) } catch { /* non-fatal */ }
         sendProgress({
           state: 'error',
           error: `SHA-256-Prüfung fehlgeschlagen für ${model.label}`,
+          modelId: model.id
+        })
+        abortSignal = null
+        return
+      }
+    }
+
+    // Extract tar.gz archives
+    if (model.archive) {
+      sendProgress({ state: 'extracting', modelId: model.id })
+      const extractDir = join(modelsDir, model.relativePath)
+      mkdirSync(extractDir, { recursive: true })
+      const extractResult = await extractTarGz(targetPath, extractDir)
+      if (!extractResult.success) {
+        try { unlinkSync(targetPath) } catch { /* non-fatal */ }
+        sendProgress({
+          state: 'error',
+          error: extractResult.error ?? 'Entpacken fehlgeschlagen',
           modelId: model.id
         })
         abortSignal = null
