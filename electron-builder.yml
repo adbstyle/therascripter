@@ -18,6 +18,7 @@ files:
   - '!resources/**/*'
   - '!build-scripts/**/*'
   - '!#/**/*'
+  - '!docs/**/*'
 extraResources:
   - from: resources/bin
     to: bin
