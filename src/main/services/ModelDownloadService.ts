@@ -50,7 +50,7 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     relativePath: 'asr/ggml-large-v3-turbo-q5_0.bin',
     checkPath: 'asr/ggml-large-v3-turbo-q5_0.bin',
     sizeBytes: 574_041_195,
-    sha256: '' // To be filled after packaging
+    sha256: '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2'
   },
   {
     id: 'pyannote-community-1',
@@ -58,8 +58,8 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     url: `${R2_CDN}/pyannote-models.tar.gz`,
     relativePath: 'diarization',
     checkPath: 'diarization/models--pyannote--speaker-diarization-3.1',
-    sizeBytes: 30_461_576,
-    sha256: '', // To be filled after packaging
+    sizeBytes: 30_461_603,
+    sha256: '81ec9fc7551884e8b7b47fbb07eb67c787220d92673c9c00a2677d2d78c2f186',
     archive: true
   },
   {
@@ -68,8 +68,8 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     url: `${R2_CDN}/flair-ner-german-large.tar.gz`,
     relativePath: 'ner',
     checkPath: 'ner/models/ner-german-large',
-    sizeBytes: 1_741_705_629,
-    sha256: '', // To be filled after packaging
+    sizeBytes: 1_741_705_466,
+    sha256: 'f512eca0bed5372ea691b7f0e92e29dd02cd4d57fed6adf406cf884a817133e3',
     archive: true
   }
 ]

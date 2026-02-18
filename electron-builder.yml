@@ -12,6 +12,12 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   - '!{vitest.config.*}'
   - '!{*.md,LICENSE}'
+  - '!python_sidecar/**/*'
+  - '!r2-upload/**/*'
+  - '!scripts/**/*'
+  - '!resources/**/*'
+  - '!build-scripts/**/*'
+  - '!#/**/*'
 extraResources:
   - from: resources/bin
     to: bin
@@ -31,8 +37,7 @@ mac:
     - target: dmg
       arch: arm64
   category: public.app-category.medical
-  entitlements: build/entitlements.mac.plist
-  entitlementsInherit: build/entitlements.mac.plist
+  identity: null
 dmg:
   contents:
     - x: 130
