@@ -20,7 +20,7 @@ npm run lint          # ESLint with cache
 npm run format        # Prettier formatting
 npm run typecheck     # TypeScript check (both node + web configs)
 npm run start         # Preview production build (electron-vite preview)
-npm run package       # Build + electron-builder → macOS DMG (arm64 only)
+npm run package       # electron-rebuild + build + electron-builder → macOS DMG (arm64 only)
 scripts/setup-whisper.sh          # Install whisper-cli via Homebrew → resources/bin/ + resources/lib/
 scripts/setup-whisper.sh --model  # Also download ASR model (~547 MB)
 scripts/setup-pyannote.sh         # Create Python venv with pyannote.audio → python_sidecar/venv/
@@ -81,7 +81,7 @@ npm run sidecar:deploy             # Build + package + upload (full pipeline)
 
 ## Gotchas
 
-- **better-sqlite3 native rebuild:** `postinstall`, `predev`, `pretest` scripts auto-run `electron-rebuild` with `SDKROOT`. If native module errors occur, run `npm run postinstall` manually.
+- **better-sqlite3 native rebuild:** `postinstall` and `predev` run `electron-rebuild` (for Electron ABI), while `pretest`/`pretest:watch` run `npm rebuild` (for system Node.js ABI). The `package` script runs `electron-rebuild` explicitly before building; `npmRebuild: false` in `electron-builder.yml` prevents electron-builder's own unreliable rebuild. If native module errors occur, run `npm run postinstall` manually.
 - **`env -u ELECTRON_RUN_AS_NODE`:** The `dev` script unsets this env var because Electron Fuses disable RunAsNode — without this workaround, `electron-vite dev` fails.
 - **`.env` file:** Contains Cloudflare R2 credentials for model uploads. Gitignored — never commit.
 - **Vitest setup:** Requires `tests/setup.ts` (jsdom environment). Referenced in `vitest.config.ts`.
