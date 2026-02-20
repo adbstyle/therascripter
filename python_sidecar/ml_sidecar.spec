@@ -121,9 +121,10 @@ all_datas = pyannote_datas + flair_datas + lightning_datas + torchaudio_datas + 
 excludes = [
     # torchcodec — blocked by runtime hook, exclude stubs too
     'torchcodec',
-    # torch bloat (headers, inductor, distributed, testing)
+    # torch bloat (headers, inductor, testing)
     'torch._inductor',
-    'torch.distributed',
+    # NOTE: torch.distributed must NOT be excluded — flair imports it top-level
+    # (flair.trainers → flair.distributed_utils → torch.distributed)
     'torch.testing',
     'torch.utils.benchmark',
     'torch.utils.tensorboard',
