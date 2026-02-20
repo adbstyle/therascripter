@@ -85,6 +85,8 @@ npm run sidecar:deploy             # Build + package + upload (full pipeline)
 - **`env -u ELECTRON_RUN_AS_NODE`:** The `dev` script unsets this env var because Electron Fuses disable RunAsNode — without this workaround, `electron-vite dev` fails.
 - **`.env` file:** Contains Cloudflare R2 credentials for model uploads. Gitignored — never commit.
 - **Vitest setup:** Requires `tests/setup.ts` (jsdom environment). Referenced in `vitest.config.ts`.
+- **Code signing:** No Apple Developer account — `identity: null` in `electron-builder.yml` disables electron-builder signing. `afterPack.js` flips Electron Fuses and must use `resetAdHocDarwinSignature: true` to re-sign with ad-hoc signature (`codesign --sign -`). Without this, ARM64 macOS kills the app on launch (`CODESIGNING, Code 2 Invalid Page`). Users must right-click → Open on first launch.
+- **electron-vite externals:** `electron-store` (main) and `@electron-toolkit/preload` (preload) are excluded from `externalizeDeps` in `electron.vite.config.ts` — they must be bundled, not externalized.
 
 ## Code Conventions
 

@@ -21,6 +21,7 @@ module.exports = async function afterPack(context) {
 
   await flipFuses(electronBinary, {
     version: FuseVersion.V1,
+    resetAdHocDarwinSignature: true,
     [FuseV1Options.RunAsNode]: false,
     [FuseV1Options.EnableCookieEncryption]: true,
     [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
