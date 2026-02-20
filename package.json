@@ -21,7 +21,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package": "npm run build && electron-builder --mac --config",
+    "package": "SDKROOT=$(xcrun --show-sdk-path) electron-rebuild -f -w better-sqlite3 && npm run build && electron-builder --mac --config",
     "sidecar:build": "scripts/build-sidecar.sh",
     "sidecar:package": "scripts/package-sidecar.sh",
     "sidecar:upload": "scripts/upload-r2.sh",

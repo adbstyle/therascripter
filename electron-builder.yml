@@ -32,6 +32,7 @@ extraResources:
     to: ml_sidecar
     filter:
       - '**/*'
+npmRebuild: false
 afterPack: build-scripts/afterPack.js
 mac:
   target:
