@@ -452,7 +452,7 @@
 2. Alle ML-Modelle sind lokal heruntergeladen und verifiziert (SHA-256, siehe NFR-16)
 
 **Out of Scope:**
-- Automatische Updates (kein Auto-Updater im MVP — neue Version = neue .dmg, Entscheidung #131)
+- Automatische App-Updates (kein Auto-Updater — neue App-Version = neue .dmg, Entscheidung #131). ML-Modell-Updates sind separat in US-9a geregelt
 - Mac App Store Distribution (Entscheidung #128, #129)
 - Intel (x86_64) Unterstützung (Entscheidung #130)
 - Offline-Installation (Modelle müssen beim First-Launch heruntergeladen werden)
@@ -502,6 +502,57 @@
 
 ---
 
+### Epic 9: Modell-Update
+
+#### US-9a: ML-Modelle automatisch aktualisieren
+
+**Als** Psychotherapeut/in
+**möchte ich**, dass meine App beim Start automatisch prüft, ob neuere ML-Modelle verfügbar sind, und diese beim nächsten Neustart installiert,
+**damit** ich immer die aktuellsten Modelle nutze, ohne manuell Dateien herunterladen oder eine neue App-Version installieren zu müssen.
+
+**Vorbedingungen:**
+1. Die App ist installiert und alle ML-Modelle wurden beim First Launch erfolgreich heruntergeladen (US-8a abgeschlossen)
+2. Der USER hat Internetzugang beim App-Start
+
+**Akzeptanzkriterien:**
+1. Das SYSTEM prüft beim App-Start im Hintergrund, ob neuere Versionen der ML-Modelle verfügbar sind
+2. Der App-Start wird durch die Update-Prüfung nicht blockiert — das Dashboard ist sofort nutzbar
+3. Das SYSTEM zeigt ein Info-Banner im Dashboard sobald mindestens ein Modell-Update verfügbar ist
+4. Das Banner informiert den USER, dass ein Neustart erforderlich ist, und bietet eine Neustart-Aktion an
+5. Der USER kann über das Banner einen App-Neustart auslösen
+6. Das SYSTEM zeigt einen Warndialog WENN der USER den Neustart auslöst UND eine Aufnahme läuft oder eine Session verarbeitet wird — der USER entscheidet ob der Neustart trotzdem durchgeführt wird
+7. Das SYSTEM lädt beim Neustart die aktualisierten Modelle herunter und zeigt den Fortschritt an (Download-Screen wie beim First Launch)
+8. Das SYSTEM lädt nur die tatsächlich aktualisierten Modelle herunter, nicht alle
+9. Das SYSTEM verifiziert die Integrität jedes heruntergeladenen Modells vor der Aktivierung (SHA-256, siehe NFR-16)
+10. Nach Abschluss des Downloads sind die neuen Modelle aktiv — kein weiterer Neustart nötig
+11. Falls der Download eines Modells fehlschlägt, werden alle Updates verworfen — alle Modelle behalten ihre bisherige Version
+12. Beim nächsten App-Start versucht das SYSTEM erneut, alle ausstehenden Updates herunterzuladen
+13. Falls die Update-Prüfung fehlschlägt (kein Internet, Server nicht erreichbar), startet die App normal mit den vorhandenen Modellen ohne Fehlermeldung
+14. Falls kein Internet verfügbar ist, arbeitet die App unbegrenzt mit den vorhandenen Modellen weiter — kein Hinweis auf fehlgeschlagene Prüfungen
+
+**Nachbedingungen:**
+1. Die aktualisierten Modelle sind lokal gespeichert und für alle zukünftigen Verarbeitungen aktiv
+2. Das Update-Banner verschwindet nach erfolgreichem Update aller Modelle
+
+**Out of Scope:**
+- Automatisches Update des Python Sidecar (bleibt im App-Bundle, wird mit neuer .dmg aktualisiert)
+- Automatisches Update von whisper-cli oder Vision OCR Binaries (bleiben im App-Bundle)
+- App-Auto-Updater (neue App-Version = neue .dmg, Entscheidung #131)
+- Rollback auf ältere Modell-Versionen
+- Selektives Update einzelner Modelle durch den USER (alle verfügbaren Updates werden als Einheit installiert)
+- Manuelle Update-Prüfung in Settings (nur automatisch beim Start)
+- Hinweis bei langanhaltend fehlgeschlagener Update-Prüfung
+- Teilweise Aktivierung von Updates (alle Modelle werden als Einheit aktualisiert — Inkompatibilitäten vermeiden)
+
+**Constraints & Randbedingungen:**
+1. NFR-1 (keine Cloud-Verarbeitung) bleibt unberührt — der Modell-Download enthält keine Nutzerdaten
+2. NFR-12 (Netzwerk-Isolation): Update-Check und Downloads laufen ausschliesslich im Main Process (CSP `connect-src 'none'` im Renderer bleibt bestehen)
+3. NFR-16 (Modell-Integritätsprüfung per SHA-256) gilt auch für Update-Downloads
+4. NFR-21 (App-Startzeit < 5s): Update-Check darf den Start nicht blockieren
+5. Entscheidung #131 (kein App-Auto-Updater) bleibt unberührt — US-9a betrifft ausschliesslich ML-Modell-Updates, nicht die App selbst (Entscheidung #158)
+
+---
+
 ## 4. Nicht-funktionale Anforderungen
 
 | ID | Kategorie | Anforderung | Ziel | Priorität |
@@ -539,6 +590,9 @@
 | NFR-31 | Distribution | .dmg-Packaging für macOS | ARM64-only .dmg mit Drag-to-Applications; ~250 MB Installer-Grösse (ohne ML-Modelle) | Hoch |
 | NFR-32 | Usability | Saubere Deinstallation | In-App-Uninstaller entfernt alle Daten und Modelle (~4.7 GB); keine Rückstände im Benutzerverzeichnis | Mittel |
 | NFR-33 | Lizenz | Open Source Lizenz | MIT-Lizenz; kompatibel mit allen verwendeten Dependencies (siehe Lizenz-Tabelle Kap. 19) | Hoch |
+| NFR-34 | Performance | Modell-Update-Prüfung non-blocking | Update-Check beim App-Start verzögert Dashboard nicht; < 5s Startzeit bleibt gewährleistet (NFR-21) | Hoch |
+| NFR-35 | Reliability | Atomares Modell-Update | Fehlgeschlagenes Update lässt alle bestehenden Modelle intakt; alte Modelle werden erst ersetzt wenn alle neuen Modelle vollständig heruntergeladen und verifiziert sind | Hoch |
+| NFR-36 | Reliability | Resume-fähiger Update-Download | Unterbrochener Update-Download wird beim nächsten App-Neustart fortgesetzt (wie NFR-28 für First-Launch) | Mittel |
 
 ---
 
@@ -586,13 +640,14 @@ flowchart TD
 - **Workflow:** Transkription → Anonymisierung automatisch, kein Zwischenschritt; Transkription non-blocking
 - **Review:** Freier Texteditor mit atomaren Platzhalter-Chips (Inline, farblich nach Typ); Herkunft dreifach unterscheidbar (NER/Sperrliste/Manuell); False Positives rückgängig (Delete auf Chip = Original erscheint), False Negatives markieren (Selektion + Kontextmenü + Typ-Auswahl: PERSON/ORT/DATUM/KONTAKT/ORGANISATION) + zur Sperrliste; kein Finalisierungs-Schritt (Export wenn fertig); jederzeit unterbrechbar (Auto-Save debounced ~2s, gesamter Zustand ohne Undo-History); Undo/Redo (Cmd+Z/Shift+Z, Standard-Editor, ~100 Schritte, nicht persistent); Speaker-Labels + Zeitstempel atomar aber löschbar; kein Audio-Player; identisch für Audio + PDF; kein Typ-Ändern; nur Scrollen; nur Standard-Shortcuts
 - **Modellauswahl:** Alle ML-Modelle (Transkription, Diarization, NER, OCR) austauschbar in globalen Settings; technische Modellnamen; User kann eigene Modelle hinzufügen (Plugin-Architektur)
+- **Modell-Update:** Automatische Prüfung beim App-Start; Badge/Banner bei verfügbarem Update; Download beim Neustart (wie First Launch); Alles-oder-nichts (kein Teilupdate); fehlgeschlagene Prüfung = stiller Weiterbetrieb mit vorhandenen Modellen (Entscheidung #158)
 - **PDF-Import:** Nur PDF-Format; Batch + non-blocking; Mixed-PDF auto pro Seite (Text vs. OCR); linearer Fliesstext; nur gedruckter Text (keine Handschrift); nur Deutsch-OCR
 - **Sitzungstypen:** Audio-Sitzungen und PDF-Sitzungen in gleicher Liste, visuell unterscheidbar; PDF hat kürzeren Workflow (kein Transkriptions-Schritt)
 - **Verarbeitung:** Strikt sequenziell — immer nur ein ML-Modell gleichzeitig geladen (8 GB RAM-Constraint). Keine Parallel-Transkription während Aufnahme. Verarbeitung startet nach Aufnahme-Stop. ML-Jobs werden über Task Queue serialisiert (FIFO)
 - **Anonymisierung:** Typ-spezifische Platzhalter ([PERSON 1], [ORT 1] etc.); Konsistenz nur pro Sitzung; Coreference-Resolution für Namens-Varianten (best-effort); NER hat Vorrang vor Sperrliste; nur ganze Wörter (keine Teilstrings); Platzhalter-Mapping intern gespeichert (für False-Positive-Undo), bei Sitzungslöschung entfernt; < 30 Sekunden Performance; keine Re-Anonymisierung nach Text-Edit im Review
 - **Export:** Nur Zwischenablage (ein Klick); nur anonymisierter Text (keine Metadaten — bewusste Datenschutz-Entscheidung); Formatierung mit Speaker-Labels erhalten; jederzeit + mehrfach kopierbar; Bestätigung nach Kopieren; immer ganzer Text (Teil-Export via Copy-Paste im Editor); kein .txt-Dateiexport (nicht MVP); kein Batch-Export (nicht MVP); kein Export-Status/Flag in Sitzungsliste
 - **Datenretention:** Auto-Löschung aller Sitzungen 30 Tage nach Erstellung — inklusive aller Daten (Audio, Texte, Mapping). Stille Löschung ohne Vorwarnung. Nicht konfigurierbar. Unabhängig vom Export-Status. App ist kein Langzeit-Archiv — der USER ist verantwortlich, den kopierten Text extern zu sichern
-- **Distribution:** .dmg via Direktdownload (kein Mac App Store); ARM64-only; ~250 MB Installer + ~4 GB Modell-Download beim First-Launch (resume-fähig); manuelles Update (neue .dmg); kostenlos / MIT-Lizenz; In-App-Uninstaller für saubere Entfernung; Code Signing/Notarization noch offen (Entscheidung #104 vs. Kosten)
+- **Distribution:** .dmg via Direktdownload (kein Mac App Store); ARM64-only; ~250 MB Installer + ~4 GB Modell-Download beim First-Launch (resume-fähig); manuelles App-Update (neue .dmg); automatisches ML-Modell-Update beim App-Start (US-9a, Entscheidung #158); kostenlos / MIT-Lizenz; In-App-Uninstaller für saubere Entfernung; Code Signing/Notarization noch offen (Entscheidung #104 vs. Kosten)
 
 ---
 
@@ -618,182 +673,3 @@ flowchart TD
 19. Gleichzeitige ML-Workloads (mehrere Modelle parallel) — immer nur ein Modell gleichzeitig geladen
 
 ---
-
-## 8. Entscheidungsprotokoll
-
-| # | Frage | Entscheidung | Datum |
-|---|-------|-------------|-------|
-| 1 | Wann wird die App genutzt? | Live-Aufnahme (Hintergrund) — kein externer Audio-Import, nur In-App-Aufnahme | 2026-02-07 |
-| 2 | Anonymisierungsumfang? | Umfassend: Namen, Orte, Kontaktdaten, Med. Identifikatoren, Geburtsdaten | 2026-02-07 |
-| 3 | Exportziele? | Mehrere: Supervision, Dokumentation, Praxissoftware | 2026-02-07 |
-| 4 | MVP-Scope? | Alles inkl. PDF — beide Eingabepfade von Anfang an | 2026-02-07 |
-| 5 | Welche Entitätstypen genau? | Kontaktdaten, Med. Identifikatoren, Geburtsdaten (NICHT Institutionen) | 2026-02-07 |
-| 6 | Live-Modus Interaktion? | Nur Hintergrund — keine Interaktion während Therapie | 2026-02-07 |
-| 7 | ~~Exportformate?~~ | ~~Nur Plaintext (.txt) + Zwischenablage~~ → **AKTUALISIERT**: Nur Zwischenablage (kein .txt-Dateiexport, Entscheidung #127) | 2026-02-07 |
-| 8 | Sperrliste? | Ja, MVP-Feature — globale Liste pro Therapeut/in | 2026-02-07 |
-| 9 | Nur Geburtsdaten oder alle Daten? | Nur explizite Geburtsdaten | 2026-02-07 |
-| 10 | Welche Dialekte? | Deutsch allgemein — Hochdeutsch + Schweizerdeutsch breit | 2026-02-07 |
-| 11 | Datenlöschung nach Export? | User entscheidet — wird gefragt | 2026-02-07 |
-| 12 | Teilnehmerzahl? | Bis 3-4 Personen (Paartherapie, Angehörige) | 2026-02-07 |
-| 13 | ~~Speaker-Labels benennbar?~~ | ~~Ja — Therapeut/in kann Labels umbenennen~~ → **GESTRICHEN** (US-2b entfernt, Labels bleiben Person A/B/C/D) | 2026-02-07 |
-| 14 | Gesprochene Kontaktdaten? | Best-effort — System versucht es, keine Garantie | 2026-02-07 |
-| 15 | ICD-Codes anonymisieren? | Nein — Diagnosen bleiben im Text | 2026-02-07 |
-| 16 | Sperrliste pro Therapeut oder pro Fall? | Eine globale Liste pro Therapeut/in | 2026-02-07 |
-| 17 | ~~Varianten-Matching in Sperrliste?~~ | ~~Exakte Treffer — keine Fuzzy-Erkennung~~ → **ERWEITERT durch #147**: Umlaut-Normalisierung (ü↔ue etc.) im MVP; darüber hinaus kein Fuzzy | 2026-02-07 |
-| 18 | Mikrofon-Auswahl nötig? | Nein — Standard-Mikrofon (OS-Default) reicht | 2026-02-07 |
-| 19 | Auto-Recovery bei Absturz? | Pflicht — max. 60 Sekunden Datenverlust, Wiederherstellung beim Start | 2026-02-07 |
-| 20 | ~~Auto-Transkription nach Import?~~ | ~~Immer automatisch, Queue bei Batch-Import~~ → **GESTRICHEN** (kein externer Audio-Import; Transkription startet automatisch nach Aufnahme-Stop) | 2026-02-07 |
-| 21 | Parallele Sitzungen? | Ja — mehrere Sitzungen gleichzeitig in verschiedenen Stadien | 2026-02-07 |
-| 22 | Sitzungsliste/Dashboard? | Ja — mit Auto-Titel (Datum+Uhrzeit), User kann umbenennen | 2026-02-07 |
-| 23 | Hintergrund-Feedback? | Menu Bar Icon mit Status (rot=läuft), Dauer, Stop/Pause | 2026-02-07 |
-| 24 | Standby während Aufnahme? | App verhindert aktiv den Ruhezustand | 2026-02-07 |
-| 25 | Batch-Verarbeitung? | Queue — nacheinander, FIFO | 2026-02-07 |
-| 26 | Warum keine Echtzeit-Transkription? | Inhaltlich unerwünscht — stört therapeutische Beziehung | 2026-02-07 |
-| 27 | Einwilligungs-Dialog? | Hinweis beim ersten Mal, kein Zwang (Therapeut verantwortlich) | 2026-02-07 |
-| 28 | Maximale Aufnahmedauer? | **2 Stunden**, dann Auto-Stop mit Benachrichtigung (korrigiert: konsistent mit US-1 AC 11) | 2026-02-07 |
-| 29 | ~~Import-Fehler & Preview?~~ | ~~Klare Fehlermeldung, kein Audio-Player~~ → **GESTRICHEN** (kein externer Audio-Import) | 2026-02-07 |
-| 30 | Sitzungsverwaltung als Epic? | Ja — neues Epic 0 (Grundlage für alle Workflows) | 2026-02-07 |
-| 31 | Lebenszyklus Sitzungen? | Bleiben bis manuell gelöscht — auch nach Export | 2026-02-07 |
-| 32 | ~~Audio-Import UX?~~ | ~~Dateiauswahl + Drag-and-Drop + Batch~~ → **GESTRICHEN** (kein externer Audio-Import; Audio nur via In-App-Aufnahme) | 2026-02-07 |
-| 33 | Bereinigung — was genau? | Nur Äh/Ähm entfernen; Füllwörter, Satzabbrüche, Wiederholungen bleiben | 2026-02-07 |
-| 34 | Schweizerdeutsch-Begriffe? | Nur Hochdeutsch-Output, bestmöglich übersetzt, kein Original verfügbar | 2026-02-07 |
-| 35 | Sprecherzuordnung korrigierbar? | Out of Scope für MVP — Labels bleiben Person A/B/C/D (keine Umbenennung) | 2026-02-07 |
-| 36 | Transkript editierbar? | Ja, im Review-Modus (Epic 6), kein separater Schritt | 2026-02-07 |
-| 37 | Zeitstempel im Transkript? | Ja — bei jedem Sprecherwechsel (z.B. [00:23:40]) | 2026-02-07 |
-| 38 | Sprecheranzahl-Handling? | Auto-Erkennung; 1 Sprecher = kein Label; 5+ = best-effort | 2026-02-07 |
-| 39 | Transkription abbrechen/neustarten? | Nein — läuft immer durch, Korrektur im Review | 2026-02-07 |
-| 40 | Wartezeit-UX? | Fortschrittsbalken (% + Restzeit) + App nutzbar + macOS-Benachrichtigung | 2026-02-07 |
-| 41 | Anonymisierung nach Transkription? | Automatisch, kein manueller Zwischenschritt | 2026-02-07 |
-| 42 | Formatierung Transkript? | Volle Interpunktion + Grossschreibung + Absätze bei Sprecherwechsel | 2026-02-07 |
-| 43 | Audio-Qualitätscheck? | Kein Vorher-Check — best-effort Ergebnis | 2026-02-07 |
-| 44 | Warum Modellauswahl? | Zukunftssicherheit — neue/bessere Modelle ohne App-Update einsetzbar | 2026-02-07 |
-| 45 | Welche Modelle wählbar? | Alle: Transkription, Diarization, NER, OCR | 2026-02-07 |
-| 46 | Wo konfiguriert? | Globale Einstellung in Settings (gilt für alle Sitzungen) | 2026-02-07 |
-| 47 | Zielgruppe Modellauswahl? | Auch Therapeut/in, nicht nur Power-User | 2026-02-07 |
-| 48 | Darstellung Modellnamen? | Technische Modellnamen direkt anzeigen | 2026-02-07 |
-| 49 | Eigene Modelle hinzufügen? | Ja — User kann neue lokale Modelle installieren/aktivieren (Plugin-Architektur) | 2026-02-07 |
-| 50 | Welche PDF-Typen? | Ärztliche Berichte, Gutachten, Versicherungsformulare, eigene Notizen, Laborergebnisse | 2026-02-07 |
-| 51 | PDF-Workflow vs. Audio? | Eigener kürzerer Workflow (kein Transkriptions-Schritt), aber gleiche Sitzungsliste | 2026-02-07 |
-| 52 | PDF in Sitzungsliste? | Ja — gleiche Liste, anderer Typ (visuell unterscheidbar) | 2026-02-07 |
-| 53 | Handschrift-OCR? | Nein — nur gedruckter Text | 2026-02-07 |
-| 54 | PDF-Layout? | Linearer Fliesstext, keine Layout-Erhaltung | 2026-02-07 |
-| 55 | Auto-Anonymisierung bei PDF? | Ja — automatisch nach Textextraktion, wie bei Audio | 2026-02-07 |
-| 56 | ~~PDF-Seitenlimit?~~ | ~~Max. 50 Seiten, darüber Warnung~~ → **GESTRICHEN** (kein Seitenlimit, keine Warnung) | 2026-02-07 |
-| 57 | Dokumentformate? | Nur PDF — kein Word, keine Bilder | 2026-02-07 |
-| 58 | ~~Passwortgeschützte PDFs?~~ | ~~Passwort-Eingabe ermöglichen~~ → **GESTRICHEN** (nicht MVP, Spec Sektion 5.4 entfernt) | 2026-02-07 |
-| 59 | Mixed-PDFs (Text + Scan)? | Automatisch pro Seite erkennen (Text → direkte Extraktion, Scan → OCR) | 2026-02-07 |
-| 60 | OCR-Sprache? | Nur Deutsch | 2026-02-07 |
-| 61 | PDF Batch & Blocking? | Batch-Import + non-blocking (Queue, FIFO) | 2026-02-07 |
-| 62 | ~~Parallel-Transkription: Was genau?~~ | ~~Hintergrund-Transkription während Live-Aufnahme~~ → **ÜBERHOLT durch #126** (gestrichen wegen 8 GB RAM) | 2026-02-07 |
-| 63 | ~~Qualität vs. Geschwindigkeit?~~ | ~~Qualität hat Priorität~~ → **ÜBERHOLT durch #126** (nur noch sequenziell) | 2026-02-07 |
-| 64 | ~~Ziel-Wartezeit nach Stop?~~ | ~~< 5 Minuten nach Stop~~ → **ÜBERHOLT durch #126** (sequenziell: max. 2x Echtzeit gemäss NFR-3) | 2026-02-07 |
-| 65 | ~~Parallel-Transkription obligatorisch?~~ | ~~Optional in Settings~~ → **ÜBERHOLT durch #126** (Feature gestrichen) | 2026-02-07 |
-| 66 | Platzhalter-Konsistenz Scope? | Nur pro Sitzung — jede Sitzung hat eigene Platzhalter-Nummerierung, kein sitzungsübergreifendes Mapping | 2026-02-07 |
-| 67 | ~~Originale nach Anonymisierung sichtbar?~~ | ~~Im Review sichtbar (Hover/Tooltip)~~ → **GESTRICHEN** (nicht MVP; Platzhalter-Mapping intern für False-Positive-Undo, bei Sitzungslöschung entfernt) | 2026-02-07 |
-| 68 | NER vs. Sperrliste Priorität? | NER hat Vorrang; Sperrliste ergänzt was NER nicht findet; bei Typ-Konflikt gilt NER | 2026-02-07 |
-| 69 | Umgang mit Mehrdeutigkeiten? | Auto-Anonymisierung + Review bei Bedarf (kein Bestätigungs-Zwang pro Fund) | 2026-02-07 |
-| 70 | Namens-Varianten erkennen? | Intelligente Zuordnung (best-effort Coreference): "Dr. Müller" = "Müller" = "Herr Müller" → [PERSON 1] | 2026-02-07 |
-| 71 | Re-Anonymisierung nach Text-Edit? | Nein — im Review ist der User verantwortlich; neue Entitäten manuell markieren | 2026-02-07 |
-| 72 | Anonymisierungs-Performance? | < 30 Sekunden, auch bei langen Texten (ca. 10'000 Wörter) | 2026-02-07 |
-| 73 | Teilstrings anonymisieren? | Nein — nur ganze Wörter/eigenständige Entitäten. "Müller" in "Müllerstrasse" bleibt | 2026-02-07 |
-| 74 | ~~Speaker-Labels anonymisieren?~~ | ~~Ja — Labels werden wie jeder andere Text anonymisiert~~ → **ENTFÄLLT** (Labels sind immer Person A/B/C/D, enthalten keine Namen) | 2026-02-07 |
-| 75 | Platzhalter-Nummerierung? | Typ-spezifisch: [PERSON 1], [ORT 1], [KONTAKT 1] etc. (7 Typen, nicht global fortlaufend — konsolidiert durch Entscheidung #146) | 2026-02-07 |
-| 76 | Sperrliste Zugangspunkt? | Settings (volle CRUD-Verwaltung) + Review-Modus (Schnellaktion: Begriff zur Sperrliste hinzufügen) | 2026-02-08 |
-| 77 | Sperrliste Case-Sensitivity? | Case-insensitive + Umlaut-Normalisierung (ü↔ue, ä↔ae, ö↔oe, ß↔ss) — erweitert durch Entscheidung #147 | 2026-02-08 |
-| 78 | Mehrwort-Einträge in Sperrliste? | Ja — beliebige Phrasen als ein Eintrag (z.B. "Dr. Hans Müller", "Bahnhofstrasse 42") | 2026-02-08 |
-| 79 | Sperrliste Import/Export? | Nein — kein Import/Export, nur lokale Verwaltung | 2026-02-08 |
-| 80 | Retroaktive Anwendung im Review? | Sofort — hinzugefügter Begriff wird auf gesamten Text der aktuellen Sitzung angewendet | 2026-02-08 |
-| 81 | Überlappende Sperrlisten-Einträge? | Longest Match — längster Treffer hat Vorrang | 2026-02-08 |
-| 82 | Herkunft im Review sichtbar? | Ja — User sieht ob Treffer von NER oder Sperrliste stammt (z.B. Icon/Tooltip) | 2026-02-08 |
-| 83 | Sperrlisten-Eingabe-Validierung? | Keine — User ist vollständig verantwortlich für sinnvolle Einträge | 2026-02-08 |
-| 84 | Review: Text-Editierung? | Freies Editieren wie in einem Texteditor (Cursor, Tippen, Löschen, Copy-Paste) | 2026-02-08 |
-| 85 | Review: Audio-Player? | Nein — kein Audio-Player im Review. User nutzt externen Player für Audio-Abgleich | 2026-02-08 |
-| 86 | Review: Zwischenspeicherung? | Jederzeit unterbrechbar — alle Änderungen werden automatisch gespeichert | 2026-02-08 |
-| 87 | Review: Finalisierung? | Kein expliziter Finalisierungs-Schritt — User exportiert wenn zufrieden | 2026-02-08 |
-| 88 | Review-Modell? | Mittlerer Weg: Freier Texteditor + atomare Platzhalter-Chips (Inline, farblich nach Typ). Keine komplexen Werkzeuge wie Typ-Ändern. Präzisiert durch Entscheidungen #128-#136 | 2026-02-08 |
-| 89 | Review: Entitäten-Navigation? | Nur Scrollen — kein Springen zum nächsten/vorherigen Platzhalter | 2026-02-08 |
-| 90 | Review: Herkunft (NER/Sperrliste)? | Bestätigt + erweitert: **3 Herkünfte** (NER/Sperrliste/Manuell) visuell unterscheidbar (Entscheidung #132) | 2026-02-08 |
-| 91 | Review: PDF vs. Audio? | Identischer Review-Modus — bei PDF fehlen nur Zeitstempel und Speaker-Labels | 2026-02-08 |
-| 92 | Export-Zeitpunkt? | Jederzeit + mehrfach — kein Finalisierungs-Voraussetzung, jeder Export = aktueller Stand | 2026-02-08 |
-| 93 | Was wird bei Sitzungslöschung gelöscht? | Alles — Audio, Originaltext, Mapping, anonymisierter Text. Sitzung verschwindet komplett | 2026-02-08 |
-| 94 | Löschfrage nach Export? | Nein — Löschung nur unabhängig via Sitzungsverwaltung (Epic 0, US-0 AC 5) | 2026-02-08 |
-| 95 | Export-Inhalt? | Nur anonymisierter Text mit Speaker-Labels und Zeitstempeln, keine Metadaten | 2026-02-08 |
-| 96 | US-7b nötig? | Gestrichen — redundant mit US-0 AC 5 (Sitzung löschen = alles löschen) | 2026-02-08 |
-| 97 | ~~Clipboard vs. .txt?~~ | ~~Identischer Inhalt~~ → **ENTFÄLLT** (.txt-Export gestrichen, Entscheidung #127) | 2026-02-08 |
-| 98 | ~~Speichern-Dialog?~~ | ~~Standard macOS Speichern-Dialog~~ → **ENTFÄLLT** (.txt-Export gestrichen, Entscheidung #127) | 2026-02-08 |
-| 99 | Encryption at Rest nötig? | Nein — FileVault (Default auf Apple Silicon) + App Sandbox reichen. App hat kein eigenes Login, daher kein Mehrwert durch SQLCipher. FileVault-Check beim Start stattdessen | 2026-02-08 |
-| 100 | Netzwerk-Isolation? | Strikte CSP im Renderer (`connect-src 'none'`); Electron-Telemetrie deaktivieren; Modell-Download nur beim First-Launch | 2026-02-08 |
-| 101 | Electron Hardening? | Vollständig: Context Isolation, Sandbox, Fuses, keine Remote-Inhalte, IPC-Schema-Validierung | 2026-02-08 |
-| 102 | Modell-Sicherheit (Plugin)? | Hash-Verification für gebündelte Modelle; `weights_only=True` für PyTorch; Pfad-Beschränkung auf `~/.therascript/models/` | 2026-02-08 |
-| 103 | Sichere Löschung? | SQLite VACUUM + Temp-Cleanup + Spotlight-Ausschluss. Kein Overwrite auf SSD (ineffektiv bei TRIM) | 2026-02-08 |
-| 104 | Code Signing? | Pflicht — Apple Developer Certificate + Notarization für Distribution | 2026-02-08 |
-| 105 | Erwartete Sitzungsanzahl? | < 100 — User löscht regelmässig nach Export, behält nur aktive Sitzungen | 2026-02-08 |
-| 106 | Modell-Loading-Strategie? | On-demand — Modelle werden erst bei erster Nutzung geladen, nicht beim App-Start. App startet sofort | 2026-02-08 |
-| 107 | CPU-Budget bei Hintergrund-Transkription? | Mac muss flüssig bleiben — ML-Tasks werden bei Bedarf gedrosselt, Transkription darf dafür länger dauern | 2026-02-08 |
-| 108 | App-Startzeit? | < 5 Sekunden bis Dashboard interaktiv (Cold Start ohne Modell-Loading) | 2026-02-08 |
-| 109 | ~~Modell-Download Resume?~~ | ~~Nein — kein Resume bei Abbruch~~ → **REVIDIERT**: Ja — resume-fähiger Download bei Abbruch (Zielgruppe sind nicht-technische Nutzer mit evtl. instabiler Verbindung) | 2026-02-13 |
-| 110 | Editor-Performance Zielgrösse? | Bis 90 Min Transkript (~15'000 Wörter) muss der Editor flüssig bleiben | 2026-02-08 |
-| 111 | Epic 7 Name? | Umbenennen zu "Export" — Datenverwaltung ist vollständig in Epic 0 abgedeckt | 2026-02-13 |
-| 112 | ~~.txt reicht für alle Exportziele?~~ | ~~Ja — Supervision, Dokumentation, Praxissoftware akzeptieren Plaintext~~ → **ENTFÄLLT** (.txt-Export gestrichen, nur Zwischenablage, Entscheidung #127) | 2026-02-13 |
-| 113 | Keine Metadaten im Export? | Bewusste Datenschutz-Entscheidung — weniger Kontext = weniger Identifizierbarkeit des Patienten | 2026-02-13 |
-| 114 | Teil-Export? | Nein — Export = immer ganzer Text. Teil-Export via normales Copy-Paste im Editor | 2026-02-13 |
-| 115 | Status "Exportiert"? | Entfernt — kein echter Statuswechsel, da beliebig oft exportierbar ohne Finalisierung | 2026-02-13 |
-| 116 | Batch-Export? | Nice-to-have, nicht MVP — einzeln exportieren reicht zunächst | 2026-02-13 |
-| 117 | Datenretention? | Auto-Löschung nach 30 Tagen ab Erstellung — App ist kein Langzeit-Archiv, User sichert kopierten Text selbst | 2026-02-13 |
-| 118 | Auch nicht-exportierte Sitzungen löschen? | Ja — Datenschutz hat Vorrang vor Komfort. Auch nie exportierte Sitzungen werden nach 30 Tagen gelöscht | 2026-02-13 |
-| 119 | Lösch-Warnung bei Auto-Löschung? | Nein — stille Löschung, kein Hinweis. Therapeut weiss das, weil es ein fixer Default ist | 2026-02-13 |
-| 120 | Export-Flag in Sitzungsliste? | Nein — kein visueller Marker für "wurde exportiert" | 2026-02-13 |
-| 121 | ~~Encoding .txt-Export?~~ | ~~Plattform-konform — UTF-8 + LF~~ → **ENTFÄLLT** (.txt-Export gestrichen, Entscheidung #127) | 2026-02-13 |
-| 122 | Sitzungsliste sortierbar? | Feste Sortierung: chronologisch absteigend (neueste zuerst). Kein Umschalten | 2026-02-13 |
-| 123 | Sitzungsliste gruppiert? | Relative Zeiträume: "Heute", "Gestern", "Diese Woche", "Letzte Woche", "Älter". Leere Gruppen ausgeblendet | 2026-02-13 |
-| 124 | Sitzungsliste filterbar? | Nein — bei max. 30 Tagen und typisch wenigen Sitzungen ist Filtern unnötig | 2026-02-13 |
-| 125 | Minimum-RAM? | **8 GB ist Minimum UND Zielgerät** (MacBook Air M3 8 GB = typisches Therapeuten-Gerät). Parallel-Transkription fällt weg, ML-Verarbeitung strikt sequenziell | 2026-02-13 |
-| 126 | Parallel-Transkription? | **Gestrichen** — passt nicht ins 8 GB RAM-Budget. Immer sequenziell nach Aufnahme-Stop. Entscheidungen #62-#65 sind damit überholt | 2026-02-13 |
-| 127 | .txt-Dateiexport? | **Gestrichen** — nicht MVP. Nur Zwischenablage reicht. User ist verantwortlich, kopierten Text extern zu sichern. Entscheidungen #7, #97, #98, #112, #121 sind damit überholt | 2026-02-13 |
-| 128 | Review: Platzhalter-Interaktionsmodell? | **Atomar (Inline-Chip)** — Platzhalter sind unteilbare Elemente, Cursor springt darüber, keine partielle Editierung möglich | 2026-02-13 |
-| 129 | Review: Chip löschen = was passiert? | **Löschen = Undo** — Delete/Backspace auf Chip ersetzt ihn durch Originaltext (konsistent mit False-Positive-Rückgängig). Zum Entfernen von beidem: erst Chip löschen (Original erscheint), dann Text löschen | 2026-02-13 |
-| 130 | Review: Undo/Redo? | **Standard-Editor-Verhalten** — Cmd+Z/Shift+Z, gruppierte Schritte, ~100 Tiefe, History geht bei App-Neustart verloren (nicht persistiert) | 2026-02-13 |
-| 131 | Review: False-Negative-Interaktion? | **Selektion + Kontextmenü** — User selektiert Text, Rechtsklick zeigt Kontextmenü mit "Anonymisieren" + Typ-Auswahl (PERSON, ORT, DATUM, KONTAKT, ORGANISATION) | 2026-02-13 |
-| 132 | Review: Herkunft 3 Quellen? | **Ja, 3 Herkünfte visuell unterscheidbar** — NER (automatisch), Sperrliste (Blocklist-Match), Manuell (vom User markiert) | 2026-02-13 |
-| 133 | Review: Auto-Save Strategie? | **Debounced (~2s Inaktivität)** — Gesamtzustand (Text + Platzhalter + Metadaten) wird persistiert, OHNE Undo-History | 2026-02-13 |
-| 134 | Review: Sperrliste retroaktives Feedback? | **Kein Feedback** — keine Meldung über Anzahl retroaktiv anonymisierter Treffer. Exakter String-Match (case-insensitive) wie in US-5 | 2026-02-13 |
-| 135 | Review: Speaker-Labels/Zeitstempel? | **Atomar wie Platzhalter-Chips, aber löschbar** — können durch Delete/Backspace oder Markieren+Löschen entfernt werden, aber nicht teilweise editiert | 2026-02-13 |
-| 136 | Review: Keyboard-Shortcuts? | **Nur Standard-Shortcuts** — Cmd+Z, Cmd+Shift+Z, Cmd+C/V/X/A. Kein dedizierter Anonymisieren-Shortcut, nur via Kontextmenü | 2026-02-13 |
-| 137 | Review: Story-Slicing? | **US-6 aufgeteilt in 3 vertikale Slices** — US-6a (Basis-Editor), US-6b (False-Positive/Negative-Korrektur), US-6c (Sperrliste-Schnellaktion im Review) | 2026-02-13 |
-| 138 | Review: Copy-Paste mit Chips? | **Chips bleiben intern, Text extern** — innerhalb Therascript bleiben Chips als atomare Elemente, in externen Apps wird Platzhalter-String (z.B. "[PERSON 1]") als Text eingefügt | 2026-02-13 |
-| 139 | Review: Chip-Überlappung bei Selektion? | **Selektion wird erweitert** — überlappt die Selektion einen bestehenden Chip teilweise, erweitert das System automatisch auf den gesamten Chip | 2026-02-13 |
-| 140 | Review: Nummerierung bei Lücken? | **Fortlaufend** — immer nächste Nummer, Lücken werden NICHT gefüllt (z.B. [PERSON 1]+[PERSON 3] → nächster wird [PERSON 4]) | 2026-02-13 |
-| 141 | Review: Sperrliste-Undo? | **Vollständiges Undo** — Cmd+Z macht gesamte Sperrlisten-Schnellaktion rückgängig (Eintrag aus Sperrliste + alle retroaktiven Anonymisierungen) als ein Schritt | 2026-02-13 |
-| 142 | Review: Batch-Rückgängig? | **Immer Batch** — Rückgängig-Machen eines Chips (Delete/Backspace) macht ALLE Chips derselben Identität rückgängig (z.B. alle [PERSON 1]). Kein einzelnes Rückgängig möglich | 2026-02-13 |
-| 143 | Sperrliste: Bestätigungsdialog? | **Ja** — einfache Bestätigung beim Hinzufügen: "[Begriff] als [Typ] hinzufügen?" mit [Abbrechen] und [Hinzufügen]. Keine Treffer-Vorschau | 2026-02-13 |
-| 144 | Sperrliste: Bearbeiten-Verhalten? | **Wie Löschen + Neuanlegen** — bestehende Platzhalter in vergangenen Sitzungen bleiben, geänderter Begriff wirkt nur auf zukünftige Anonymisierungen | 2026-02-13 |
-| 145 | Sperrliste: Löschen-Verhalten? | **Nur zukünftig** — Löschung eines Eintrags wirkt nur auf zukünftige Anonymisierungen. Bestehende Platzhalter in vergangenen Sitzungen bleiben unverändert | 2026-02-13 |
-| 146 | Sperrliste: Extra-Platzhalter-Typen? | **MEDIZINISCH + SONSTIGES** zusätzlich zu NER-Typen (PERSON, ORT, DATUM, KONTAKT, ORGANISATION) — insgesamt 7 Typen | 2026-02-13 |
-| 147 | Sperrliste: Umlaut-Normalisierung? | **MVP-Feature** — bidirektionale Normalisierung: ü↔ue, ä↔ae, ö↔oe, ß↔ss. "Müller" findet "Mueller" und umgekehrt. CH-Varianten zu häufig für exaktes Matching | 2026-02-13 |
-| 148 | Sperrliste: US-5 Scope? | **Entschlackt** — US-5 = nur CRUD + Matching-Logik + Settings-UI. Review-Integration (Schnellaktion, retroaktive Anwendung, Herkunft) bleibt in US-6c/US-6b | 2026-02-13 |
-| 149 | Sperrliste: Kernproblem? | **Begriffe die NER prinzipiell nicht erkennt** — Spitznamen, Firmennamen, Therapie-spezifische Codes. Nicht primär für NER-Fehler (False Negatives) | 2026-02-13 |
-| 150 | Sperrliste: Erwartete Grösse? | **< 50 Einträge** — einfache Liste reicht, keine Suche/Filter/Pagination nötig | 2026-02-13 |
-| 151 | MEDIZINISCH/SONSTIGES im Review? | **Nein** — Extra-Typen nur in der Sperrliste verfügbar. Manuelle False-Negative-Markierung im Review bleibt bei 5 NER-Typen (PERSON, ORT, DATUM, KONTAKT, ORGANISATION) | 2026-02-13 |
-| 152 | Distributionsformat? | **.dmg via Direktdownload** — kein Mac App Store | 2026-02-13 |
-| 153 | Warum kein Mac App Store? | **Kontrolle + Kosten** — unabhängig von Apple verteilen, Apple Developer Program (99€/Jahr) + Review-Prozess vermeiden | 2026-02-13 |
-| 154 | Architektur ARM64/Universal? | **Nur ARM64** (Apple Silicon) — kein Intel-Support, kein Universal Binary | 2026-02-13 |
-| 155 | Update-Mechanismus? | **Manuell** — neue Version = neue .dmg herunterladen und installieren. Kein Auto-Updater im MVP | 2026-02-13 |
-| 156 | Geschäftsmodell? | **Kostenlos / Open Source (MIT-Lizenz)** — kein Lizenzschlüssel, kein Bezahlmodell | 2026-02-13 |
-| 157 | Deinstallation? | **In-App-Uninstaller nötig** — Menüpunkt entfernt Modelle, Daten, Settings. .app muss USER manuell löschen | 2026-02-13 |
-| 158 | flair ORG automatisch anonymisieren? | **Nein** — flair ORG-Entitäten (Institutionsnamen) werden ignoriert. ORGANISATION nur via Sperrliste oder manuelle Markierung im Review. Konsistent mit Out of Scope (Entscheidung #5) | 2026-02-13 |
-| 159 | Passwort-PDFs im MVP? | **Gestrichen** — passwortgeschützte PDFs werden nicht unterstützt. User muss PDF vorher entschlüsseln. Entscheidung #58 ist damit überholt | 2026-02-13 |
-| 160 | US-4 Platzhalter-Subtypen? | **Konsolidiert auf 7 Typen** (Entscheidung #146 gilt): Telefon/Email/AHV-Nr etc. → KONTAKT; Geburtsdatum → DATUM. US-4 ACs entsprechend aktualisiert | 2026-02-13 |
-
----
-
-## 9. Requirements-Readiness
-
-| Kriterium | Bewertung |
-|-----------|-----------|
-| Geschäftswert | Klar — Vertraulichkeit in der Psychotherapie |
-| Vollständigkeit | Alle offenen Fragen geklärt |
-| NFRs | Definiert — lokale Verarbeitung als Kernprinzip |
-| Testbarkeit | Akzeptanzkriterien sind messbar |
-| Konflikte | Schweizerdeutsch lokal transkribieren ist technisch anspruchsvoll; Best-effort für gesprochene Kontaktdaten akzeptiert |
-
-**Status:** READY — Alle Kernanforderungen sind klar definiert. Offene Fragen wurden im Requirements-Engineering geklärt (siehe Entscheidungsprotokoll).
