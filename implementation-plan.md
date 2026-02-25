@@ -437,6 +437,98 @@ npm run package               → .dmg wird erstellt
 
 ---
 
+## Iteration 17: ML-Modell-Auto-Update (Epic 9 — US-9a)
+
+**Scope:** Remote-Manifest auf R2, Background-Update-Check, Info-Banner, Neustart-Flow, atomarer Download + Staging + Swap mit Rollback
+
+**Abhängigkeit:** Iteration 16 (Distribution — First-Launch-Download-Infrastruktur wird wiederverwendet)
+
+**Deliverables:**
+
+**Manifest & Tooling:**
+- `manifest.json` — Remote-Modell-Manifest (initiale Version aus aktuellen MODEL_DEFINITIONS generiert)
+- `scripts/publish-manifest.sh` — Manifest-Generierung aus `r2-upload/` mit SHA-256-Hashes + Upload auf R2
+
+**Shared Types & Validierung:**
+- `src/shared/types/ModelUpdate.ts` — TypeScript Interfaces (PendingModelUpdate, ManifestModel, Manifest)
+- `src/shared/validation/model-update-schemas.ts` — Zod Schemas (ManifestSchema, ManifestModelSchema)
+
+**Main Process:**
+- `src/main/services/ModelUpdateService.ts` — Kernlogik:
+  - `checkForUpdates()` — Manifest fetchen, Versionen vergleichen, Updates identifizieren
+  - `triggerUpdateRestart()` — `pendingModelUpdates` speichern, `app.relaunch()` + `app.quit()`
+  - `executeUpdate()` — Download → Staging → SHA-256-Verifikation → atomarer Swap mit Backup/Rollback
+  - `cleanupIncompleteUpdates()` — Startup-Recovery für `.staging/` und `.backup/`
+  - `migrateInstalledVersions()` — Initialisierung von `installedModelVersions` für bestehende Installationen
+- `src/main/ipc/model-update-handlers.ts` — IPC Handler:
+  - `modelUpdate:check` — Update-Check auslösen
+  - `modelUpdate:restart` — Neustart mit Warndialog-Prüfung
+  - `modelUpdate:startDownload` — Download nach Neustart starten
+- `src/main/services/SettingsService.ts` — Erweiterung:
+  - `installedModelVersions: Record<string, { version, sha256, installedAt }>`
+  - `pendingModelUpdates: PendingModelUpdate[] | null`
+- `src/main/index.ts` — Startup-Integration:
+  - `cleanupIncompleteUpdates()` aufrufen
+  - `pendingModelUpdates` prüfen → ModelUpdateScreen-Flow
+  - Background-`checkForUpdates()` nach Dashboard-Ready
+
+**Preload:**
+- `src/preload/index.ts` — Erweiterung um `modelUpdate` API:
+  - `onAvailable()`, `restart()`, `getPending()`, `startDownload()`,
+  - `onDownloadProgress()`, `onDownloadComplete()`, `onDownloadError()`
+
+**Renderer:**
+- `src/renderer/src/components/UpdateBanner.tsx` — Info-Banner:
+  - Persistent (nicht schliessbar), zeigt Anzahl/Grösse der Updates
+  - [Jetzt neu starten] Button mit Warndialog bei aktiver Aufnahme/Verarbeitung
+- `src/renderer/src/components/ModelUpdateScreen.tsx` — Download-Screen nach Neustart:
+  - Wiederverwendet FirstLaunchScreen-Struktur (Fortschrittsanzeige pro Modell + gesamt)
+  - Titel: "Modelle werden aktualisiert"
+  - Zeigt nur zu aktualisierende Modelle
+  - Fehler-Fallback: "Update fehlgeschlagen" + Weiter-Button
+- `src/renderer/src/hooks/useModelUpdates.ts` — React Hook:
+  - Lauscht auf `modelUpdate:available` IPC-Events
+  - Stellt Banner-State und Neustart-Aktion bereit
+- `src/renderer/src/App.tsx` — Erweiterung:
+  - Neuer State `pendingUpdates` (vor Dashboard geprüft)
+  - ModelUpdateScreen-Anzeige wenn `pendingModelUpdates` gesetzt
+
+**Tests:**
+- Unit-Tests für `ModelUpdateService`:
+  - Manifest-Parsing + Validierung (gültig, ungültig, Schema-Verletzung)
+  - Version-Vergleich (kein Update, ein Update, alle Updates)
+  - URL-Validierung (R2_CDN-Prefix-Check)
+  - Pfad-Traversal-Schutz (`../` in targetPath)
+  - Staging + Swap + Rollback-Logik (mit Mock-Dateisystem)
+  - Crash-Recovery (`.staging/` und `.backup/` Cleanup)
+  - Migration bestehender Installationen
+- Unit-Tests für Zod-Schemas (ManifestSchema)
+- Komponenten-Tests für UpdateBanner (Anzeige, Klick, Warndialog)
+
+**Verifikation:**
+```
+npm run dev                   → App startet, Dashboard sofort sichtbar
+                              → Kein Banner wenn manifest.json nicht erreichbar
+                              → Kein Banner wenn alle Modelle aktuell
+                              → Banner erscheint bei simuliertem Update
+                                (manifest.json mit neuem sha256 auf R2 publizieren)
+                              → "Jetzt neu starten" bei laufender Aufnahme → Warndialog
+                              → "Jetzt neu starten" ohne aktive Arbeit → App startet neu
+                              → Nach Neustart: Download-Screen zeigt Fortschritt
+                              → Nur geänderte Modelle werden heruntergeladen
+                              → SHA-256-Verifikation erfolgreich
+                              → Nach Download: Dashboard, neue Modelle aktiv, Banner weg
+                              → Fehlerhafter Download: alte Modelle bleiben intakt
+                              → Nächster Start: Banner erscheint erneut (erneuter Versuch)
+npm test                      → ModelUpdateService-Tests grün
+npm run lint                  → 0 Fehler
+npm run build                 → TypeScript kompiliert fehlerfrei
+```
+
+**AC abgedeckt:** US-9a AC 1-14, NFR-34 (non-blocking Check), NFR-35 (atomares Update), NFR-36 (resume-fähig)
+
+---
+
 ## Abhängigkeitskette
 
 ```
@@ -456,6 +548,7 @@ Iter 1 (Scaffold)
                           → Iter 14 (Blocklist Quick-Add) ← Epic 6c komplett
                             → Iter 15 (Export)    ← Epic 7 komplett
                               → Iter 16 (Distribution) ← Epic 8 komplett
+                                → Iter 17 (Modell-Auto-Update) ← Epic 9 komplett
 ```
 
 ---
@@ -485,6 +578,8 @@ git add <files> && git commit # Nur wenn alles grün
 | `src/renderer/components/ReviewEditor/ReviewEditor.tsx` | 12 | Komplexeste UI-Komponente |
 | `python_sidecar/` | 8-9 | ML-Runtime für pyannote + flair |
 | `swift_cli/vision_ocr` | 11 | Apple Vision OCR Helper |
+| `src/main/services/ModelUpdateService.ts` | 17 | Update-Check, Staging, atomarer Swap |
+| `scripts/publish-manifest.sh` | 17 | Manifest-Generierung für R2 |
 
 ---
 
@@ -508,4 +603,5 @@ git add <files> && git commit # Nur wenn alles grün
 | 14 Blocklist Quick-Add | 2 | 28 |
 | 15 Export | 1 | 29 |
 | 16 Distribution | 2 | 31 |
-| **Total** | **~31 Tage** | **~6 Wochen** |
+| 17 Modell-Auto-Update | 3 | 34 |
+| **Total** | **~34 Tage** | **~7 Wochen** |
