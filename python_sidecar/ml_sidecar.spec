@@ -121,37 +121,27 @@ all_datas = pyannote_datas + flair_datas + lightning_datas + torchaudio_datas + 
 excludes = [
     # torchcodec — blocked by runtime hook, exclude stubs too
     'torchcodec',
-    # torch bloat (headers, inductor, testing)
-    'torch._inductor',
-    # NOTE: torch.distributed must NOT be excluded — flair imports it top-level
-    # (flair.trainers → flair.distributed_utils → torch.distributed)
-    # NOTE: torch.utils.data.datapipes must NOT be excluded — torch.utils.data.__init__
-    # imports from datapipes unconditionally (PyTorch 2.10+)
-    # NOTE: torch.testing must NOT be excluded — torch/__init__.py eagerly imports it
-    # at line 2273: `from torch import (... testing as testing ...)`
-    # Exclude only _internal (9.7 MB of test infrastructure, never imported at runtime)
-    'torch.testing._internal',
+    # --- DO NOT exclude these (unconditional top-level imports at runtime): ---
+    # torch._inductor    — lightning.fabric → torch._dynamo → torch._inductor.test_operators
+    # torch.testing._internal — torch.utils.checkpoint → torch.testing._internal.logging_tensor
+    # torch.distributed  — flair.trainers → flair.distributed_utils → torch.distributed
+    # torch.utils.data.datapipes — torch.utils.data.__init__ imports unconditionally
+    # botocore/boto3/s3transfer — flair/file_utils.py top-level imports (lines 20-24)
+    # matplotlib         — torchmetrics.utilities.plot unconditional import (via pyannote)
+    # unittest           — torch/utils/_config_module.py top-level import (lines 10, 16)
+    # --- Safe to exclude (verified not on any runtime import path): ---
     'torch.utils.benchmark',
     'torch.utils.tensorboard',
-    # AWS SDK (pulled in transitively by huggingface_hub, not needed at runtime)
-    'botocore',
-    'boto3',
     'aiobotocore',
-    's3transfer',
-    # gRPC (not needed)
     'grpc',
     'grpcio',
-    # GUI/notebook (not needed in CLI)
-    'matplotlib',
     'tkinter',
     'IPython',
     'jupyter',
     'notebook',
     'nbformat',
     'nbconvert',
-    # Test frameworks
     'pytest',
-    'unittest',
     '_pytest',
 ]
 
