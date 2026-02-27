@@ -13,6 +13,7 @@ then gets our soundfile-based shim instead of the real torchcodec.
 
 Loaded automatically via sitecustomize.py in the standalone Python environment.
 """
+import importlib.machinery
 import sys
 import types
 from dataclasses import dataclass
@@ -85,20 +86,28 @@ class AudioDecoder:
 
 
 # --- Register fake torchcodec modules in sys.modules ---
+# Each module needs __spec__ set so importlib.util.find_spec() doesn't raise ValueError.
+# transformers' import_utils.py calls find_spec("torchcodec") during init.
 
-# Top-level torchcodec module
-mod_torchcodec = types.ModuleType('torchcodec')
-mod_torchcodec.__path__ = []
-mod_torchcodec.AudioSamples = AudioSamples
+def _make_fake_module(name, attrs=None, is_package=False):
+    """Create a fake module with proper __spec__ for importlib compatibility."""
+    mod = types.ModuleType(name)
+    mod.__spec__ = importlib.machinery.ModuleSpec(name, None, is_package=is_package)
+    if is_package:
+        mod.__path__ = []
+    if attrs:
+        for k, v in attrs.items():
+            setattr(mod, k, v)
+    return mod
 
-# torchcodec.decoders submodule
-mod_decoders = types.ModuleType('torchcodec.decoders')
-mod_decoders.__path__ = []
-mod_decoders.AudioDecoder = AudioDecoder
-mod_decoders.AudioStreamMetadata = AudioStreamMetadata
+mod_torchcodec = _make_fake_module('torchcodec', {'AudioSamples': AudioSamples}, is_package=True)
+mod_decoders = _make_fake_module('torchcodec.decoders', {
+    'AudioDecoder': AudioDecoder,
+    'AudioStreamMetadata': AudioStreamMetadata,
+}, is_package=True)
 
 sys.modules['torchcodec'] = mod_torchcodec
 sys.modules['torchcodec.decoders'] = mod_decoders
 # Block the native _core to prevent any accidental real import
-sys.modules['torchcodec.decoders._core'] = types.ModuleType('torchcodec.decoders._core')
-sys.modules['torchcodec._core'] = types.ModuleType('torchcodec._core')
+sys.modules['torchcodec.decoders._core'] = _make_fake_module('torchcodec.decoders._core')
+sys.modules['torchcodec._core'] = _make_fake_module('torchcodec._core')

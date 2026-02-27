@@ -1,53 +1,218 @@
 #!/usr/bin/env bash
-# Build merged PyInstaller sidecar binary (diarize + ner_service).
-# Produces: python_sidecar/dist/ml_sidecar/{diarize, ner_service, _internal/}
-# Requires: python_sidecar/venv with pyannote.audio + flair + pyinstaller installed
+# Build relocatable Python sidecar via uv.
+#
+# Produces: python_sidecar/standalone/ (complete Python 3.12 + all ML deps)
+#
+# The standalone directory contains a full Python installation with torch,
+# pyannote.audio, and flair pre-installed. This replaces the previous
+# PyInstaller-based build, eliminating hidden import issues entirely.
+#
+# Prerequisites:
+#   - uv installed (brew install uv)
+#   - macOS ARM64 (Apple Silicon)
+#
+# Usage:
+#   scripts/build-sidecar.sh          # full build
+#   scripts/build-sidecar.sh --clean  # remove existing standalone dir first
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 SIDECAR_DIR="$PROJECT_ROOT/python_sidecar"
-VENV_DIR="$SIDECAR_DIR/venv"
+STANDALONE_DIR="$SIDECAR_DIR/standalone"
+PYTHON_VERSION="3.12"
 
-# Check venv
-if [ ! -d "$VENV_DIR" ]; then
-  echo "Error: Python venv nicht gefunden: $VENV_DIR"
-  echo "Setup: scripts/setup-pyannote.sh && scripts/setup-ner.sh"
+# --- Parse args ---
+CLEAN=false
+for arg in "$@"; do
+  case "$arg" in
+    --clean) CLEAN=true ;;
+    *) echo "Unknown option: $arg"; exit 1 ;;
+  esac
+done
+
+# --- Check prerequisites ---
+if ! command -v uv &>/dev/null; then
+  echo "Error: uv is required. Install via: brew install uv"
   exit 1
 fi
 
-# Activate venv
-source "$VENV_DIR/bin/activate"
+echo "Using uv $(uv --version)"
 
-# Ensure PyInstaller is installed
-if ! command -v pyinstaller &>/dev/null; then
-  echo "PyInstaller nicht gefunden, wird installiert..."
-  pip install pyinstaller
+# --- Clean if requested ---
+if [ "$CLEAN" = true ] && [ -d "$STANDALONE_DIR" ]; then
+  echo "=== Cleaning previous standalone build ==="
+  rm -rf "$STANDALONE_DIR"
 fi
 
-# Clean previous build
-echo "=== Cleaning previous build ==="
-rm -rf "$SIDECAR_DIR/dist/ml_sidecar" "$SIDECAR_DIR/build/diarize" "$SIDECAR_DIR/build/ner_service"
+# Skip if already built
+if [ -d "$STANDALONE_DIR" ] && [ -f "$STANDALONE_DIR/bin/python3" ]; then
+  echo "Standalone Python already exists at $STANDALONE_DIR"
+  echo "Use --clean to rebuild from scratch."
+  echo ""
+  echo "Verifying existing build..."
+  "$STANDALONE_DIR/bin/python3" -c "import torch, pyannote.audio, flair; print('All imports OK')" 2>/dev/null \
+    && { echo "=== Build already complete ==="; exit 0; } \
+    || { echo "Existing build is broken, rebuilding..."; rm -rf "$STANDALONE_DIR"; }
+fi
 
-# Build merged sidecar
-echo "=== Building merged ml_sidecar ==="
-cd "$SIDECAR_DIR"
-pyinstaller ml_sidecar.spec --noconfirm
+# --- 1. Install standalone Python via uv ---
+echo ""
+echo "=== Step 1/5: Installing standalone Python $PYTHON_VERSION ==="
 
-# Verify output
-if [ ! -f "$SIDECAR_DIR/dist/ml_sidecar/diarize" ] || [ ! -f "$SIDECAR_DIR/dist/ml_sidecar/ner_service" ]; then
-  echo "Error: Build fehlgeschlagen — Executables nicht gefunden"
+# uv creates a versioned subdirectory like cpython-3.12.12-macos-aarch64-none/
+# We install to a temp location, then move the inner directory to standalone/
+UV_INSTALL_DIR="$SIDECAR_DIR/.standalone-build"
+rm -rf "$UV_INSTALL_DIR"
+
+uv python install "cpython-${PYTHON_VERSION}" \
+  --install-dir "$UV_INSTALL_DIR" \
+  --reinstall
+
+# Find the versioned directory uv created (e.g., cpython-3.12.12-macos-aarch64-none)
+PYTHON_SUBDIR=$(find "$UV_INSTALL_DIR" -maxdepth 1 -type d -name "cpython-*" | head -1)
+if [ -z "$PYTHON_SUBDIR" ]; then
+  echo "Error: Could not find cpython-* directory in $UV_INSTALL_DIR"
+  ls -la "$UV_INSTALL_DIR"
+  exit 1
+fi
+
+# Move the inner directory to the final location
+mv "$PYTHON_SUBDIR" "$STANDALONE_DIR"
+rm -rf "$UV_INSTALL_DIR"
+
+PYTHON_BIN="$STANDALONE_DIR/bin/python3"
+if [ ! -f "$PYTHON_BIN" ]; then
+  echo "Error: Python binary not found at $PYTHON_BIN"
+  ls -la "$STANDALONE_DIR/bin/"
+  exit 1
+fi
+
+echo "Python installed: $("$PYTHON_BIN" --version)"
+
+# --- 2. Remove EXTERNALLY-MANAGED marker ---
+# uv marks its Python as externally managed, preventing pip installs.
+# We need to remove this since we're building a self-contained bundle.
+MANAGED_FILE=$(find "$STANDALONE_DIR" -name "EXTERNALLY-MANAGED" -type f | head -1)
+if [ -n "$MANAGED_FILE" ]; then
+  rm "$MANAGED_FILE"
+  echo "Removed EXTERNALLY-MANAGED marker"
+fi
+
+# --- 3. Install ML dependencies ---
+echo ""
+echo "=== Step 2/5: Installing ML dependencies ==="
+echo "This will take several minutes (downloading ~1 GB of packages)..."
+
+uv pip install \
+  --python "$PYTHON_BIN" \
+  -r "$SIDECAR_DIR/requirements.txt" \
+  -r "$SIDECAR_DIR/requirements-ner.txt"
+
+echo "Dependencies installed."
+
+# --- 4. Install torchcodec shim via sitecustomize ---
+echo ""
+echo "=== Step 3/5: Installing torchcodec shim ==="
+
+SITE_PACKAGES=$("$PYTHON_BIN" -c "import site; print(site.getsitepackages()[0])")
+echo "site-packages: $SITE_PACKAGES"
+
+cat > "$SITE_PACKAGES/sitecustomize.py" << 'SITECUSTOMIZE_EOF'
+"""Auto-load torchcodec shim before any app code.
+
+This file is auto-generated by scripts/build-sidecar.sh.
+It loads torchcodec_shim.py which provides a soundfile-based fallback
+for torchcodec (required by pyannote.audio 4.0.4+).
+"""
+import importlib.util
+import os
+import sys
+
+# torchcodec_shim.py lives next to diarize.py and ner_service.py
+# Production layout: <app>/Contents/Resources/ml_sidecar/torchcodec_shim.py
+#                    <app>/Contents/Resources/ml_sidecar/standalone/bin/python3
+# So from site-packages we go up to standalone/, then up to ml_sidecar/
+_candidates = [
+    # Production: site-packages → lib/python3.12 → lib → standalone → ml_sidecar
+    os.path.normpath(os.path.join(
+        os.path.dirname(__file__), '..', '..', '..', 'torchcodec_shim.py'
+    )),
+    # Dev build: standalone/lib/python3.12/site-packages → standalone → python_sidecar
+    os.path.normpath(os.path.join(
+        os.path.dirname(__file__), '..', '..', '..', '..', 'torchcodec_shim.py'
+    )),
+]
+
+for _shim_path in _candidates:
+    if os.path.isfile(_shim_path):
+        _spec = importlib.util.spec_from_file_location('torchcodec_shim', _shim_path)
+        _mod = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        break
+SITECUSTOMIZE_EOF
+
+echo "sitecustomize.py installed."
+
+# --- 5. Ad-hoc codesign all native binaries ---
+echo ""
+echo "=== Step 4/5: Code-signing native binaries ==="
+
+SIGN_COUNT=0
+SIGN_FAIL=0
+while IFS= read -r -d '' dylib; do
+  if codesign --sign - --force --no-strict "$dylib" 2>/dev/null; then
+    SIGN_COUNT=$((SIGN_COUNT + 1))
+  else
+    SIGN_FAIL=$((SIGN_FAIL + 1))
+  fi
+done < <(find "$STANDALONE_DIR" \( -name '*.dylib' -o -name '*.so' \) -print0)
+
+# Sign the Python binary itself
+codesign --sign - --force --no-strict "$PYTHON_BIN" 2>/dev/null && SIGN_COUNT=$((SIGN_COUNT + 1)) || true
+
+echo "Signed $SIGN_COUNT native binaries ($SIGN_FAIL failed — non-critical)."
+
+# --- 6. Verify ---
+echo ""
+echo "=== Step 5/5: Verifying build ==="
+
+VERIFY_FAILED=false
+
+"$PYTHON_BIN" -c "
+import torch
+print(f'  torch {torch.__version__} (MPS: {torch.backends.mps.is_available()})')
+" || VERIFY_FAILED=true
+
+"$PYTHON_BIN" -c "
+import pyannote.audio
+print(f'  pyannote.audio {pyannote.audio.__version__}')
+" || VERIFY_FAILED=true
+
+"$PYTHON_BIN" -c "
+import flair
+print(f'  flair {flair.__version__}')
+" || VERIFY_FAILED=true
+
+# Test that scripts can at least parse args
+"$PYTHON_BIN" "$SIDECAR_DIR/diarize.py" --help > /dev/null 2>&1 \
+  && echo "  diarize.py: OK" \
+  || { echo "  diarize.py: FAILED"; VERIFY_FAILED=true; }
+
+"$PYTHON_BIN" "$SIDECAR_DIR/ner_service.py" --help > /dev/null 2>&1 \
+  && echo "  ner_service.py: OK" \
+  || { echo "  ner_service.py: FAILED"; VERIFY_FAILED=true; }
+
+if [ "$VERIFY_FAILED" = true ]; then
+  echo ""
+  echo "=== VERIFICATION FAILED ==="
+  echo "Some imports or scripts failed. Check the output above."
   exit 1
 fi
 
 # Report sizes
 echo ""
 echo "=== Build erfolgreich ==="
-echo "Executables:"
-ls -lh "$SIDECAR_DIR/dist/ml_sidecar/diarize" "$SIDECAR_DIR/dist/ml_sidecar/ner_service"
 echo ""
-echo "_internal/:"
-du -sh "$SIDECAR_DIR/dist/ml_sidecar/_internal/"
-echo ""
-echo "Gesamt:"
-du -sh "$SIDECAR_DIR/dist/ml_sidecar/"
+echo "Python: $PYTHON_BIN"
+du -sh "$STANDALONE_DIR/"
