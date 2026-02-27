@@ -156,7 +156,7 @@ export default function App(): React.JSX.Element {
         </aside>
 
         {/* Main content */}
-        <main className="flex flex-1 flex-col">
+        <main className="flex min-h-0 flex-1 flex-col">
           {/* Header — only for non-review views (review has its own header) */}
           {!isInReview && (
             <header className="titlebar-drag flex items-center justify-between border-b border-gray-200 px-6 py-4">
