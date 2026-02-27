@@ -194,6 +194,11 @@ import flair
 print(f'  flair {flair.__version__}')
 " || VERIFY_FAILED=true
 
+"$PYTHON_BIN" -c "
+import soundfile as sf
+print(f'  soundfile {sf.__version__} (libsndfile {sf.__libsndfile_version__})')
+" || VERIFY_FAILED=true
+
 # Test that scripts can at least parse args
 "$PYTHON_BIN" "$SIDECAR_DIR/diarize.py" --help > /dev/null 2>&1 \
   && echo "  diarize.py: OK" \
