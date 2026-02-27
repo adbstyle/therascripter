@@ -159,9 +159,11 @@ export class PyannoteSidecar implements TaskExecutor {
             .filter(
               (line) =>
                 line.startsWith('Error:') ||
+                line.startsWith('Fehler:') ||
                 line.includes('error') ||
                 line.includes('Error') ||
-                line.includes('failed')
+                line.includes('failed') ||
+                line.includes('fehlgeschlagen')
             )
           const errorDetail = errorLines.length > 0 ? errorLines.join('; ') : stderr.slice(-500)
           reject(new Error(`Diarization Fehler (Exit Code ${code}): ${errorDetail}`))
