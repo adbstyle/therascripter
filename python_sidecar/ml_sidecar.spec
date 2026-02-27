@@ -120,7 +120,7 @@ all_datas = pyannote_datas + flair_datas + lightning_datas + torchaudio_datas + 
 
 excludes = [
     # torchcodec — native .dylibs can't be bundled (uses importlib.machinery.FileFinder).
-    # Runtime hook provides torchaudio-based shim (AudioDecoder/AudioSamples/AudioStreamMetadata).
+    # Runtime hook provides soundfile-based shim (AudioDecoder/AudioSamples/AudioStreamMetadata).
     'torchcodec',
     # --- DO NOT exclude these (unconditional top-level imports at runtime): ---
     # torch._inductor    — lightning.fabric → torch._dynamo → torch._inductor.test_operators
