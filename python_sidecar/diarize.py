@@ -7,7 +7,7 @@ Progress is reported to stderr for parsing by the Electron main process.
 
 Usage:
     python3 diarize.py --audio <path> [--model-dir <path>] [--min-speakers 1] [--max-speakers 4]
-                       [--num-speakers 0] [--collar 1.5]
+                       [--num-speakers 0] [--collar 0.5]
 
 Output format (RTTM, one line per speaker segment):
     SPEAKER <file-id> 1 <start-sec> <duration-sec> <NA> <NA> <speaker-label> <NA> <NA>
@@ -48,7 +48,7 @@ def main() -> None:
     parser.add_argument(
         "--collar",
         type=float,
-        default=1.5,
+        default=0.5,
         help="Post-processing collar: merge same-speaker segments separated by less than this (seconds)",
     )
     args = parser.parse_args()

@@ -49,9 +49,9 @@ export class AlignmentService implements TaskExecutor {
     // Build consistent speaker label mapping (raw label → "Person A", "Person B", ...)
     const labelMap = buildSpeakerLabelMap(diarization.speakers)
 
-    // Align words with speaker segments, then smooth speaker boundaries
+    // Align words with speaker segments, then correct sentence boundaries
     const rawAligned = alignWords(transcript.words, diarization.speakers, labelMap)
-    const alignedWords = smoothBoundaries(rawAligned)
+    const alignedWords = correctSentenceBoundaries(rawAligned)
 
     onProgress(0.6)
 
@@ -140,25 +140,54 @@ export function alignWords(
   })
 }
 
-// Post-assignment boundary smoother: when a word at a speaker transition is
-// immediately preceded by sentence-ending punctuation (.!?), reassign it to the
-// next speaker — it likely starts their sentence, not ends the previous one.
-export function smoothBoundaries(words: TranscriptWord[]): TranscriptWord[] {
-  if (words.length < 3) return words
+// Maximum number of words to look back when snapping a speaker change
+// to the nearest sentence boundary. Limits false positives from genuine
+// mid-sentence interruptions.
+const MAX_SENTENCE_LOOKBACK = 5
+
+// Sentence-aware boundary correction: when a speaker change occurs mid-sentence,
+// snap it backward to the nearest sentence boundary (.!?) and reassign the
+// intermediate words to the new speaker. This handles multi-word misassignment
+// caused by pyannote segment boundaries being 0.5-1.5s off from actual transitions.
+export function correctSentenceBoundaries(words: TranscriptWord[]): TranscriptWord[] {
+  if (words.length < 2) return words
 
   const result = words.map((w) => ({ ...w }))
 
-  for (let i = 1; i < result.length - 1; i++) {
-    const prev = words[i - 1]
-    const curr = words[i]
-    const next = words[i + 1]
+  for (let i = 1; i < result.length; i++) {
+    // Find speaker change
+    if (result[i].speaker === result[i - 1].speaker) continue
 
-    if (
-      curr.speaker !== next.speaker && // transition coming up
-      curr.speaker === prev.speaker && // curr is still in the previous speaker's run
-      /[.!?]$/.test(prev.text) // sentence ended before curr
-    ) {
-      result[i] = { ...curr, speaker: next.speaker }
+    // Speaker change is already at a sentence boundary — nothing to fix
+    if (/[.!?]$/.test(result[i - 1].text)) continue
+
+    // Look backward for nearest .!? within MAX_SENTENCE_LOOKBACK words
+    let sentEnd = -1
+    for (let j = i - 2; j >= Math.max(0, i - MAX_SENTENCE_LOOKBACK - 1); j--) {
+      if (/[.!?]$/.test(result[j].text)) {
+        sentEnd = j
+        break
+      }
+    }
+
+    if (sentEnd < 0) continue // no sentence boundary found within lookback
+
+    // Safety: only snap if all words between sentEnd+1 and i-1 had the same speaker
+    // in the ORIGINAL input (prevents cascading reassignments from previous snaps)
+    const outgoingSpeaker = words[i - 1].speaker
+    let allSame = true
+    for (let k = sentEnd + 1; k < i; k++) {
+      if (words[k].speaker !== outgoingSpeaker) {
+        allSame = false
+        break
+      }
+    }
+    if (!allSame) continue
+
+    // Reassign words between sentence boundary and speaker change to the new speaker
+    const newSpeaker = result[i].speaker
+    for (let k = sentEnd + 1; k < i; k++) {
+      result[k] = { ...result[k], speaker: newSpeaker }
     }
   }
 
