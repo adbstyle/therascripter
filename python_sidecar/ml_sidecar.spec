@@ -127,7 +127,10 @@ excludes = [
     # (flair.trainers → flair.distributed_utils → torch.distributed)
     # NOTE: torch.utils.data.datapipes must NOT be excluded — torch.utils.data.__init__
     # imports from datapipes unconditionally (PyTorch 2.10+)
-    'torch.testing',
+    # NOTE: torch.testing must NOT be excluded — torch/__init__.py eagerly imports it
+    # at line 2273: `from torch import (... testing as testing ...)`
+    # Exclude only _internal (9.7 MB of test infrastructure, never imported at runtime)
+    'torch.testing._internal',
     'torch.utils.benchmark',
     'torch.utils.tensorboard',
     # AWS SDK (pulled in transitively by huggingface_hub, not needed at runtime)
