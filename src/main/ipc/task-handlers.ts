@@ -7,4 +7,8 @@ export function registerTaskHandlers(): void {
     const { sessionId } = GetSessionTasksSchema.parse(args)
     return getTaskQueue().getSessionTasks(sessionId)
   })
+
+  ipcMain.handle('task:isProcessing', () => {
+    return getTaskQueue().isProcessing()
+  })
 }

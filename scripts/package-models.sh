@@ -1,27 +1,15 @@
 #!/usr/bin/env bash
-# Package sidecar binary + model archives for R2 upload.
+# Package ML model archives for R2 upload.
 # Creates tar.gz archives in r2-upload/ and prints SHA-256 hashes.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 OUTPUT_DIR="$PROJECT_ROOT/r2-upload"
-SIDECAR_DIST="$PROJECT_ROOT/python_sidecar/dist/ml_sidecar"
 MODELS_DIR="$HOME/.therascript/models"
-
-# Verify sidecar build exists
-if [ ! -f "$SIDECAR_DIST/diarize" ] || [ ! -f "$SIDECAR_DIST/ner_service" ]; then
-  echo "Error: Sidecar-Build nicht gefunden. Zuerst: npm run sidecar:build"
-  exit 1
-fi
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
-
-echo "=== Packaging sidecar binary ==="
-# Package ml_sidecar (sidecar binary + _internal/)
-tar -czf "$OUTPUT_DIR/ml-sidecar-arm64.tar.gz" -C "$PROJECT_ROOT/python_sidecar/dist" ml_sidecar
-echo "  -> ml-sidecar-arm64.tar.gz"
 
 echo "=== Packaging model archives ==="
 

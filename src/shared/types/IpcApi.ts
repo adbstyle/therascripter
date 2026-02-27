@@ -3,6 +3,7 @@ import type { Task, TaskType } from './Task'
 import type { BlocklistEntry } from './NerTypes'
 import type { EntityMap, PlaceholderType } from './EntityMap'
 import type { TipTapDocument } from './TipTapDocument'
+import type { PendingModelUpdate } from './ModelUpdate'
 
 export interface SessionApi {
   list(): Promise<Session[]>
@@ -43,6 +44,7 @@ export interface TaskErrorData {
 
 export interface TasksApi {
   getSessionTasks(sessionId: string): Promise<Task[]>
+  isProcessing(): Promise<boolean>
   onProgress(callback: (data: TaskProgressData) => void): () => void
   onCompleted(callback: (data: TaskCompletedData) => void): () => void
   onError(callback: (data: TaskErrorData) => void): () => void
@@ -127,6 +129,23 @@ export interface ModelDownloadApi {
   onStatus(callback: (status: ModelDownloadStatus) => void): () => void
 }
 
+export interface ModelUpdateRestartResult {
+  allowed: boolean
+  reason?: 'recording' | 'processing'
+}
+
+export interface ModelUpdateApi {
+  check(): Promise<PendingModelUpdate[]>
+  restart(updates: PendingModelUpdate[]): Promise<ModelUpdateRestartResult>
+  startDownload(): Promise<void>
+  getPending(): Promise<PendingModelUpdate[] | null>
+  clearPending(): Promise<void>
+  onAvailable(callback: (updates: PendingModelUpdate[]) => void): () => void
+  onDownloadProgress(callback: (status: ModelDownloadStatus) => void): () => void
+  onDownloadComplete(callback: () => void): () => void
+  onDownloadError(callback: (error: string) => void): () => void
+}
+
 export interface IpcApi {
   sessions: SessionApi
   recording: RecordingApi
@@ -137,4 +156,5 @@ export interface IpcApi {
   review: ReviewApi
   system: SystemApi
   modelDownload: ModelDownloadApi
+  modelUpdate: ModelUpdateApi
 }

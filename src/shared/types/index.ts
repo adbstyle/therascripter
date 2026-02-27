@@ -29,6 +29,8 @@ export type {
   ModelStatusInfo,
   DiskSpaceInfo,
   ModelDownloadApi,
+  ModelUpdateRestartResult,
+  ModelUpdateApi,
   IpcApi
 } from './IpcApi'
 
@@ -63,3 +65,10 @@ export type {
 } from './TipTapDocument'
 
 export type { PageData, ExtractionResult } from './PDFTypes'
+
+export type {
+  ManifestModel,
+  Manifest,
+  PendingModelUpdate,
+  InstalledModelVersion
+} from './ModelUpdate'

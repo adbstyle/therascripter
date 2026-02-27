@@ -1,4 +1,5 @@
 import Store from 'electron-store'
+import type { PendingModelUpdate, InstalledModelVersion } from '../../shared/types/ModelUpdate'
 
 export interface AppSettings {
   activeModels: {
@@ -10,6 +11,8 @@ export interface AppSettings {
   firstLaunchDone: boolean
   consentReminderShown: boolean
   modelsDownloaded: boolean
+  installedModelVersions: Record<string, InstalledModelVersion>
+  pendingModelUpdates: PendingModelUpdate[] | null
 }
 
 const defaults: AppSettings = {
@@ -21,7 +24,9 @@ const defaults: AppSettings = {
   },
   firstLaunchDone: false,
   consentReminderShown: false,
-  modelsDownloaded: false
+  modelsDownloaded: false,
+  installedModelVersions: {},
+  pendingModelUpdates: null
 }
 
 let store: Store<AppSettings> | null = null

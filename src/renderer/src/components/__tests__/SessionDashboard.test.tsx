@@ -76,6 +76,18 @@ const mockSessions = {
   rename: vi.fn()
 }
 
+const mockModelUpdate = {
+  check: vi.fn().mockResolvedValue([]),
+  restart: vi.fn(),
+  startDownload: vi.fn(),
+  getPending: vi.fn().mockResolvedValue(null),
+  clearPending: vi.fn().mockResolvedValue(undefined),
+  onAvailable: vi.fn().mockReturnValue(() => {}),
+  onDownloadProgress: vi.fn().mockReturnValue(() => {}),
+  onDownloadComplete: vi.fn().mockReturnValue(() => {}),
+  onDownloadError: vi.fn().mockReturnValue(() => {})
+}
+
 beforeEach(() => {
   window.api = {
     sessions: mockSessions,
@@ -93,6 +105,7 @@ beforeEach(() => {
     },
     tasks: {
       getSessionTasks: vi.fn().mockResolvedValue([]),
+      isProcessing: vi.fn().mockResolvedValue(false),
       onProgress: vi.fn().mockReturnValue(() => {}),
       onCompleted: vi.fn().mockReturnValue(() => {}),
       onError: vi.fn().mockReturnValue(() => {})
@@ -122,7 +135,8 @@ beforeEach(() => {
       checkDiskSpace: vi.fn().mockResolvedValue({ sufficient: true, availableBytes: 0, requiredBytes: 0 }),
       start: vi.fn(),
       onStatus: vi.fn().mockReturnValue(() => {})
-    }
+    },
+    modelUpdate: mockModelUpdate
   } as typeof window.api
   vi.clearAllMocks()
 })

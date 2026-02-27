@@ -1,143 +1,138 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type {
-  ModelDownloadProgress,
-  ModelDownloadStatus,
-  ModelStatusInfo,
-  DiskSpaceInfo
-} from '../../../shared/types'
+import type { ModelDownloadProgress, ModelDownloadStatus } from '../../../shared/types'
+import type { PendingModelUpdate } from '../../../shared/types/ModelUpdate'
 import { formatBytes } from '../utils/formatBytes'
 
-interface FirstLaunchScreenProps {
+interface ModelUpdateScreenProps {
+  updates: PendingModelUpdate[]
   onComplete: () => void
 }
 
-export default function FirstLaunchScreen({
+export default function ModelUpdateScreen({
+  updates,
   onComplete
-}: FirstLaunchScreenProps): React.JSX.Element {
-  const [modelInfo, setModelInfo] = useState<ModelStatusInfo | null>(null)
-  const [diskSpace, setDiskSpace] = useState<DiskSpaceInfo | null>(null)
+}: ModelUpdateScreenProps): React.JSX.Element {
   const [status, setStatus] = useState<ModelDownloadStatus>({ state: 'idle' })
   const [started, setStarted] = useState(false)
   const lastProgressRef = useRef<ModelDownloadProgress | null>(null)
 
   useEffect(() => {
-    window.api.modelDownload.status().then(setModelInfo)
-    window.api.modelDownload.checkDiskSpace().then(setDiskSpace)
-
-    const unsub = window.api.modelDownload.onStatus((s) => {
+    const unsubProgress = window.api.modelUpdate.onDownloadProgress((s) => {
       if (s.state === 'downloading') {
         lastProgressRef.current = s.progress
       }
       setStatus(s)
-      if (s.state === 'complete') {
-        onComplete()
-      }
     })
 
-    return unsub
+    const unsubComplete = window.api.modelUpdate.onDownloadComplete(() => {
+      setStatus({ state: 'complete' })
+      onComplete()
+    })
+
+    const unsubError = window.api.modelUpdate.onDownloadError((error) => {
+      setStatus({ state: 'error', error, modelId: '' })
+    })
+
+    return () => {
+      unsubProgress()
+      unsubComplete()
+      unsubError()
+    }
   }, [onComplete])
 
   const handleStart = useCallback(async () => {
     setStarted(true)
-    setStatus({ state: 'downloading', progress: {
-      currentModel: '',
-      currentModelLabel: '',
-      currentModelProgress: 0,
-      currentModelDownloaded: 0,
-      currentModelTotal: 0,
-      overallDownloaded: 0,
-      overallTotal: 1,
-      overallPercent: 0
-    }})
-    await window.api.modelDownload.start()
-  }, [])
+    setStatus({
+      state: 'downloading',
+      progress: {
+        currentModel: '',
+        currentModelLabel: '',
+        currentModelProgress: 0,
+        currentModelDownloaded: 0,
+        currentModelTotal: 0,
+        overallDownloaded: 0,
+        overallTotal: updates.reduce((sum, u) => sum + u.sizeBytes, 0),
+        overallPercent: 0
+      }
+    })
+    await window.api.modelUpdate.startDownload()
+  }, [updates])
 
-  // Disk space error
-  if (diskSpace && !diskSpace.sufficient) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-white">
-        <div className="max-w-md text-center">
-          <div className="mb-4 text-4xl">&#9888;</div>
-          <h2 className="mb-2 text-lg font-semibold text-gray-900">
-            Nicht genügend Speicherplatz
-          </h2>
-          <p className="mb-4 text-sm text-gray-600">
-            Therascript benötigt mindestens 5 GB freien Speicherplatz für die ML-Modelle.
-          </p>
-          <div className="mb-4 text-sm text-gray-500">
-            <p>Verfügbar: {formatBytes(diskSpace.availableBytes)}</p>
-            <p>Benötigt: ~5.0 GB</p>
-          </div>
-          <p className="text-sm text-gray-500">
-            Bitte schaffen Sie Speicherplatz frei und starten Sie die App erneut.
-          </p>
-        </div>
-      </div>
-    )
-  }
+  const handleSkip = useCallback(async () => {
+    // Clear pending updates in settings so the screen doesn't reappear next launch
+    await window.api.modelUpdate.clearPending()
+    onComplete()
+  }, [onComplete])
 
   const isDownloading = status.state === 'downloading'
   const isExtracting = status.state === 'extracting'
   const isVerifying = status.state === 'verifying'
   const isError = status.state === 'error'
   const progress = isDownloading ? status.progress : null
-  // Keep overall progress bar visible during extracting/verifying states
   const displayProgress = progress ?? lastProgressRef.current
 
-  // Find which model is currently being processed
   const currentModelId =
     progress?.currentModel ||
     (isExtracting ? status.modelId : null) ||
     (isVerifying ? status.modelId : null)
+
+  const currentModelIndex = currentModelId
+    ? updates.findIndex((u) => u.id === currentModelId)
+    : -1
 
   return (
     <div className="flex h-screen flex-col items-center justify-center bg-white">
       <div className="w-full max-w-lg px-8">
         {/* Header */}
         <div className="titlebar-drag mb-8 text-center">
-          <div className="mb-2 text-sm text-gray-400">&#128274; Therascript</div>
-          <h1 className="mb-2 text-2xl font-bold text-gray-900">Willkommen bei Therascript</h1>
+          <div className="mb-2 text-sm text-gray-400">&#8635; Therascript</div>
+          <h1 className="mb-2 text-2xl font-bold text-gray-900">Modelle werden aktualisiert</h1>
           <p className="text-sm text-gray-600">
-            Alle Verarbeitung findet komplett lokal auf Ihrem Mac statt — keine Daten verlassen Ihr
-            Gerät.
+            Verbesserte Modellversionen werden heruntergeladen. Bestehende Modelle bleiben bis
+            zum erfolgreichen Abschluss erhalten.
           </p>
         </div>
 
         {!started && (
           <div className="mb-8 text-center">
             <p className="mb-6 text-sm text-gray-600">
-              Für die erste Einrichtung werden ML-Modelle heruntergeladen (~2.2 GB). Dies ist der
-              einzige Zeitpunkt, an dem eine Internetverbindung nötig ist.
+              {updates.length} {updates.length === 1 ? 'Modell wird' : 'Modelle werden'} aktualisiert
+              (~{formatBytes(updates.reduce((s, u) => s + u.sizeBytes, 0))}).
             </p>
-            <button
-              className="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-              onClick={handleStart}
-            >
-              Download starten
-            </button>
+            <div className="flex justify-center gap-3">
+              <button
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                onClick={handleSkip}
+              >
+                Überspringen
+              </button>
+              <button
+                className="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                onClick={handleStart}
+              >
+                Update starten
+              </button>
+            </div>
           </div>
         )}
 
         {/* Download progress */}
         {started && (
           <div className="rounded-lg border border-gray-200 p-5">
-            {modelInfo?.models.map((model) => {
-              const isCurrent = model.id === currentModelId
-              const isCompleted =
-                currentModelId &&
-                modelInfo.models.indexOf(model) <
-                  modelInfo.models.findIndex((m) => m.id === currentModelId)
+            {updates.map((update, index) => {
+              const isCurrent = update.id === currentModelId
+              const isCompleted = currentModelIndex > 0 && index < currentModelIndex
 
               return (
-                <div key={model.id} className="mb-3 last:mb-0">
+                <div key={update.id} className="mb-3 last:mb-0">
                   <div className="mb-1 flex items-center justify-between">
                     <span
                       className={`text-sm ${isCurrent ? 'font-medium text-gray-900' : 'text-gray-500'}`}
                     >
                       {isCompleted ? '✓ ' : isCurrent ? '' : '○ '}
-                      {model.label}
+                      {update.label}
                     </span>
-                    <span className="text-xs text-gray-400">{formatBytes(model.sizeBytes)}</span>
+                    <span className="text-xs text-gray-400">{formatBytes(update.sizeBytes)}</span>
                   </div>
                   {isCurrent && isDownloading && progress && (
                     <div className="h-2 overflow-hidden rounded-full bg-gray-200">
@@ -181,21 +176,24 @@ export default function FirstLaunchScreen({
         {/* Error state */}
         {isError && (
           <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
-            <p className="mb-2 text-sm font-medium text-red-800">Download fehlgeschlagen</p>
+            <p className="mb-2 text-sm font-medium text-red-800">Update fehlgeschlagen</p>
             <p className="mb-3 text-sm text-red-600">{status.error}</p>
+            <p className="mb-3 text-xs text-gray-500">
+              Bestehende Modelle sind unverändert. Das Update wird beim nächsten Start erneut
+              versucht.
+            </p>
             <button
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-              onClick={handleStart}
+              onClick={handleSkip}
             >
-              Erneut versuchen
+              Weiter
             </button>
           </div>
         )}
 
-        {/* Resume hint */}
         {started && !isError && (
           <p className="mt-4 text-center text-xs text-gray-400">
-            Hinweis: Bei Abbruch wird der Download beim nächsten Start automatisch fortgesetzt.
+            Hinweis: Bei Abbruch wird das Update beim nächsten Start automatisch fortgesetzt.
           </p>
         )}
       </div>

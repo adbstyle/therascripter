@@ -16,6 +16,7 @@ import { registerPDFHandlers } from './ipc/pdf-handlers'
 import { registerReviewHandlers } from './ipc/review-handlers'
 import { registerSystemHandlers } from './ipc/system-handlers'
 import { registerModelDownloadHandlers } from './ipc/model-download-handlers'
+import { registerModelUpdateHandlers } from './ipc/model-update-handlers'
 import { initTray, getTray } from './services/TrayService'
 import {
   startAutoDeletion,
@@ -23,6 +24,10 @@ import {
   ensureSpotlightExclusion
 } from './services/AutoDeletionService'
 import { checkFileVaultOnStartup } from './services/FileVaultService'
+import {
+  cleanupIncompleteUpdates,
+  migrateInstalledVersions
+} from './services/ModelUpdateService'
 import { WhisperService } from './ml/WhisperService'
 import { PyannoteSidecar } from './ml/PyannoteSidecar'
 import { AlignmentService } from './ml/AlignmentService'
@@ -102,6 +107,9 @@ app.whenReady().then(() => {
 
   initSettings()
 
+  // Clean up any incomplete model updates from a previous crashed update
+  cleanupIncompleteUpdates()
+
   // Initialize task queue + crash recovery (before IPC handlers that may enqueue tasks)
   const taskQueue = initTaskQueue(getDatabase())
   const recovered = taskQueue.recoverStuckTasks()
@@ -132,10 +140,14 @@ app.whenReady().then(() => {
   registerReviewHandlers()
   registerSystemHandlers()
   registerModelDownloadHandlers()
+  registerModelUpdateHandlers()
 
   setupCSP()
   createWindow()
   checkFileVaultOnStartup()
+
+  // Migrate existing model installations to version tracking (one-time, idempotent)
+  migrateInstalledVersions()
 
   // Initialize tray after window is created
   const tray = initTray()
