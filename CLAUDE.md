@@ -28,7 +28,7 @@ scripts/setup-pyannote.sh --model # Also download diarization model
 scripts/setup-ner.sh              # Install flair into existing Python venv
 scripts/setup-ner.sh --model      # Also download NER model (~1.1 GB)
 scripts/setup-vision-ocr.sh       # Build Swift Vision OCR CLI helper → resources/bin/
-npm run sidecar:build              # PyInstaller-bundle Python sidecar → python_sidecar/dist/
+npm run sidecar:build              # Build standalone Python sidecar via uv → python_sidecar/standalone/
 npm run sidecar:package            # Package models for R2 upload
 npm run sidecar:upload             # Upload model packages to Cloudflare R2
 npm run sidecar:deploy             # Build + package + upload (full pipeline)
@@ -59,7 +59,7 @@ npm run sidecar:deploy             # Build + package + upload (full pipeline)
 
 **First launch:** FirstLaunchScreen checks for models, validates disk space (5 GB minimum), downloads ~4.1 GB (Whisper 1.7 GB + Pyannote 0.2 GB + flair NER 2.2 GB) with progress tracking. Models persist across app updates.
 
-**Python sidecar:** Two modes: (1) **Dev**: Python venv at `python_sidecar/venv/` — one-time setup after fresh clone: `scripts/setup-pyannote.sh --model` then `scripts/setup-ner.sh --model`. (2) **Production**: PyInstaller-bundled binaries at `python_sidecar/dist/` (no venv needed). Build with `npm run sidecar:build`. Pyannote requires HuggingFace token (`huggingface-cli login`) and accepted terms for `pyannote/speaker-diarization-3.1` + `pyannote/speaker-diarization-community-1`. The venv and models persist across builds — no re-setup needed for `npm run dev/build`.
+**Python sidecar:** Two modes: (1) **Dev**: Python venv at `python_sidecar/venv/` — one-time setup after fresh clone: `scripts/setup-pyannote.sh --model` then `scripts/setup-ner.sh --model`. (2) **Production**: Standalone relocatable Python at `python_sidecar/standalone/` built via `uv` (no PyInstaller, no hidden import issues). Build with `npm run sidecar:build`. The torchcodec shim (`torchcodec_shim.py`) is loaded via `sitecustomize.py` in the standalone environment. Pyannote requires HuggingFace token (`huggingface-cli login`) and accepted terms for `pyannote/speaker-diarization-3.1` + `pyannote/speaker-diarization-community-1`. The venv and models persist across builds — no re-setup needed for `npm run dev/build`.
 
 **Review Editor extensions:** 3 custom TipTap node extensions in `src/renderer/src/extensions/` — `placeholderChip` (anonymized entity chips), `speakerLabel` (speaker diarization labels), `timestamp` (time markers). Corresponding NodeViews in `components/editor/`.
 
@@ -87,6 +87,7 @@ npm run sidecar:deploy             # Build + package + upload (full pipeline)
 - **Vitest setup:** Requires `tests/setup.ts` (jsdom environment). Referenced in `vitest.config.ts`.
 - **Code signing:** No Apple Developer account — `identity: null` in `electron-builder.yml` disables electron-builder signing. `afterPack.js` flips Electron Fuses and must use `resetAdHocDarwinSignature: true` to re-sign with ad-hoc signature (`codesign --sign -`). Without this, ARM64 macOS kills the app on launch (`CODESIGNING, Code 2 Invalid Page`). Users must right-click → Open on first launch.
 - **electron-vite externals:** `electron-store` (main) and `@electron-toolkit/preload` (preload) are excluded from `externalizeDeps` in `electron.vite.config.ts` — they must be bundled, not externalized.
+- **Standalone Python sidecar:** Built via `uv` with python-build-standalone (~1 GB). All `.dylib`/`.so` files are ad-hoc codesigned during build. If the sidecar fails to run, try `scripts/build-sidecar.sh --clean` for a fresh build. The `torchcodec_shim.py` provides a soundfile-based fallback for torchcodec (required by pyannote.audio 4.0.4+), loaded automatically via `sitecustomize.py`.
 
 ## Code Conventions
 
