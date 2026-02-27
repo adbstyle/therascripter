@@ -85,6 +85,22 @@ describe('parseRTTM', () => {
     expect(segments).toHaveLength(1)
     expect(segments[0]).toEqual({ label: 'SPEAKER_00', start: 0.5, end: 1.7 })
   })
+
+  it('filters out segments shorter than 0.5 seconds', () => {
+    const rttm = [
+      'SPEAKER file1 1 0.50 1.20 <NA> <NA> SPEAKER_00 <NA> <NA>', // 1.2s → kept
+      'SPEAKER file1 1 2.00 0.10 <NA> <NA> SPEAKER_01 <NA> <NA>', // 0.1s → filtered
+      'SPEAKER file1 1 3.00 0.49 <NA> <NA> SPEAKER_00 <NA> <NA>', // 0.49s → filtered
+      'SPEAKER file1 1 4.00 0.50 <NA> <NA> SPEAKER_01 <NA> <NA>', // 0.5s → kept
+      'SPEAKER file1 1 5.00 0.017 <NA> <NA> SPEAKER_00 <NA> <NA>' // 17ms → filtered
+    ].join('\n')
+
+    const segments = parseRTTM(rttm)
+
+    expect(segments).toHaveLength(2)
+    expect(segments[0]).toEqual({ label: 'SPEAKER_00', start: 0.5, end: 1.7 })
+    expect(segments[1]).toEqual({ label: 'SPEAKER_01', start: 4.0, end: 4.5 })
+  })
 })
 
 describe('buildDiarizationData', () => {
