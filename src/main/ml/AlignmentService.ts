@@ -49,8 +49,9 @@ export class AlignmentService implements TaskExecutor {
     // Build consistent speaker label mapping (raw label → "Person A", "Person B", ...)
     const labelMap = buildSpeakerLabelMap(diarization.speakers)
 
-    // Align words with speaker segments
-    const alignedWords = alignWords(transcript.words, diarization.speakers, labelMap)
+    // Align words with speaker segments, then smooth speaker boundaries
+    const rawAligned = alignWords(transcript.words, diarization.speakers, labelMap)
+    const alignedWords = smoothBoundaries(rawAligned)
 
     onProgress(0.6)
 
@@ -95,8 +96,28 @@ export function buildSpeakerLabelMap(segments: SpeakerSegment[]): Map<string, st
   return labelMap
 }
 
-// For each word, find the speaker segment containing its midpoint
-// and assign the mapped speaker label
+// For each word, find the speaker segment with the greatest temporal overlap.
+// Returns null when the word falls entirely in a gap (no overlap with any segment).
+export function findBestOverlapSegment(
+  word: TranscriptWord,
+  segments: SpeakerSegment[]
+): SpeakerSegment | null {
+  let bestSeg: SpeakerSegment | null = null
+  let bestOverlap = 0
+
+  for (const seg of segments) {
+    const overlap = Math.max(0, Math.min(word.end, seg.end) - Math.max(word.start, seg.start))
+    if (overlap > bestOverlap) {
+      bestOverlap = overlap
+      bestSeg = seg
+    }
+  }
+
+  return bestSeg
+}
+
+// For each word, find the speaker segment with the greatest temporal overlap
+// and assign the mapped speaker label. Falls back to nearest segment for gap words.
 export function alignWords(
   words: TranscriptWord[],
   speakers: SpeakerSegment[],
@@ -105,8 +126,10 @@ export function alignWords(
   if (speakers.length === 0) return words
 
   return words.map((word) => {
-    const midpoint = (word.start + word.end) / 2
-    const segment = findSpeakerForTime(midpoint, speakers)
+    // Prefer overlap-based assignment; fall back to nearest-segment for gap words
+    const segment =
+      findBestOverlapSegment(word, speakers) ??
+      findSpeakerForTime((word.start + word.end) / 2, speakers)
     const rawLabel = segment?.label
     const mappedLabel = rawLabel ? labelMap.get(rawLabel) : undefined
 
@@ -115,6 +138,31 @@ export function alignWords(
       speaker: mappedLabel ? `Person ${mappedLabel}` : undefined
     }
   })
+}
+
+// Post-assignment boundary smoother: when a word at a speaker transition is
+// immediately preceded by sentence-ending punctuation (.!?), reassign it to the
+// next speaker — it likely starts their sentence, not ends the previous one.
+export function smoothBoundaries(words: TranscriptWord[]): TranscriptWord[] {
+  if (words.length < 3) return words
+
+  const result = words.map((w) => ({ ...w }))
+
+  for (let i = 1; i < result.length - 1; i++) {
+    const prev = words[i - 1]
+    const curr = words[i]
+    const next = words[i + 1]
+
+    if (
+      curr.speaker !== next.speaker && // transition coming up
+      curr.speaker === prev.speaker && // curr is still in the previous speaker's run
+      /[.!?]$/.test(prev.text) // sentence ended before curr
+    ) {
+      result[i] = { ...curr, speaker: next.speaker }
+    }
+  }
+
+  return result
 }
 
 // Find the speaker segment containing the given time point

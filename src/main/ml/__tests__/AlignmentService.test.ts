@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildSpeakerLabelMap,
+  findBestOverlapSegment,
   alignWords,
+  smoothBoundaries,
   findSpeakerForTime,
   rebuildSegmentsWithSpeakers,
   formatTimestamp
@@ -69,6 +71,54 @@ describe('buildSpeakerLabelMap', () => {
   })
 })
 
+// --- findBestOverlapSegment ---
+
+describe('findBestOverlapSegment', () => {
+  const segments = [seg('A', 0, 5), seg('B', 5, 10), seg('A', 12, 18)]
+
+  it('returns segment with greatest overlap for word fully inside', () => {
+    expect(findBestOverlapSegment(word('Hallo', 1, 3), segments)).toEqual(seg('A', 0, 5))
+    expect(findBestOverlapSegment(word('Welt', 6, 8), segments)).toEqual(seg('B', 5, 10))
+  })
+
+  it('returns segment with greatest overlap when word straddles boundary', () => {
+    // Word spans 4.8–5.2: overlap with A (0-5) = 0.2, overlap with B (5-10) = 0.2
+    // Tie → first match (A) wins
+    expect(findBestOverlapSegment(word('Ich', 4.8, 5.2), segments)).toEqual(seg('A', 0, 5))
+
+    // Word spans 4.7–5.3: overlap with A = 0.3, overlap with B = 0.3 → tie → A
+    expect(findBestOverlapSegment(word('Ich', 4.7, 5.3), segments)).toEqual(seg('A', 0, 5))
+
+    // Word spans 4.6–5.4: overlap with A = 0.4, overlap with B = 0.4 → tie → A
+    expect(findBestOverlapSegment(word('Ich', 4.6, 5.4), segments)).toEqual(seg('A', 0, 5))
+
+    // Word mostly in B: spans 4.9–5.5: overlap A = 0.1, overlap B = 0.5 → B wins
+    expect(findBestOverlapSegment(word('Ich', 4.9, 5.5), segments)).toEqual(seg('B', 5, 10))
+  })
+
+  it('returns null when word falls in a gap (no overlap)', () => {
+    // Word at 10.5–11.5 — gap between B (5-10) and A (12-18)
+    expect(findBestOverlapSegment(word('gap', 10.5, 11.5), segments)).toBeNull()
+  })
+
+  it('returns null for empty segments', () => {
+    expect(findBestOverlapSegment(word('test', 1, 2), [])).toBeNull()
+  })
+
+  it('handles overlapping speaker segments (picks larger overlap)', () => {
+    // Two speakers overlap in time
+    const overlapping = [seg('A', 0, 6), seg('B', 4, 10)]
+    // Word at 4.5–5.5: overlap A = 1.0 (4.5→5.5 clipped to 4.5→6 = 1.5), overlap B = 1.0 (4.5→5.5 clipped to 4.5→5.5 = 1.0)
+    // Actually: overlap A = min(5.5,6) - max(4.5,0) = 5.5-4.5 = 1.0
+    // overlap B = min(5.5,10) - max(4.5,4) = 5.5-4.5 = 1.0 → tie → A
+    expect(findBestOverlapSegment(word('overlap', 4.5, 5.5), overlapping)).toEqual(seg('A', 0, 6))
+
+    // Word at 5.5–6.5: overlap A = min(6.5,6) - max(5.5,0) = 6-5.5 = 0.5
+    // overlap B = min(6.5,10) - max(5.5,4) = 6.5-5.5 = 1.0 → B wins
+    expect(findBestOverlapSegment(word('overlap', 5.5, 6.5), overlapping)).toEqual(seg('B', 4, 10))
+  })
+})
+
 // --- findSpeakerForTime ---
 
 describe('findSpeakerForTime', () => {
@@ -117,7 +167,7 @@ describe('findSpeakerForTime', () => {
 // --- alignWords ---
 
 describe('alignWords', () => {
-  it('assigns speaker labels based on word midpoint', () => {
+  it('assigns speaker labels based on temporal overlap', () => {
     const words = [
       word('Hallo', 0, 2), // midpoint 1 → in A (0-5)
       word('wie', 6, 8), // midpoint 7 → in B (5-10)
@@ -168,6 +218,122 @@ describe('alignWords', () => {
 
     // Should get assigned to nearest segment
     expect(result[0].speaker).toBeDefined()
+  })
+})
+
+// --- smoothBoundaries ---
+
+describe('smoothBoundaries', () => {
+  it('reassigns boundary word after sentence-ending punctuation', () => {
+    // "sagen." (A) → "Ich" (A, should be B) → "denke" (B)
+    const words = [
+      word('sagen.', 0, 1, 'Person A'),
+      word('Ich', 1, 2, 'Person A'),
+      word('denke', 2, 3, 'Person B')
+    ]
+
+    const result = smoothBoundaries(words)
+
+    expect(result[0].speaker).toBe('Person A')
+    expect(result[1].speaker).toBe('Person B') // reassigned
+    expect(result[2].speaker).toBe('Person B')
+  })
+
+  it('handles multiple boundary corrections', () => {
+    // Simulates the exact screenshot bug: "...ja. Ich" [A] → [C] "bin doch nicht ganz durch. Ich" [C] → [A] "würde"
+    const words = [
+      word('ja.', 0, 1, 'Person A'),
+      word('Ich', 1, 2, 'Person A'), // should be C
+      word('bin', 2, 3, 'Person C'),
+      word('durch.', 3, 4, 'Person C'),
+      word('Ich', 4, 5, 'Person C'), // should be A
+      word('würde', 5, 6, 'Person A')
+    ]
+
+    const result = smoothBoundaries(words)
+
+    expect(result[0].speaker).toBe('Person A')
+    expect(result[1].speaker).toBe('Person C') // fixed
+    expect(result[2].speaker).toBe('Person C')
+    expect(result[3].speaker).toBe('Person C')
+    expect(result[4].speaker).toBe('Person A') // fixed
+    expect(result[5].speaker).toBe('Person A')
+  })
+
+  it('does not reassign after comma', () => {
+    const words = [
+      word('also,', 0, 1, 'Person A'),
+      word('Ich', 1, 2, 'Person A'),
+      word('denke', 2, 3, 'Person B')
+    ]
+
+    const result = smoothBoundaries(words)
+
+    // "also," ends with comma, not .!? — no reassignment
+    expect(result[1].speaker).toBe('Person A')
+  })
+
+  it('does not reassign mid-run words (no punctuation before)', () => {
+    const words = [
+      word('und', 0, 1, 'Person A'),
+      word('dann', 1, 2, 'Person A'),
+      word('sagte', 2, 3, 'Person B')
+    ]
+
+    const result = smoothBoundaries(words)
+
+    // "und" does not end with .!? — no reassignment
+    expect(result[1].speaker).toBe('Person A')
+  })
+
+  it('does not mutate input array', () => {
+    const words = [
+      word('Ende.', 0, 1, 'Person A'),
+      word('Anfang', 1, 2, 'Person A'),
+      word('weiter', 2, 3, 'Person B')
+    ]
+    const originalSpeaker = words[1].speaker
+
+    smoothBoundaries(words)
+
+    expect(words[1].speaker).toBe(originalSpeaker)
+  })
+
+  it('returns input unchanged for fewer than 3 words', () => {
+    const twoWords = [word('Hallo', 0, 1, 'Person A'), word('Welt', 1, 2, 'Person B')]
+
+    expect(smoothBoundaries(twoWords)).toEqual(twoWords)
+    expect(smoothBoundaries([word('Solo', 0, 1, 'Person A')])).toEqual([
+      word('Solo', 0, 1, 'Person A')
+    ])
+    expect(smoothBoundaries([])).toEqual([])
+  })
+
+  it('does not reassign first or last word', () => {
+    // First word cannot be reassigned (loop starts at i=1)
+    // Last word cannot be reassigned (loop ends at length-2)
+    const words = [
+      word('Ich', 0, 1, 'Person A'),
+      word('denke.', 1, 2, 'Person A'),
+      word('Ja', 2, 3, 'Person B')
+    ]
+
+    const result = smoothBoundaries(words)
+
+    expect(result[0].speaker).toBe('Person A') // first word unchanged
+    expect(result[2].speaker).toBe('Person B') // last word unchanged
+  })
+
+  it('handles exclamation and question marks', () => {
+    const words = [
+      word('Nein!', 0, 1, 'Person A'),
+      word('Doch', 1, 2, 'Person A'),
+      word('also', 2, 3, 'Person B')
+    ]
+
+    const result = smoothBoundaries(words)
+
+    expect(result[1].speaker).toBe('Person B') // reassigned after !
   })
 })
 
