@@ -13,15 +13,16 @@ const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
 
 export class PyannoteSidecar implements TaskExecutor {
   /**
-   * Resolve the diarize binary/script path.
-   * Production: PyInstaller binary bundled in extraResources (no Python needed).
+   * Resolve the diarize script path.
+   * Production: standalone Python + diarize.py bundled in extraResources.
    * Dev: venv Python + diarize.py script.
    */
   private getCommand(): { bin: string; args: string[] } {
     if (app.isPackaged) {
-      // Production: PyInstaller binary in extraResources/ml_sidecar/
-      const binary = join(process.resourcesPath, 'ml_sidecar', 'diarize')
-      return { bin: binary, args: [] }
+      // Production: standalone Python + diarize.py in extraResources/ml_sidecar/
+      const python = join(process.resourcesPath, 'ml_sidecar', 'standalone', 'bin', 'python3')
+      const script = join(process.resourcesPath, 'ml_sidecar', 'diarize.py')
+      return { bin: python, args: [script] }
     }
     // Dev: use venv Python + script
     const venvPython = join(app.getAppPath(), 'python_sidecar', 'venv', 'bin', 'python3')

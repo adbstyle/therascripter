@@ -28,10 +28,16 @@ extraResources:
     to: lib
     filter:
       - '**/*'
-  - from: python_sidecar/dist/ml_sidecar
-    to: ml_sidecar
+  - from: python_sidecar/standalone
+    to: ml_sidecar/standalone
     filter:
       - '**/*'
+  - from: python_sidecar/diarize.py
+    to: ml_sidecar/diarize.py
+  - from: python_sidecar/ner_service.py
+    to: ml_sidecar/ner_service.py
+  - from: python_sidecar/torchcodec_shim.py
+    to: ml_sidecar/torchcodec_shim.py
 npmRebuild: false
 afterPack: build-scripts/afterPack.js
 mac:

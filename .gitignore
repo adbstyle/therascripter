@@ -41,8 +41,9 @@ coverage/
 resources/bin/
 resources/lib/
 
-# Python sidecar virtual environment and cache
+# Python sidecar virtual environment, standalone build, and cache
 python_sidecar/venv/
+python_sidecar/standalone/
 python_sidecar/__pycache__/
 *.pyc
 
