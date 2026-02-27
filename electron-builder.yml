@@ -1,0 +1,56 @@
+appId: com.therascript.app
+productName: Therascript
+directories:
+  buildResources: build
+  output: dist
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!tests/*'
+  - '!electron.vite.config.*'
+  - '!{.eslintrc,.eslintignore,.prettierrc,.prettierignore,eslint.config.*}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{vitest.config.*}'
+  - '!{*.md,LICENSE}'
+  - '!python_sidecar/**/*'
+  - '!r2-upload/**/*'
+  - '!scripts/**/*'
+  - '!resources/**/*'
+  - '!build-scripts/**/*'
+  - '!#/**/*'
+  - '!docs/**/*'
+extraResources:
+  - from: resources/bin
+    to: bin
+    filter:
+      - '**/*'
+  - from: resources/lib
+    to: lib
+    filter:
+      - '**/*'
+  - from: python_sidecar/standalone
+    to: ml_sidecar/standalone
+    filter:
+      - '**/*'
+  - from: python_sidecar/diarize.py
+    to: ml_sidecar/diarize.py
+  - from: python_sidecar/ner_service.py
+    to: ml_sidecar/ner_service.py
+  - from: python_sidecar/torchcodec_shim.py
+    to: ml_sidecar/torchcodec_shim.py
+npmRebuild: false
+afterPack: build-scripts/afterPack.js
+mac:
+  target:
+    - target: dmg
+      arch: arm64
+  category: public.app-category.medical
+  identity: null
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications

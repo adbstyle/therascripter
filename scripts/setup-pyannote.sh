@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+#
+# Setup Python sidecar for pyannote.audio speaker diarization.
+# Creates a virtual environment and installs dependencies.
+#
+# Produces:
+#   python_sidecar/venv/     (Python venv with pyannote.audio + torch)
+#   ~/.therascript/models/diarization/  (pyannote model files, with --model)
+#
+# Usage:
+#   ./scripts/setup-pyannote.sh          # venv + deps only
+#   ./scripts/setup-pyannote.sh --model  # also download the diarization model (~1.5 GB with torch deps)
+#
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+VENV_DIR="$PROJECT_ROOT/python_sidecar/venv"
+MODEL_DIR="$HOME/.therascript/models/diarization"
+REQUIREMENTS="$PROJECT_ROOT/python_sidecar/requirements.txt"
+
+DOWNLOAD_MODEL=false
+for arg in "$@"; do
+  case "$arg" in
+    --model) DOWNLOAD_MODEL=true ;;
+    *) echo "Unknown option: $arg"; exit 1 ;;
+  esac
+done
+
+# ── 1. Check Python 3 ─────────────────────────────────────────────────────────
+
+PYTHON=""
+for candidate in python3.12 python3.11 python3.10 python3; do
+  if command -v "$candidate" &>/dev/null; then
+    PYTHON="$candidate"
+    break
+  fi
+done
+
+if [ -z "$PYTHON" ]; then
+  echo "Error: Python 3.10+ is required. Install via:"
+  echo "  brew install python@3.12"
+  exit 1
+fi
+
+PY_VERSION=$("$PYTHON" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+PY_MAJOR=$("$PYTHON" -c "import sys; print(sys.version_info.major)")
+PY_MINOR=$("$PYTHON" -c "import sys; print(sys.version_info.minor)")
+
+if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]; }; then
+  echo "Error: Python 3.10+ required (found $PY_VERSION)"
+  exit 1
+fi
+
+echo "Using Python $PY_VERSION ($PYTHON)"
+
+# ── 2. Create virtual environment ─────────────────────────────────────────────
+
+if [ -d "$VENV_DIR" ]; then
+  echo "Virtual environment already exists: $VENV_DIR"
+else
+  echo "Creating virtual environment..."
+  "$PYTHON" -m venv "$VENV_DIR"
+fi
+
+# Activate venv
+source "$VENV_DIR/bin/activate"
+
+# ── 3. Install dependencies ───────────────────────────────────────────────────
+
+echo "Installing dependencies (this may take a few minutes)..."
+pip install --upgrade pip --quiet
+pip install -r "$REQUIREMENTS" --quiet
+
+echo "Dependencies installed."
+
+# ── 4. Verify installation ────────────────────────────────────────────────────
+
+python3 -c "import pyannote.audio; print(f'pyannote.audio {pyannote.audio.__version__}')"
+python3 -c "import torch; print(f'PyTorch {torch.__version__} (MPS: {torch.backends.mps.is_available()})')"
+
+# ── 5. Download model (optional) ─────────────────────────────────────────────
+
+if [ "$DOWNLOAD_MODEL" = true ]; then
+  mkdir -p "$MODEL_DIR"
+  echo "Downloading pyannote diarization model..."
+  echo "(This requires a HuggingFace token for pyannote/speaker-diarization-3.1)"
+  echo "If you don't have one, visit: https://huggingface.co/pyannote/speaker-diarization-3.1"
+  echo ""
+
+  # Download model using Python (handles HuggingFace authentication)
+  python3 -c "
+from pyannote.audio import Pipeline
+import os
+
+model_dir = '$MODEL_DIR'
+print(f'Downloading to {model_dir}...')
+
+try:
+    pipeline = Pipeline.from_pretrained(
+        'pyannote/speaker-diarization-3.1',
+        cache_dir=model_dir,
+    )
+    print('Model downloaded successfully.')
+except Exception as e:
+    print(f'Error: {e}')
+    print()
+    print('Note: pyannote/speaker-diarization-3.1 requires accepting the terms at:')
+    print('  https://huggingface.co/pyannote/speaker-diarization-3.1')
+    print('and setting your HuggingFace token via:')
+    print('  huggingface-cli login')
+    exit(1)
+"
+fi
+
+deactivate
+
+echo ""
+echo "=== Setup complete ==="
+echo ""
+echo "Virtual environment: $VENV_DIR"
+echo "Python: $VENV_DIR/bin/python3"
+echo ""
+if [ "$DOWNLOAD_MODEL" = false ]; then
+  echo "To download the diarization model, run:"
+  echo "  ./scripts/setup-pyannote.sh --model"
+fi

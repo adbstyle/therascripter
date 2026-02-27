@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- App Sandbox (required for Mac App Store, recommended for security) -->
+  <key>com.apple.security.app-sandbox</key>
+  <true/>
+  <!-- Microphone access for audio recording -->
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+  <!-- Read/write access to user-selected files (PDF import via dialog) -->
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+  <!-- Outgoing network connections (model download at first launch only) -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+</dict>
+</plist>

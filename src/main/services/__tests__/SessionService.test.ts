@@ -1,0 +1,230 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import Database from 'better-sqlite3'
+import { readFileSync } from 'fs'
+import { join } from 'path'
+import { SessionService } from '../SessionService'
+
+vi.mock('electron', () => ({
+  app: {
+    getPath: vi.fn(() => '/mock/home')
+  }
+}))
+
+function applySchema(db: Database.Database): void {
+  const sql = readFileSync(
+    join(__dirname, '..', '..', 'db', 'migrations', '001-initial-schema.sql'),
+    'utf-8'
+  )
+  db.exec(sql)
+}
+
+describe('SessionService', () => {
+  let db: Database.Database
+  let service: SessionService
+
+  beforeEach(() => {
+    db = new Database(':memory:')
+    db.pragma('foreign_keys = ON')
+    applySchema(db)
+    service = new SessionService(db)
+  })
+
+  afterEach(() => {
+    db.close()
+  })
+
+  describe('createSession', () => {
+    it('creates an audio session with recording status', () => {
+      const session = service.createSession('Sitzung 14.02.2026 14:30', 'audio')
+
+      expect(session.title).toBe('Sitzung 14.02.2026 14:30')
+      expect(session.type).toBe('audio')
+      expect(session.status).toBe('recording')
+    })
+
+    it('creates a pdf session with extracting status', () => {
+      const session = service.createSession('Arztbericht', 'pdf', '/path/report.pdf')
+
+      expect(session.type).toBe('pdf')
+      expect(session.status).toBe('extracting')
+      expect(session.pdfPath).toBe('/path/report.pdf')
+    })
+  })
+
+  describe('getSession / getAllSessions', () => {
+    it('retrieves a session by id', () => {
+      const created = service.createSession('Test', 'audio')
+      const found = service.getSession(created.id)
+
+      expect(found).toEqual(created)
+    })
+
+    it('returns null for non-existent session', () => {
+      expect(service.getSession('non-existent')).toBeNull()
+    })
+
+    it('returns all sessions', () => {
+      service.createSession('Session 1', 'audio')
+      service.createSession('Session 2', 'pdf')
+
+      expect(service.getAllSessions()).toHaveLength(2)
+    })
+  })
+
+  describe('updateSession — status transitions', () => {
+    it('allows recording → transcribing', () => {
+      const session = service.createSession('Test', 'audio')
+      const updated = service.updateSession(session.id, { status: 'transcribing' })
+
+      expect(updated?.status).toBe('transcribing')
+    })
+
+    it('allows transcribing → diarizing', () => {
+      const session = service.createSession('Test', 'audio')
+      service.updateSession(session.id, { status: 'transcribing' })
+      const updated = service.updateSession(session.id, { status: 'diarizing' })
+
+      expect(updated?.status).toBe('diarizing')
+    })
+
+    it('allows diarizing → anonymizing', () => {
+      const session = service.createSession('Test', 'audio')
+      service.updateSession(session.id, { status: 'transcribing' })
+      service.updateSession(session.id, { status: 'diarizing' })
+      const updated = service.updateSession(session.id, { status: 'anonymizing' })
+
+      expect(updated?.status).toBe('anonymizing')
+    })
+
+    it('allows anonymizing → review', () => {
+      const session = service.createSession('Test', 'audio')
+      service.updateSession(session.id, { status: 'transcribing' })
+      service.updateSession(session.id, { status: 'diarizing' })
+      service.updateSession(session.id, { status: 'anonymizing' })
+      const updated = service.updateSession(session.id, { status: 'review' })
+
+      expect(updated?.status).toBe('review')
+    })
+
+    it('allows extracting → anonymizing (pdf pipeline)', () => {
+      const session = service.createSession('PDF', 'pdf')
+      const updated = service.updateSession(session.id, { status: 'anonymizing' })
+
+      expect(updated?.status).toBe('anonymizing')
+    })
+
+    it('allows any status → error', () => {
+      const session = service.createSession('Test', 'audio')
+      const updated = service.updateSession(session.id, { status: 'error' })
+
+      expect(updated?.status).toBe('error')
+    })
+
+    it('allows error → transcribing (retry)', () => {
+      const session = service.createSession('Test', 'audio')
+      service.updateSession(session.id, { status: 'error' })
+      const updated = service.updateSession(session.id, { status: 'transcribing' })
+
+      expect(updated?.status).toBe('transcribing')
+    })
+
+    it('rejects invalid transition recording → review', () => {
+      const session = service.createSession('Test', 'audio')
+
+      expect(() => {
+        service.updateSession(session.id, { status: 'review' })
+      }).toThrow('Invalid status transition: recording → review')
+    })
+
+    it('rejects invalid transition recording → diarizing (skipping transcribing)', () => {
+      const session = service.createSession('Test', 'audio')
+
+      expect(() => {
+        service.updateSession(session.id, { status: 'diarizing' })
+      }).toThrow('Invalid status transition')
+    })
+
+    it('throws for non-existent session on status update', () => {
+      expect(() => {
+        service.updateSession('non-existent', { status: 'review' })
+      }).toThrow('Session non-existent not found')
+    })
+  })
+
+  describe('updateSession — non-status updates', () => {
+    it('updates title without status validation', () => {
+      const session = service.createSession('Old', 'audio')
+      const updated = service.updateSession(session.id, { title: 'New' })
+
+      expect(updated?.title).toBe('New')
+    })
+  })
+
+  describe('renameSession', () => {
+    it('renames a session', () => {
+      const session = service.createSession('Old Title', 'audio')
+      const renamed = service.renameSession(session.id, 'New Title')
+
+      expect(renamed?.title).toBe('New Title')
+    })
+  })
+
+  describe('deleteSession', () => {
+    it('deletes a session', () => {
+      const session = service.createSession('Delete Me', 'audio')
+
+      expect(service.deleteSession(session.id)).toBe(true)
+      expect(service.getSession(session.id)).toBeNull()
+    })
+  })
+
+  describe('cleanupOldSessions', () => {
+    it('deletes sessions older than 30 days', () => {
+      const oldDate = new Date()
+      oldDate.setDate(oldDate.getDate() - 31)
+
+      db.prepare(
+        `INSERT INTO sessions (id, title, type, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).run('old-1', 'Old 1', 'audio', 'review', oldDate.toISOString(), oldDate.toISOString())
+
+      db.prepare(
+        `INSERT INTO sessions (id, title, type, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).run('old-2', 'Old 2', 'pdf', 'review', oldDate.toISOString(), oldDate.toISOString())
+
+      service.createSession('Recent', 'audio')
+
+      const deleted = service.cleanupOldSessions()
+
+      expect(deleted).toBe(2)
+      expect(service.getAllSessions()).toHaveLength(1)
+    })
+
+    it('returns 0 when no old sessions exist', () => {
+      service.createSession('Recent', 'audio')
+
+      expect(service.cleanupOldSessions()).toBe(0)
+    })
+  })
+
+  describe('path generation', () => {
+    it('generates audio path', () => {
+      const path = service.generateAudioPath('abc-123')
+
+      expect(path).toBe('/mock/home/.therascript/audio/abc-123.wav')
+    })
+
+    it('generates transcript path', () => {
+      const path = service.generateTranscriptPath('abc-123')
+
+      expect(path).toBe('/mock/home/.therascript/transcripts/abc-123.json')
+    })
+
+    it('generates anonymized path', () => {
+      const path = service.generateAnonymizedPath('abc-123')
+
+      expect(path).toBe('/mock/home/.therascript/anonymized/abc-123.json')
+    })
+  })
+})

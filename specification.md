@@ -1478,3 +1478,554 @@ In-App-Menüpunkt "Therascript vollständig entfernen" mit Bestätigungsdialog.
 | T4 | Minimum macOS-Version? | macOS 13 vs. 14 | macOS 14 (für Apple Vision + CoreML Features) |
 | T5 | Audio-Format auf Disk? | WAV (unkomprimiert) vs. FLAC (komprimiert) | WAV (einfacher, Auto-Recovery-freundlich) |
 | T6 | TipTap Version? | TipTap v2 (stable) vs. v3 (beta) | v2 (stable, production-ready) |
+
+---
+
+## 23. Modell-Update-Architektur (Epic 9 — US-9a)
+
+### 23.1 Überblick
+
+ML-Modelle werden unabhängig von der App aktualisiert. Die App prüft beim Start im Hintergrund, ob neuere Modell-Versionen auf dem R2 CDN verfügbar sind, und bietet dem User per Info-Banner einen Neustart zur Installation an. Der Download erfolgt beim Neustart — atomar (alles-oder-nichts) und resume-fähig.
+
+**Kernprinzipien:**
+- Update-Check blockiert den Start nicht (NFR-34: < 5s)
+- Alle Updates werden als Einheit installiert — kein Teilupdate (NFR-35)
+- Fehlgeschlagener Download → alle Modelle behalten bisherige Version
+- Kein Internet → stiller Weiterbetrieb mit vorhandenen Modellen
+
+```
+┌─ App Start ──────────────────────────────────────────────────┐
+│                                                               │
+│  ┌──────────────────┐    ┌─────────────────────────────────┐ │
+│  │ Dashboard sofort  │    │ Background (setTimeout, async):  │ │
+│  │ interaktiv        │    │ 1. pendingModelUpdates prüfen    │ │
+│  │ (NFR-34: < 5s)    │    │ 2. .staging/.backup Cleanup      │ │
+│  │                   │    │ 3. fetch(R2/manifest.json, 10s)  │ │
+│  │                   │    │    ├─ Fail → ignore              │ │
+│  │                   │    │    └─ OK → Versionen vergleichen │ │
+│  │                   │    │         └─ Diff? → Banner        │ │
+│  └──────────────────┘    └─────────────────────────────────┘ │
+│                                                               │
+│  ┌── Update-Banner (persistent, nicht schliessbar) ────────┐ │
+│  │ ℹ Modell-Updates verfügbar           [Jetzt neu starten] │ │
+│  └──────────────────────────────────────────────────────────┘ │
+│                                                               │
+│  ┌── Neustart-Flow ──────────────────────────────────────┐   │
+│  │ 1. Aktive Aufnahme/Verarbeitung? → Warndialog         │   │
+│  │ 2. pendingModelUpdates in electron-store speichern     │   │
+│  │ 3. app.relaunch() + app.quit()                         │   │
+│  └────────────────────────────────────────────────────────┘   │
+│                                                               │
+│  ┌── Nach Neustart: ModelUpdateScreen ───────────────────┐   │
+│  │ (wie FirstLaunchScreen, aber nur geänderte Modelle)    │   │
+│  │ 1. Download → .staging/        (resume-fähig)          │   │
+│  │ 2. SHA-256 Verifikation         (NFR-16)               │   │
+│  │ 3. Atomarer Swap: .staging/ → aktiv                    │   │
+│  │ 4. Fallback bei Fehler → alte Modelle behalten         │   │
+│  └────────────────────────────────────────────────────────┘   │
+└───────────────────────────────────────────────────────────────┘
+```
+
+### 23.2 Remote Manifest (R2 CDN)
+
+Eine `manifest.json`-Datei auf dem R2 CDN beschreibt die aktuell verfügbaren Modell-Versionen. Die App fetcht dieses Manifest beim Start und vergleicht es mit den lokal installierten Versionen.
+
+**URL:** `https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/manifest.json`
+
+**Schema:**
+
+```json
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-02-25T10:00:00Z",
+  "models": [
+    {
+      "id": "whisper-large-v3-turbo",
+      "version": "1.0.0",
+      "url": "https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/whisper-ggml-large-v3-turbo-q5_0.bin",
+      "sha256": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+      "sizeBytes": 574041195,
+      "archive": false,
+      "targetPath": "asr/ggml-large-v3-turbo-q5_0.bin",
+      "checkPath": "asr/ggml-large-v3-turbo-q5_0.bin",
+      "label": "Spracherkennung (Whisper Large V3 Turbo)"
+    },
+    {
+      "id": "pyannote-community-1",
+      "version": "1.0.0",
+      "url": "https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/pyannote-models.tar.gz",
+      "sha256": "81ec9fc7551884e8b7b47fbb07eb67c787220d92673c9c00a2677d2d78c2f186",
+      "sizeBytes": 30461603,
+      "archive": true,
+      "targetPath": "diarization/",
+      "checkPath": "diarization/models--pyannote--speaker-diarization-3.1",
+      "label": "Sprechererkennung (Pyannote)"
+    },
+    {
+      "id": "flair-ner-german-large",
+      "version": "1.0.0",
+      "url": "https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/flair-ner-german-large.tar.gz",
+      "sha256": "f512eca0bed5372ea691b7f0e92e29dd02cd4d57fed6adf406cf884a817133e3",
+      "sizeBytes": 1741705466,
+      "archive": true,
+      "targetPath": "ner/",
+      "checkPath": "ner/models/ner-german-large",
+      "label": "Anonymisierung (flair NER)"
+    }
+  ]
+}
+```
+
+**Zod-Validierung im Main Process:**
+
+```typescript
+const ManifestModelSchema = z.object({
+  id: z.string(),
+  version: z.string(),
+  url: z.string().url(),
+  sha256: z.string().length(64),
+  sizeBytes: z.number().positive(),
+  archive: z.boolean(),
+  targetPath: z.string(),
+  checkPath: z.string(),
+  label: z.string(),
+})
+
+const ManifestSchema = z.object({
+  schemaVersion: z.literal(1),
+  updatedAt: z.string(),
+  models: z.array(ManifestModelSchema),
+})
+```
+
+**Manifest-Update (Entwickler-Workflow):**
+1. Neues Modell in `r2-upload/` ablegen
+2. `scripts/publish-manifest.sh` ausführen → generiert `manifest.json` mit SHA-256-Hashes + Versionen
+3. Upload `manifest.json` + Modell auf R2 via `scripts/upload-r2.sh`
+4. `MODEL_DEFINITIONS` in `ModelDownloadService.ts` ebenfalls aktualisieren (für Neuinstallationen)
+
+### 23.3 Lokale Versionsverwaltung (electron-store)
+
+Erweiterung der `AppSettings` in electron-store:
+
+```typescript
+interface AppSettings {
+  // ... bestehende Felder (activeModels, firstLaunchDone, consentReminderShown, modelsDownloaded)
+
+  // Neu: Installierte Modell-Versionen
+  installedModelVersions: Record<string, {
+    version: string
+    sha256: string
+    installedAt: string  // ISO 8601
+  }>
+
+  // Neu: Ausstehende Updates (gesetzt vor Neustart, gelesen nach Neustart)
+  pendingModelUpdates: PendingModelUpdate[] | null
+}
+
+interface PendingModelUpdate {
+  id: string
+  version: string
+  url: string
+  sha256: string
+  sizeBytes: number
+  archive: boolean
+  targetPath: string
+  checkPath: string
+  label: string
+}
+```
+
+**Migration für bestehende Installationen:** Beim ersten Start mit Update-Support (wenn `installedModelVersions` leer, aber `modelsDownloaded === true`) werden die SHA-256-Hashes aus `MODEL_DEFINITIONS` übernommen — diese wurden beim First-Launch-Download verifiziert.
+
+### 23.4 Update-Check-Service
+
+```typescript
+// src/main/services/ModelUpdateService.ts
+
+class ModelUpdateService {
+  private static MANIFEST_URL = `${R2_CDN}/manifest.json`
+  private static CHECK_TIMEOUT = 10_000 // 10 Sekunden
+
+  /**
+   * Prüft ob Updates verfügbar sind.
+   * Gibt leeres Array zurück bei Fehler (stiller Weiterbetrieb).
+   */
+  async checkForUpdates(): Promise<PendingModelUpdate[]> {
+    try {
+      const response = await net.fetch(ModelUpdateService.MANIFEST_URL, {
+        signal: AbortSignal.timeout(ModelUpdateService.CHECK_TIMEOUT),
+      })
+      if (!response.ok) return []
+
+      const manifest = ManifestSchema.parse(await response.json())
+      const installed = getSettings().get('installedModelVersions') ?? {}
+      const updates: PendingModelUpdate[] = []
+
+      for (const model of manifest.models) {
+        // URL muss mit konfiguriertem CDN-Prefix beginnen (Sicherheit)
+        if (!model.url.startsWith(R2_CDN)) continue
+
+        const local = installed[model.id]
+        // Update nötig wenn: nicht installiert ODER sha256 unterschiedlich
+        if (!local || local.sha256 !== model.sha256) {
+          updates.push(model)
+        }
+      }
+
+      return updates
+    } catch {
+      // Netzwerk-Fehler, Timeout, Parse-Fehler → stiller Weiterbetrieb
+      // (US-9a AC 13-14)
+      return []
+    }
+  }
+
+  /**
+   * Bereitet den Neustart für Updates vor.
+   * Speichert pendingModelUpdates und löst app.relaunch() aus.
+   */
+  async triggerUpdateRestart(updates: PendingModelUpdate[]): Promise<void> {
+    getSettings().set('pendingModelUpdates', updates)
+    app.relaunch()
+    app.quit()
+  }
+
+  /**
+   * Führt den Download und die Aktivierung aus (nach Neustart).
+   * Atomar: Entweder alle Updates oder keine.
+   */
+  async executeUpdate(
+    updates: PendingModelUpdate[],
+    onProgress: (progress: ModelDownloadProgress) => void,
+  ): Promise<{ success: boolean; error?: string }> {
+    const modelsDir = getModelsDir()
+    const stagingDir = join(modelsDir, '.staging')
+    const backupDir = join(modelsDir, '.backup')
+
+    try {
+      // Phase 1: Download aller Updates in .staging/
+      await mkdir(stagingDir, { recursive: true })
+      for (const update of updates) {
+        const targetPath = join(stagingDir, update.targetPath)
+        await downloadFile(update.url, targetPath, onProgress, /* abortSignal */)
+        const valid = await verifyFileSha256(targetPath, update.sha256)
+        if (!valid) throw new Error(`SHA-256 mismatch: ${update.id}`)
+        if (update.archive) {
+          await extractTarGz(targetPath, join(stagingDir, dirname(update.targetPath)))
+        }
+      }
+
+      // Phase 2: Atomarer Swap
+      await mkdir(backupDir, { recursive: true })
+      const swapped: string[] = []
+
+      for (const update of updates) {
+        const activePath = join(modelsDir, update.targetPath)
+        const backupPath = join(backupDir, update.targetPath)
+        const stagingPath = join(stagingDir, update.targetPath)
+
+        // Backup erstellen
+        if (existsSync(activePath)) {
+          await mkdir(dirname(backupPath), { recursive: true })
+          await rename(activePath, backupPath)
+        }
+        // Staging → Aktiv
+        await rename(stagingPath, activePath)
+        swapped.push(update.targetPath)
+      }
+
+      // Phase 3: Erfolg — Versionen aktualisieren
+      const versions = getSettings().get('installedModelVersions') ?? {}
+      for (const update of updates) {
+        versions[update.id] = {
+          version: update.version,
+          sha256: update.sha256,
+          installedAt: new Date().toISOString(),
+        }
+      }
+      getSettings().set('installedModelVersions', versions)
+      getSettings().set('pendingModelUpdates', null)
+
+      // Cleanup
+      await rm(stagingDir, { recursive: true, force: true })
+      await rm(backupDir, { recursive: true, force: true })
+
+      return { success: true }
+    } catch (error) {
+      // Rollback: .backup/ → aktiv
+      await this.rollback(modelsDir, backupDir, updates)
+      await rm(stagingDir, { recursive: true, force: true })
+      getSettings().set('pendingModelUpdates', null)
+      return { success: false, error: error.message }
+    }
+  }
+
+  /**
+   * Rollback bei Fehler: Backup-Dateien wiederherstellen.
+   */
+  private async rollback(
+    modelsDir: string,
+    backupDir: string,
+    updates: PendingModelUpdate[],
+  ): Promise<void> {
+    for (const update of updates) {
+      const activePath = join(modelsDir, update.targetPath)
+      const backupPath = join(backupDir, update.targetPath)
+      if (existsSync(backupPath)) {
+        await rm(activePath, { recursive: true, force: true })
+        await rename(backupPath, activePath)
+      }
+    }
+    await rm(backupDir, { recursive: true, force: true })
+  }
+
+  /**
+   * Startup-Cleanup: Inkomplette Staging/Backup-Verzeichnisse aufräumen.
+   */
+  async cleanupIncompleteUpdates(): Promise<void> {
+    const modelsDir = getModelsDir()
+    const stagingDir = join(modelsDir, '.staging')
+    const backupDir = join(modelsDir, '.backup')
+
+    // .backup vorhanden → unterbrochener Swap → Rollback
+    if (existsSync(backupDir)) {
+      const pending = getSettings().get('pendingModelUpdates')
+      if (pending) await this.rollback(modelsDir, backupDir, pending)
+      else await rm(backupDir, { recursive: true, force: true })
+    }
+
+    // .staging vorhanden → inkompletter Download → löschen
+    if (existsSync(stagingDir)) {
+      await rm(stagingDir, { recursive: true, force: true })
+    }
+  }
+}
+```
+
+**Wichtig:** `net.fetch()` (Electrons Netzwerk-API) wird im Main Process verwendet — nicht `globalThis.fetch`. Der Renderer behält `connect-src 'none'` (NFR-12).
+
+### 23.5 Startup-Flow (Entscheidungsbaum)
+
+```
+App Start
+  │
+  ├─ 1. modelsDownloaded === false?
+  │   └─ JA → FirstLaunchScreen (bestehend, unverändert)
+  │
+  ├─ 2. cleanupIncompleteUpdates()
+  │   └─ .staging/.backup aufräumen (Crash-Recovery)
+  │
+  ├─ 3. pendingModelUpdates !== null?
+  │   └─ JA → ModelUpdateScreen
+  │         ├─ Download + Verifikation + Swap
+  │         ├─ Erfolg → installedModelVersions aktualisieren → Dashboard
+  │         └─ Fehler → pendingModelUpdates löschen → Dashboard
+  │                     (alte Modelle bleiben, nächster Start prüft erneut)
+  │
+  ├─ 4. installedModelVersions leer + modelsDownloaded === true?
+  │   └─ JA → Migration: SHA-256 aus MODEL_DEFINITIONS übernehmen
+  │
+  └─ 5. Background: checkForUpdates()
+      ├─ setTimeout(0) — Dashboard ist bereits interaktiv
+      ├─ Updates verfügbar → IPC 'modelUpdate:available' → Banner anzeigen
+      └─ Keine Updates / Fehler → nichts tun
+```
+
+### 23.6 Atomarer Update-Prozess (Staging + Swap)
+
+```
+~/.therascript/models/
+├── .staging/              ← Temp-Download-Bereich
+│   ├── asr/               (nur bei ASR-Update)
+│   └── ner/               (nur bei NER-Update)
+├── .backup/               ← Backup während Swap
+│   ├── asr/               (Rollback-Sicherung)
+│   └── ner/               (Rollback-Sicherung)
+├── asr/                   ← Aktive Modelle
+├── diarization/
+└── ner/
+```
+
+**Ablauf:**
+
+```
+Phase 1: Download (resume-fähig)
+  │
+  ├─ Für jedes Update:
+  │   ├─ Download → .staging/{targetPath}.partial
+  │   ├─ .partial → Finaler Dateiname (atomic rename)
+  │   ├─ SHA-256 verifizieren
+  │   └─ Falls Archiv: tar.gz entpacken
+  │
+  ├─ ALLE Downloads erfolgreich?
+  │   ├─ NEIN → .staging/ löschen → Fehler → alte Modelle behalten (NFR-35)
+  │   └─ JA → Phase 2
+
+Phase 2: Atomarer Swap
+  │
+  ├─ .backup/ erstellen
+  ├─ Für jedes Update:
+  │   ├─ mv aktiv → .backup/     (Sicherung)
+  │   └─ mv .staging/ → aktiv    (Aktivierung)
+  │
+  ├─ Erfolg?
+  │   ├─ JA → installedModelVersions aktualisieren
+  │   │       pendingModelUpdates → null
+  │   │       .backup/ + .staging/ löschen
+  │   └─ NEIN → Rollback: .backup/ → aktiv
+  │              .staging/ löschen
+  │              Alte Modelle wiederhergestellt
+
+Phase 3: Crash-Recovery (beim nächsten Start)
+  │
+  ├─ .backup/ vorhanden? → Rollback (Swap wurde unterbrochen)
+  └─ .staging/ vorhanden? → Löschen (Download war inkomplett)
+```
+
+### 23.7 Update-Banner UI
+
+Info-Banner im SessionDashboard — persistent, nicht schliessbar:
+
+```typescript
+// SessionDashboard.tsx — eingebettet am oberen Rand
+
+interface UpdateBannerProps {
+  updates: PendingModelUpdate[]
+  onRestart: () => void
+}
+
+// Banner-Inhalt:
+// ┌─────────────────────────────────────────────────────────────┐
+// │ ℹ Modell-Updates verfügbar (2 Modelle, 1.8 GB)             │
+// │ Ein Neustart ist erforderlich.          [Jetzt neu starten] │
+// └─────────────────────────────────────────────────────────────┘
+```
+
+**Warndialog bei aktivem Workflow (US-9a AC 6):**
+
+Vor dem Neustart prüft das System ob eine Aufnahme läuft (`recording` Status) oder eine Session verarbeitet wird (`transcribing`/`diarizing`/`extracting`/`anonymizing`). Falls ja:
+
+```
+┌─ Achtung ──────────────────────────────────────────────────┐
+│                                                             │
+│ Es läuft gerade eine Aufnahme/Verarbeitung.                │
+│ Ein Neustart wird diese abbrechen.                          │
+│                                                             │
+│ Trotzdem neu starten?                                       │
+│                                                             │
+│                              [Abbrechen]  [Jetzt neu starten]│
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 23.8 ModelUpdateScreen (Download nach Neustart)
+
+Wiederverwendung der FirstLaunchScreen-Struktur mit Anpassungen:
+
+- Titel: "Modelle werden aktualisiert" (statt "Ersteinrichtung")
+- Zeigt nur die zu aktualisierenden Modelle (nicht alle)
+- Gleiche Fortschrittsanzeige (pro Modell + gesamt)
+- Bei Fehler: "Update fehlgeschlagen — die bisherigen Modelle wurden beibehalten" + Weiter-Button
+- Bei Erfolg: automatischer Übergang zum Dashboard
+
+### 23.9 IPC-Kanäle (neu)
+
+**Renderer → Main (invoke/handle):**
+
+| Channel | Payload | Antwort | Beschreibung |
+|---------|---------|---------|--------------|
+| `modelUpdate:check` | — | `PendingModelUpdate[]` | Update-Check auslösen (intern) |
+| `modelUpdate:restart` | — | — | Neustart für Update |
+| `modelUpdate:startDownload` | — | — | Download nach Neustart starten |
+
+**Main → Renderer (send/on):**
+
+| Channel | Payload | Beschreibung |
+|---------|---------|--------------|
+| `modelUpdate:available` | `{ updates: PendingModelUpdate[] }` | Updates verfügbar (→ Banner) |
+| `modelUpdate:downloadProgress` | `ModelDownloadProgress` | Fortschritt (wie FirstLaunch) |
+| `modelUpdate:downloadComplete` | — | Alle Updates installiert |
+| `modelUpdate:downloadError` | `{ error: string }` | Update fehlgeschlagen |
+
+**Preload-Erweiterung:**
+
+```typescript
+// src/preload/index.ts — neue API
+modelUpdate: {
+  onAvailable(callback: (data: { updates: PendingModelUpdate[] }) => void): () => void
+  restart(): Promise<void>
+  getPending(): Promise<PendingModelUpdate[] | null>
+  startDownload(): Promise<void>
+  onDownloadProgress(callback: (progress: ModelDownloadProgress) => void): () => void
+  onDownloadComplete(callback: () => void): () => void
+  onDownloadError(callback: (data: { error: string }) => void): () => void
+}
+```
+
+### 23.10 Manifest-Publikation (Entwickler-Workflow)
+
+Script `scripts/publish-manifest.sh` automatisiert die Manifest-Erstellung:
+
+```bash
+#!/bin/bash
+# Generiert manifest.json aus r2-upload/ Dateien und lädt auf R2 hoch
+
+# 1. SHA-256 Hashes berechnen für alle Modell-Dateien in r2-upload/
+# 2. manifest.json generieren mit:
+#    - schemaVersion: 1
+#    - updatedAt: aktueller Zeitstempel
+#    - models[]: id, version (aus Argument), url, sha256, sizeBytes, etc.
+# 3. manifest.json in r2-upload/ ablegen
+# 4. Alles auf R2 hochladen (models + manifest)
+
+# Verwendung:
+# scripts/publish-manifest.sh                    # Manifest aus aktuellen Dateien generieren
+# scripts/publish-manifest.sh --bump-version ner # NER-Version inkrementieren
+```
+
+**Vollständiger Release-Workflow für ein Modell-Update:**
+
+```bash
+# 1. Neues Modell vorbereiten (z.B. flair NER v2)
+cp /path/to/new-flair-model.tar.gz r2-upload/flair-ner-german-large.tar.gz
+
+# 2. Manifest generieren + Hashes berechnen
+scripts/publish-manifest.sh --bump-version ner
+
+# 3. Auf R2 hochladen (Modell + aktualisiertes Manifest)
+scripts/upload-r2.sh
+
+# 4. MODEL_DEFINITIONS in ModelDownloadService.ts aktualisieren (für Neuinstallationen)
+# 5. Optional: Neue .dmg bauen (bestehende Instanzen bekommen Update via Manifest)
+```
+
+### 23.11 Sicherheit
+
+| Massnahme | Beschreibung |
+|-----------|--------------|
+| **Manifest-Validierung** | Zod-Schema-Validierung vor Verarbeitung (verhindert manipulierte Manifeste) |
+| **SHA-256-Integrität** | Jedes Modell wird gegen den Hash im Manifest verifiziert (NFR-16) |
+| **URL-Beschränkung** | Download-URLs im Manifest müssen mit dem konfigurierten `R2_CDN`-Prefix beginnen (verhindert Redirect-Angriffe auf fremde Server) |
+| **Pfad-Traversal-Schutz** | `targetPath` wird gegen `~/.therascript/models/` validiert — kein `../` oder absolute Pfade erlaubt |
+| **Main-Process-Only** | Alle Netzwerk-Requests laufen im Main Process. Renderer behält `connect-src 'none'` (NFR-12) |
+| **Timeout** | 10 Sekunden für Manifest-Fetch. Download-Timeout über bestehenden DownloadService |
+| **Atomares Update** | Staging + Backup + Rollback verhindert korrupte Zustände (NFR-35) |
+
+### 23.12 Zusammenfassung: US-9a AC-Mapping
+
+| AC | Lösung |
+|----|--------|
+| AC 1: Hintergrund-Prüfung beim Start | `checkForUpdates()` via `setTimeout` nach Dashboard-Render |
+| AC 2: Start nicht blockiert | Check läuft async, Dashboard sofort interaktiv (NFR-34) |
+| AC 3: Info-Banner | `UpdateBanner` Komponente im SessionDashboard |
+| AC 4: Banner informiert über Neustart | Banner-Text + Button |
+| AC 5: Neustart per Banner | `modelUpdate:restart` IPC → `app.relaunch()` |
+| AC 6: Warndialog bei aktiver Verarbeitung | Prüfung auf `recording`/Processing-Status vor Relaunch |
+| AC 7: Download mit Fortschritt nach Neustart | `ModelUpdateScreen` mit Progress (wie FirstLaunch) |
+| AC 8: Nur geänderte Modelle | SHA-256-Vergleich: nur Modelle mit neuem Hash |
+| AC 9: SHA-256 Verifikation | `verifyFileSha256()` aus bestehendem DownloadService |
+| AC 10: Neue Modelle sofort aktiv | Nach Swap: Modelle am korrekten Pfad, kein weiterer Neustart |
+| AC 11: Fehlgeschlagener Download → verwerfen | Rollback: `.backup/` → aktiv, `.staging/` löschen |
+| AC 12: Nächster Start erneut versuchen | `pendingModelUpdates` bleibt in electron-store bis Erfolg; neuer Check beim nächsten Start findet Updates erneut |
+| AC 13: Fehlgeschlagene Prüfung → normal starten | `try/catch` → leeres Array → kein Banner |
+| AC 14: Kein Internet → Weiterbetrieb | Identisch zu AC 13 — stiller Fallback |
