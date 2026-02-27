@@ -125,10 +125,11 @@ excludes = [
     'torch._inductor',
     # NOTE: torch.distributed must NOT be excluded — flair imports it top-level
     # (flair.trainers → flair.distributed_utils → torch.distributed)
+    # NOTE: torch.utils.data.datapipes must NOT be excluded — torch.utils.data.__init__
+    # imports from datapipes unconditionally (PyTorch 2.10+)
     'torch.testing',
     'torch.utils.benchmark',
     'torch.utils.tensorboard',
-    'torch.utils.data.datapipes',
     # AWS SDK (pulled in transitively by huggingface_hub, not needed at runtime)
     'botocore',
     'boto3',
