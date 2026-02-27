@@ -93,10 +93,12 @@ export function SessionCard({
         <p className="truncate text-sm font-medium text-gray-900">{session.title}</p>
         <div className="flex items-center gap-2">
           <span className={`text-xs font-medium ${statusConfig.color}`}>{statusLabel}</span>
-          {session.status === 'error' && session.errorMessage && (
-            <span className="truncate text-xs text-gray-400">{session.errorMessage}</span>
-          )}
         </div>
+        {session.status === 'error' && session.errorMessage && (
+          <p className="mt-0.5 line-clamp-3 text-xs text-gray-400">
+            {session.errorMessage}
+          </p>
+        )}
 
         {showProgress && (
           <div className="mt-2">
