@@ -38,7 +38,7 @@ export default function RecordingView({
 
           {/* Timer */}
           <time
-            className="mb-8 font-mono text-5xl font-bold text-gray-900"
+            className="mb-8 font-mono text-5xl font-bold text-text-primary"
             aria-live="polite"
             aria-label={`Aufnahmedauer ${formatTime(duration)}`}
           >
@@ -53,23 +53,23 @@ export default function RecordingView({
           {/* Stop button */}
           <button
             onClick={onStop}
-            className="titlebar-no-drag rounded-lg bg-recording px-8 py-4 text-base font-semibold text-white transition-colors hover:bg-red-700"
+            className="titlebar-no-drag rounded-lg bg-recording px-8 py-4 text-base font-semibold text-white transition-colors hover:bg-recording-hover"
             aria-label="Aufnahme stoppen"
           >
             &#9632; Aufnahme stoppen
           </button>
 
           {/* Auto-stop countdown */}
-          <p className="mt-4 text-sm text-gray-500">Auto-Stop nach {formatTime(remaining)}</p>
+          <p className="mt-4 text-sm text-text-tertiary">Auto-Stop nach {formatTime(remaining)}</p>
 
           {/* Hint */}
-          <p className="mt-6 max-w-sm text-center text-xs text-gray-400">
+          <p className="mt-6 max-w-sm text-center text-xs text-text-tertiary">
             Die App kann minimiert werden — die Aufnahme läuft im Hintergrund weiter.
           </p>
 
           {/* Error */}
           {error && (
-            <p role="alert" className="mt-4 text-sm text-red-600">
+            <p role="alert" className="mt-4 text-sm text-error-text">
               {error}
             </p>
           )}

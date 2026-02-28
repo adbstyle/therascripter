@@ -6,6 +6,7 @@ import type {
   DiskSpaceInfo
 } from '../../../shared/types'
 import { formatBytes } from '../utils/formatBytes'
+import AppLogo from './AppLogo'
 
 interface FirstLaunchScreenProps {
   onComplete: () => void
@@ -55,20 +56,20 @@ export default function FirstLaunchScreen({
   // Disk space error
   if (diskSpace && !diskSpace.sufficient) {
     return (
-      <div className="flex h-screen items-center justify-center bg-white">
+      <div className="flex h-screen items-center justify-center bg-surface-0">
         <div className="max-w-md text-center">
           <div className="mb-4 text-4xl">&#9888;</div>
-          <h2 className="mb-2 text-lg font-semibold text-gray-900">
+          <h2 className="mb-2 text-lg font-semibold text-text-primary">
             Nicht genügend Speicherplatz
           </h2>
-          <p className="mb-4 text-sm text-gray-600">
+          <p className="mb-4 text-sm text-text-secondary">
             Therascript benötigt mindestens 5 GB freien Speicherplatz für die ML-Modelle.
           </p>
-          <div className="mb-4 text-sm text-gray-500">
+          <div className="mb-4 text-sm text-text-tertiary">
             <p>Verfügbar: {formatBytes(diskSpace.availableBytes)}</p>
             <p>Benötigt: ~5.0 GB</p>
           </div>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-text-tertiary">
             Bitte schaffen Sie Speicherplatz frei und starten Sie die App erneut.
           </p>
         </div>
@@ -91,13 +92,13 @@ export default function FirstLaunchScreen({
     (isVerifying ? status.modelId : null)
 
   return (
-    <div className="flex h-screen flex-col items-center justify-center bg-white">
+    <div className="flex h-screen flex-col items-center justify-center bg-surface-0">
       <div className="w-full max-w-lg px-8">
         {/* Header */}
         <div className="titlebar-drag mb-8 text-center">
-          <div className="mb-2 text-sm text-gray-400">&#128274; Therascript</div>
-          <h1 className="mb-2 text-2xl font-bold text-gray-900">Willkommen bei Therascript</h1>
-          <p className="text-sm text-gray-600">
+          <AppLogo size={72} className="mx-auto mb-3" />
+          <h1 className="mb-2 text-2xl font-bold text-text-primary">Therascript</h1>
+          <p className="text-sm text-text-secondary">
             Alle Verarbeitung findet komplett lokal auf Ihrem Mac statt — keine Daten verlassen Ihr
             Gerät.
           </p>
@@ -105,12 +106,12 @@ export default function FirstLaunchScreen({
 
         {!started && (
           <div className="mb-8 text-center">
-            <p className="mb-6 text-sm text-gray-600">
+            <p className="mb-6 text-sm text-text-secondary">
               Für die erste Einrichtung werden ML-Modelle heruntergeladen (~2.2 GB). Dies ist der
               einzige Zeitpunkt, an dem eine Internetverbindung nötig ist.
             </p>
             <button
-              className="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+              className="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
               onClick={handleStart}
             >
               Download starten
@@ -120,7 +121,7 @@ export default function FirstLaunchScreen({
 
         {/* Download progress */}
         {started && (
-          <div className="rounded-lg border border-gray-200 p-5">
+          <div className="rounded-lg border border-border p-5">
             {modelInfo?.models.map((model) => {
               const isCurrent = model.id === currentModelId
               const isCompleted =
@@ -132,15 +133,15 @@ export default function FirstLaunchScreen({
                 <div key={model.id} className="mb-3 last:mb-0">
                   <div className="mb-1 flex items-center justify-between">
                     <span
-                      className={`text-sm ${isCurrent ? 'font-medium text-gray-900' : 'text-gray-500'}`}
+                      className={`text-sm ${isCurrent ? 'font-medium text-text-primary' : 'text-text-tertiary'}`}
                     >
-                      {isCompleted ? '✓ ' : isCurrent ? '' : '○ '}
+                      {isCompleted ? '\u2713 ' : isCurrent ? '' : '\u25CB '}
                       {model.label}
                     </span>
-                    <span className="text-xs text-gray-400">{formatBytes(model.sizeBytes)}</span>
+                    <span className="text-xs text-text-tertiary">{formatBytes(model.sizeBytes)}</span>
                   </div>
                   {isCurrent && isDownloading && progress && (
-                    <div className="h-2 overflow-hidden rounded-full bg-gray-200">
+                    <div className="h-2 overflow-hidden rounded-full bg-surface-2">
                       <div
                         className="h-full rounded-full bg-primary transition-all duration-300"
                         style={{ width: `${progress.currentModelProgress}%` }}
@@ -148,10 +149,10 @@ export default function FirstLaunchScreen({
                     </div>
                   )}
                   {isCurrent && isExtracting && (
-                    <p className="text-xs text-gray-400">Wird entpackt…</p>
+                    <p className="text-xs text-text-tertiary">Wird entpackt\u2026</p>
                   )}
                   {isCurrent && isVerifying && (
-                    <p className="text-xs text-gray-400">Wird überprüft…</p>
+                    <p className="text-xs text-text-tertiary">Wird \u00FCberpr\u00FCft\u2026</p>
                   )}
                 </div>
               )
@@ -159,15 +160,15 @@ export default function FirstLaunchScreen({
 
             {/* Overall progress */}
             {displayProgress && (
-              <div className="mt-4 border-t border-gray-100 pt-3">
-                <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
+              <div className="mt-4 border-t border-border pt-3">
+                <div className="mb-1 flex items-center justify-between text-xs text-text-tertiary">
                   <span>Gesamt</span>
                   <span>
                     {formatBytes(displayProgress.overallDownloaded)} /{' '}
                     {formatBytes(displayProgress.overallTotal)}
                   </span>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-gray-200">
+                <div className="h-2 overflow-hidden rounded-full bg-surface-2">
                   <div
                     className="h-full rounded-full bg-primary transition-all duration-300"
                     style={{ width: `${displayProgress.overallPercent}%` }}
@@ -180,11 +181,11 @@ export default function FirstLaunchScreen({
 
         {/* Error state */}
         {isError && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
-            <p className="mb-2 text-sm font-medium text-red-800">Download fehlgeschlagen</p>
-            <p className="mb-3 text-sm text-red-600">{status.error}</p>
+          <div className="mt-4 rounded-lg border border-error-border bg-error-bg p-4">
+            <p className="mb-2 text-sm font-medium text-error-text-emphasis">Download fehlgeschlagen</p>
+            <p className="mb-3 text-sm text-error-text">{status.error}</p>
             <button
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
               onClick={handleStart}
             >
               Erneut versuchen
@@ -194,8 +195,8 @@ export default function FirstLaunchScreen({
 
         {/* Resume hint */}
         {started && !isError && (
-          <p className="mt-4 text-center text-xs text-gray-400">
-            Hinweis: Bei Abbruch wird der Download beim nächsten Start automatisch fortgesetzt.
+          <p className="mt-4 text-center text-xs text-text-tertiary">
+            Hinweis: Bei Abbruch wird der Download beim n\u00E4chsten Start automatisch fortgesetzt.
           </p>
         )}
       </div>

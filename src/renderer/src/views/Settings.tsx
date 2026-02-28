@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import BlocklistManager from '../components/BlocklistManager'
+import AppearanceSettings from '../components/AppearanceSettings'
 import AboutPage from '../components/AboutPage'
 
-type Tab = 'sperrliste' | 'modelle' | 'ueber'
+type Tab = 'sperrliste' | 'darstellung' | 'modelle' | 'ueber'
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'sperrliste', label: 'Sperrliste' },
+  { id: 'darstellung', label: 'Darstellung' },
   { id: 'modelle', label: 'Modelle' },
   { id: 'ueber', label: 'Über' }
 ]
@@ -16,7 +18,7 @@ export default function Settings(): React.JSX.Element {
   return (
     <div className="flex flex-1 flex-col">
       {/* Tabs */}
-      <div className="border-b border-gray-200 px-6">
+      <div className="border-b border-border px-6">
         <nav className="flex gap-6">
           {TABS.map((tab) => (
             <button
@@ -24,7 +26,7 @@ export default function Settings(): React.JSX.Element {
               className={`titlebar-no-drag border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
                 currentTab === tab.id
                   ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  : 'border-transparent text-text-tertiary hover:border-border-strong hover:text-text-secondary'
               }`}
               onClick={() => setCurrentTab(tab.id)}
             >
@@ -37,9 +39,12 @@ export default function Settings(): React.JSX.Element {
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto">
         {currentTab === 'sperrliste' && <BlocklistManager />}
+        {currentTab === 'darstellung' && <AppearanceSettings />}
         {currentTab === 'modelle' && (
           <div className="flex flex-1 items-center justify-center p-8">
-            <p className="text-sm text-gray-400">Modell-Verwaltung — noch nicht implementiert</p>
+            <p className="text-sm text-text-tertiary">
+              Modell-Verwaltung — noch nicht implementiert
+            </p>
           </div>
         )}
         {currentTab === 'ueber' && <AboutPage />}

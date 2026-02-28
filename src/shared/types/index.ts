@@ -1,3 +1,5 @@
+export type ThemePreference = 'light' | 'system' | 'dark'
+
 export type { PlaceholderType, EntitySource, EntityMapEntry, EntityMap } from './EntityMap'
 
 export type {

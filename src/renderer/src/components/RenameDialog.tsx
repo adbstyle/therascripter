@@ -41,10 +41,10 @@ export function RenameDialog({
       onClick={onCancel}
     >
       <div
-        className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+        className="mx-4 w-full max-w-md rounded-xl bg-surface-1 p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="mb-4 text-base font-semibold text-gray-900">Sitzung umbenennen</h3>
+        <h3 className="mb-4 text-base font-semibold text-text-primary">Sitzung umbenennen</h3>
 
         <form onSubmit={handleSubmit}>
           <input
@@ -52,7 +52,7 @@ export function RenameDialog({
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="mb-4 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            className="mb-4 w-full rounded-lg border border-border-strong bg-surface-0 px-3 py-2 text-sm text-text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary"
             maxLength={200}
             autoFocus
           />
@@ -60,14 +60,14 @@ export function RenameDialog({
           <div className="flex justify-end gap-2">
             <button
               type="button"
-              className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              className="rounded-lg px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-2"
               onClick={onCancel}
             >
               Abbrechen
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover"
               disabled={title.trim().length === 0}
             >
               Umbenennen

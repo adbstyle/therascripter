@@ -18,6 +18,9 @@ export function useRecording(): UseRecordingResult {
   const recorderRef = useRef<AudioRecorder | null>(null)
   const startingRef = useRef(false)
   const stoppingRef = useRef(false)
+  const levelRef = useRef(0)
+  const levelCountRef = useRef(0)
+  const rafRef = useRef(0)
 
   const stopRecording = useCallback(async () => {
     if (stoppingRef.current) return
@@ -31,6 +34,8 @@ export function useRecording(): UseRecordingResult {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Stoppen der Aufnahme')
     } finally {
+      levelRef.current = 0
+      levelCountRef.current = 0
       setIsRecording(false)
       setDuration(0)
       setLevel(0)
@@ -49,7 +54,11 @@ export function useRecording(): UseRecordingResult {
 
     try {
       await recorder.start((rmsLevel) => {
-        setLevel(rmsLevel)
+        // Accumulate all RMS samples between display frames.
+        // The rAF loop (~60 Hz) reads the average of ~6 worklet values (~375 Hz),
+        // so silence stays low and speech registers high — no random sampling.
+        levelRef.current += rmsLevel
+        levelCountRef.current++
       })
       setIsRecording(true)
     } catch (err) {
@@ -80,6 +89,27 @@ export function useRecording(): UseRecordingResult {
     return cleanup
   }, [isRecording])
 
+  // Sync audio level to React state at display refresh rate (~60 fps)
+  useEffect(() => {
+    if (!isRecording) return
+
+    let running = true
+    const tick = (): void => {
+      if (!running) return
+      const avg = levelCountRef.current > 0 ? levelRef.current / levelCountRef.current : 0
+      setLevel(avg)
+      levelRef.current = 0
+      levelCountRef.current = 0
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+
+    return () => {
+      running = false
+      cancelAnimationFrame(rafRef.current)
+    }
+  }, [isRecording])
+
   // Listen for recording errors from main process
   useEffect(() => {
     if (!isRecording) return
@@ -104,6 +134,8 @@ export function useRecording(): UseRecordingResult {
         recorderRef.current.stop().catch(() => {})
         recorderRef.current = null
       }
+      levelRef.current = 0
+      levelCountRef.current = 0
       setIsRecording(false)
       setDuration(0)
       setLevel(0)

@@ -4,7 +4,8 @@ const settingsKeySchema = z.enum([
   'activeModels',
   'firstLaunchDone',
   'consentReminderShown',
-  'modelsDownloaded'
+  'modelsDownloaded',
+  'theme'
 ])
 
 export const SettingsGetSchema = z.object({

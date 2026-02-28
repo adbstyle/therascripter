@@ -7,7 +7,7 @@ export function SpeakerLabelView({ node }: NodeViewProps): React.JSX.Element {
   return (
     <NodeViewWrapper as="span" className="inline">
       <span
-        className="inline cursor-default text-sm font-semibold text-gray-700"
+        className="inline cursor-default text-sm font-semibold text-text-secondary"
         contentEditable={false}
       >
         [{label}]:
