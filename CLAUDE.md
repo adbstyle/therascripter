@@ -21,6 +21,7 @@ npm run format        # Prettier formatting
 npm run typecheck     # TypeScript check (both node + web configs)
 npm run start         # Preview production build (electron-vite preview)
 npm run package       # electron-rebuild + build + electron-builder → macOS DMG (arm64 only)
+scripts/release.sh                # Interactive version bump → DMG build → GitHub release (via gh CLI)
 scripts/setup-whisper.sh          # Install whisper-cli via Homebrew → resources/bin/ + resources/lib/
 scripts/setup-whisper.sh --model  # Also download ASR model (~547 MB)
 scripts/setup-pyannote.sh         # Create Python venv with pyannote.audio → python_sidecar/venv/
