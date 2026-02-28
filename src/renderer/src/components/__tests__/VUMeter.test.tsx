@@ -21,9 +21,10 @@ describe('VUMeter', () => {
   it('reflects level in aria-valuenow', () => {
     render(<VUMeter level={0.5} />)
     const meter = screen.getByRole('meter')
-    // Smoothing: smoothedRef starts at 0, smoothed = 0 * 0.7 + 0.5 * 0.3 = 0.15
-    // Math.round(0.15 * 100) = 15
-    expect(meter).toHaveAttribute('aria-valuenow', '15')
+    // Gain+sqrt: scaled = min(1, sqrt(0.5 * 25)) = min(1, 3.54) = 1.0
+    // Smoothing: smoothedRef starts at 0, smoothed = 0 * 0.7 + 1.0 * 0.3 = 0.3
+    // Math.round(0.3 * 100) = 30
+    expect(meter).toHaveAttribute('aria-valuenow', '30')
   })
 
   it('shows zero level with minimum bar heights', () => {

@@ -9,8 +9,11 @@ const BAR_COUNT = 16
 export function VUMeter({ level }: VUMeterProps): React.JSX.Element {
   const smoothedRef = useRef(0)
 
+  // Gain + sqrt: amplify tiny RMS values (typical speech ≈ 0.001–0.02) to visible range
+  const scaled = Math.min(1, Math.sqrt(Math.max(0, level) * 25))
+
   // Exponential smoothing: blend previous value with new level
-  const smoothed = smoothedRef.current * 0.7 + level * 0.3
+  const smoothed = smoothedRef.current * 0.7 + scaled * 0.3
   smoothedRef.current = smoothed
 
   // Generate symmetric waveform-like bar heights centered on the middle
