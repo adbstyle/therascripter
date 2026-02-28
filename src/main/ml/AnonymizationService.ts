@@ -125,9 +125,7 @@ export class AnonymizationService implements TaskExecutor {
       const { bin, args: prefixArgs } = this.getCommand()
 
       if (!existsSync(bin)) {
-        reject(
-          new Error(`NER-Binary nicht gefunden: ${bin}. Bitte prüfen Sie die Installation.`)
-        )
+        reject(new Error(`NER-Binary nicht gefunden: ${bin}. Bitte prüfen Sie die Installation.`))
         return
       }
 
