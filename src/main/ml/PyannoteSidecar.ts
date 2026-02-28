@@ -11,6 +11,11 @@ import { getDatabase, getDataDir } from '../db/connection'
 // Progress line format: "[PROGRESS] 42"
 const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
 
+// Minimum segment duration in seconds. Segments shorter than this are
+// filtered as pyannote segmentation noise. The Python-side collar merge
+// (hardcoded at 0.5s in diarize.py) handles same-speaker gap filling.
+const MIN_SEGMENT_DURATION_S = 0.5
+
 export class PyannoteSidecar implements TaskExecutor {
   /**
    * Resolve the diarize script path.
@@ -205,7 +210,9 @@ export function parseRTTM(rttm: string): SpeakerSegment[] {
   // Sort by start time
   segments.sort((a, b) => a.start - b.start)
 
-  return segments
+  // Filter out very short segments — these are typically noise artifacts
+  // from the segmentation model, not real speaker activity
+  return segments.filter((seg) => seg.end - seg.start >= MIN_SEGMENT_DURATION_S)
 }
 
 // Exported for testing

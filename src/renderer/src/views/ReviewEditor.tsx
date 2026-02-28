@@ -394,7 +394,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Header */}
       <header className="titlebar-drag flex items-center justify-between border-b border-gray-200 px-6 py-4">
         <div className="flex items-center gap-3">

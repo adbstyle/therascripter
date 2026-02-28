@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildSpeakerLabelMap,
+  findBestOverlapSegment,
   alignWords,
+  correctSentenceBoundaries,
   findSpeakerForTime,
   rebuildSegmentsWithSpeakers,
   formatTimestamp
@@ -69,6 +71,54 @@ describe('buildSpeakerLabelMap', () => {
   })
 })
 
+// --- findBestOverlapSegment ---
+
+describe('findBestOverlapSegment', () => {
+  const segments = [seg('A', 0, 5), seg('B', 5, 10), seg('A', 12, 18)]
+
+  it('returns segment with greatest overlap for word fully inside', () => {
+    expect(findBestOverlapSegment(word('Hallo', 1, 3), segments)).toEqual(seg('A', 0, 5))
+    expect(findBestOverlapSegment(word('Welt', 6, 8), segments)).toEqual(seg('B', 5, 10))
+  })
+
+  it('returns segment with greatest overlap when word straddles boundary', () => {
+    // Word spans 4.8–5.2: overlap with A (0-5) = 0.2, overlap with B (5-10) = 0.2
+    // Tie → first match (A) wins
+    expect(findBestOverlapSegment(word('Ich', 4.8, 5.2), segments)).toEqual(seg('A', 0, 5))
+
+    // Word spans 4.7–5.3: overlap with A = 0.3, overlap with B = 0.3 → tie → A
+    expect(findBestOverlapSegment(word('Ich', 4.7, 5.3), segments)).toEqual(seg('A', 0, 5))
+
+    // Word spans 4.6–5.4: overlap with A = 0.4, overlap with B = 0.4 → tie → A
+    expect(findBestOverlapSegment(word('Ich', 4.6, 5.4), segments)).toEqual(seg('A', 0, 5))
+
+    // Word mostly in B: spans 4.9–5.5: overlap A = 0.1, overlap B = 0.5 → B wins
+    expect(findBestOverlapSegment(word('Ich', 4.9, 5.5), segments)).toEqual(seg('B', 5, 10))
+  })
+
+  it('returns null when word falls in a gap (no overlap)', () => {
+    // Word at 10.5–11.5 — gap between B (5-10) and A (12-18)
+    expect(findBestOverlapSegment(word('gap', 10.5, 11.5), segments)).toBeNull()
+  })
+
+  it('returns null for empty segments', () => {
+    expect(findBestOverlapSegment(word('test', 1, 2), [])).toBeNull()
+  })
+
+  it('handles overlapping speaker segments (picks larger overlap)', () => {
+    // Two speakers overlap in time
+    const overlapping = [seg('A', 0, 6), seg('B', 4, 10)]
+    // Word at 4.5–5.5: overlap A = 1.0 (4.5→5.5 clipped to 4.5→6 = 1.5), overlap B = 1.0 (4.5→5.5 clipped to 4.5→5.5 = 1.0)
+    // Actually: overlap A = min(5.5,6) - max(4.5,0) = 5.5-4.5 = 1.0
+    // overlap B = min(5.5,10) - max(4.5,4) = 5.5-4.5 = 1.0 → tie → A
+    expect(findBestOverlapSegment(word('overlap', 4.5, 5.5), overlapping)).toEqual(seg('A', 0, 6))
+
+    // Word at 5.5–6.5: overlap A = min(6.5,6) - max(5.5,0) = 6-5.5 = 0.5
+    // overlap B = min(6.5,10) - max(5.5,4) = 6.5-5.5 = 1.0 → B wins
+    expect(findBestOverlapSegment(word('overlap', 5.5, 6.5), overlapping)).toEqual(seg('B', 4, 10))
+  })
+})
+
 // --- findSpeakerForTime ---
 
 describe('findSpeakerForTime', () => {
@@ -117,11 +167,11 @@ describe('findSpeakerForTime', () => {
 // --- alignWords ---
 
 describe('alignWords', () => {
-  it('assigns speaker labels based on word midpoint', () => {
+  it('assigns speaker labels based on temporal overlap', () => {
     const words = [
-      word('Hallo', 0, 2), // midpoint 1 → in A (0-5)
-      word('wie', 6, 8), // midpoint 7 → in B (5-10)
-      word('gehts?', 13, 16) // midpoint 14.5 → in A (12-18)
+      word('Hallo', 0, 2), // fully within A (0-5)
+      word('wie', 6, 8), // fully within B (5-10)
+      word('gehts?', 13, 16) // fully within A (12-18)
     ]
     const speakers = [seg('SPEAKER_00', 0, 5), seg('SPEAKER_01', 5, 10), seg('SPEAKER_00', 12, 18)]
     const labelMap = new Map([
@@ -157,7 +207,7 @@ describe('alignWords', () => {
   })
 
   it('handles words in gaps (nearest segment fallback)', () => {
-    const words = [word('gap', 10.5, 11.5)] // midpoint 11, falls in gap
+    const words = [word('gap', 10.5, 11.5)] // no overlap with any segment
     const speakers = [seg('A', 0, 5), seg('B', 15, 20)]
     const labelMap = new Map([
       ['A', 'A'],
@@ -168,6 +218,233 @@ describe('alignWords', () => {
 
     // Should get assigned to nearest segment
     expect(result[0].speaker).toBeDefined()
+  })
+})
+
+// --- correctSentenceBoundaries ---
+
+describe('correctSentenceBoundaries', () => {
+  it('snaps single-word speaker change to sentence boundary (Bug 1 original)', () => {
+    // "sagen." (A) → "Ich" (A, should be B) → "denke" (B)
+    const words = [
+      word('sagen.', 0, 1, 'Person A'),
+      word('Ich', 1, 2, 'Person A'),
+      word('denke', 2, 3, 'Person B')
+    ]
+
+    const result = correctSentenceBoundaries(words)
+
+    expect(result[0].speaker).toBe('Person A')
+    expect(result[1].speaker).toBe('Person B') // reassigned
+    expect(result[2].speaker).toBe('Person B')
+  })
+
+  it('snaps multi-word speaker change to sentence boundary (Bug 1 real data)', () => {
+    // "beklagen." (A) → "Es" (A) "ist" (A) "ein" (A) → "Leitsatz" (B)
+    // All of "Es ist ein" should become B
+    const words = [
+      word('beklagen.', 22, 23, 'Person A'),
+      word('Es', 23, 23.2, 'Person A'),
+      word('ist', 23.2, 23.5, 'Person A'),
+      word('ein', 23.5, 23.8, 'Person A'),
+      word('Leitsatz,', 23.8, 24.5, 'Person B'),
+      word('den', 24.5, 25, 'Person B')
+    ]
+
+    const result = correctSentenceBoundaries(words)
+
+    expect(result[0].speaker).toBe('Person A') // "beklagen." stays A
+    expect(result[1].speaker).toBe('Person B') // "Es" → B
+    expect(result[2].speaker).toBe('Person B') // "ist" → B
+    expect(result[3].speaker).toBe('Person B') // "ein" → B
+    expect(result[4].speaker).toBe('Person B')
+    expect(result[5].speaker).toBe('Person B')
+  })
+
+  it('snaps trailing words to sentence boundary (Bug 2 real data)', () => {
+    // "klicken?" (B) → "Eigentlich" (B) "niemandem," (B) → "eigentlich" (A)
+    // "Eigentlich niemandem," should become A
+    const words = [
+      word('klicken?', 33, 34, 'Person B'),
+      word('Eigentlich', 34, 35, 'Person B'),
+      word('niemandem,', 35, 35.5, 'Person B'),
+      word('eigentlich', 35.5, 36, 'Person A'),
+      word('niemandem.', 36, 37, 'Person A')
+    ]
+
+    const result = correctSentenceBoundaries(words)
+
+    expect(result[0].speaker).toBe('Person B') // "klicken?" stays B
+    expect(result[1].speaker).toBe('Person A') // "Eigentlich" → A
+    expect(result[2].speaker).toBe('Person A') // "niemandem," → A
+    expect(result[3].speaker).toBe('Person A')
+    expect(result[4].speaker).toBe('Person A')
+  })
+
+  it('handles multiple corrections in one pass', () => {
+    const words = [
+      word('ja.', 0, 1, 'Person A'),
+      word('Ich', 1, 2, 'Person A'), // should be C
+      word('bin', 2, 3, 'Person C'),
+      word('durch.', 3, 4, 'Person C'),
+      word('Ich', 4, 5, 'Person C'), // should be A
+      word('würde', 5, 6, 'Person A')
+    ]
+
+    const result = correctSentenceBoundaries(words)
+
+    expect(result[0].speaker).toBe('Person A')
+    expect(result[1].speaker).toBe('Person C') // fixed
+    expect(result[2].speaker).toBe('Person C')
+    expect(result[3].speaker).toBe('Person C')
+    expect(result[4].speaker).toBe('Person A') // fixed
+    expect(result[5].speaker).toBe('Person A')
+  })
+
+  it('does not snap when change is already at sentence boundary', () => {
+    const words = [
+      word('Ende.', 0, 1, 'Person A'),
+      word('Anfang', 1, 2, 'Person B'),
+      word('weiter', 2, 3, 'Person B')
+    ]
+
+    const result = correctSentenceBoundaries(words)
+
+    // Change is already at "Ende." boundary — no modification
+    expect(result[0].speaker).toBe('Person A')
+    expect(result[1].speaker).toBe('Person B')
+  })
+
+  it('does not snap when no sentence boundary within lookback', () => {
+    // 6 words without punctuation before speaker change → exceeds MAX_SENTENCE_LOOKBACK (5)
+    const words = [
+      word('und', 0, 1, 'Person A'),
+      word('dann', 1, 2, 'Person A'),
+      word('hat', 2, 3, 'Person A'),
+      word('er', 3, 4, 'Person A'),
+      word('auch', 4, 5, 'Person A'),
+      word('noch', 5, 6, 'Person A'),
+      word('gesagt', 6, 7, 'Person A'),
+      word('dass', 7, 8, 'Person B')
+    ]
+
+    const result = correctSentenceBoundaries(words)
+
+    // No sentence end within 5 words lookback from "dass" → no snap
+    expect(result[6].speaker).toBe('Person A')
+    expect(result[7].speaker).toBe('Person B')
+  })
+
+  it('does not snap when lookback crosses different speakers', () => {
+    // Words between sentence end and speaker change have mixed speakers
+    const words = [
+      word('gut.', 0, 1, 'Person A'),
+      word('Und', 1, 2, 'Person A'),
+      word('ja', 2, 3, 'Person B'), // different speaker in between
+      word('genau', 3, 4, 'Person A'),
+      word('also', 4, 5, 'Person B')
+    ]
+
+    const result = correctSentenceBoundaries(words)
+
+    // All words should remain unchanged — mixed speakers prevent any snap
+    expect(result[0].speaker).toBe('Person A')
+    expect(result[1].speaker).toBe('Person A') // must NOT be snapped to B
+    expect(result[2].speaker).toBe('Person B')
+    expect(result[3].speaker).toBe('Person A')
+    expect(result[4].speaker).toBe('Person B')
+  })
+
+  it('does not snap isolated speaker blip (A-B-A pattern)', () => {
+    // Single B word surrounded by A — should not trigger a snap
+    const words = [
+      word('Ende.', 0, 1, 'Person A'),
+      word('Und', 1, 2, 'Person A'),
+      word('ja', 2, 3, 'Person B'), // isolated blip
+      word('genau', 3, 4, 'Person A'),
+      word('weiter', 4, 5, 'Person A')
+    ]
+
+    const result = correctSentenceBoundaries(words)
+
+    // "ja" is an isolated B word — forward-look safety prevents snap
+    expect(result[1].speaker).toBe('Person A') // unchanged
+    expect(result[2].speaker).toBe('Person B') // unchanged
+    expect(result[3].speaker).toBe('Person A') // unchanged
+  })
+
+  it('does not snap after comma (only .!?)', () => {
+    const words = [
+      word('also,', 0, 1, 'Person A'),
+      word('Ich', 1, 2, 'Person A'),
+      word('denke', 2, 3, 'Person B')
+    ]
+
+    const result = correctSentenceBoundaries(words)
+
+    // "also," ends with comma, not .!? — no snap
+    expect(result[1].speaker).toBe('Person A')
+  })
+
+  it('does not mutate input array', () => {
+    const words = [
+      word('Ende.', 0, 1, 'Person A'),
+      word('Anfang', 1, 2, 'Person A'),
+      word('weiter', 2, 3, 'Person B')
+    ]
+    const originalSpeaker = words[1].speaker
+
+    correctSentenceBoundaries(words)
+
+    expect(words[1].speaker).toBe(originalSpeaker)
+  })
+
+  it('returns input unchanged for fewer than 2 words', () => {
+    expect(correctSentenceBoundaries([word('Solo', 0, 1, 'Person A')])).toEqual([
+      word('Solo', 0, 1, 'Person A')
+    ])
+    expect(correctSentenceBoundaries([])).toEqual([])
+  })
+
+  it('handles exclamation and question marks', () => {
+    const words = [
+      word('Nein!', 0, 1, 'Person A'),
+      word('Doch', 1, 2, 'Person A'),
+      word('also', 2, 3, 'Person B')
+    ]
+
+    const result = correctSentenceBoundaries(words)
+
+    expect(result[1].speaker).toBe('Person B') // snapped to after "Nein!"
+  })
+
+  it('handles speaker change at first word (no lookback possible)', () => {
+    const words = [word('Hallo', 0, 1, 'Person A'), word('Welt', 1, 2, 'Person B')]
+
+    const result = correctSentenceBoundaries(words)
+
+    // No sentence boundary before first word — no snap
+    expect(result[0].speaker).toBe('Person A')
+    expect(result[1].speaker).toBe('Person B')
+  })
+
+  it('snaps exactly at MAX_SENTENCE_LOOKBACK boundary (5 words)', () => {
+    // Sentence end is exactly 5 words before the speaker change
+    const words = [
+      word('Ende.', 0, 1, 'Person A'),
+      word('w1', 1, 2, 'Person A'),
+      word('w2', 2, 3, 'Person A'),
+      word('w3', 3, 4, 'Person A'),
+      word('w4', 4, 5, 'Person A'),
+      word('w5', 5, 6, 'Person A'),
+      word('Neu', 6, 7, 'Person B')
+    ]
+
+    const result = correctSentenceBoundaries(words)
+
+    // "Ende." is 5 words before "Neu" → within MAX_SENTENCE_LOOKBACK → snap
+    expect(result[1].speaker).toBe('Person B') // w1 → B
+    expect(result[5].speaker).toBe('Person B') // w5 → B
   })
 })
 

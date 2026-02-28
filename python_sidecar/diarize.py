@@ -7,6 +7,7 @@ Progress is reported to stderr for parsing by the Electron main process.
 
 Usage:
     python3 diarize.py --audio <path> [--model-dir <path>] [--min-speakers 1] [--max-speakers 4]
+                       [--collar 0.5]
 
 Output format (RTTM, one line per speaker segment):
     SPEAKER <file-id> 1 <start-sec> <duration-sec> <NA> <NA> <speaker-label> <NA> <NA>
@@ -26,7 +27,6 @@ Exit codes:
 import argparse
 import os
 import sys
-import json
 
 
 def report_progress(percent: int) -> None:
@@ -44,6 +44,12 @@ def main() -> None:
     )
     parser.add_argument("--min-speakers", type=int, default=1, help="Minimum speakers (default: 1)")
     parser.add_argument("--max-speakers", type=int, default=4, help="Maximum speakers (default: 4)")
+    parser.add_argument(
+        "--collar",
+        type=float,
+        default=0.5,
+        help="Post-processing collar: merge same-speaker segments separated by less than this (seconds)",
+    )
     args = parser.parse_args()
 
     # Validate audio file
@@ -83,6 +89,10 @@ def main() -> None:
             pipeline = pipeline.to(torch.device("mps"))
         else:
             pipeline = pipeline.to(torch.device("cpu"))
+
+        # Reduce over-segmentation: fill short intra-speaker gaps (default 0.0 is too aggressive).
+        # Set after .to() to ensure the parameter survives device transfer.
+        pipeline.segmentation.min_duration_off = 0.5
     except Exception as e:
         print(f"Fehler: Pyannote-Modell konnte nicht geladen werden: {e}", file=sys.stderr)
         print(
@@ -142,6 +152,12 @@ def main() -> None:
         annotation = diarization.speaker_diarization
     else:
         annotation = diarization
+
+    # Post-processing: merge same-speaker segments separated by short gaps.
+    # annotation.support(collar) fills gaps < collar seconds between same-speaker segments,
+    # dramatically reducing over-segmentation artifacts.
+    if args.collar > 0:
+        annotation = annotation.support(collar=args.collar)
 
     # Output RTTM format to stdout
     file_id = os.path.splitext(os.path.basename(args.audio))[0]

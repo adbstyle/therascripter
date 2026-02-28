@@ -24,10 +24,7 @@ import {
   ensureSpotlightExclusion
 } from './services/AutoDeletionService'
 import { checkFileVaultOnStartup } from './services/FileVaultService'
-import {
-  cleanupIncompleteUpdates,
-  migrateInstalledVersions
-} from './services/ModelUpdateService'
+import { cleanupIncompleteUpdates, migrateInstalledVersions } from './services/ModelUpdateService'
 import { WhisperService } from './ml/WhisperService'
 import { PyannoteSidecar } from './ml/PyannoteSidecar'
 import { AlignmentService } from './ml/AlignmentService'

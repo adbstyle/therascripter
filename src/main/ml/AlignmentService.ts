@@ -49,8 +49,9 @@ export class AlignmentService implements TaskExecutor {
     // Build consistent speaker label mapping (raw label → "Person A", "Person B", ...)
     const labelMap = buildSpeakerLabelMap(diarization.speakers)
 
-    // Align words with speaker segments
-    const alignedWords = alignWords(transcript.words, diarization.speakers, labelMap)
+    // Align words with speaker segments, then correct sentence boundaries
+    const rawAligned = alignWords(transcript.words, diarization.speakers, labelMap)
+    const alignedWords = correctSentenceBoundaries(rawAligned)
 
     onProgress(0.6)
 
@@ -95,8 +96,28 @@ export function buildSpeakerLabelMap(segments: SpeakerSegment[]): Map<string, st
   return labelMap
 }
 
-// For each word, find the speaker segment containing its midpoint
-// and assign the mapped speaker label
+// For each word, find the speaker segment with the greatest temporal overlap.
+// Returns null when the word falls entirely in a gap (no overlap with any segment).
+export function findBestOverlapSegment(
+  word: TranscriptWord,
+  segments: SpeakerSegment[]
+): SpeakerSegment | null {
+  let bestSeg: SpeakerSegment | null = null
+  let bestOverlap = 0
+
+  for (const seg of segments) {
+    const overlap = Math.max(0, Math.min(word.end, seg.end) - Math.max(word.start, seg.start))
+    if (overlap > bestOverlap) {
+      bestOverlap = overlap
+      bestSeg = seg
+    }
+  }
+
+  return bestSeg
+}
+
+// For each word, find the speaker segment with the greatest temporal overlap
+// and assign the mapped speaker label. Falls back to nearest segment for gap words.
 export function alignWords(
   words: TranscriptWord[],
   speakers: SpeakerSegment[],
@@ -105,8 +126,10 @@ export function alignWords(
   if (speakers.length === 0) return words
 
   return words.map((word) => {
-    const midpoint = (word.start + word.end) / 2
-    const segment = findSpeakerForTime(midpoint, speakers)
+    // Prefer overlap-based assignment; fall back to nearest-segment for gap words
+    const segment =
+      findBestOverlapSegment(word, speakers) ??
+      findSpeakerForTime((word.start + word.end) / 2, speakers)
     const rawLabel = segment?.label
     const mappedLabel = rawLabel ? labelMap.get(rawLabel) : undefined
 
@@ -115,6 +138,78 @@ export function alignWords(
       speaker: mappedLabel ? `Person ${mappedLabel}` : undefined
     }
   })
+}
+
+// Maximum number of words to look back when snapping a speaker change
+// to the nearest sentence boundary. Limits false positives from genuine
+// mid-sentence interruptions.
+const MAX_SENTENCE_LOOKBACK = 5
+
+// Minimum number of consecutive words the new speaker must have starting at
+// the change point (in the original input). Prevents snapping for isolated
+// speaker blips like A-B-A where B is a single misassigned word.
+const MIN_NEW_SPEAKER_RUN = 2
+
+// Sentence-aware boundary correction: when a speaker change occurs mid-sentence,
+// snap it backward to the nearest sentence boundary (.!?) and reassign the
+// intermediate words to the new speaker. This handles multi-word misassignment
+// caused by pyannote segment boundaries being 0.5-1.5s off from actual transitions.
+export function correctSentenceBoundaries(words: TranscriptWord[]): TranscriptWord[] {
+  if (words.length < 2) return words
+
+  const result = words.map((w) => ({ ...w }))
+
+  for (let i = 1; i < result.length; i++) {
+    // Find speaker change (read from immutable original to prevent cascade effects)
+    if (words[i].speaker === words[i - 1].speaker) continue
+
+    // Speaker change is already at a sentence boundary — nothing to fix
+    if (/[.!?]$/.test(result[i - 1].text)) continue
+
+    // Look backward for nearest .!? within MAX_SENTENCE_LOOKBACK words
+    let sentEnd = -1
+    for (let j = i - 2; j >= Math.max(0, i - MAX_SENTENCE_LOOKBACK - 1); j--) {
+      if (/[.!?]$/.test(result[j].text)) {
+        sentEnd = j
+        break
+      }
+    }
+
+    if (sentEnd < 0) continue // no sentence boundary found within lookback
+
+    // Safety 1: only snap if all words between sentEnd+1 and i-1 had the same speaker
+    // in the ORIGINAL input (prevents snapping through mixed-speaker regions)
+    const outgoingSpeaker = words[i - 1].speaker
+    let allSame = true
+    for (let k = sentEnd + 1; k < i; k++) {
+      if (words[k].speaker !== outgoingSpeaker) {
+        allSame = false
+        break
+      }
+    }
+    if (!allSame) continue
+
+    // Safety 2: verify the new speaker persists for at least MIN_NEW_SPEAKER_RUN
+    // consecutive words starting at i. Prevents snapping for isolated speaker blips
+    // (e.g. A-B-A where B is a single misassigned word from pyannote).
+    // Skip this check when fewer than MIN_NEW_SPEAKER_RUN words remain (end of transcript).
+    if (i + MIN_NEW_SPEAKER_RUN <= words.length) {
+      let newSpeakerRun = 0
+      for (let f = i; f < i + MIN_NEW_SPEAKER_RUN; f++) {
+        if (words[f].speaker === words[i].speaker) newSpeakerRun++
+        else break
+      }
+      if (newSpeakerRun < MIN_NEW_SPEAKER_RUN) continue
+    }
+
+    // Reassign words between sentence boundary and speaker change to the new speaker
+    const newSpeaker = words[i].speaker
+    for (let k = sentEnd + 1; k < i; k++) {
+      result[k] = { ...result[k], speaker: newSpeaker }
+    }
+  }
+
+  return result
 }
 
 // Find the speaker segment containing the given time point

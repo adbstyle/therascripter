@@ -7,10 +7,7 @@ const path = require('path')
  * See: https://www.electronjs.org/docs/latest/tutorial/fuses
  */
 module.exports = async function afterPack(context) {
-  const appPath = path.join(
-    context.appOutDir,
-    `${context.packager.appInfo.productFilename}.app`
-  )
+  const appPath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
 
   const electronBinary = path.join(
     appPath,
