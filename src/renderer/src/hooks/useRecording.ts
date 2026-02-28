@@ -125,6 +125,7 @@ export function useRecording(): UseRecordingResult {
         recorderRef.current.stop().catch(() => {})
         recorderRef.current = null
       }
+      levelRef.current = 0
       setIsRecording(false)
       setDuration(0)
       setLevel(0)
