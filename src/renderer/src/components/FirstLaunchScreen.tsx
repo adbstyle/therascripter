@@ -6,6 +6,7 @@ import type {
   DiskSpaceInfo
 } from '../../../shared/types'
 import { formatBytes } from '../utils/formatBytes'
+import AppLogo from './AppLogo'
 
 interface FirstLaunchScreenProps {
   onComplete: () => void
@@ -95,8 +96,8 @@ export default function FirstLaunchScreen({
       <div className="w-full max-w-lg px-8">
         {/* Header */}
         <div className="titlebar-drag mb-8 text-center">
-          <div className="mb-2 text-sm text-gray-400">&#128274; Therascript</div>
-          <h1 className="mb-2 text-2xl font-bold text-gray-900">Willkommen bei Therascript</h1>
+          <AppLogo size={72} className="mx-auto mb-3" />
+          <h1 className="mb-2 text-2xl font-bold text-gray-900">Therascript</h1>
           <p className="text-sm text-gray-600">
             Alle Verarbeitung findet komplett lokal auf Ihrem Mac statt — keine Daten verlassen Ihr
             Gerät.

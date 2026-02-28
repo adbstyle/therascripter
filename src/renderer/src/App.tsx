@@ -124,7 +124,7 @@ export default function App(): React.JSX.Element {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside className="flex w-[200px] flex-col border-r border-gray-200 bg-white px-4 py-6">
-          <h1 className="titlebar-drag mb-8 text-base font-semibold text-gray-900">THERASCRIPT</h1>
+          <div className="titlebar-drag mb-8" />
           <nav className="flex flex-1 flex-col gap-1">
             <button
               className={`titlebar-no-drag rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${

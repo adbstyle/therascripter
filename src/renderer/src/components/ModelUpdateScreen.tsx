@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ModelDownloadProgress, ModelDownloadStatus } from '../../../shared/types'
 import type { PendingModelUpdate } from '../../../shared/types/ModelUpdate'
 import { formatBytes } from '../utils/formatBytes'
+import AppLogo from './AppLogo'
 
 interface ModelUpdateScreenProps {
   updates: PendingModelUpdate[]
@@ -85,7 +86,7 @@ export default function ModelUpdateScreen({
       <div className="w-full max-w-lg px-8">
         {/* Header */}
         <div className="titlebar-drag mb-8 text-center">
-          <div className="mb-2 text-sm text-gray-400">&#8635; Therascript</div>
+          <AppLogo size={72} className="mx-auto mb-3" />
           <h1 className="mb-2 text-2xl font-bold text-gray-900">Modelle werden aktualisiert</h1>
           <p className="text-sm text-gray-600">
             Verbesserte Modellversionen werden heruntergeladen. Bestehende Modelle bleiben bis

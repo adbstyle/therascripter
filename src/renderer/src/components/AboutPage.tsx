@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { AboutInfo } from '../../../shared/types'
 import { ConfirmDialog } from './ConfirmDialog'
 import { formatBytes } from '../utils/formatBytes'
+import AppLogo from './AppLogo'
 
 export default function AboutPage(): React.JSX.Element {
   const [info, setInfo] = useState<AboutInfo | null>(null)
@@ -21,6 +22,7 @@ export default function AboutPage(): React.JSX.Element {
       <div className="max-w-lg space-y-6">
         {/* Version */}
         <div>
+          <AppLogo size={64} className="mb-3" />
           <h3 className="text-lg font-semibold text-gray-900">
             Therascript v{info?.version ?? '…'}
           </h3>

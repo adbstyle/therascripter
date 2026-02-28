@@ -71,10 +71,11 @@ beforeEach(() => {
 })
 
 describe('App', () => {
-  it('renders Therascript title', async () => {
+  it('renders sidebar navigation', async () => {
     render(<App />)
     await waitFor(() => {
-      expect(screen.getByText('THERASCRIPT')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Sitzungen' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Einstellungen' })).toBeInTheDocument()
     })
   })
 
