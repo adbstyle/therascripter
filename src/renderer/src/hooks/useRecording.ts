@@ -19,6 +19,7 @@ export function useRecording(): UseRecordingResult {
   const startingRef = useRef(false)
   const stoppingRef = useRef(false)
   const levelRef = useRef(0)
+  const levelCountRef = useRef(0)
   const rafRef = useRef(0)
 
   const stopRecording = useCallback(async () => {
@@ -34,6 +35,7 @@ export function useRecording(): UseRecordingResult {
       setError(err instanceof Error ? err.message : 'Fehler beim Stoppen der Aufnahme')
     } finally {
       levelRef.current = 0
+      levelCountRef.current = 0
       setIsRecording(false)
       setDuration(0)
       setLevel(0)
@@ -52,7 +54,11 @@ export function useRecording(): UseRecordingResult {
 
     try {
       await recorder.start((rmsLevel) => {
-        levelRef.current = rmsLevel
+        // Accumulate all RMS samples between display frames.
+        // The rAF loop (~60 Hz) reads the average of ~6 worklet values (~375 Hz),
+        // so silence stays low and speech registers high — no random sampling.
+        levelRef.current += rmsLevel
+        levelCountRef.current++
       })
       setIsRecording(true)
     } catch (err) {
@@ -90,7 +96,10 @@ export function useRecording(): UseRecordingResult {
     let running = true
     const tick = (): void => {
       if (!running) return
-      setLevel(levelRef.current)
+      const avg = levelCountRef.current > 0 ? levelRef.current / levelCountRef.current : 0
+      setLevel(avg)
+      levelRef.current = 0
+      levelCountRef.current = 0
       rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
@@ -126,6 +135,7 @@ export function useRecording(): UseRecordingResult {
         recorderRef.current = null
       }
       levelRef.current = 0
+      levelCountRef.current = 0
       setIsRecording(false)
       setDuration(0)
       setLevel(0)

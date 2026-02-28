@@ -1,19 +1,26 @@
 import { useRef } from 'react'
 
 interface VUMeterProps {
-  level: number // 0.0 to 1.0
+  level: number // 0.0 to 1.0 (RMS from AudioWorklet)
 }
 
 const BAR_COUNT = 16
+// dB range for normalization: silence at -60 dB, speech clips rarely above -6 dBFS
+const MIN_DB = -60
+const MAX_DB = -6
 
 export function VUMeter({ level }: VUMeterProps): React.JSX.Element {
   const smoothedRef = useRef(0)
 
-  // Gain + sqrt: amplify tiny RMS values (typical speech ≈ 0.001–0.02) to visible range
-  const scaled = Math.min(1, Math.sqrt(Math.max(0, level) * 25))
+  // Convert RMS to dB, then normalize to 0–1 within the expected speech range.
+  // This is perceptually correct and stable across different microphones,
+  // unlike arbitrary sqrt(level * N) scaling.
+  const db = 20 * Math.log10(Math.max(level, 1e-10))
+  const scaled = Math.max(0, Math.min(1, (db - MIN_DB) / (MAX_DB - MIN_DB)))
 
-  // Exponential smoothing: blend previous value with new level
-  const smoothed = smoothedRef.current * 0.7 + scaled * 0.3
+  // Light exponential smoothing (0.5/0.5) for visual continuity without sluggishness.
+  // No CSS transition — double-damping makes bars appear static.
+  const smoothed = smoothedRef.current * 0.5 + scaled * 0.5
   smoothedRef.current = smoothed
 
   // Generate symmetric waveform-like bar heights centered on the middle
@@ -22,7 +29,7 @@ export function VUMeter({ level }: VUMeterProps): React.JSX.Element {
     const center = (BAR_COUNT - 1) / 2
     const distFromCenter = Math.abs(i - center) / center
     // Bars near center are taller, edges shorter — scaled by audio level
-    const height = Math.max(0.05, smoothed * (1 - distFromCenter * 0.6))
+    const height = Math.max(0.03, smoothed * (1 - distFromCenter * 0.6))
     return height
   })
 
@@ -39,9 +46,9 @@ export function VUMeter({ level }: VUMeterProps): React.JSX.Element {
       {bars.map((height, i) => (
         <div
           key={i}
-          className="w-2 rounded-sm transition-all duration-75"
+          className="w-2 rounded-sm"
           style={{
-            height: `${Math.max(4, height * 96)}px`,
+            height: `${Math.max(3, height * 96)}px`,
             backgroundColor: barColor(height)
           }}
         />
