@@ -176,9 +176,9 @@ export default function ModelUpdateScreen({
 
         {/* Error state */}
         {isError && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950">
-            <p className="mb-2 text-sm font-medium text-red-800 dark:text-red-200">Update fehlgeschlagen</p>
-            <p className="mb-3 text-sm text-red-600 dark:text-red-400">{status.error}</p>
+          <div className="mt-4 rounded-lg border border-error-border bg-error-bg p-4">
+            <p className="mb-2 text-sm font-medium text-error-text-emphasis">Update fehlgeschlagen</p>
+            <p className="mb-3 text-sm text-error-text">{status.error}</p>
             <p className="mb-3 text-xs text-text-tertiary">
               Bestehende Modelle sind unver\u00E4ndert. Das Update wird beim n\u00E4chsten Start erneut
               versucht.

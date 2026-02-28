@@ -382,7 +382,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   if (loadError) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4">
-        <p className="text-sm text-red-600 dark:text-red-400">Fehler beim Laden: {loadError}</p>
+        <p className="text-sm text-error-text">Fehler beim Laden: {loadError}</p>
         <button
           className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-1"
           onClick={onBack}

@@ -28,6 +28,26 @@
   --color-border: #e5e7eb;
   --color-border-strong: #d1d5db;
 
+  /* Status: error/destructive */
+  --color-error-bg: #fef2f2;
+  --color-error-border: #fecaca;
+  --color-error-text: #dc2626;
+  --color-error-text-emphasis: #991b1b;
+
+  /* Status: warning */
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-warning-text: #78350f;
+  --color-warning-text-secondary: #b45309;
+
+  /* Status: info */
+  --color-info-bg: #eff6ff;
+  --color-info-border: #bfdbfe;
+  --color-info-text: #1e40af;
+
+  /* Tooltip */
+  --color-tooltip-bg: #111827;
+
   /* Entity chip colors */
   --color-chip-person-bg: #dbeafe;
   --color-chip-person-text: #1d4ed8;
@@ -69,6 +89,22 @@
 
   --color-border: #2d3148;
   --color-border-strong: #3d4260;
+
+  --color-error-bg: #450a0a;
+  --color-error-border: #991b1b;
+  --color-error-text: #f87171;
+  --color-error-text-emphasis: #fecaca;
+
+  --color-warning-bg: #451a03;
+  --color-warning-border: #92400e;
+  --color-warning-text: #fde68a;
+  --color-warning-text-secondary: #fcd34d;
+
+  --color-info-bg: #172554;
+  --color-info-border: #1e40af;
+  --color-info-text: #bfdbfe;
+
+  --color-tooltip-bg: #374151;
 
   --color-chip-person-bg: #1e3a5f;
   --color-chip-person-text: #93c5fd;

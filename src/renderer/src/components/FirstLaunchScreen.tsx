@@ -181,9 +181,9 @@ export default function FirstLaunchScreen({
 
         {/* Error state */}
         {isError && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950">
-            <p className="mb-2 text-sm font-medium text-red-800 dark:text-red-200">Download fehlgeschlagen</p>
-            <p className="mb-3 text-sm text-red-600 dark:text-red-400">{status.error}</p>
+          <div className="mt-4 rounded-lg border border-error-border bg-error-bg p-4">
+            <p className="mb-2 text-sm font-medium text-error-text-emphasis">Download fehlgeschlagen</p>
+            <p className="mb-3 text-sm text-error-text">{status.error}</p>
             <button
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
               onClick={handleStart}

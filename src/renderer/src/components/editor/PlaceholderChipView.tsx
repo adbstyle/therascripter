@@ -101,7 +101,7 @@ export function PlaceholderChipView({ node, selected }: NodeViewProps): React.JS
               zIndex: 9999,
               pointerEvents: 'none'
             }}
-            className="whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs font-normal text-white shadow-lg dark:bg-gray-700"
+            className="whitespace-nowrap rounded bg-tooltip-bg px-2 py-1 text-xs font-normal text-white shadow-lg"
           >
             {type} &middot; {sourceInfo.label}
           </span>,

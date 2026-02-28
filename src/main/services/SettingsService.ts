@@ -1,4 +1,5 @@
 import Store from 'electron-store'
+import type { ThemePreference } from '../../shared/types'
 import type { PendingModelUpdate, InstalledModelVersion } from '../../shared/types/ModelUpdate'
 
 export interface AppSettings {
@@ -11,7 +12,7 @@ export interface AppSettings {
   firstLaunchDone: boolean
   consentReminderShown: boolean
   modelsDownloaded: boolean
-  theme: 'light' | 'system' | 'dark'
+  theme: ThemePreference
   installedModelVersions: Record<string, InstalledModelVersion>
   pendingModelUpdates: PendingModelUpdate[] | null
 }

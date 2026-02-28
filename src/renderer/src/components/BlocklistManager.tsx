@@ -100,7 +100,7 @@ export default function BlocklistManager(): React.JSX.Element {
   if (error) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-red-500">{error}</p>
+        <p className="text-sm text-error-text">{error}</p>
       </div>
     )
   }
@@ -154,13 +154,13 @@ export default function BlocklistManager(): React.JSX.Element {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <button
-                          className="text-sm text-primary hover:text-blue-700 dark:hover:text-blue-300"
+                          className="text-sm text-primary hover:text-primary-hover"
                           onClick={() => setDialogMode({ type: 'edit', entry })}
                         >
                           Bearbeiten
                         </button>
                         <button
-                          className="text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                          className="text-sm text-error-text hover:text-error-text-emphasis"
                           onClick={() => setDeleteTarget(entry)}
                         >
                           Löschen

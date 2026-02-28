@@ -1,6 +1,7 @@
 import { createContext } from 'react'
+import type { ThemePreference } from '../../../shared/types'
 
-export type ThemePreference = 'light' | 'system' | 'dark'
+export type { ThemePreference }
 
 export interface ThemeContextValue {
   theme: ThemePreference

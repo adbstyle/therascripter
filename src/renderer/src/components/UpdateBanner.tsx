@@ -11,8 +11,8 @@ export default function UpdateBanner({ updates, onRestart }: UpdateBannerProps):
   const count = updates.length
 
   return (
-    <div className="flex items-center justify-between border-b border-blue-200 bg-blue-50 px-6 py-2.5 dark:border-blue-800 dark:bg-blue-950">
-      <div className="flex items-center gap-2 text-sm text-blue-800 dark:text-blue-200">
+    <div className="flex items-center justify-between border-b border-info-border bg-info-bg px-6 py-2.5">
+      <div className="flex items-center gap-2 text-sm text-info-text">
         <span>&#8635;</span>
         <span>
           Modell-Update verfügbar ({count} {count === 1 ? 'Modell' : 'Modelle'},{' '}

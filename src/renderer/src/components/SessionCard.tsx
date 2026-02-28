@@ -17,7 +17,7 @@ const STATUS_CONFIG: Record<SessionStatus, { label: string; color: string }> = {
   extracting: { label: 'Textextraktion', color: 'text-primary' },
   anonymizing: { label: 'Anonymisierung', color: 'text-primary' },
   review: { label: 'Review', color: 'text-success' },
-  error: { label: 'Fehler', color: 'text-red-600 dark:text-red-400' }
+  error: { label: 'Fehler', color: 'text-error-text' }
 }
 
 const TASK_LABELS: Record<TaskType, string> = {
@@ -175,7 +175,7 @@ export function SessionCard({
               Umbenennen
             </button>
             <button
-              className="w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
+              className="w-full px-3 py-1.5 text-left text-sm text-error-text hover:bg-error-bg"
               onClick={() => {
                 setMenuOpen(false)
                 onDelete()
