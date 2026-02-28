@@ -103,8 +103,20 @@ cd "$ROOT_DIR"
 
 echo "→ Git commit + tag v$NEW_VERSION …"
 git add package.json
-git commit -m "chore: bump version to $NEW_VERSION"
-git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+
+# Only commit if package.json actually changed
+if git diff --cached --quiet; then
+  echo "  (keine Änderung in package.json — überspringe commit)"
+else
+  git commit -m "chore: bump version to $NEW_VERSION"
+fi
+
+# Only create tag if it doesn't exist yet
+if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
+  echo "  (Tag v$NEW_VERSION existiert bereits — überspringe)"
+else
+  git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+fi
 
 echo "→ Push commit + tag …"
 git push origin HEAD
