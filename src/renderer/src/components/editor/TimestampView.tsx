@@ -7,7 +7,7 @@ export function TimestampView({ node }: NodeViewProps): React.JSX.Element {
   return (
     <NodeViewWrapper as="span" className="inline">
       <span
-        className="inline cursor-default font-mono text-xs text-gray-400"
+        className="inline cursor-default font-mono text-xs text-text-tertiary"
         contentEditable={false}
       >
         [{formatted}]

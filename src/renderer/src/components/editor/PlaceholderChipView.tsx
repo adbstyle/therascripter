@@ -48,7 +48,7 @@ export function PlaceholderChipView({ node, selected }: NodeViewProps): React.JS
 
         {showTooltip && (
           <span
-            className="absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs font-normal text-white shadow-lg"
+            className="absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs font-normal text-white shadow-lg dark:bg-gray-700"
             role="tooltip"
           >
             {type} &middot; {sourceInfo.label}

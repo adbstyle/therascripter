@@ -50,10 +50,10 @@ export function BlocklistDialog({
       onClick={onCancel}
     >
       <div
-        className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+        className="mx-4 w-full max-w-md rounded-xl bg-surface-1 p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="mb-4 text-base font-semibold text-gray-900">
+        <h3 className="mb-4 text-base font-semibold text-text-primary">
           {mode === 'add' ? 'Eintrag hinzufügen' : 'Eintrag bearbeiten'}
         </h3>
 
@@ -61,7 +61,7 @@ export function BlocklistDialog({
           <div className="mb-4">
             <label
               htmlFor="blocklist-term"
-              className="mb-1 block text-sm font-medium text-gray-700"
+              className="mb-1 block text-sm font-medium text-text-secondary"
             >
               Begriff
             </label>
@@ -71,28 +71,30 @@ export function BlocklistDialog({
               type="text"
               value={term}
               onChange={(e) => setTerm(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              className="w-full rounded-lg border border-border-strong bg-surface-0 px-3 py-2 text-sm text-text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary"
               maxLength={200}
               autoFocus
             />
           </div>
 
           <div className="mb-6">
-            <label className="mb-1 block text-sm font-medium text-gray-700">Platzhaltertyp</label>
+            <label className="mb-1 block text-sm font-medium text-text-secondary">
+              Platzhaltertyp
+            </label>
             <PlaceholderTypeDropdown value={type} onChange={setType} />
           </div>
 
           <div className="flex justify-end gap-2">
             <button
               type="button"
-              className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              className="rounded-lg px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-2"
               onClick={onCancel}
             >
               Abbrechen
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!isValid}
             >
               {mode === 'add' ? 'Hinzufügen' : 'Speichern'}

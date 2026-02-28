@@ -11,6 +11,7 @@ export interface AppSettings {
   firstLaunchDone: boolean
   consentReminderShown: boolean
   modelsDownloaded: boolean
+  theme: 'light' | 'system' | 'dark'
   installedModelVersions: Record<string, InstalledModelVersion>
   pendingModelUpdates: PendingModelUpdate[] | null
 }
@@ -25,6 +26,7 @@ const defaults: AppSettings = {
   firstLaunchDone: false,
   consentReminderShown: false,
   modelsDownloaded: false,
+  theme: 'system',
   installedModelVersions: {},
   pendingModelUpdates: null
 }

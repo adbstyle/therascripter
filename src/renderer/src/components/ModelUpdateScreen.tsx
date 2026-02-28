@@ -82,13 +82,13 @@ export default function ModelUpdateScreen({
     : -1
 
   return (
-    <div className="flex h-screen flex-col items-center justify-center bg-white">
+    <div className="flex h-screen flex-col items-center justify-center bg-surface-0">
       <div className="w-full max-w-lg px-8">
         {/* Header */}
         <div className="titlebar-drag mb-8 text-center">
           <AppLogo size={72} className="mx-auto mb-3" />
-          <h1 className="mb-2 text-2xl font-bold text-gray-900">Modelle werden aktualisiert</h1>
-          <p className="text-sm text-gray-600">
+          <h1 className="mb-2 text-2xl font-bold text-text-primary">Modelle werden aktualisiert</h1>
+          <p className="text-sm text-text-secondary">
             Verbesserte Modellversionen werden heruntergeladen. Bestehende Modelle bleiben bis
             zum erfolgreichen Abschluss erhalten.
           </p>
@@ -96,19 +96,19 @@ export default function ModelUpdateScreen({
 
         {!started && (
           <div className="mb-8 text-center">
-            <p className="mb-6 text-sm text-gray-600">
+            <p className="mb-6 text-sm text-text-secondary">
               {updates.length} {updates.length === 1 ? 'Modell wird' : 'Modelle werden'} aktualisiert
               (~{formatBytes(updates.reduce((s, u) => s + u.sizeBytes, 0))}).
             </p>
             <div className="flex justify-center gap-3">
               <button
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                className="rounded-lg border border-border-strong bg-surface-0 px-4 py-2.5 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
                 onClick={handleSkip}
               >
                 Überspringen
               </button>
               <button
-                className="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                className="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
                 onClick={handleStart}
               >
                 Update starten
@@ -119,7 +119,7 @@ export default function ModelUpdateScreen({
 
         {/* Download progress */}
         {started && (
-          <div className="rounded-lg border border-gray-200 p-5">
+          <div className="rounded-lg border border-border p-5">
             {updates.map((update, index) => {
               const isCurrent = update.id === currentModelId
               const isCompleted = currentModelIndex > 0 && index < currentModelIndex
@@ -128,15 +128,15 @@ export default function ModelUpdateScreen({
                 <div key={update.id} className="mb-3 last:mb-0">
                   <div className="mb-1 flex items-center justify-between">
                     <span
-                      className={`text-sm ${isCurrent ? 'font-medium text-gray-900' : 'text-gray-500'}`}
+                      className={`text-sm ${isCurrent ? 'font-medium text-text-primary' : 'text-text-tertiary'}`}
                     >
-                      {isCompleted ? '✓ ' : isCurrent ? '' : '○ '}
+                      {isCompleted ? '\u2713 ' : isCurrent ? '' : '\u25CB '}
                       {update.label}
                     </span>
-                    <span className="text-xs text-gray-400">{formatBytes(update.sizeBytes)}</span>
+                    <span className="text-xs text-text-tertiary">{formatBytes(update.sizeBytes)}</span>
                   </div>
                   {isCurrent && isDownloading && progress && (
-                    <div className="h-2 overflow-hidden rounded-full bg-gray-200">
+                    <div className="h-2 overflow-hidden rounded-full bg-surface-2">
                       <div
                         className="h-full rounded-full bg-primary transition-all duration-300"
                         style={{ width: `${progress.currentModelProgress}%` }}
@@ -144,10 +144,10 @@ export default function ModelUpdateScreen({
                     </div>
                   )}
                   {isCurrent && isExtracting && (
-                    <p className="text-xs text-gray-400">Wird entpackt…</p>
+                    <p className="text-xs text-text-tertiary">Wird entpackt\u2026</p>
                   )}
                   {isCurrent && isVerifying && (
-                    <p className="text-xs text-gray-400">Wird überprüft…</p>
+                    <p className="text-xs text-text-tertiary">Wird \u00FCberpr\u00FCft\u2026</p>
                   )}
                 </div>
               )
@@ -155,15 +155,15 @@ export default function ModelUpdateScreen({
 
             {/* Overall progress */}
             {displayProgress && (
-              <div className="mt-4 border-t border-gray-100 pt-3">
-                <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
+              <div className="mt-4 border-t border-border pt-3">
+                <div className="mb-1 flex items-center justify-between text-xs text-text-tertiary">
                   <span>Gesamt</span>
                   <span>
                     {formatBytes(displayProgress.overallDownloaded)} /{' '}
                     {formatBytes(displayProgress.overallTotal)}
                   </span>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-gray-200">
+                <div className="h-2 overflow-hidden rounded-full bg-surface-2">
                   <div
                     className="h-full rounded-full bg-primary transition-all duration-300"
                     style={{ width: `${displayProgress.overallPercent}%` }}
@@ -176,15 +176,15 @@ export default function ModelUpdateScreen({
 
         {/* Error state */}
         {isError && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
-            <p className="mb-2 text-sm font-medium text-red-800">Update fehlgeschlagen</p>
-            <p className="mb-3 text-sm text-red-600">{status.error}</p>
-            <p className="mb-3 text-xs text-gray-500">
-              Bestehende Modelle sind unverändert. Das Update wird beim nächsten Start erneut
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950">
+            <p className="mb-2 text-sm font-medium text-red-800 dark:text-red-200">Update fehlgeschlagen</p>
+            <p className="mb-3 text-sm text-red-600 dark:text-red-400">{status.error}</p>
+            <p className="mb-3 text-xs text-text-tertiary">
+              Bestehende Modelle sind unver\u00E4ndert. Das Update wird beim n\u00E4chsten Start erneut
               versucht.
             </p>
             <button
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
               onClick={handleSkip}
             >
               Weiter
@@ -193,8 +193,8 @@ export default function ModelUpdateScreen({
         )}
 
         {started && !isError && (
-          <p className="mt-4 text-center text-xs text-gray-400">
-            Hinweis: Bei Abbruch wird das Update beim nächsten Start automatisch fortgesetzt.
+          <p className="mt-4 text-center text-xs text-text-tertiary">
+            Hinweis: Bei Abbruch wird das Update beim n\u00E4chsten Start automatisch fortgesetzt.
           </p>
         )}
       </div>
