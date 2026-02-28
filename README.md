@@ -24,7 +24,7 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 
 ## Installation
 
-1. [DMG herunterladen](https://drive.proton.me/urls/DPYM39CKT4#V51Bl7TEvRYG)
+1. [DMG herunterladen](https://github.com/adbstyle/therascripter/releases)
 2. DMG öffnen und Therascript in den Programme-Ordner ziehen
 3. Gatekeeper-Sperre aufheben (App ist nicht notarisiert):
    ```bash
