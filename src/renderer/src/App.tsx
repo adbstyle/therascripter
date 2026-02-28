@@ -159,7 +159,7 @@ export default function App(): React.JSX.Element {
         <main className="flex min-h-0 flex-1 flex-col">
           {/* Header — only for non-review views (review has its own header) */}
           {!isInReview && (
-            <header className="titlebar-drag flex items-center justify-between border-b border-gray-200 px-6 py-4">
+            <header className="titlebar-drag flex min-h-[71px] items-center justify-between border-b border-gray-200 px-6 py-4">
               <h2 className="text-2xl font-bold text-gray-900">{headerTitle}</h2>
               {!isRecording && currentView === 'sessions' && (
                 <div className="flex items-center gap-2">
