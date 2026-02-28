@@ -32,6 +32,7 @@ npm run sidecar:build              # Build standalone Python sidecar via uv → 
 npm run sidecar:package            # Package models for R2 upload
 npm run sidecar:upload             # Upload model packages to Cloudflare R2
 npm run sidecar:deploy             # Build + package + upload (full pipeline)
+scripts/publish-manifest.sh       # Generate manifest.json from r2-upload/ + upload to R2 (run after sidecar:package)
 ```
 
 ## Architecture
@@ -69,7 +70,13 @@ npm run sidecar:deploy             # Build + package + upload (full pipeline)
 
 **PDF import:** Drag-and-drop or button in SessionDashboard. Files copied to `~/.therascript/pdf/`. Import guard prevents duplicate imports. Copy failure triggers session rollback. Orphaned sessions (stuck in processing with no tasks) are recovered at startup.
 
-**UI navigation:** Simple view state (`'sessions' | 'settings' | 'review'`) in App.tsx — no router. First-launch screen is shown conditionally via `modelsReady` state (not a view). Settings view has tabbed layout (Sperrliste/Modelle/Über). Review editor opened by clicking a session card in `review` status. Navigation disabled during recording and review. First-launch screen shown when models are not yet downloaded.
+**UI navigation:** Simple view state (`'sessions' | 'settings' | 'review'`) in App.tsx — no router. First-launch screen is shown conditionally via `modelsReady` state (not a view). `ModelUpdateScreen` is shown when pending model updates exist after restart (`pendingUpdates` state). `UpdateBanner` overlays the main app when new model versions are available (non-blocking). Settings view has tabbed layout (Sperrliste/Darstellung/Modelle/Über). Review editor opened by clicking a session card in `review` status. Navigation disabled during recording and review. First-launch screen shown when models are not yet downloaded.
+
+**Theme system:** `ThemeContext` + `ThemeProvider` (`src/renderer/src/contexts/ThemeContext.tsx`) manage light/dark/system preference, persisted via electron-store. `createWindow()` reads `nativeTheme` to set `backgroundColor` on the `BrowserWindow` (prevents white flash in dark mode). `AppearanceSettings.tsx` renders the user-facing toggle in the Darstellung tab.
+
+**ConsentBanner:** Shown inside `RecordingView` on first recording — one-time reminder to obtain patient consent. State tracked via electron-store (`consentReminderShown`).
+
+**Model Update System (Iteration 17):** `ModelUpdateService` checks R2 manifest for newer model versions, downloads atomically into a staging directory, and swaps on restart. `model-update-handlers.ts` exposes `modelUpdate.check()`, `modelUpdate.getPending()`, `modelUpdate.apply()` IPC channels.
 
 **Key constraints:**
 - 8 GB minimum RAM budget (~5.2 GB peak during flair NER)
