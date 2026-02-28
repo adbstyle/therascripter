@@ -169,9 +169,9 @@ describe('findSpeakerForTime', () => {
 describe('alignWords', () => {
   it('assigns speaker labels based on temporal overlap', () => {
     const words = [
-      word('Hallo', 0, 2), // midpoint 1 → in A (0-5)
-      word('wie', 6, 8), // midpoint 7 → in B (5-10)
-      word('gehts?', 13, 16) // midpoint 14.5 → in A (12-18)
+      word('Hallo', 0, 2), // fully within A (0-5)
+      word('wie', 6, 8), // fully within B (5-10)
+      word('gehts?', 13, 16) // fully within A (12-18)
     ]
     const speakers = [seg('SPEAKER_00', 0, 5), seg('SPEAKER_01', 5, 10), seg('SPEAKER_00', 12, 18)]
     const labelMap = new Map([
@@ -207,7 +207,7 @@ describe('alignWords', () => {
   })
 
   it('handles words in gaps (nearest segment fallback)', () => {
-    const words = [word('gap', 10.5, 11.5)] // midpoint 11, falls in gap
+    const words = [word('gap', 10.5, 11.5)] // no overlap with any segment
     const speakers = [seg('A', 0, 5), seg('B', 15, 20)]
     const labelMap = new Map([
       ['A', 'A'],
@@ -347,7 +347,29 @@ describe('correctSentenceBoundaries', () => {
 
     const result = correctSentenceBoundaries(words)
 
-    // Words between "gut." and "also" have mixed speakers → safety check prevents snap
+    // All words should remain unchanged — mixed speakers prevent any snap
+    expect(result[0].speaker).toBe('Person A')
+    expect(result[1].speaker).toBe('Person A') // must NOT be snapped to B
+    expect(result[2].speaker).toBe('Person B')
+    expect(result[3].speaker).toBe('Person A')
+    expect(result[4].speaker).toBe('Person B')
+  })
+
+  it('does not snap isolated speaker blip (A-B-A pattern)', () => {
+    // Single B word surrounded by A — should not trigger a snap
+    const words = [
+      word('Ende.', 0, 1, 'Person A'),
+      word('Und', 1, 2, 'Person A'),
+      word('ja', 2, 3, 'Person B'), // isolated blip
+      word('genau', 3, 4, 'Person A'),
+      word('weiter', 4, 5, 'Person A')
+    ]
+
+    const result = correctSentenceBoundaries(words)
+
+    // "ja" is an isolated B word — forward-look safety prevents snap
+    expect(result[1].speaker).toBe('Person A') // unchanged
+    expect(result[2].speaker).toBe('Person B') // unchanged
     expect(result[3].speaker).toBe('Person A') // unchanged
   })
 
@@ -397,10 +419,7 @@ describe('correctSentenceBoundaries', () => {
   })
 
   it('handles speaker change at first word (no lookback possible)', () => {
-    const words = [
-      word('Hallo', 0, 1, 'Person A'),
-      word('Welt', 1, 2, 'Person B')
-    ]
+    const words = [word('Hallo', 0, 1, 'Person A'), word('Welt', 1, 2, 'Person B')]
 
     const result = correctSentenceBoundaries(words)
 

@@ -7,7 +7,7 @@ Progress is reported to stderr for parsing by the Electron main process.
 
 Usage:
     python3 diarize.py --audio <path> [--model-dir <path>] [--min-speakers 1] [--max-speakers 4]
-                       [--num-speakers 0] [--collar 0.5]
+                       [--collar 0.5]
 
 Output format (RTTM, one line per speaker segment):
     SPEAKER <file-id> 1 <start-sec> <duration-sec> <NA> <NA> <speaker-label> <NA> <NA>
@@ -44,7 +44,6 @@ def main() -> None:
     )
     parser.add_argument("--min-speakers", type=int, default=1, help="Minimum speakers (default: 1)")
     parser.add_argument("--max-speakers", type=int, default=4, help="Maximum speakers (default: 4)")
-    parser.add_argument("--num-speakers", type=int, default=0, help="Exact speaker count (0=auto)")
     parser.add_argument(
         "--collar",
         type=float,
@@ -108,14 +107,10 @@ def main() -> None:
     # Run diarization
     try:
         diarization_params = {}
-        if args.num_speakers > 0:
-            # Exact speaker count overrides min/max
-            diarization_params["num_speakers"] = args.num_speakers
-        else:
-            if args.min_speakers > 0:
-                diarization_params["min_speakers"] = args.min_speakers
-            if args.max_speakers > 0:
-                diarization_params["max_speakers"] = args.max_speakers
+        if args.min_speakers > 0:
+            diarization_params["min_speakers"] = args.min_speakers
+        if args.max_speakers > 0:
+            diarization_params["max_speakers"] = args.max_speakers
 
         # Progress hook matching pyannote.audio 4.x protocol
         class ProgressHook:

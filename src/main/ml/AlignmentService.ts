@@ -145,6 +145,11 @@ export function alignWords(
 // mid-sentence interruptions.
 const MAX_SENTENCE_LOOKBACK = 5
 
+// Minimum number of consecutive words the new speaker must have starting at
+// the change point (in the original input). Prevents snapping for isolated
+// speaker blips like A-B-A where B is a single misassigned word.
+const MIN_NEW_SPEAKER_RUN = 2
+
 // Sentence-aware boundary correction: when a speaker change occurs mid-sentence,
 // snap it backward to the nearest sentence boundary (.!?) and reassign the
 // intermediate words to the new speaker. This handles multi-word misassignment
@@ -155,8 +160,8 @@ export function correctSentenceBoundaries(words: TranscriptWord[]): TranscriptWo
   const result = words.map((w) => ({ ...w }))
 
   for (let i = 1; i < result.length; i++) {
-    // Find speaker change
-    if (result[i].speaker === result[i - 1].speaker) continue
+    // Find speaker change (read from immutable original to prevent cascade effects)
+    if (words[i].speaker === words[i - 1].speaker) continue
 
     // Speaker change is already at a sentence boundary — nothing to fix
     if (/[.!?]$/.test(result[i - 1].text)) continue
@@ -172,8 +177,8 @@ export function correctSentenceBoundaries(words: TranscriptWord[]): TranscriptWo
 
     if (sentEnd < 0) continue // no sentence boundary found within lookback
 
-    // Safety: only snap if all words between sentEnd+1 and i-1 had the same speaker
-    // in the ORIGINAL input (prevents cascading reassignments from previous snaps)
+    // Safety 1: only snap if all words between sentEnd+1 and i-1 had the same speaker
+    // in the ORIGINAL input (prevents snapping through mixed-speaker regions)
     const outgoingSpeaker = words[i - 1].speaker
     let allSame = true
     for (let k = sentEnd + 1; k < i; k++) {
@@ -184,8 +189,21 @@ export function correctSentenceBoundaries(words: TranscriptWord[]): TranscriptWo
     }
     if (!allSame) continue
 
+    // Safety 2: verify the new speaker persists for at least MIN_NEW_SPEAKER_RUN
+    // consecutive words starting at i. Prevents snapping for isolated speaker blips
+    // (e.g. A-B-A where B is a single misassigned word from pyannote).
+    // Skip this check when fewer than MIN_NEW_SPEAKER_RUN words remain (end of transcript).
+    if (i + MIN_NEW_SPEAKER_RUN <= words.length) {
+      let newSpeakerRun = 0
+      for (let f = i; f < i + MIN_NEW_SPEAKER_RUN; f++) {
+        if (words[f].speaker === words[i].speaker) newSpeakerRun++
+        else break
+      }
+      if (newSpeakerRun < MIN_NEW_SPEAKER_RUN) continue
+    }
+
     // Reassign words between sentence boundary and speaker change to the new speaker
-    const newSpeaker = result[i].speaker
+    const newSpeaker = words[i].speaker
     for (let k = sentEnd + 1; k < i; k++) {
       result[k] = { ...result[k], speaker: newSpeaker }
     }

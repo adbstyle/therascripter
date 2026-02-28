@@ -12,8 +12,8 @@ import { getDatabase, getDataDir } from '../db/connection'
 const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
 
 // Minimum segment duration in seconds. Segments shorter than this are
-// filtered as pyannote segmentation noise. Complementary to the Python-side
-// collar merge (diarize.py --collar) which handles same-speaker gap filling.
+// filtered as pyannote segmentation noise. The Python-side collar merge
+// (hardcoded at 0.5s in diarize.py) handles same-speaker gap filling.
 const MIN_SEGMENT_DURATION_S = 0.5
 
 export class PyannoteSidecar implements TaskExecutor {
