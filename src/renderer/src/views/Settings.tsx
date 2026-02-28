@@ -16,7 +16,7 @@ export default function Settings(): React.JSX.Element {
   const [currentTab, setCurrentTab] = useState<Tab>('sperrliste')
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Tabs */}
       <div className="border-b border-border px-6">
         <nav className="flex gap-6">
