@@ -92,7 +92,7 @@ export default function BlocklistManager(): React.JSX.Element {
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-gray-400">Laden...</p>
+        <p className="text-sm text-text-tertiary">Laden...</p>
       </div>
     )
   }
@@ -100,7 +100,7 @@ export default function BlocklistManager(): React.JSX.Element {
   if (error) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-red-500">{error}</p>
+        <p className="text-sm text-error-text">{error}</p>
       </div>
     )
   }
@@ -109,11 +109,11 @@ export default function BlocklistManager(): React.JSX.Element {
     <>
       <div className="p-6">
         <div className="mb-4 flex items-center justify-between">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-text-secondary">
             Begriffe, die immer automatisch anonymisiert werden.
           </p>
           <button
-            className="titlebar-no-drag rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+            className="titlebar-no-drag rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
             onClick={() => setDialogMode({ type: 'add' })}
           >
             + Eintrag hinzufügen
@@ -121,46 +121,46 @@ export default function BlocklistManager(): React.JSX.Element {
         </div>
 
         {entries.length === 0 ? (
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center">
-            <p className="text-sm text-gray-500">Noch keine Einträge vorhanden.</p>
+          <div className="rounded-lg border border-border bg-surface-1 p-8 text-center">
+            <p className="text-sm text-text-tertiary">Noch keine Einträge vorhanden.</p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-gray-200">
+          <div className="overflow-hidden rounded-lg border border-border">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-surface-1">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-tertiary">
                     Begriff
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-tertiary">
                     Typ
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-tertiary">
                     Erstellt
                   </th>
                   <th className="w-24 px-4 py-3" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
+              <tbody className="divide-y divide-border bg-surface-0">
                 {entries.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-900">{entry.term}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
+                  <tr key={entry.id} className="hover:bg-surface-1">
+                    <td className="px-4 py-3 text-sm text-text-primary">{entry.term}</td>
+                    <td className="px-4 py-3 text-sm text-text-secondary">
                       {PLACEHOLDER_TYPE_LABELS[entry.placeholderType]}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">
+                    <td className="px-4 py-3 text-sm text-text-tertiary">
                       {formatDate(entry.createdAt)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <button
-                          className="text-sm text-primary hover:text-blue-700"
+                          className="text-sm text-primary hover:text-primary-hover"
                           onClick={() => setDialogMode({ type: 'edit', entry })}
                         >
                           Bearbeiten
                         </button>
                         <button
-                          className="text-sm text-red-600 hover:text-red-700"
+                          className="text-sm text-error-text hover:text-error-text-emphasis"
                           onClick={() => setDeleteTarget(entry)}
                         >
                           Löschen
@@ -174,7 +174,7 @@ export default function BlocklistManager(): React.JSX.Element {
           </div>
         )}
 
-        <p className="mt-3 text-xs text-gray-400">{entries.length} Einträge</p>
+        <p className="mt-3 text-xs text-text-tertiary">{entries.length} Einträge</p>
       </div>
 
       {dialogMode && (

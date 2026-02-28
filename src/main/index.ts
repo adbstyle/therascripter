@@ -1,7 +1,7 @@
-import { app, BrowserWindow, dialog, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, nativeTheme, session, shell } from 'electron'
 import { join } from 'path'
 import { initDatabase, getDatabase, closeDatabase } from './db/connection'
-import { initSettings } from './services/SettingsService'
+import { initSettings, getSettings } from './services/SettingsService'
 import { initTaskQueue, getTaskQueue } from './services/TaskQueueService'
 import { registerSessionHandlers } from './ipc/session-handlers'
 import {
@@ -33,6 +33,11 @@ import { PDFExtractionExecutor } from './services/PDFExtractionExecutor'
 import { VisionOCRService } from './ml/VisionOCRService'
 
 function createWindow(): void {
+  // Set background color based on theme to prevent white flash in dark mode
+  const isDark =
+    nativeTheme.themeSource === 'dark' ||
+    (nativeTheme.themeSource === 'system' && nativeTheme.shouldUseDarkColors)
+
   const mainWindow = new BrowserWindow({
     width: 1024,
     height: 700,
@@ -41,6 +46,7 @@ function createWindow(): void {
     title: 'Therascript',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 15, y: 10 },
+    backgroundColor: isDark ? '#0f1117' : '#ffffff',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -103,6 +109,14 @@ app.whenReady().then(() => {
   }
 
   initSettings()
+
+  // Sync Electron nativeTheme with saved preference
+  const savedTheme = getSettings().get('theme') as string | undefined
+  if (savedTheme === 'light' || savedTheme === 'dark') {
+    nativeTheme.themeSource = savedTheme
+  } else {
+    nativeTheme.themeSource = 'system'
+  }
 
   // Clean up any incomplete model updates from a previous crashed update
   cleanupIncompleteUpdates()

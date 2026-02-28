@@ -32,12 +32,12 @@ export function PlaceholderTypeDropdown({
     <div ref={dropdownRef} className="relative">
       <button
         type="button"
-        className="flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 hover:border-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+        className="flex w-full items-center justify-between rounded-lg border border-border-strong bg-surface-0 px-3 py-2 text-sm text-text-primary hover:border-text-tertiary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         onClick={() => setIsOpen(!isOpen)}
       >
         <span>{currentLabel}</span>
         <svg
-          className={`h-4 w-4 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 text-text-tertiary transition-transform ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -47,13 +47,13 @@ export function PlaceholderTypeDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute z-10 mt-1 w-full rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+        <div className="absolute z-10 mt-1 w-full rounded-lg border border-border bg-surface-1 py-1 shadow-lg">
           {PLACEHOLDER_TYPES.map((type) => (
             <button
               key={type.value}
               type="button"
-              className={`block w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${
-                type.value === value ? 'bg-blue-50 text-primary' : 'text-gray-900'
+              className={`block w-full px-3 py-2 text-left text-sm hover:bg-surface-2 ${
+                type.value === value ? 'bg-primary-light text-primary' : 'text-text-primary'
               }`}
               onClick={() => {
                 onChange(type.value)

@@ -101,7 +101,7 @@ export default function App(): React.JSX.Element {
 
   // Show loading state while checking models
   if (modelsReady === null) {
-    return <div className="flex h-screen items-center justify-center bg-white" />
+    return <div className="flex h-screen items-center justify-center bg-surface-0" />
   }
 
   // First launch: show model download screen
@@ -115,7 +115,7 @@ export default function App(): React.JSX.Element {
   }
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col bg-surface-0">
       {/* Update banner — shown when updates are available (non-blocking) */}
       {availableUpdates && availableUpdates.length > 0 && (
         <UpdateBanner updates={availableUpdates} onRestart={handleRestartForUpdate} />
@@ -123,14 +123,14 @@ export default function App(): React.JSX.Element {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="flex w-[200px] flex-col border-r border-gray-200 bg-white px-4 py-6">
+        <aside className="flex w-[200px] flex-col border-r border-border bg-surface-0 px-4 py-6">
           <div className="titlebar-drag mb-8" />
           <nav className="flex flex-1 flex-col gap-1">
             <button
               className={`titlebar-no-drag rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
                 currentView === 'sessions'
-                  ? 'bg-gray-100 text-gray-900'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  ? 'bg-surface-2 text-text-primary'
+                  : 'text-text-secondary hover:bg-surface-1 hover:text-text-primary'
               } ${sidebarDisabled ? 'pointer-events-none opacity-50' : ''}`}
               onClick={() => setCurrentView('sessions')}
               disabled={sidebarDisabled}
@@ -140,8 +140,8 @@ export default function App(): React.JSX.Element {
             <button
               className={`titlebar-no-drag rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
                 currentView === 'settings'
-                  ? 'bg-gray-100 text-gray-900'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  ? 'bg-surface-2 text-text-primary'
+                  : 'text-text-secondary hover:bg-surface-1 hover:text-text-primary'
               } ${sidebarDisabled ? 'pointer-events-none opacity-50' : ''}`}
               onClick={() => setCurrentView('settings')}
               disabled={sidebarDisabled}
@@ -149,7 +149,7 @@ export default function App(): React.JSX.Element {
               Einstellungen
             </button>
           </nav>
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
+          <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
             <span>&#128274;</span>
             <span>Lokal</span>
           </div>
@@ -159,19 +159,19 @@ export default function App(): React.JSX.Element {
         <main className="flex min-h-0 flex-1 flex-col">
           {/* Header — only for non-review views (review has its own header) */}
           {!isInReview && (
-            <header className="titlebar-drag flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <h2 className="text-2xl font-bold text-gray-900">{headerTitle}</h2>
+            <header className="titlebar-drag flex min-h-[71px] items-center justify-between border-b border-border px-6 py-4">
+              <h2 className="text-2xl font-bold text-text-primary">{headerTitle}</h2>
               {!isRecording && currentView === 'sessions' && (
                 <div className="flex items-center gap-2">
                   <button
-                    className={`titlebar-no-drag rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
+                    className={`titlebar-no-drag rounded-lg border border-border-strong bg-surface-0 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1 ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
                     onClick={handleImportPDF}
                     disabled={isImporting}
                   >
                     PDF importieren
                   </button>
                   <button
-                    className="titlebar-no-drag rounded-lg bg-recording px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+                    className="titlebar-no-drag rounded-lg bg-recording px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-recording-hover"
                     onClick={startRecording}
                   >
                     &#9679; Aufnahme starten

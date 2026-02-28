@@ -17,7 +17,7 @@ const STATUS_CONFIG: Record<SessionStatus, { label: string; color: string }> = {
   extracting: { label: 'Textextraktion', color: 'text-primary' },
   anonymizing: { label: 'Anonymisierung', color: 'text-primary' },
   review: { label: 'Review', color: 'text-success' },
-  error: { label: 'Fehler', color: 'text-red-600' }
+  error: { label: 'Fehler', color: 'text-error-text' }
 }
 
 const TASK_LABELS: Record<TaskType, string> = {
@@ -73,7 +73,7 @@ export function SessionCard({
 
   return (
     <div
-      className={`group relative flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 transition-colors hover:border-gray-300 ${onClick ? 'cursor-pointer hover:shadow-sm' : ''}`}
+      className={`group relative flex items-center gap-3 rounded-lg border border-border bg-surface-0 px-4 py-3 transition-colors hover:border-border-strong ${onClick ? 'cursor-pointer hover:shadow-sm' : ''}`}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
@@ -90,12 +90,12 @@ export function SessionCard({
       </span>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-gray-900">{session.title}</p>
+        <p className="truncate text-sm font-medium text-text-primary">{session.title}</p>
         <div className="flex items-center gap-2">
           <span className={`text-xs font-medium ${statusConfig.color}`}>{statusLabel}</span>
         </div>
         {session.status === 'error' && session.errorMessage && (
-          <p className="mt-0.5 line-clamp-3 text-xs text-gray-400">
+          <p className="mt-0.5 line-clamp-3 text-xs text-text-tertiary">
             {session.errorMessage}
           </p>
         )}
@@ -105,7 +105,7 @@ export function SessionCard({
             {/* Progress bar */}
             {currentProgress && (
               <div
-                className="mb-1.5 h-1 w-full overflow-hidden rounded-full bg-gray-100"
+                className="mb-1.5 h-1 w-full overflow-hidden rounded-full bg-surface-2"
                 role="progressbar"
                 aria-valuenow={Math.round(currentProgress.progress * 100)}
                 aria-valuemin={0}
@@ -126,7 +126,7 @@ export function SessionCard({
                 const isRunning = task?.status === 'running'
                 const isFailed = task?.status === 'failed'
 
-                let dotClass = 'bg-gray-200' // pending
+                let dotClass = 'bg-surface-3' // pending
                 if (isCompleted) dotClass = 'bg-success'
                 else if (isRunning) dotClass = 'bg-primary animate-pulse'
                 else if (isFailed) dotClass = 'bg-red-500'
@@ -146,7 +146,7 @@ export function SessionCard({
 
       <div className="relative" ref={menuRef}>
         <button
-          className="rounded p-1 text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-600 group-hover:opacity-100"
+          className="rounded p-1 text-text-tertiary opacity-0 transition-opacity hover:bg-surface-2 hover:text-text-secondary group-hover:opacity-100"
           onClick={(e) => {
             e.stopPropagation()
             setMenuOpen(!menuOpen)
@@ -162,11 +162,11 @@ export function SessionCard({
 
         {menuOpen && (
           <div
-            className="absolute right-0 top-full z-10 mt-1 w-40 rounded-md border border-gray-200 bg-white py-1 shadow-lg"
+            className="absolute right-0 top-full z-10 mt-1 w-40 rounded-md border border-border bg-surface-1 py-1 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
             <button
-              className="w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+              className="w-full px-3 py-1.5 text-left text-sm text-text-secondary hover:bg-surface-2"
               onClick={() => {
                 setMenuOpen(false)
                 onRename()
@@ -175,7 +175,7 @@ export function SessionCard({
               Umbenennen
             </button>
             <button
-              className="w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50"
+              className="w-full px-3 py-1.5 text-left text-sm text-error-text hover:bg-error-bg"
               onClick={() => {
                 setMenuOpen(false)
                 onDelete()

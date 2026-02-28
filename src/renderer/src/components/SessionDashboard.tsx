@@ -91,7 +91,7 @@ export default function SessionDashboard({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <p className="text-sm text-gray-400">Laden...</p>
+        <p className="text-sm text-text-tertiary">Laden...</p>
       </div>
     )
   }
@@ -112,7 +112,7 @@ export default function SessionDashboard({
   if (sessions.length === 0) {
     return (
       <div
-        className={`flex flex-1 items-center justify-center transition-colors ${isDragOver ? 'bg-blue-50' : ''}`}
+        className={`flex flex-1 items-center justify-center transition-colors ${isDragOver ? 'bg-primary-light' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -121,14 +121,14 @@ export default function SessionDashboard({
           {isDragOver ? (
             <>
               <p className="mb-1 text-lg font-medium text-primary">PDF hier ablegen</p>
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-text-tertiary">
                 Lassen Sie die Datei los, um sie zu importieren.
               </p>
             </>
           ) : (
             <>
-              <p className="mb-1 text-lg font-medium text-gray-600">Keine Sitzungen</p>
-              <p className="text-sm text-gray-400">
+              <p className="mb-1 text-lg font-medium text-text-secondary">Keine Sitzungen</p>
+              <p className="text-sm text-text-tertiary">
                 Starten Sie eine Aufnahme oder importieren Sie ein PDF-Dokument.
               </p>
             </>
@@ -141,13 +141,13 @@ export default function SessionDashboard({
   return (
     <>
       <div
-        className={`relative flex-1 overflow-y-auto px-6 py-4 transition-colors ${isDragOver ? 'bg-blue-50' : ''}`}
+        className={`relative flex-1 overflow-y-auto px-6 py-4 transition-colors ${isDragOver ? 'bg-primary-light' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         {isDragOver && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-blue-50/80">
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary-light/80">
             <p className="text-lg font-medium text-primary">PDF hier ablegen</p>
           </div>
         )}
@@ -158,7 +158,7 @@ export default function SessionDashboard({
 
           return (
             <div key={group} className="mb-6">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
                 {group}
               </h3>
               <div className="flex flex-col gap-2">

@@ -374,7 +374,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-gray-400">Dokument wird geladen...</p>
+        <p className="text-sm text-text-tertiary">Dokument wird geladen...</p>
       </div>
     )
   }
@@ -382,9 +382,9 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   if (loadError) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4">
-        <p className="text-sm text-red-600">Fehler beim Laden: {loadError}</p>
+        <p className="text-sm text-error-text">Fehler beim Laden: {loadError}</p>
         <button
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-1"
           onClick={onBack}
         >
           Zurück
@@ -396,10 +396,10 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Header */}
-      <header className="titlebar-drag flex items-center justify-between border-b border-gray-200 px-6 py-4">
+      <header className="titlebar-drag flex items-center justify-between border-b border-border px-6 py-4">
         <div className="flex items-center gap-3">
           <button
-            className="titlebar-no-drag rounded-md px-2 py-1 text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+            className="titlebar-no-drag rounded-md px-2 py-1 text-sm text-text-tertiary hover:bg-surface-2 hover:text-text-secondary"
             onClick={onBack}
           >
             &larr; Zurück
@@ -407,10 +407,10 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           <span className="text-lg" aria-hidden="true">
             {sessionType === 'audio' ? '\uD83C\uDFA4' : '\uD83D\uDCC4'}
           </span>
-          <h2 className="text-lg font-semibold text-gray-900">{sessionTitle}</h2>
+          <h2 className="text-lg font-semibold text-text-primary">{sessionTitle}</h2>
         </div>
         <button
-          className="titlebar-no-drag flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+          className="titlebar-no-drag flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface-0 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
           onClick={handleExportClipboard}
         >
           &#128203; Kopieren
@@ -444,9 +444,9 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
       )}
 
       {/* Footer status bar */}
-      <footer className="flex items-center justify-between border-t border-gray-200 px-6 py-2">
+      <footer className="flex items-center justify-between border-t border-border px-6 py-2">
         <div className="flex items-center gap-4">
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-text-tertiary">
             {saving
               ? 'Speichern...'
               : lastSavedAt
@@ -454,7 +454,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
                 : ''}
           </span>
         </div>
-        <div className="flex items-center gap-3 text-xs text-gray-400">
+        <div className="flex items-center gap-3 text-xs text-text-tertiary">
           <span>Cmd+Z Undo</span>
           <span>Cmd+Shift+Z Redo</span>
         </div>

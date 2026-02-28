@@ -84,20 +84,20 @@ export function EditorContextMenu({
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 min-w-[220px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+      className="fixed z-50 min-w-[220px] rounded-lg border border-border bg-surface-1 py-1 shadow-lg"
       style={style}
     >
       {/* Chip context: "Rückgängig machen" */}
       {state.chip && (
         <button
-          className="flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-gray-50"
+          className="flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-surface-2"
           onClick={() => {
             onBatchRemove(state.chip!.entityId)
             onClose()
           }}
         >
-          <span className="font-medium text-gray-900">Rückgängig machen</span>
-          <span className="text-xs text-gray-500">
+          <span className="font-medium text-text-primary">Rückgängig machen</span>
+          <span className="text-xs text-text-tertiary">
             Macht alle [{state.chip.type} {state.chip.number}] im Text rückgängig
             {state.chip.count > 1 ? ` (${state.chip.count} Vorkommen)` : ''}
           </span>
@@ -105,16 +105,18 @@ export function EditorContextMenu({
       )}
 
       {/* Separator when both chip and selection options present */}
-      {state.chip && state.hasSelection && <div className="my-1 border-t border-gray-100" />}
+      {state.chip && state.hasSelection && <div className="my-1 border-t border-border" />}
 
       {/* Selection context: "Anonymisieren als..." */}
       {state.hasSelection && (
         <>
-          <div className="px-3 py-1.5 text-xs font-medium text-gray-400">Anonymisieren als...</div>
+          <div className="px-3 py-1.5 text-xs font-medium text-text-tertiary">
+            Anonymisieren als...
+          </div>
           {ANONYMIZE_TYPES.map((type) => (
             <button
               key={`anon-${type.value}`}
-              className="w-full px-3 py-1.5 text-left text-sm text-gray-900 hover:bg-gray-50"
+              className="w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-surface-2"
               onClick={() => {
                 onAnonymize(type.value)
                 onClose()
@@ -125,16 +127,16 @@ export function EditorContextMenu({
           ))}
 
           {/* Separator before blocklist section */}
-          <div className="my-1 border-t border-gray-100" />
+          <div className="my-1 border-t border-border" />
 
           {/* Blocklist quick-add: "Zur Sperrliste hinzufügen..." (US-6c) */}
-          <div className="px-3 py-1.5 text-xs font-medium text-gray-400">
+          <div className="px-3 py-1.5 text-xs font-medium text-text-tertiary">
             Zur Sperrliste hinzufügen...
           </div>
           {BLOCKLIST_TYPES.map((type) => (
             <button
               key={`bl-${type.value}`}
-              className="w-full px-3 py-1.5 text-left text-sm text-gray-900 hover:bg-gray-50"
+              className="w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-surface-2"
               onClick={() => {
                 onAddToBlocklist(type.value)
                 onClose()

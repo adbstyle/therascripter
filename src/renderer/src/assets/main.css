@@ -1,14 +1,54 @@
 @import 'tailwindcss';
 
+/* Enable class-based dark mode: add .dark to <html> to activate dark: utilities */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
-  /* Therascript color palette (from wireframes section 8.1) */
+  /* Therascript color palette */
   --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
   --color-primary-light: #dbeafe;
   --color-recording: #dc2626;
+  --color-recording-hover: #b91c1c;
   --color-success: #16a34a;
   --color-warning: #ea580c;
 
-  /* Entity chip colors (from wireframes section 8.2) */
+  /* Semantic surface colors (light defaults) */
+  --color-surface-0: #ffffff;
+  --color-surface-1: #f9fafb;
+  --color-surface-2: #f3f4f6;
+  --color-surface-3: #e5e7eb;
+
+  /* Semantic text colors */
+  --color-text-primary: #111827;
+  --color-text-secondary: #6b7280;
+  --color-text-tertiary: #9ca3af;
+
+  /* Semantic border colors */
+  --color-border: #e5e7eb;
+  --color-border-strong: #d1d5db;
+
+  /* Status: error/destructive */
+  --color-error-bg: #fef2f2;
+  --color-error-border: #fecaca;
+  --color-error-text: #dc2626;
+  --color-error-text-emphasis: #991b1b;
+
+  /* Status: warning */
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-warning-text: #78350f;
+  --color-warning-text-secondary: #b45309;
+
+  /* Status: info */
+  --color-info-bg: #eff6ff;
+  --color-info-border: #bfdbfe;
+  --color-info-text: #1e40af;
+
+  /* Tooltip */
+  --color-tooltip-bg: #111827;
+
+  /* Entity chip colors */
   --color-chip-person-bg: #dbeafe;
   --color-chip-person-text: #1d4ed8;
   --color-chip-ort-bg: #dcfce7;
@@ -24,8 +64,77 @@
   --color-chip-sonstiges-bg: #f3f4f6;
   --color-chip-sonstiges-text: #4b5563;
 
-  /* Typography scale (from wireframes section 8.3) */
+  /* Typography */
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+}
+
+/* Dark mode overrides — activated by .dark class on <html> */
+.dark {
+  --color-primary: #60a5fa;
+  --color-primary-hover: #93c5fd;
+  --color-primary-light: #1e3a5f;
+  --color-recording: #ef4444;
+  --color-recording-hover: #fca5a5;
+  --color-success: #22c55e;
+  --color-warning: #f97316;
+
+  --color-surface-0: #0f1117;
+  --color-surface-1: #1a1d27;
+  --color-surface-2: #252836;
+  --color-surface-3: #2d3148;
+
+  --color-text-primary: #f0f1f5;
+  --color-text-secondary: #9da3b4;
+  --color-text-tertiary: #6b7186;
+
+  --color-border: #2d3148;
+  --color-border-strong: #3d4260;
+
+  --color-error-bg: #450a0a;
+  --color-error-border: #991b1b;
+  --color-error-text: #f87171;
+  --color-error-text-emphasis: #fecaca;
+
+  --color-warning-bg: #451a03;
+  --color-warning-border: #92400e;
+  --color-warning-text: #fde68a;
+  --color-warning-text-secondary: #fcd34d;
+
+  --color-info-bg: #172554;
+  --color-info-border: #1e40af;
+  --color-info-text: #bfdbfe;
+
+  --color-tooltip-bg: #374151;
+
+  --color-chip-person-bg: #1e3a5f;
+  --color-chip-person-text: #93c5fd;
+  --color-chip-ort-bg: #14432a;
+  --color-chip-ort-text: #86efac;
+  --color-chip-datum-bg: #431407;
+  --color-chip-datum-text: #fdba74;
+  --color-chip-kontakt-bg: #2e1065;
+  --color-chip-kontakt-text: #c4b5fd;
+  --color-chip-organisation-bg: #134e4a;
+  --color-chip-organisation-text: #5eead4;
+  --color-chip-medizinisch-bg: #450a0a;
+  --color-chip-medizinisch-text: #fca5a5;
+  --color-chip-sonstiges-bg: #1f2937;
+  --color-chip-sonstiges-text: #d1d5db;
+}
+
+/* TipTap editor prose text color */
+.ProseMirror {
+  color: var(--color-text-primary);
+}
+
+/* Selection highlight in dark mode */
+.dark .ProseMirror ::selection {
+  background: rgba(96, 165, 250, 0.3);
+}
+
+/* Ring offset color for chip selection */
+.dark .ring-offset-1 {
+  --tw-ring-offset-color: var(--color-surface-0);
 }
 
 /* titleBarStyle: 'hiddenInset' removes the native title bar drag region.
