@@ -29,7 +29,7 @@ type TooltipPos = {
 export function PlaceholderChipView({ node, selected }: NodeViewProps): React.JSX.Element {
   const [tooltipPos, setTooltipPos] = useState<TooltipPos | null>(null)
   const chipRef = useRef<HTMLSpanElement>(null)
-  const { type, number, source } = node.attrs as {
+  const { type, number, source, original } = node.attrs as {
     type: PlaceholderType
     number: number
     source: EntitySource
@@ -103,7 +103,7 @@ export function PlaceholderChipView({ node, selected }: NodeViewProps): React.JS
             }}
             className="whitespace-nowrap rounded bg-tooltip-bg px-2 py-1 text-xs font-normal text-white shadow-lg"
           >
-            {type} &middot; {sourceInfo.label}
+            {original}
           </span>,
           document.body
         )}
