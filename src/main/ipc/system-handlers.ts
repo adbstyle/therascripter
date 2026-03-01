@@ -3,8 +3,8 @@ import { execSync } from 'child_process'
 import { rmSync, statSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { release, totalmem } from 'os'
-import { z } from 'zod'
 import { getDatabase, getDataDir, closeDatabase } from '../db/connection'
+import { OpenInFinderSchema } from '../../shared/validation/system-schemas'
 import type { AboutInfo } from '../../shared/types'
 
 function getChipName(): string {
@@ -80,9 +80,9 @@ export function registerSystemHandlers(): void {
     }
   })
 
-  ipcMain.handle('system:openInFinder', (_event, args: unknown) => {
-    const { path } = z.object({ path: z.string().min(1) }).parse(args)
-    shell.openPath(path)
+  ipcMain.handle('system:openInFinder', async (_event, args: unknown) => {
+    const { path } = OpenInFinderSchema.parse(args)
+    await shell.openPath(path)
   })
 
   ipcMain.handle('system:uninstall', async () => {
