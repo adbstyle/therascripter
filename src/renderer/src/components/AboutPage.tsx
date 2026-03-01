@@ -4,6 +4,37 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { formatBytes } from '../utils/formatBytes'
 import AppLogo from './AppLogo'
 
+const ACKNOWLEDGMENTS = [
+  {
+    name: 'Whisper.cpp',
+    description: 'Automatische Spracherkennung (ASR) — wandelt Audiodaten in Text um'
+  },
+  {
+    name: 'pyannote.audio',
+    description: 'Sprecherdiarisierung — erkennt und trennt verschiedene Gesprächspersonen'
+  },
+  {
+    name: 'flair',
+    description: 'Named Entity Recognition (NER) — identifiziert Personen, Orte und andere Entitäten'
+  },
+  {
+    name: 'TipTap',
+    description: 'Review-Editor — ermöglicht die Bearbeitung des anonymisierten Textes'
+  },
+  {
+    name: 'Electron',
+    description: 'Desktop-App-Framework — ermöglicht die native macOS-Anwendung'
+  },
+  {
+    name: 'pdfjs-dist',
+    description: 'PDF-Textextraktion — liest Text aus importierten PDF-Dokumenten aus'
+  },
+  {
+    name: 'better-sqlite3',
+    description: 'Lokale Datenbank — speichert Sitzungen und Sperrliste auf dem Gerät'
+  }
+]
+
 export default function AboutPage(): React.JSX.Element {
   const [info, setInfo] = useState<AboutInfo | null>(null)
   const [showUninstall, setShowUninstall] = useState(false)
@@ -17,10 +48,16 @@ export default function AboutPage(): React.JSX.Element {
     await window.api.system.uninstall()
   }, [])
 
+  const handleOpenInFinder = useCallback(() => {
+    if (info?.dataDir) {
+      window.api.system.openInFinder(info.dataDir)
+    }
+  }, [info?.dataDir])
+
   return (
     <div className="p-8">
       <div className="max-w-lg space-y-6">
-        {/* Version */}
+        {/* Version / Logo */}
         <div>
           <AppLogo size={64} className="mb-3" />
           <h3 className="text-lg font-semibold text-text-primary">
@@ -33,7 +70,35 @@ export default function AboutPage(): React.JSX.Element {
           Alle Verarbeitung findet komplett lokal auf Ihrem Mac statt.
         </p>
 
-        {/* Storage */}
+        {/* Quellcode */}
+        <div>
+          <h4 className="mb-1 text-sm font-medium text-text-secondary">Quellcode</h4>
+          <button
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-2"
+            onClick={() => window.open('https://github.com/adbstyle/therascripter', '_blank')}
+          >
+            Auf GitHub ansehen
+          </button>
+        </div>
+
+        {/* App-Datenverzeichnis */}
+        <div>
+          <h4 className="mb-1 text-sm font-medium text-text-secondary">App-Datenverzeichnis</h4>
+          <div className="flex items-center gap-3">
+            <p className="min-w-0 flex-1 truncate text-sm text-text-secondary">
+              {info?.dataDir ?? '\u2026'}
+            </p>
+            <button
+              className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-2 disabled:opacity-50"
+              onClick={handleOpenInFinder}
+              disabled={!info?.dataDir}
+            >
+              Öffnen
+            </button>
+          </div>
+        </div>
+
+        {/* Speicherverbrauch */}
         <div>
           <h4 className="mb-1 text-sm font-medium text-text-secondary">Speicherverbrauch</h4>
           {info ? (
@@ -68,7 +133,7 @@ export default function AboutPage(): React.JSX.Element {
           )}
         </div>
 
-        {/* Data info box */}
+        {/* Daten info box */}
         <div className="rounded-lg border border-border bg-surface-1 p-4">
           <h4 className="mb-1 text-sm font-medium text-text-secondary">Daten</h4>
           <p className="text-sm text-text-secondary">
@@ -77,6 +142,19 @@ export default function AboutPage(): React.JSX.Element {
           <p className="mt-1 text-sm text-text-secondary">
             Sie sind verantwortlich, den kopierten Text extern zu sichern.
           </p>
+        </div>
+
+        {/* Acknowledgments */}
+        <div>
+          <h4 className="mb-2 text-sm font-medium text-text-secondary">Acknowledgments</h4>
+          <div className="space-y-2">
+            {ACKNOWLEDGMENTS.map((item) => (
+              <div key={item.name}>
+                <span className="text-sm font-medium text-text-secondary">{item.name}</span>
+                <span className="text-sm text-text-tertiary"> — {item.description}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Uninstall button */}

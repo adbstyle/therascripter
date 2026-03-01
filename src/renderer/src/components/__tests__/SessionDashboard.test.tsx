@@ -128,7 +128,8 @@ beforeEach(() => {
     },
     system: {
       aboutInfo: vi.fn().mockResolvedValue({}),
-      uninstall: vi.fn()
+      uninstall: vi.fn(),
+      openInFinder: vi.fn()
     },
     modelDownload: {
       status: vi.fn().mockResolvedValue({ modelsReady: true, models: [] }),

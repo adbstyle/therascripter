@@ -95,7 +95,8 @@ const api: IpcApi = {
   },
   system: {
     aboutInfo: () => ipcRenderer.invoke('system:aboutInfo'),
-    uninstall: () => ipcRenderer.invoke('system:uninstall')
+    uninstall: () => ipcRenderer.invoke('system:uninstall'),
+    openInFinder: (path) => ipcRenderer.invoke('system:openInFinder', { path })
   },
   modelDownload: {
     status: () => ipcRenderer.invoke('modelDownload:status'),

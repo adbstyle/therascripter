@@ -85,11 +85,13 @@ export interface AboutInfo {
   fileVaultActive: boolean | null
   storageModelsBytes: number
   storageSessionsBytes: number
+  dataDir: string
 }
 
 export interface SystemApi {
   aboutInfo(): Promise<AboutInfo>
   uninstall(): Promise<boolean>
+  openInFinder(path: string): Promise<void>
 }
 
 export interface ModelDownloadProgress {

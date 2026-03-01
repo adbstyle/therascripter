@@ -1,20 +1,11 @@
-import { app, dialog, ipcMain } from 'electron'
+import { app, dialog, ipcMain, shell } from 'electron'
 import { execSync } from 'child_process'
 import { rmSync, statSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { release, totalmem } from 'os'
+import { z } from 'zod'
 import { getDatabase, getDataDir, closeDatabase } from '../db/connection'
-
-export interface AboutInfo {
-  version: string
-  electronVersion: string
-  osVersion: string
-  chip: string
-  totalMemoryGB: number
-  fileVaultActive: boolean | null
-  storageModelsBytes: number
-  storageSessionsBytes: number
-}
+import type { AboutInfo } from '../../shared/types'
 
 function getChipName(): string {
   try {
@@ -84,8 +75,14 @@ export function registerSystemHandlers(): void {
       totalMemoryGB: Math.round(totalmem() / (1024 * 1024 * 1024)),
       fileVaultActive: getFileVaultStatus(),
       storageModelsBytes: getDirSizeBytes(modelsDir),
-      storageSessionsBytes: sessionsBytes
+      storageSessionsBytes: sessionsBytes,
+      dataDir
     }
+  })
+
+  ipcMain.handle('system:openInFinder', (_event, args: unknown) => {
+    const { path } = z.object({ path: z.string().min(1) }).parse(args)
+    shell.openPath(path)
   })
 
   ipcMain.handle('system:uninstall', async () => {
