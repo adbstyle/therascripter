@@ -131,10 +131,10 @@ npm run package electron-builder.yml
 
 # ── Locate DMG ───────────────────────────────────────────────────────────────
 
-DMG_PATH="$(find "$ROOT_DIR/dist" -maxdepth 2 -name "*.dmg" | head -1)"
+DMG_PATH="$ROOT_DIR/dist/Therascript-$NEW_VERSION-arm64.dmg"
 
-if [[ -z "$DMG_PATH" ]]; then
-  echo "❌ Kein DMG in dist/ gefunden. Build fehlgeschlagen?"
+if [[ ! -f "$DMG_PATH" ]]; then
+  echo "❌ DMG nicht gefunden: $DMG_PATH"
   exit 1
 fi
 
