@@ -7,8 +7,11 @@ import { SpeakerLabel } from '../extensions/speakerLabel'
 import { Timestamp } from '../extensions/timestamp'
 import { useAutoSave } from '../hooks/useAutoSave'
 import { useToast } from '../hooks/useToast'
+import { useClickOutside } from '../hooks/useClickOutside'
 import { EditorContextMenu, type ContextMenuState } from '../components/editor/EditorContextMenu'
 import { BlocklistConfirmDialog } from '../components/editor/BlocklistConfirmDialog'
+import { RenameDialog } from '../components/RenameDialog'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
   batchRemovePlaceholder,
   anonymizeSelection,
@@ -47,9 +50,16 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     term: string
     type: PlaceholderType
   } | null>(null)
+  const [showMenu, setShowMenu] = useState(false)
+  const [showRenameDialog, setShowRenameDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const entityMapRef = useRef<EntityMap>({})
   const editorRef = useRef<Editor | null>(null)
   const blocklistUndoStackRef = useRef<BlocklistUndoEntry[]>([])
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const closeMenu = useCallback(() => setShowMenu(false), [])
+  useClickOutside(menuRef, closeMenu)
 
   /** Update entityMap in both state and ref, and trigger auto-save */
   const updateEntityMap = useCallback((updated: EntityMap) => {
@@ -358,6 +368,40 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     }
   }, [editor, blocklistConfirm, updateEntityMap])
 
+  /** Handle rename confirmation from 3-dot menu */
+  const handleRenameConfirm = useCallback(
+    async (title: string) => {
+      try {
+        const updated = await window.api.sessions.rename(sessionId, title)
+        if (updated) {
+          setSessionTitle(updated.title)
+        } else {
+          toast.error('Umbenennen fehlgeschlagen')
+        }
+      } catch {
+        toast.error('Umbenennen fehlgeschlagen')
+      }
+      setShowRenameDialog(false)
+    },
+    [sessionId, toast]
+  )
+
+  /** Handle delete confirmation from 3-dot menu */
+  const handleDeleteConfirm = useCallback(async () => {
+    try {
+      const ok = await window.api.sessions.delete(sessionId)
+      if (ok) {
+        onBack()
+      } else {
+        toast.error('Löschen fehlgeschlagen')
+        setShowDeleteDialog(false)
+      }
+    } catch {
+      toast.error('Löschen fehlgeschlagen')
+      setShowDeleteDialog(false)
+    }
+  }, [sessionId, onBack, toast])
+
   /** Export current editor content to clipboard (US-7) */
   const handleExportClipboard = useCallback(async () => {
     if (!editor) return
@@ -409,12 +453,45 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           </span>
           <h2 className="text-lg font-semibold text-text-primary">{sessionTitle}</h2>
         </div>
-        <button
-          className="titlebar-no-drag flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface-0 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
-          onClick={handleExportClipboard}
-        >
-          &#128203; Kopieren
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            className="titlebar-no-drag flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface-0 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
+            onClick={handleExportClipboard}
+          >
+            &#128203; Kopieren
+          </button>
+          <div ref={menuRef} className="titlebar-no-drag relative">
+            <button
+              className="flex items-center justify-center rounded-lg border border-border-strong bg-surface-0 px-3 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
+              onClick={() => setShowMenu((prev) => !prev)}
+              aria-label="Weitere Optionen"
+            >
+              ···
+            </button>
+            {showMenu && (
+              <div className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-lg border border-border bg-surface-1 py-1 shadow-lg">
+                <button
+                  className="w-full px-3 py-2 text-left text-sm text-text-primary hover:bg-surface-2"
+                  onClick={() => {
+                    setShowMenu(false)
+                    setShowRenameDialog(true)
+                  }}
+                >
+                  Umbenennen
+                </button>
+                <button
+                  className="w-full px-3 py-2 text-left text-sm text-error-text hover:bg-surface-2"
+                  onClick={() => {
+                    setShowMenu(false)
+                    setShowDeleteDialog(true)
+                  }}
+                >
+                  Löschen
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </header>
 
       {/* Editor */}
@@ -440,6 +517,28 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           type={blocklistConfirm.type}
           onConfirm={handleBlocklistConfirm}
           onCancel={() => setBlocklistConfirm(null)}
+        />
+      )}
+
+      {/* Rename dialog */}
+      {showRenameDialog && (
+        <RenameDialog
+          currentTitle={sessionTitle}
+          onConfirm={handleRenameConfirm}
+          onCancel={() => setShowRenameDialog(false)}
+        />
+      )}
+
+      {/* Delete confirm dialog */}
+      {showDeleteDialog && (
+        <ConfirmDialog
+          title="Sitzung löschen"
+          message={`„${sessionTitle}" und alle zugehörigen Daten unwiderruflich löschen?`}
+          details={['Audiodatei', 'Originaltext', 'Anonymisierter Text', 'Platzhalter-Mapping']}
+          confirmLabel="Löschen"
+          destructive
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setShowDeleteDialog(false)}
         />
       )}
 
