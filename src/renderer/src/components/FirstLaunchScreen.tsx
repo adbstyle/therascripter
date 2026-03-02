@@ -40,16 +40,19 @@ export default function FirstLaunchScreen({
 
   const handleStart = useCallback(async () => {
     setStarted(true)
-    setStatus({ state: 'downloading', progress: {
-      currentModel: '',
-      currentModelLabel: '',
-      currentModelProgress: 0,
-      currentModelDownloaded: 0,
-      currentModelTotal: 0,
-      overallDownloaded: 0,
-      overallTotal: 1,
-      overallPercent: 0
-    }})
+    setStatus({
+      state: 'downloading',
+      progress: {
+        currentModel: '',
+        currentModelLabel: '',
+        currentModelProgress: 0,
+        currentModelDownloaded: 0,
+        currentModelTotal: 0,
+        overallDownloaded: 0,
+        overallTotal: 1,
+        overallPercent: 0
+      }
+    })
     await window.api.modelDownload.start()
   }, [])
 
@@ -138,7 +141,9 @@ export default function FirstLaunchScreen({
                       {isCompleted ? '\u2713 ' : isCurrent ? '' : '\u25CB '}
                       {model.label}
                     </span>
-                    <span className="text-xs text-text-tertiary">{formatBytes(model.sizeBytes)}</span>
+                    <span className="text-xs text-text-tertiary">
+                      {formatBytes(model.sizeBytes)}
+                    </span>
                   </div>
                   {isCurrent && isDownloading && progress && (
                     <div className="h-2 overflow-hidden rounded-full bg-surface-2">
@@ -182,7 +187,9 @@ export default function FirstLaunchScreen({
         {/* Error state */}
         {isError && (
           <div className="mt-4 rounded-lg border border-error-border bg-error-bg p-4">
-            <p className="mb-2 text-sm font-medium text-error-text-emphasis">Download fehlgeschlagen</p>
+            <p className="mb-2 text-sm font-medium text-error-text-emphasis">
+              Download fehlgeschlagen
+            </p>
             <p className="mb-3 text-sm text-error-text">{status.error}</p>
             <button
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"

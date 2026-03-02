@@ -77,9 +77,7 @@ export default function ModelUpdateScreen({
     (isExtracting ? status.modelId : null) ||
     (isVerifying ? status.modelId : null)
 
-  const currentModelIndex = currentModelId
-    ? updates.findIndex((u) => u.id === currentModelId)
-    : -1
+  const currentModelIndex = currentModelId ? updates.findIndex((u) => u.id === currentModelId) : -1
 
   return (
     <div className="flex h-screen flex-col items-center justify-center bg-surface-0">
@@ -89,16 +87,16 @@ export default function ModelUpdateScreen({
           <AppLogo size={72} className="mx-auto mb-3" />
           <h1 className="mb-2 text-2xl font-bold text-text-primary">Modelle werden aktualisiert</h1>
           <p className="text-sm text-text-secondary">
-            Verbesserte Modellversionen werden heruntergeladen. Bestehende Modelle bleiben bis
-            zum erfolgreichen Abschluss erhalten.
+            Verbesserte Modellversionen werden heruntergeladen. Bestehende Modelle bleiben bis zum
+            erfolgreichen Abschluss erhalten.
           </p>
         </div>
 
         {!started && (
           <div className="mb-8 text-center">
             <p className="mb-6 text-sm text-text-secondary">
-              {updates.length} {updates.length === 1 ? 'Modell wird' : 'Modelle werden'} aktualisiert
-              (~{formatBytes(updates.reduce((s, u) => s + u.sizeBytes, 0))}).
+              {updates.length} {updates.length === 1 ? 'Modell wird' : 'Modelle werden'}{' '}
+              aktualisiert (~{formatBytes(updates.reduce((s, u) => s + u.sizeBytes, 0))}).
             </p>
             <div className="flex justify-center gap-3">
               <button
@@ -133,7 +131,9 @@ export default function ModelUpdateScreen({
                       {isCompleted ? '\u2713 ' : isCurrent ? '' : '\u25CB '}
                       {update.label}
                     </span>
-                    <span className="text-xs text-text-tertiary">{formatBytes(update.sizeBytes)}</span>
+                    <span className="text-xs text-text-tertiary">
+                      {formatBytes(update.sizeBytes)}
+                    </span>
                   </div>
                   {isCurrent && isDownloading && progress && (
                     <div className="h-2 overflow-hidden rounded-full bg-surface-2">
@@ -177,11 +177,13 @@ export default function ModelUpdateScreen({
         {/* Error state */}
         {isError && (
           <div className="mt-4 rounded-lg border border-error-border bg-error-bg p-4">
-            <p className="mb-2 text-sm font-medium text-error-text-emphasis">Update fehlgeschlagen</p>
+            <p className="mb-2 text-sm font-medium text-error-text-emphasis">
+              Update fehlgeschlagen
+            </p>
             <p className="mb-3 text-sm text-error-text">{status.error}</p>
             <p className="mb-3 text-xs text-text-tertiary">
-              Bestehende Modelle sind unver\u00E4ndert. Das Update wird beim n\u00E4chsten Start erneut
-              versucht.
+              Bestehende Modelle sind unver\u00E4ndert. Das Update wird beim n\u00E4chsten Start
+              erneut versucht.
             </p>
             <button
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"

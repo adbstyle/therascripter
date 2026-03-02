@@ -15,7 +15,8 @@ const ACKNOWLEDGMENTS = [
   },
   {
     name: 'flair',
-    description: 'Named Entity Recognition (NER) — identifiziert Personen, Orte und andere Entitäten'
+    description:
+      'Named Entity Recognition (NER) — identifiziert Personen, Orte und andere Entitäten'
   },
   {
     name: 'TipTap',

@@ -119,10 +119,8 @@ const api: IpcApi = {
     getPending: () => ipcRenderer.invoke('modelUpdate:getPending'),
     clearPending: () => ipcRenderer.invoke('modelUpdate:clearPending'),
     onAvailable: (callback) => {
-      const handler = (
-        _event: Electron.IpcRendererEvent,
-        updates: PendingModelUpdate[]
-      ): void => callback(updates)
+      const handler = (_event: Electron.IpcRendererEvent, updates: PendingModelUpdate[]): void =>
+        callback(updates)
       ipcRenderer.on('modelUpdate:available', handler)
       return () => {
         ipcRenderer.removeListener('modelUpdate:available', handler)

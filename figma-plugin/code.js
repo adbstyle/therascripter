@@ -2,54 +2,55 @@
 // Auto-generated from source code
 // Creates all app screens as Figma frames on the current page
 
-(async () => {
+;(async () => {
   try {
     // ─── Font loading ────────────────────────────────────────────────────────
     await Promise.all([
       figma.loadFontAsync({ family: 'Inter', style: 'Regular' }),
       figma.loadFontAsync({ family: 'Inter', style: 'Medium' }),
       figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' }),
-      figma.loadFontAsync({ family: 'Inter', style: 'Bold' }),
+      figma.loadFontAsync({ family: 'Inter', style: 'Bold' })
     ])
 
     // ─── Design tokens (dark mode) ───────────────────────────────────────────
     const C = {
-      surface0:       hex('#0f1117'),
-      surface1:       hex('#1a1d27'),
-      surface2:       hex('#252836'),
-      surface3:       hex('#2d3148'),
-      textPrimary:    hex('#f0f1f5'),
-      textSecondary:  hex('#9da3b4'),
-      textTertiary:   hex('#6b7186'),
-      border:         hex('#2d3148'),
-      borderStrong:   hex('#3d4260'),
-      primary:        hex('#60a5fa'),
-      primaryLight:   hex('#1e3a5f'),
-      recording:      hex('#ef4444'),
-      success:        hex('#22c55e'),
-      white:          hex('#ffffff'),
-      overlay:        { r: 0, g: 0, b: 0 },
-      chipPersonBg:   hex('#1e3a5f'),
+      surface0: hex('#0f1117'),
+      surface1: hex('#1a1d27'),
+      surface2: hex('#252836'),
+      surface3: hex('#2d3148'),
+      textPrimary: hex('#f0f1f5'),
+      textSecondary: hex('#9da3b4'),
+      textTertiary: hex('#6b7186'),
+      border: hex('#2d3148'),
+      borderStrong: hex('#3d4260'),
+      primary: hex('#60a5fa'),
+      primaryLight: hex('#1e3a5f'),
+      recording: hex('#ef4444'),
+      success: hex('#22c55e'),
+      white: hex('#ffffff'),
+      overlay: { r: 0, g: 0, b: 0 },
+      chipPersonBg: hex('#1e3a5f'),
       chipPersonText: hex('#93c5fd'),
-      chipOrtBg:      hex('#14432a'),
-      chipOrtText:    hex('#86efac'),
-      chipDatumBg:    hex('#431407'),
-      chipDatumText:  hex('#fdba74'),
-      warning:        hex('#f97316'),
+      chipOrtBg: hex('#14432a'),
+      chipOrtText: hex('#86efac'),
+      chipDatumBg: hex('#431407'),
+      chipDatumText: hex('#fdba74'),
+      warning: hex('#f97316')
     }
 
     function hex(h) {
       return {
         r: parseInt(h.slice(1, 3), 16) / 255,
         g: parseInt(h.slice(3, 5), 16) / 255,
-        b: parseInt(h.slice(5, 7), 16) / 255,
+        b: parseInt(h.slice(5, 7), 16) / 255
       }
     }
-    const fill  = (c, o = 1) => [{ type: 'SOLID', color: c, opacity: o }]
+    const fill = (c, o = 1) => [{ type: 'SOLID', color: c, opacity: o }]
     const noFill = () => []
 
     // ─── Layout constants ────────────────────────────────────────────────────
-    const W = 900, H = 560
+    const W = 900,
+      H = 560
     const SIDEBAR_W = 200
     const HEADER_H = 71
     const GAP = 80
@@ -97,7 +98,10 @@
       t.fontName = { family: 'Inter', style: weight }
       t.fontSize = size
       t.fills = fill(color)
-      if (maxW) { t.textAutoResize = 'HEIGHT'; t.resize(maxW, 20) }
+      if (maxW) {
+        t.textAutoResize = 'HEIGHT'
+        t.resize(maxW, 20)
+      }
       t.characters = str
       return t
     }
@@ -116,7 +120,7 @@
       // Nav items
       const items = [
         { id: 'sessions', label: 'Sitzungen', y: 56 },
-        { id: 'settings', label: 'Einstellungen', y: 88 },
+        { id: 'settings', label: 'Einstellungen', y: 88 }
       ]
       for (const item of items) {
         const isActive = active === item.id
@@ -248,11 +252,21 @@
 
       const cardW = mainW - 48
       const sessions = [
-        { title: 'Sitzung 28.02.2026 14:47',    status: 'Review',               color: C.success,   icon: '🎤' },
-        { title: 'myInsel – Briefdetails',       status: 'Review',               color: C.success,   icon: '📄' },
-        { title: 'Sitzung 28.02.2026 09:30',    status: 'Review',               color: C.success,   icon: '🎤' },
-        { title: 'Sitzung 28.02.2026 09:29',    status: 'Transkription 45%',    color: C.primary,   icon: '🎤' },
-        { title: 'Sitzung 28.02.2026 09:25',    status: 'Sprechererkennung',    color: C.primary,   icon: '🎤' },
+        { title: 'Sitzung 28.02.2026 14:47', status: 'Review', color: C.success, icon: '🎤' },
+        { title: 'myInsel – Briefdetails', status: 'Review', color: C.success, icon: '📄' },
+        { title: 'Sitzung 28.02.2026 09:30', status: 'Review', color: C.success, icon: '🎤' },
+        {
+          title: 'Sitzung 28.02.2026 09:29',
+          status: 'Transkription 45%',
+          color: C.primary,
+          icon: '🎤'
+        },
+        {
+          title: 'Sitzung 28.02.2026 09:25',
+          status: 'Sprechererkennung',
+          color: C.primary,
+          icon: '🎤'
+        }
       ]
       let cardY = 36
       for (const s of sessions) {
@@ -268,7 +282,7 @@
 
       const yesterdayCards = [
         { title: 'Sitzung 27.02.2026 22:48', status: 'Review', color: C.success, icon: '🎤' },
-        { title: 'Sitzung 27.02.2026 22:24', status: 'Review', color: C.success, icon: '🎤' },
+        { title: 'Sitzung 27.02.2026 22:24', status: 'Review', color: C.success, icon: '🎤' }
       ]
       for (const s of yesterdayCards) {
         const card = makeSessionCard(s.title, s.status, s.color, s.icon, cardW)
@@ -298,7 +312,8 @@
       place(main, banner, 0, HEADER_H)
       const bannerTxt = text(
         '⚠  Die aufgenommenen Personen wurden über die Aufnahme informiert.',
-        11, C.textSecondary
+        11,
+        C.textSecondary
       )
       place(main, bannerTxt, 16, HEADER_H + 13)
 
@@ -316,8 +331,11 @@
       place(main, timer, cx - 76, 178)
 
       // VU Meter bars
-      const barW = 5, barGap = 3
-      const barHeights = [6,10,14,18,24,28,34,38,34,28,22,18,22,28,20,16,12,10,8,6]
+      const barW = 5,
+        barGap = 3
+      const barHeights = [
+        6, 10, 14, 18, 24, 28, 34, 38, 34, 28, 22, 18, 22, 28, 20, 16, 12, 10, 8, 6
+      ]
       const totalBarW = barHeights.length * (barW + barGap) - barGap
       let bx = cx - totalBarW / 2
       for (const bh of barHeights) {
@@ -335,7 +353,10 @@
       place(main, autoStop, cx - 60, 365)
       const hint = text(
         'Die App kann minimiert werden — die Aufnahme läuft im Hintergrund weiter.',
-        11, C.textTertiary, 'Regular', mainW - 100
+        11,
+        C.textTertiary,
+        'Regular',
+        mainW - 100
       )
       hint.textAlignHorizontal = 'CENTER'
       place(main, hint, 50, 390)
@@ -413,7 +434,10 @@
 
       const para4 = text(
         'Das freut mich zu hören. Ich habe Ihre Notizen von letzter Woche durchgesehen.',
-        14, C.textPrimary, 'Regular', W - 48
+        14,
+        C.textPrimary,
+        'Regular',
+        W - 48
       )
       place(editorArea, para4, 24, ty)
 
@@ -440,7 +464,7 @@
         { id: 'sperrliste', label: 'Sperrliste', active: true },
         { id: 'darstellung', label: 'Darstellung', active: false },
         { id: 'modelle', label: 'Modelle', active: false },
-        { id: 'ueber', label: 'Über', active: false },
+        { id: 'ueber', label: 'Über', active: false }
       ]
       let tx = 24
       for (const tab of tabs) {
@@ -539,7 +563,10 @@
 
       const tagline = text(
         'Lokale Transkription und Anonymisierung für Therapiesitzungen.',
-        13, C.textSecondary, 'Regular', mainW - 80
+        13,
+        C.textSecondary,
+        'Regular',
+        mainW - 80
       )
       tagline.textAlignHorizontal = 'CENTER'
       place(main, tagline, 40, contentY + 162)
@@ -582,7 +609,7 @@
       const models = [
         { name: 'Spracherkennung (Whisper)', size: '1.7 GB', icon: '🎙' },
         { name: 'Sprechererkennung (Pyannote)', size: '0.2 GB', icon: '👥' },
-        { name: 'Anonymisierung (flair NER)', size: '2.2 GB', icon: '🔒' },
+        { name: 'Anonymisierung (flair NER)', size: '2.2 GB', icon: '🔒' }
       ]
       let my = 208
       for (const m of models) {
@@ -636,7 +663,7 @@
       const models2 = [
         { name: 'Spracherkennung (Whisper)', status: 'abgeschlossen', done: true },
         { name: 'Sprechererkennung (Pyannote)', status: 'Herunterladen 63%', active: true },
-        { name: 'Anonymisierung (flair NER)', status: 'ausstehend', done: false },
+        { name: 'Anonymisierung (flair NER)', status: 'ausstehend', done: false }
       ]
       let my2 = 180
       for (const m of models2) {
@@ -647,7 +674,12 @@
           row.strokeWeight = 1
           row.strokeAlign = 'INSIDE'
         }
-        const ic2 = text(m.done ? '✓' : m.active ? '⬇' : '○', 14, m.done ? C.success : m.active ? C.primary : C.textTertiary, 'Bold')
+        const ic2 = text(
+          m.done ? '✓' : m.active ? '⬇' : '○',
+          14,
+          m.done ? C.success : m.active ? C.primary : C.textTertiary,
+          'Bold'
+        )
         place(row, ic2, 12, 15)
         const nm2 = text(m.name, 13, m.done || m.active ? C.textPrimary : C.textTertiary, 'Medium')
         place(row, nm2, 36, 10)
@@ -696,7 +728,10 @@
 
       const dialogMsg = text(
         '„Sitzung 28.02.2026 14:47" und alle zugehörigen Daten unwiderruflich löschen?',
-        13, C.textSecondary, 'Regular', 352
+        13,
+        C.textSecondary,
+        'Regular',
+        352
       )
       place(modal, dialogMsg, 24, 52)
 

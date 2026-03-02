@@ -1,6 +1,13 @@
 import { createHash } from 'crypto'
 import { execFile } from 'child_process'
-import { createReadStream, createWriteStream, existsSync, renameSync, statSync, unlinkSync } from 'fs'
+import {
+  createReadStream,
+  createWriteStream,
+  existsSync,
+  renameSync,
+  statSync,
+  unlinkSync
+} from 'fs'
 import { get as httpsGet } from 'https'
 import { get as httpGet, type IncomingMessage } from 'http'
 
