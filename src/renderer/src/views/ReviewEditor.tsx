@@ -57,6 +57,8 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const editorRef = useRef<Editor | null>(null)
   const blocklistUndoStackRef = useRef<BlocklistUndoEntry[]>([])
   const menuRef = useRef<HTMLDivElement>(null)
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(scrollTimerRef.current), [])
 
   const closeMenu = useCallback(() => setShowMenu(false), [])
   useClickOutside(menuRef, closeMenu)
@@ -498,11 +500,11 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
         onScroll={(e) => {
           const el = e.currentTarget
           el.classList.add('is-scrolling')
-          clearTimeout(
-            (el as unknown as { _scrollTimer?: ReturnType<typeof setTimeout> })._scrollTimer
+          clearTimeout(scrollTimerRef.current)
+          scrollTimerRef.current = setTimeout(
+            () => el.classList.remove('is-scrolling'),
+            1500
           )
-          ;(el as unknown as { _scrollTimer?: ReturnType<typeof setTimeout> })._scrollTimer =
-            setTimeout(() => el.classList.remove('is-scrolling'), 1500)
         }}
       >
         <EditorContent editor={editor} />
