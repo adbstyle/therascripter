@@ -7,6 +7,7 @@ import type { DiarizationData, SpeakerSegment } from '../../shared/types'
 import type { TaskExecutor } from '../services/task-executors'
 import { SessionService } from '../services/SessionService'
 import { getDatabase, getDataDir } from '../db/connection'
+import { resolvePythonSidecar } from './resolve-python'
 
 // Progress line format: "[PROGRESS] 42"
 const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
@@ -17,23 +18,8 @@ const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
 const MIN_SEGMENT_DURATION_S = 0.5
 
 export class PyannoteSidecar implements TaskExecutor {
-  /**
-   * Resolve the diarize script path.
-   * Production: standalone Python + diarize.py bundled in extraResources.
-   * Dev: venv Python + diarize.py script.
-   */
   private getCommand(): { bin: string; args: string[] } {
-    if (app.isPackaged) {
-      // Production: standalone Python + diarize.py in extraResources/ml_sidecar/
-      const python = join(process.resourcesPath, 'ml_sidecar', 'standalone', 'bin', 'python3')
-      const script = join(process.resourcesPath, 'ml_sidecar', 'diarize.py')
-      return { bin: python, args: [script] }
-    }
-    // Dev: use venv Python + script
-    const venvPython = join(app.getAppPath(), 'python_sidecar', 'venv', 'bin', 'python3')
-    const pythonPath = existsSync(venvPython) ? venvPython : 'python3'
-    const scriptPath = join(app.getAppPath(), 'python_sidecar', 'diarize.py')
-    return { bin: pythonPath, args: [scriptPath] }
+    return resolvePythonSidecar('diarize.py')
   }
 
   private getModelDir(): string {

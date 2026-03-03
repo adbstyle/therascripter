@@ -13,27 +13,14 @@ import { mergeEntities } from './entity-merger'
 import { resolveCoreferences } from './coreference-resolver'
 import { buildEntityMap } from './entity-map-builder'
 import { buildTipTapDocument } from './tiptap-builder'
+import { resolvePythonSidecar } from './resolve-python'
 
 // Progress line format: "[PROGRESS] 42"
 const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
 
 export class AnonymizationService implements TaskExecutor {
-  /**
-   * Resolve the ner_service script path.
-   * Production: standalone Python + ner_service.py bundled in extraResources.
-   * Dev: venv Python + ner_service.py script.
-   */
   private getCommand(): { bin: string; args: string[] } {
-    if (app.isPackaged) {
-      // Production: standalone Python + ner_service.py in extraResources/ml_sidecar/
-      const python = join(process.resourcesPath, 'ml_sidecar', 'standalone', 'bin', 'python3')
-      const script = join(process.resourcesPath, 'ml_sidecar', 'ner_service.py')
-      return { bin: python, args: [script] }
-    }
-    const venvPython = join(app.getAppPath(), 'python_sidecar', 'venv', 'bin', 'python3')
-    const pythonPath = existsSync(venvPython) ? venvPython : 'python3'
-    const scriptPath = join(app.getAppPath(), 'python_sidecar', 'ner_service.py')
-    return { bin: pythonPath, args: [scriptPath] }
+    return resolvePythonSidecar('ner_service.py')
   }
 
   private getModelDir(): string {
