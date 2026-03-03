@@ -23,6 +23,7 @@ interface SessionRow {
   error_message: string | null
   created_at: string
   updated_at: string
+  review_at: string | null
 }
 
 function parseEntityMap(json: string | null, sessionId: string): EntityMap | null {
@@ -49,7 +50,8 @@ function rowToSession(row: SessionRow): Session {
     entityMap: parseEntityMap(row.entity_map, row.id),
     errorMessage: row.error_message,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    reviewAt: row.review_at
   }
 }
 
@@ -136,6 +138,10 @@ export class SessionRepository {
       sets.push('error_message = ?')
       values.push(input.errorMessage)
     }
+    if (input.reviewAt !== undefined) {
+      sets.push('review_at = ?')
+      values.push(input.reviewAt)
+    }
 
     if (sets.length === 0) return this.findById(id)
 
@@ -159,6 +165,22 @@ export class SessionRepository {
 
     const rows = this.db
       .prepare('SELECT * FROM sessions WHERE created_at < ? ORDER BY created_at ASC')
+      .all(cutoff.toISOString()) as SessionRow[]
+    return rows.map(rowToSession)
+  }
+
+  findReadyForSourceFileDeletion(): Session[] {
+    const cutoff = new Date()
+    cutoff.setHours(cutoff.getHours() - 24)
+
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM sessions
+         WHERE status = 'review'
+           AND review_at < ?
+           AND (audio_path IS NOT NULL OR pdf_path IS NOT NULL)
+         ORDER BY review_at ASC`
+      )
       .all(cutoff.toISOString()) as SessionRow[]
     return rows.map(rowToSession)
   }

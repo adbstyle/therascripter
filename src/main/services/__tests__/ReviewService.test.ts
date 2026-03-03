@@ -15,11 +15,10 @@ vi.mock('electron', () => ({
 }))
 
 function applySchema(db: Database.Database): void {
-  const sql = readFileSync(
-    join(__dirname, '..', '..', 'db', 'migrations', '001-initial-schema.sql'),
-    'utf-8'
-  )
-  db.exec(sql)
+  const migrationsDir = join(__dirname, '..', '..', 'db', 'migrations')
+  db.exec(readFileSync(join(migrationsDir, '001-initial-schema.sql'), 'utf-8'))
+  db.exec(readFileSync(join(migrationsDir, '002-add-diarization-path.sql'), 'utf-8'))
+  db.exec(readFileSync(join(migrationsDir, '003-add-review-at.sql'), 'utf-8'))
 }
 
 const sampleDoc: TipTapDocument = {

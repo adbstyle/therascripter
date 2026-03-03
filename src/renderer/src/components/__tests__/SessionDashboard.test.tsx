@@ -20,6 +20,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     errorMessage: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    reviewAt: null,
     ...overrides
   }
 }

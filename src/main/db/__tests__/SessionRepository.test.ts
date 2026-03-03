@@ -6,8 +6,10 @@ import { SessionRepository } from '../repositories/SessionRepository'
 import type { EntityMap } from '../../../shared/types'
 
 function applySchema(db: Database.Database): void {
-  const sql = readFileSync(join(__dirname, '..', 'migrations', '001-initial-schema.sql'), 'utf-8')
-  db.exec(sql)
+  const migrationsDir = join(__dirname, '..', 'migrations')
+  db.exec(readFileSync(join(migrationsDir, '001-initial-schema.sql'), 'utf-8'))
+  db.exec(readFileSync(join(migrationsDir, '002-add-diarization-path.sql'), 'utf-8'))
+  db.exec(readFileSync(join(migrationsDir, '003-add-review-at.sql'), 'utf-8'))
 }
 
 describe('SessionRepository', () => {
@@ -241,6 +243,110 @@ describe('SessionRepository', () => {
 
       const tasks = db.prepare('SELECT * FROM task_queue WHERE session_id = ?').all(session.id)
       expect(tasks).toHaveLength(0)
+    })
+  })
+
+  describe('findReadyForSourceFileDeletion', () => {
+    it('finds review sessions with source file and review_at older than 24h', () => {
+      const oldReviewAt = new Date()
+      oldReviewAt.setHours(oldReviewAt.getHours() - 25)
+
+      db.prepare(
+        `INSERT INTO sessions (id, title, type, status, audio_path, review_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        'ready',
+        'Ready',
+        'audio',
+        'review',
+        '/audio/ready.wav',
+        oldReviewAt.toISOString(),
+        oldReviewAt.toISOString(),
+        oldReviewAt.toISOString()
+      )
+
+      const sessions = repo.findReadyForSourceFileDeletion()
+
+      expect(sessions).toHaveLength(1)
+      expect(sessions[0].id).toBe('ready')
+    })
+
+    it('skips review sessions where 24h have not passed', () => {
+      db.prepare(
+        `INSERT INTO sessions (id, title, type, status, audio_path, review_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        'not-ready',
+        'Not Ready',
+        'audio',
+        'review',
+        '/audio/not-ready.wav',
+        new Date().toISOString(),
+        new Date().toISOString(),
+        new Date().toISOString()
+      )
+
+      expect(repo.findReadyForSourceFileDeletion()).toHaveLength(0)
+    })
+
+    it('skips review sessions where source file is already null', () => {
+      const oldReviewAt = new Date()
+      oldReviewAt.setHours(oldReviewAt.getHours() - 25)
+
+      db.prepare(
+        `INSERT INTO sessions (id, title, type, status, audio_path, review_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        'already-cleaned',
+        'Already Cleaned',
+        'audio',
+        'review',
+        null,
+        oldReviewAt.toISOString(),
+        oldReviewAt.toISOString(),
+        oldReviewAt.toISOString()
+      )
+
+      expect(repo.findReadyForSourceFileDeletion()).toHaveLength(0)
+    })
+
+    it('skips sessions with review_at = null', () => {
+      db.prepare(
+        `INSERT INTO sessions (id, title, type, status, audio_path, review_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        'no-review-at',
+        'No ReviewAt',
+        'audio',
+        'review',
+        '/audio/no-review-at.wav',
+        null,
+        new Date().toISOString(),
+        new Date().toISOString()
+      )
+
+      expect(repo.findReadyForSourceFileDeletion()).toHaveLength(0)
+    })
+
+    it('skips non-review sessions', () => {
+      const oldReviewAt = new Date()
+      oldReviewAt.setHours(oldReviewAt.getHours() - 25)
+
+      db.prepare(
+        `INSERT INTO sessions (id, title, type, status, audio_path, review_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        'error-session',
+        'Error Session',
+        'audio',
+        'error',
+        '/audio/error.wav',
+        oldReviewAt.toISOString(),
+        oldReviewAt.toISOString(),
+        oldReviewAt.toISOString()
+      )
+
+      expect(repo.findReadyForSourceFileDeletion()).toHaveLength(0)
     })
   })
 

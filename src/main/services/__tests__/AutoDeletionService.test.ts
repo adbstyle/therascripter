@@ -7,9 +7,11 @@ vi.mock('electron', () => ({
 }))
 
 const mockCleanupOldSessions = vi.fn().mockReturnValue(0)
+const mockCleanupSourceFiles = vi.fn().mockReturnValue(0)
 vi.mock('../SessionService', () => ({
   SessionService: vi.fn().mockImplementation(() => ({
-    cleanupOldSessions: mockCleanupOldSessions
+    cleanupOldSessions: mockCleanupOldSessions,
+    cleanupSourceFiles: mockCleanupSourceFiles
   }))
 }))
 
@@ -44,6 +46,11 @@ describe('AutoDeletionService', () => {
     stopAutoDeletion()
     vi.useRealTimers()
     vi.clearAllMocks()
+  })
+
+  it('calls cleanupSourceFiles on each cleanup run', () => {
+    startAutoDeletion()
+    expect(mockCleanupSourceFiles).toHaveBeenCalledOnce()
   })
 
   describe('startAutoDeletion', () => {
