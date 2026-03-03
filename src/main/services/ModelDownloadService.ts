@@ -166,7 +166,9 @@ export async function startModelDownload(): Promise<void> {
             currentModelTotal: progress.totalBytes,
             overallDownloaded: baseOverall + progress.downloadedBytes,
             overallTotal,
-            overallPercent: Math.round(((baseOverall + progress.downloadedBytes) / overallTotal) * 100)
+            overallPercent: Math.round(
+              ((baseOverall + progress.downloadedBytes) / overallTotal) * 100
+            )
           }
         })
       },
@@ -188,7 +190,11 @@ export async function startModelDownload(): Promise<void> {
       sendProgress({ state: 'verifying', modelId: model.id })
       const valid = await verifyFileSha256(targetPath, model.sha256)
       if (!valid) {
-        try { unlinkSync(targetPath) } catch { /* non-fatal */ }
+        try {
+          unlinkSync(targetPath)
+        } catch {
+          /* non-fatal */
+        }
         sendProgress({
           state: 'error',
           error: `SHA-256-Prüfung fehlgeschlagen für ${model.label}`,
@@ -206,7 +212,11 @@ export async function startModelDownload(): Promise<void> {
       mkdirSync(extractDir, { recursive: true })
       const extractResult = await extractTarGz(targetPath, extractDir)
       if (!extractResult.success) {
-        try { unlinkSync(targetPath) } catch { /* non-fatal */ }
+        try {
+          unlinkSync(targetPath)
+        } catch {
+          /* non-fatal */
+        }
         sendProgress({
           state: 'error',
           error: extractResult.error ?? 'Entpacken fehlgeschlagen',

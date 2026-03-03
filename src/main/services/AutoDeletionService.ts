@@ -26,7 +26,11 @@ function runCleanup(): void {
     const db = getDatabase()
     const service = new SessionService(db)
     const deleted = service.cleanupOldSessions()
+    const cleaned = service.cleanupSourceFiles()
 
+    if (cleaned > 0) {
+      console.log(`Source File Cleanup: ${cleaned} source file(s) deleted`)
+    }
     if (deleted > 0) {
       console.log(`Auto-Deletion: ${deleted} expired session(s) deleted`)
       db.pragma('wal_checkpoint(TRUNCATE)')

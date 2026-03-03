@@ -20,6 +20,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     errorMessage: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    reviewAt: null,
     ...overrides
   }
 }
@@ -133,7 +134,9 @@ beforeEach(() => {
     },
     modelDownload: {
       status: vi.fn().mockResolvedValue({ modelsReady: true, models: [] }),
-      checkDiskSpace: vi.fn().mockResolvedValue({ sufficient: true, availableBytes: 0, requiredBytes: 0 }),
+      checkDiskSpace: vi
+        .fn()
+        .mockResolvedValue({ sufficient: true, availableBytes: 0, requiredBytes: 0 }),
       start: vi.fn(),
       onStatus: vi.fn().mockReturnValue(() => {})
     },

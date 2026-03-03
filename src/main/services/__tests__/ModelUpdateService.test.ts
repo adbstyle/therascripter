@@ -147,8 +147,16 @@ describe('checkForUpdates', () => {
 
   it('returns updates when manifest sha256 differs from installed', async () => {
     mockSettingsStore.get.mockReturnValue({
-      'whisper-large-v3-turbo': { version: '2025-01-15', sha256: 'aaaa' + 'a'.repeat(60), installedAt: '' },
-      'pyannote-community-1': { version: '2025-01-15', sha256: 'bbbb' + 'b'.repeat(60), installedAt: '' }
+      'whisper-large-v3-turbo': {
+        version: '2025-01-15',
+        sha256: 'aaaa' + 'a'.repeat(60),
+        installedAt: ''
+      },
+      'pyannote-community-1': {
+        version: '2025-01-15',
+        sha256: 'bbbb' + 'b'.repeat(60),
+        installedAt: ''
+      }
     })
     makeHttpsResponse(200, validManifest)
 
@@ -163,8 +171,16 @@ describe('checkForUpdates', () => {
 
   it('returns no updates when all sha256 match', async () => {
     mockSettingsStore.get.mockReturnValue({
-      'whisper-large-v3-turbo': { version: '2025-01-15', sha256: 'cccc' + 'c'.repeat(60), installedAt: '' },
-      'pyannote-community-1': { version: '2025-01-15', sha256: 'bbbb' + 'b'.repeat(60), installedAt: '' }
+      'whisper-large-v3-turbo': {
+        version: '2025-01-15',
+        sha256: 'cccc' + 'c'.repeat(60),
+        installedAt: ''
+      },
+      'pyannote-community-1': {
+        version: '2025-01-15',
+        sha256: 'bbbb' + 'b'.repeat(60),
+        installedAt: ''
+      }
     })
     makeHttpsResponse(200, validManifest)
 
@@ -291,10 +307,9 @@ describe('cleanupIncompleteUpdates', () => {
 
     cleanupIncompleteUpdates()
 
-    expect(mockRmSync).toHaveBeenCalledWith(
-      expect.stringContaining('.staging'),
-      { recursive: true }
-    )
+    expect(mockRmSync).toHaveBeenCalledWith(expect.stringContaining('.staging'), {
+      recursive: true
+    })
   })
 
   it('does nothing to .staging/ if it does not exist', () => {
@@ -338,10 +353,9 @@ describe('cleanupIncompleteUpdates', () => {
 
     cleanupIncompleteUpdates()
 
-    expect(mockRmSync).toHaveBeenCalledWith(
-      expect.stringContaining('whisper-large-v3-turbo'),
-      { recursive: true }
-    )
+    expect(mockRmSync).toHaveBeenCalledWith(expect.stringContaining('whisper-large-v3-turbo'), {
+      recursive: true
+    })
     expect(mockRenameSync).not.toHaveBeenCalled()
   })
 })
@@ -375,8 +389,8 @@ describe('migrateInstalledVersions', () => {
   it('skips models that are not installed on disk', () => {
     mockSettingsStore.get.mockReturnValue({})
     // whisper not installed, pyannote installed
-    mockExistsSync.mockImplementation((p: string) =>
-      p.includes('diarization') || p.includes('speaker-diarization')
+    mockExistsSync.mockImplementation(
+      (p: string) => p.includes('diarization') || p.includes('speaker-diarization')
     )
 
     migrateInstalledVersions()
@@ -389,7 +403,11 @@ describe('migrateInstalledVersions', () => {
 
   it('does nothing if installedModelVersions already has entries', () => {
     mockSettingsStore.get.mockReturnValue({
-      'whisper-large-v3-turbo': { version: '2025-01-15', sha256: 'aaaa' + 'a'.repeat(60), installedAt: '' }
+      'whisper-large-v3-turbo': {
+        version: '2025-01-15',
+        sha256: 'aaaa' + 'a'.repeat(60),
+        installedAt: ''
+      }
     })
 
     migrateInstalledVersions()

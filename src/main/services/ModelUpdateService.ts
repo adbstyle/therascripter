@@ -14,8 +14,7 @@ import type { ModelDownloadStatus } from '../../shared/types/IpcApi'
 import type { PendingModelUpdate } from '../../shared/types/ModelUpdate'
 import { z } from 'zod'
 
-const MANIFEST_URL =
-  'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/manifest.json'
+const MANIFEST_URL = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/manifest.json'
 
 // ─── Manifest fetch ───────────────────────────────────────────────────────────
 
@@ -191,39 +190,45 @@ export async function executeUpdates(): Promise<void> {
       }
     } satisfies ModelDownloadStatus)
 
-    const downloadResult = await downloadFile(
-      update.url,
-      downloadTarget,
-      (progress) => {
-        sendToRenderer('modelUpdate:downloadProgress', {
-          state: 'downloading',
-          progress: {
-            currentModel: update.id,
-            currentModelLabel: update.label,
-            currentModelProgress: progress.percent,
-            currentModelDownloaded: progress.downloadedBytes,
-            currentModelTotal: progress.totalBytes,
-            overallDownloaded: baseOverall + progress.downloadedBytes,
-            overallTotal,
-            overallPercent:
-              overallTotal > 0
-                ? Math.round(((baseOverall + progress.downloadedBytes) / overallTotal) * 100)
-                : 0
-          }
-        } satisfies ModelDownloadStatus)
-      }
-    )
+    const downloadResult = await downloadFile(update.url, downloadTarget, (progress) => {
+      sendToRenderer('modelUpdate:downloadProgress', {
+        state: 'downloading',
+        progress: {
+          currentModel: update.id,
+          currentModelLabel: update.label,
+          currentModelProgress: progress.percent,
+          currentModelDownloaded: progress.downloadedBytes,
+          currentModelTotal: progress.totalBytes,
+          overallDownloaded: baseOverall + progress.downloadedBytes,
+          overallTotal,
+          overallPercent:
+            overallTotal > 0
+              ? Math.round(((baseOverall + progress.downloadedBytes) / overallTotal) * 100)
+              : 0
+        }
+      } satisfies ModelDownloadStatus)
+    })
 
     if (!downloadResult.success) {
-      sendToRenderer('modelUpdate:downloadError', downloadResult.error ?? `Download fehlgeschlagen: ${update.label}`)
+      sendToRenderer(
+        'modelUpdate:downloadError',
+        downloadResult.error ?? `Download fehlgeschlagen: ${update.label}`
+      )
       return
     }
 
     // ── 2. SHA-256 verification ──
-    sendToRenderer('modelUpdate:downloadProgress', { state: 'verifying', modelId: update.id } satisfies ModelDownloadStatus)
+    sendToRenderer('modelUpdate:downloadProgress', {
+      state: 'verifying',
+      modelId: update.id
+    } satisfies ModelDownloadStatus)
     const valid = await verifyFileSha256(downloadTarget, update.sha256)
     if (!valid) {
-      try { rmSync(downloadTarget) } catch { /* non-fatal */ }
+      try {
+        rmSync(downloadTarget)
+      } catch {
+        /* non-fatal */
+      }
       sendToRenderer('modelUpdate:downloadError', `SHA-256-Prüfung fehlgeschlagen: ${update.label}`)
       return
     }
@@ -231,13 +236,23 @@ export async function executeUpdates(): Promise<void> {
     // ── 3. Extract archive (if needed) ──
     let stagedPath: string
     if (update.archive) {
-      sendToRenderer('modelUpdate:downloadProgress', { state: 'extracting', modelId: update.id } satisfies ModelDownloadStatus)
+      sendToRenderer('modelUpdate:downloadProgress', {
+        state: 'extracting',
+        modelId: update.id
+      } satisfies ModelDownloadStatus)
       stagedPath = join(stagingDir, update.id)
       mkdirSync(stagedPath, { recursive: true })
       const extractResult = await extractTarGz(downloadTarget, stagedPath)
       if (!extractResult.success) {
-        try { rmSync(stagedPath, { recursive: true }) } catch { /* non-fatal */ }
-        sendToRenderer('modelUpdate:downloadError', extractResult.error ?? `Entpacken fehlgeschlagen: ${update.label}`)
+        try {
+          rmSync(stagedPath, { recursive: true })
+        } catch {
+          /* non-fatal */
+        }
+        sendToRenderer(
+          'modelUpdate:downloadError',
+          extractResult.error ?? `Entpacken fehlgeschlagen: ${update.label}`
+        )
         return
       }
     } else {
@@ -252,8 +267,15 @@ export async function executeUpdates(): Promise<void> {
       try {
         renameSync(finalPath, backupPath)
       } catch (err) {
-        try { rmSync(stagedPath, { recursive: true }) } catch { /* non-fatal */ }
-        sendToRenderer('modelUpdate:downloadError', `Backup fehlgeschlagen: ${update.label}: ${err}`)
+        try {
+          rmSync(stagedPath, { recursive: true })
+        } catch {
+          /* non-fatal */
+        }
+        sendToRenderer(
+          'modelUpdate:downloadError',
+          `Backup fehlgeschlagen: ${update.label}: ${err}`
+        )
         return
       }
     }
@@ -270,7 +292,11 @@ export async function executeUpdates(): Promise<void> {
     } catch (err) {
       // Rollback: restore backup
       if (existsSync(backupPath)) {
-        try { renameSync(backupPath, finalPath) } catch { /* non-fatal */ }
+        try {
+          renameSync(backupPath, finalPath)
+        } catch {
+          /* non-fatal */
+        }
       }
       sendToRenderer('modelUpdate:downloadError', `Swap fehlgeschlagen: ${update.label}: ${err}`)
       return
@@ -278,7 +304,11 @@ export async function executeUpdates(): Promise<void> {
 
     // ── 6. Cleanup backup ──
     if (existsSync(backupPath)) {
-      try { rmSync(backupPath, { recursive: true }) } catch { /* non-fatal */ }
+      try {
+        rmSync(backupPath, { recursive: true })
+      } catch {
+        /* non-fatal */
+      }
     }
 
     // ── 7. Record installed version ──
@@ -295,7 +325,11 @@ export async function executeUpdates(): Promise<void> {
 
   // All updates done — clear pending and cleanup staging
   settings.set('pendingModelUpdates', null)
-  try { rmSync(stagingDir, { recursive: true }) } catch { /* non-fatal */ }
+  try {
+    rmSync(stagingDir, { recursive: true })
+  } catch {
+    /* non-fatal */
+  }
   sendToRenderer('modelUpdate:downloadComplete')
 }
 
@@ -354,7 +388,9 @@ export function cleanupIncompleteUpdates(): void {
         // Model exists — swap completed, cleanup missed backup
         try {
           rmSync(backupPath, { recursive: true })
-        } catch { /* non-fatal */ }
+        } catch {
+          /* non-fatal */
+        }
       }
     }
 

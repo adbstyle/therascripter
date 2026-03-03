@@ -97,7 +97,8 @@ export function PlaceholderChipView({ node, selected }: NodeViewProps): React.JS
               position: 'fixed',
               left: tooltipPos.x,
               top: tooltipPos.y,
-              transform: tooltipPos.placement === 'top' ? 'translate(-50%, -100%)' : 'translateX(-50%)',
+              transform:
+                tooltipPos.placement === 'top' ? 'translate(-50%, -100%)' : 'translateX(-50%)',
               zIndex: 9999,
               pointerEvents: 'none'
             }}

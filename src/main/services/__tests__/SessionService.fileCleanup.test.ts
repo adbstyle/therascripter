@@ -16,11 +16,10 @@ vi.mock('../../utils/file-ops', () => ({
 }))
 
 function applySchema(db: Database.Database): void {
-  const sql = readFileSync(
-    join(__dirname, '..', '..', 'db', 'migrations', '001-initial-schema.sql'),
-    'utf-8'
-  )
-  db.exec(sql)
+  const migrationsDir = join(__dirname, '..', '..', 'db', 'migrations')
+  db.exec(readFileSync(join(migrationsDir, '001-initial-schema.sql'), 'utf-8'))
+  db.exec(readFileSync(join(migrationsDir, '002-add-diarization-path.sql'), 'utf-8'))
+  db.exec(readFileSync(join(migrationsDir, '003-add-review-at.sql'), 'utf-8'))
 }
 
 describe('SessionService file cleanup', () => {
@@ -68,6 +67,36 @@ describe('SessionService file cleanup', () => {
   it('returns false for non-existent session', () => {
     expect(service.deleteSession('non-existent')).toBe(false)
     expect(mockRemoveFile).not.toHaveBeenCalled()
+  })
+
+  it('deletes only the source file during cleanupSourceFiles', () => {
+    const oldReviewAt = new Date()
+    oldReviewAt.setHours(oldReviewAt.getHours() - 25)
+
+    db.prepare(
+      `INSERT INTO sessions (id, title, type, status, audio_path, transcript_path, review_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      'source-cleanup',
+      'Source Cleanup',
+      'audio',
+      'review',
+      '/mock/home/.therascript/audio/source-cleanup.wav',
+      '/mock/home/.therascript/transcripts/source-cleanup.json',
+      oldReviewAt.toISOString(),
+      oldReviewAt.toISOString(),
+      oldReviewAt.toISOString()
+    )
+
+    const cleaned = service.cleanupSourceFiles()
+
+    expect(cleaned).toBe(1)
+    const calledPaths = mockRemoveFile.mock.calls.map((c: unknown[]) => c[0] as string)
+    expect(calledPaths).toContain('/mock/home/.therascript/audio/source-cleanup.wav')
+    // Transcript must NOT be deleted
+    expect(calledPaths).not.toContain('/mock/home/.therascript/transcripts/source-cleanup.json')
+    // audio_path nulled in DB
+    expect(service.getSession('source-cleanup')?.audioPath).toBeNull()
   })
 
   it('cleans up files during cleanupOldSessions', () => {

@@ -11,11 +11,10 @@ vi.mock('electron', () => ({
 }))
 
 function applySchema(db: Database.Database): void {
-  const sql = readFileSync(
-    join(__dirname, '..', '..', 'db', 'migrations', '001-initial-schema.sql'),
-    'utf-8'
-  )
-  db.exec(sql)
+  const migrationsDir = join(__dirname, '..', '..', 'db', 'migrations')
+  db.exec(readFileSync(join(migrationsDir, '001-initial-schema.sql'), 'utf-8'))
+  db.exec(readFileSync(join(migrationsDir, '002-add-diarization-path.sql'), 'utf-8'))
+  db.exec(readFileSync(join(migrationsDir, '003-add-review-at.sql'), 'utf-8'))
 }
 
 describe('SessionService', () => {
@@ -178,6 +177,39 @@ describe('SessionService', () => {
     })
   })
 
+  describe('updateSession — reviewAt auto-set', () => {
+    it('sets reviewAt on first transition to review', () => {
+      const session = service.createSession('Test', 'audio')
+      service.updateSession(session.id, { status: 'transcribing' })
+      service.updateSession(session.id, { status: 'diarizing' })
+      service.updateSession(session.id, { status: 'anonymizing' })
+      const updated = service.updateSession(session.id, { status: 'review' })
+
+      expect(updated?.reviewAt).toBeTruthy()
+      expect(new Date(updated!.reviewAt!).getTime()).toBeCloseTo(Date.now(), -3)
+    })
+
+    it('does not reset reviewAt on review → review (re-anonymization)', () => {
+      const session = service.createSession('Test', 'audio')
+      service.updateSession(session.id, { status: 'transcribing' })
+      service.updateSession(session.id, { status: 'diarizing' })
+      service.updateSession(session.id, { status: 'anonymizing' })
+      const firstReview = service.updateSession(session.id, { status: 'review' })
+      const firstReviewAt = firstReview!.reviewAt
+
+      const secondReview = service.updateSession(session.id, { status: 'review' })
+
+      expect(secondReview?.reviewAt).toBe(firstReviewAt)
+    })
+
+    it('reviewAt is null for non-review sessions', () => {
+      const session = service.createSession('Test', 'audio')
+      const updated = service.updateSession(session.id, { status: 'transcribing' })
+
+      expect(updated?.reviewAt).toBeNull()
+    })
+  })
+
   describe('cleanupOldSessions', () => {
     it('deletes sessions older than 30 days', () => {
       const oldDate = new Date()
@@ -205,6 +237,102 @@ describe('SessionService', () => {
       service.createSession('Recent', 'audio')
 
       expect(service.cleanupOldSessions()).toBe(0)
+    })
+  })
+
+  describe('cleanupSourceFiles', () => {
+    it('returns 0 when no sessions are ready for source file deletion', () => {
+      service.createSession('Recent', 'audio')
+
+      expect(service.cleanupSourceFiles()).toBe(0)
+    })
+
+    it('returns 0 for review sessions where 24h have not passed', () => {
+      const session = service.createSession('Test', 'audio')
+      db.prepare(
+        `INSERT INTO sessions (id, title, type, status, audio_path, review_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        'recent-review',
+        'Recent Review',
+        'audio',
+        'review',
+        '/audio/recent.wav',
+        new Date().toISOString(),
+        session.createdAt,
+        session.updatedAt
+      )
+
+      expect(service.cleanupSourceFiles()).toBe(0)
+    })
+
+    it('cleans up audio source file after 24h', () => {
+      const oldReviewAt = new Date()
+      oldReviewAt.setHours(oldReviewAt.getHours() - 25)
+
+      db.prepare(
+        `INSERT INTO sessions (id, title, type, status, audio_path, review_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        'ready-audio',
+        'Ready Audio',
+        'audio',
+        'review',
+        '/audio/ready.wav',
+        oldReviewAt.toISOString(),
+        oldReviewAt.toISOString(),
+        oldReviewAt.toISOString()
+      )
+
+      const cleaned = service.cleanupSourceFiles()
+
+      expect(cleaned).toBe(1)
+      expect(service.getSession('ready-audio')?.audioPath).toBeNull()
+    })
+
+    it('cleans up pdf source file after 24h', () => {
+      const oldReviewAt = new Date()
+      oldReviewAt.setHours(oldReviewAt.getHours() - 25)
+
+      db.prepare(
+        `INSERT INTO sessions (id, title, type, status, pdf_path, review_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        'ready-pdf',
+        'Ready PDF',
+        'pdf',
+        'review',
+        '/pdf/ready.pdf',
+        oldReviewAt.toISOString(),
+        oldReviewAt.toISOString(),
+        oldReviewAt.toISOString()
+      )
+
+      const cleaned = service.cleanupSourceFiles()
+
+      expect(cleaned).toBe(1)
+      expect(service.getSession('ready-pdf')?.pdfPath).toBeNull()
+    })
+
+    it('skips sessions where source file is already deleted (path is null)', () => {
+      const oldReviewAt = new Date()
+      oldReviewAt.setHours(oldReviewAt.getHours() - 25)
+
+      db.prepare(
+        `INSERT INTO sessions (id, title, type, status, audio_path, review_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        'already-cleaned',
+        'Already Cleaned',
+        'audio',
+        'review',
+        null,
+        oldReviewAt.toISOString(),
+        oldReviewAt.toISOString(),
+        oldReviewAt.toISOString()
+      )
+
+      expect(service.cleanupSourceFiles()).toBe(0)
     })
   })
 

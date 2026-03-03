@@ -48,6 +48,10 @@ export class SessionService {
       if (!isValidTransition(session.status, input.status)) {
         throw new Error(`Invalid status transition: ${session.status} → ${input.status}`)
       }
+      // Auto-set reviewAt on first transition to 'review' — never reset on re-anonymization
+      if (input.status === 'review' && !session.reviewAt) {
+        input = { ...input, reviewAt: new Date().toISOString() }
+      }
     }
     return this.repository.update(id, input)
   }
@@ -74,6 +78,20 @@ export class SessionService {
     return deleted
   }
 
+  cleanupSourceFiles(): number {
+    const sessions = this.repository.findReadyForSourceFileDeletion()
+    let cleaned = 0
+    for (const session of sessions) {
+      this.deleteSourceFile(session)
+      const update =
+        session.type === 'audio'
+          ? this.repository.update(session.id, { audioPath: null })
+          : this.repository.update(session.id, { pdfPath: null })
+      if (update) cleaned++
+    }
+    return cleaned
+  }
+
   private cleanupSessionFiles(session: Session): void {
     const dataDir = getDataDir()
     const filePaths = [
@@ -90,6 +108,13 @@ export class SessionService {
       if (filePath) {
         removeFile(filePath)
       }
+    }
+  }
+
+  private deleteSourceFile(session: Session): void {
+    const filePath = session.type === 'audio' ? session.audioPath : session.pdfPath
+    if (filePath) {
+      removeFile(filePath)
     }
   }
 

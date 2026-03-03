@@ -114,8 +114,10 @@ export class WhisperService implements TaskExecutor {
       ]
 
       // QoS: nice -n 10 (NFR-23) — spawn via nice
+      // stdout is ignored — whisper.cpp writes JSON to file (-ojf), not stdout.
+      // Piping stdout without reading it causes a deadlock when the pipe buffer fills.
       const proc = spawn('nice', ['-n', '10', binaryPath, ...args], {
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'ignore', 'pipe']
       })
 
       let stderr = ''

@@ -57,6 +57,8 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const editorRef = useRef<Editor | null>(null)
   const blocklistUndoStackRef = useRef<BlocklistUndoEntry[]>([])
   const menuRef = useRef<HTMLDivElement>(null)
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(scrollTimerRef.current), [])
 
   const closeMenu = useCallback(() => setShowMenu(false), [])
   useClickOutside(menuRef, closeMenu)
@@ -145,10 +147,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
                     .then((newEntry) => {
                       stackEntry.entryId = newEntry.id
                       // Update entityMap after entryId is set to avoid race condition
-                      const number = parseInt(
-                        stackEntry.entityId.split('-').pop() ?? '0',
-                        10
-                      )
+                      const number = parseInt(stackEntry.entityId.split('-').pop() ?? '0', 10)
                       const updated = { ...entityMapRef.current }
                       updated[stackEntry.entityId] = {
                         original: stackEntry.term,
@@ -495,7 +494,19 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
       </header>
 
       {/* Editor */}
-      <div className="flex-1 overflow-y-auto" onContextMenu={handleContextMenu}>
+      <div
+        className="editor-scroll flex-1 overflow-y-auto"
+        onContextMenu={handleContextMenu}
+        onScroll={(e) => {
+          const el = e.currentTarget
+          el.classList.add('is-scrolling')
+          clearTimeout(scrollTimerRef.current)
+          scrollTimerRef.current = setTimeout(
+            () => el.classList.remove('is-scrolling'),
+            1500
+          )
+        }}
+      >
         <EditorContent editor={editor} />
       </div>
 

@@ -25,6 +25,7 @@ export interface Session {
   errorMessage: string | null
   createdAt: string
   updatedAt: string
+  reviewAt: string | null
 }
 
 export interface CreateSessionInput {
@@ -45,4 +46,5 @@ export interface UpdateSessionInput {
   pdfPath?: string | null
   entityMap?: EntityMap | null
   errorMessage?: string | null
+  reviewAt?: string | null
 }
