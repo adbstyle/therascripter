@@ -7,7 +7,7 @@ import type {
   TaskErrorData,
   ModelDownloadStatus
 } from '../shared/types'
-import type { PendingModelUpdate } from '../shared/types/ModelUpdate'
+import type { PendingModelUpdate, AppUpdateStatus } from '../shared/types/ModelUpdate'
 
 const api: IpcApi = {
   sessions: {
@@ -146,6 +146,19 @@ const api: IpcApi = {
       ipcRenderer.on('modelUpdate:downloadError', handler)
       return () => {
         ipcRenderer.removeListener('modelUpdate:downloadError', handler)
+      }
+    }
+  },
+  appUpdate: {
+    getStatus: () => ipcRenderer.invoke('appUpdate:getStatus'),
+    check: () => ipcRenderer.invoke('appUpdate:check'),
+    openReleasePage: () => ipcRenderer.invoke('appUpdate:openReleasePage'),
+    onStatus: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: AppUpdateStatus): void =>
+        callback(data)
+      ipcRenderer.on('appUpdate:status', handler)
+      return () => {
+        ipcRenderer.removeListener('appUpdate:status', handler)
       }
     }
   }

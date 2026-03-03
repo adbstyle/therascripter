@@ -3,7 +3,7 @@ import type { Task, TaskType } from './Task'
 import type { BlocklistEntry } from './NerTypes'
 import type { EntityMap, PlaceholderType } from './EntityMap'
 import type { TipTapDocument } from './TipTapDocument'
-import type { PendingModelUpdate } from './ModelUpdate'
+import type { PendingModelUpdate, AppUpdateStatus, CheckResult } from './ModelUpdate'
 
 export interface SessionApi {
   list(): Promise<Session[]>
@@ -148,6 +148,13 @@ export interface ModelUpdateApi {
   onDownloadError(callback: (error: string) => void): () => void
 }
 
+export interface AppUpdateApi {
+  getStatus(): Promise<AppUpdateStatus>
+  check(): Promise<CheckResult>
+  openReleasePage(): Promise<void>
+  onStatus(callback: (status: AppUpdateStatus) => void): () => void
+}
+
 export interface IpcApi {
   sessions: SessionApi
   recording: RecordingApi
@@ -159,4 +166,5 @@ export interface IpcApi {
   system: SystemApi
   modelDownload: ModelDownloadApi
   modelUpdate: ModelUpdateApi
+  appUpdate: AppUpdateApi
 }

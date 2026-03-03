@@ -11,6 +11,7 @@ export const ManifestModelSchema = z.object({
 
 export const ManifestSchema = z.object({
   generatedAt: z.string().min(1),
+  latestAppVersion: z.string().regex(/^\d+\.\d+\.\d+$/).optional(),
   models: z.array(ManifestModelSchema).min(1)
 })
 
@@ -32,4 +33,10 @@ export const PendingModelUpdateSchema = z.object({
 // Wrapper object schema for the restart IPC handler (matches preload convention: { updates })
 export const RestartUpdateSchema = z.object({
   updates: z.array(PendingModelUpdateSchema).min(1)
+})
+
+// App update status (persisted in electron-store, validated on read)
+export const AppUpdateStatusSchema = z.object({
+  available: z.boolean(),
+  checkedAt: z.string().nullable()
 })

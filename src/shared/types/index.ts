@@ -33,6 +33,7 @@ export type {
   ModelDownloadApi,
   ModelUpdateRestartResult,
   ModelUpdateApi,
+  AppUpdateApi,
   IpcApi
 } from './IpcApi'
 
@@ -72,5 +73,7 @@ export type {
   ManifestModel,
   Manifest,
   PendingModelUpdate,
-  InstalledModelVersion
+  InstalledModelVersion,
+  AppUpdateStatus,
+  CheckResult
 } from './ModelUpdate'

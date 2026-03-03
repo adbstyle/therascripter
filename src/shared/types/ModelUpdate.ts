@@ -9,6 +9,7 @@ export interface ManifestModel {
 
 export interface Manifest {
   generatedAt: string
+  latestAppVersion?: string
   models: ManifestModel[]
 }
 
@@ -29,4 +30,16 @@ export interface InstalledModelVersion {
   version: string
   sha256: string
   installedAt: string
+}
+
+// ─── App Update ──────────────────────────────────────────────────────────────
+
+export interface AppUpdateStatus {
+  available: boolean
+  checkedAt: string | null // ISO timestamp of last check
+}
+
+export interface CheckResult {
+  modelUpdates: PendingModelUpdate[]
+  appUpdate: AppUpdateStatus
 }

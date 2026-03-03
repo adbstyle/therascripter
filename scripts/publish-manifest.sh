@@ -33,6 +33,7 @@ CDN_BASE="https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev"
 # Today's date as version string
 VERSION=$(date +%Y-%m-%d)
 GENERATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+APP_VERSION=$(node -e "process.stdout.write(require('$PROJECT_ROOT/package.json').version)")
 
 echo "=== Generating manifest.json ==="
 echo "Version: $VERSION"
@@ -90,6 +91,7 @@ MODELS_JSON="$MODELS_JSON
 cat > "$MANIFEST_FILE" << EOF
 {
   "generatedAt": "$GENERATED_AT",
+  "latestAppVersion": "$APP_VERSION",
   "models": $MODELS_JSON
 }
 EOF

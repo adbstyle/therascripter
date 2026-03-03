@@ -8,6 +8,7 @@ import Settings from './views/Settings'
 import ReviewEditor from './views/ReviewEditor'
 import { useRecording } from './hooks/useRecording'
 import { useModelUpdates } from './hooks/useModelUpdates'
+import { useAppUpdate } from './hooks/useAppUpdate'
 import type { PendingModelUpdate } from '../../shared/types/ModelUpdate'
 
 type View = 'sessions' | 'settings' | 'review'
@@ -15,6 +16,7 @@ type View = 'sessions' | 'settings' | 'review'
 export default function App(): React.JSX.Element {
   const { isRecording, duration, level, error, startRecording, stopRecording } = useRecording()
   const { availableUpdates, clearUpdates } = useModelUpdates()
+  const { status: appUpdateStatus, openReleasePage } = useAppUpdate()
   const [modelsReady, setModelsReady] = useState<boolean | null>(null)
   const [pendingUpdates, setPendingUpdates] = useState<PendingModelUpdate[] | null>(null)
   const [currentView, setCurrentView] = useState<View>('sessions')
@@ -45,16 +47,12 @@ export default function App(): React.JSX.Element {
   }, [])
 
   // Check for pending model updates on startup (set before restart)
+  // Note: background update check is now handled by main process (startup + 24h timer)
   useEffect(() => {
     if (modelsReady !== true) return
     window.api.modelUpdate.getPending().then((pending) => {
       if (pending && pending.length > 0) {
         setPendingUpdates(pending)
-      } else {
-        // No pending updates — trigger background update check
-        window.api.modelUpdate.check().catch(() => {
-          // Silently ignore — non-blocking check
-        })
       }
     })
   }, [modelsReady])
@@ -149,10 +147,20 @@ export default function App(): React.JSX.Element {
               Einstellungen
             </button>
           </nav>
-          <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
-            <span>&#128274;</span>
-            <span>Lokal</span>
-          </div>
+          {appUpdateStatus?.available ? (
+            <button
+              className="titlebar-no-drag flex items-center gap-1.5 text-xs font-medium text-primary transition-colors hover:text-primary-hover"
+              onClick={openReleasePage}
+            >
+              <span className="text-[10px]">&#9679;</span>
+              <span>Update verf&#252;gbar</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
+              <span>&#128274;</span>
+              <span>Lokal</span>
+            </div>
+          )}
         </aside>
 
         {/* Main content */}

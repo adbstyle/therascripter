@@ -159,6 +159,12 @@ fi
 
 gh "${GH_ARGS[@]}"
 
+# ── Update manifest ──────────────────────────────────────────────────────────
+
+echo ""
+echo "→ Aktualisiere manifest.json mit latestAppVersion=$NEW_VERSION …"
+"$ROOT_DIR/scripts/publish-manifest.sh"
+
 echo ""
 echo "✅ Release v$NEW_VERSION erfolgreich erstellt!"
 echo "   https://github.com/adbstyle/therascripter/releases/tag/v$NEW_VERSION"

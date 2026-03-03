@@ -24,7 +24,13 @@ import {
   ensureSpotlightExclusion
 } from './services/AutoDeletionService'
 import { checkFileVaultOnStartup } from './services/FileVaultService'
-import { cleanupIncompleteUpdates, migrateInstalledVersions } from './services/ModelUpdateService'
+import { registerAppUpdateHandlers } from './ipc/app-update-handlers'
+import {
+  cleanupIncompleteUpdates,
+  migrateInstalledVersions,
+  checkForUpdates,
+  invalidateCachedAppUpdateIfNeeded
+} from './services/UpdateCheckService'
 import { WhisperService } from './ml/WhisperService'
 import { PyannoteSidecar } from './ml/PyannoteSidecar'
 import { AlignmentService } from './ml/AlignmentService'
@@ -152,6 +158,7 @@ app.whenReady().then(() => {
   registerSystemHandlers()
   registerModelDownloadHandlers()
   registerModelUpdateHandlers()
+  registerAppUpdateHandlers()
 
   setupCSP()
   createWindow()
@@ -169,6 +176,24 @@ app.whenReady().then(() => {
 
   // Start auto-deletion (30-day cleanup at startup + every 6h)
   startAutoDeletion()
+
+  // Invalidate stale cached app update status if user installed a new version
+  invalidateCachedAppUpdateIfNeeded()
+
+  // Non-blocking: check for model + app updates on startup
+  checkForUpdates().catch(() => {
+    /* already handled inside */
+  })
+
+  // Periodic update check every 24h while app is running
+  setInterval(
+    () => {
+      checkForUpdates().catch(() => {
+        /* already handled inside */
+      })
+    },
+    24 * 60 * 60 * 1000
+  )
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

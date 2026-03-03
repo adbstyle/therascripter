@@ -140,7 +140,13 @@ beforeEach(() => {
       start: vi.fn(),
       onStatus: vi.fn().mockReturnValue(() => {})
     },
-    modelUpdate: mockModelUpdate
+    modelUpdate: mockModelUpdate,
+    appUpdate: {
+      getStatus: vi.fn().mockResolvedValue(null),
+      check: vi.fn().mockResolvedValue({ modelUpdates: [], appUpdate: { available: false, checkedAt: null } }),
+      openReleasePage: vi.fn(),
+      onStatus: vi.fn().mockReturnValue(() => {})
+    }
   } as typeof window.api
   vi.clearAllMocks()
 })

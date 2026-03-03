@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { AboutInfo } from '../../../shared/types'
 import { ConfirmDialog } from './ConfirmDialog'
 import { formatBytes } from '../utils/formatBytes'
+import { useAppUpdate } from '../hooks/useAppUpdate'
 import AppLogo from './AppLogo'
 
 const ACKNOWLEDGMENTS = [
@@ -39,6 +40,7 @@ const ACKNOWLEDGMENTS = [
 export default function AboutPage(): React.JSX.Element {
   const [info, setInfo] = useState<AboutInfo | null>(null)
   const [showUninstall, setShowUninstall] = useState(false)
+  const { status: appUpdateStatus, checking, checkNow, openReleasePage } = useAppUpdate()
 
   useEffect(() => {
     window.api.system.aboutInfo().then(setInfo)
@@ -65,6 +67,30 @@ export default function AboutPage(): React.JSX.Element {
             Therascript v{info?.version ?? '\u2026'}
           </h3>
           <p className="text-sm text-text-tertiary">Open Source (MIT-Lizenz)</p>
+        </div>
+
+        {/* App Update */}
+        <div>
+          <div className="flex items-center gap-3">
+            <button
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-2 disabled:opacity-50"
+              onClick={checkNow}
+              disabled={checking}
+            >
+              {checking ? 'Pr\u00FCfe\u2026' : 'Nach Updates suchen'}
+            </button>
+            {appUpdateStatus?.available && (
+              <button
+                className="text-sm font-medium text-primary transition-colors hover:text-primary-hover"
+                onClick={openReleasePage}
+              >
+                Neue Version verf\u00FCgbar &mdash; herunterladen
+              </button>
+            )}
+            {appUpdateStatus && !appUpdateStatus.available && appUpdateStatus.checkedAt && (
+              <span className="text-sm text-text-tertiary">Therascript ist aktuell</span>
+            )}
+          </div>
         </div>
 
         <p className="text-sm text-text-secondary">

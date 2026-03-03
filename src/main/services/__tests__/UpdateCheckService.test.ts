@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 vi.mock('electron', () => ({
-  app: { relaunch: vi.fn(), quit: vi.fn() },
+  app: { relaunch: vi.fn(), quit: vi.fn(), getVersion: vi.fn().mockReturnValue('0.3.3') },
   BrowserWindow: { getAllWindows: vi.fn().mockReturnValue([]) }
 }))
 
@@ -80,8 +80,9 @@ import {
   triggerUpdateRestart,
   cleanupIncompleteUpdates,
   migrateInstalledVersions,
-  executeUpdates
-} from '../ModelUpdateService'
+  executeUpdates,
+  isNewerVersion
+} from '../UpdateCheckService'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -116,26 +117,28 @@ function makeHttpsError(message: string): void {
   })
 }
 
+const validManifestModels = [
+  {
+    id: 'whisper-large-v3-turbo',
+    version: '2025-02-01',
+    label: 'Spracherkennung',
+    url: 'https://example.com/whisper.bin',
+    sha256: 'cccc' + 'c'.repeat(60), // different from installed aaaa...
+    sizeBytes: 100
+  },
+  {
+    id: 'pyannote-community-1',
+    version: '2025-02-01',
+    label: 'Sprechererkennung',
+    url: 'https://example.com/pyannote.tar.gz',
+    sha256: 'bbbb' + 'b'.repeat(60), // same as installed — no update
+    sizeBytes: 200
+  }
+]
+
 const validManifest = JSON.stringify({
   generatedAt: '2025-01-15T00:00:00Z',
-  models: [
-    {
-      id: 'whisper-large-v3-turbo',
-      version: '2025-02-01',
-      label: 'Spracherkennung',
-      url: 'https://example.com/whisper.bin',
-      sha256: 'cccc' + 'c'.repeat(60), // different from installed aaaa...
-      sizeBytes: 100
-    },
-    {
-      id: 'pyannote-community-1',
-      version: '2025-02-01',
-      label: 'Sprechererkennung',
-      url: 'https://example.com/pyannote.tar.gz',
-      sha256: 'bbbb' + 'b'.repeat(60), // same as installed — no update
-      sizeBytes: 200
-    }
-  ]
+  models: validManifestModels
 })
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -160,13 +163,13 @@ describe('checkForUpdates', () => {
     })
     makeHttpsResponse(200, validManifest)
 
-    const updates = await checkForUpdates()
+    const { modelUpdates } = await checkForUpdates()
 
-    expect(updates).toHaveLength(1)
-    expect(updates[0].id).toBe('whisper-large-v3-turbo')
-    expect(updates[0].sha256).toBe('cccc' + 'c'.repeat(60))
-    expect(updates[0].relativePath).toBe('asr/ggml-large-v3-turbo-q5_0.bin')
-    expect(updates[0].archive).toBe(false)
+    expect(modelUpdates).toHaveLength(1)
+    expect(modelUpdates[0].id).toBe('whisper-large-v3-turbo')
+    expect(modelUpdates[0].sha256).toBe('cccc' + 'c'.repeat(60))
+    expect(modelUpdates[0].relativePath).toBe('asr/ggml-large-v3-turbo-q5_0.bin')
+    expect(modelUpdates[0].archive).toBe(false)
   })
 
   it('returns no updates when all sha256 match', async () => {
@@ -184,48 +187,48 @@ describe('checkForUpdates', () => {
     })
     makeHttpsResponse(200, validManifest)
 
-    const updates = await checkForUpdates()
-    expect(updates).toHaveLength(0)
+    const { modelUpdates } = await checkForUpdates()
+    expect(modelUpdates).toHaveLength(0)
   })
 
   it('returns all models as updates when no versions installed', async () => {
     mockSettingsStore.get.mockReturnValue({})
     makeHttpsResponse(200, validManifest)
 
-    const updates = await checkForUpdates()
-    expect(updates).toHaveLength(2)
+    const { modelUpdates } = await checkForUpdates()
+    expect(modelUpdates).toHaveLength(2)
   })
 
-  it('returns empty array on network error (non-blocking)', async () => {
+  it('returns empty modelUpdates on network error (non-blocking)', async () => {
     mockSettingsStore.get.mockReturnValue({})
     makeHttpsError('Connection refused')
 
-    const updates = await checkForUpdates()
-    expect(updates).toHaveLength(0)
+    const { modelUpdates } = await checkForUpdates()
+    expect(modelUpdates).toHaveLength(0)
   })
 
-  it('returns empty array on HTTP 404', async () => {
+  it('returns empty modelUpdates on HTTP 404', async () => {
     mockSettingsStore.get.mockReturnValue({})
     makeHttpsResponse(404, 'Not Found')
 
-    const updates = await checkForUpdates()
-    expect(updates).toHaveLength(0)
+    const { modelUpdates } = await checkForUpdates()
+    expect(modelUpdates).toHaveLength(0)
   })
 
-  it('returns empty array on invalid JSON', async () => {
+  it('returns empty modelUpdates on invalid JSON', async () => {
     mockSettingsStore.get.mockReturnValue({})
     makeHttpsResponse(200, 'not json {{')
 
-    const updates = await checkForUpdates()
-    expect(updates).toHaveLength(0)
+    const { modelUpdates } = await checkForUpdates()
+    expect(modelUpdates).toHaveLength(0)
   })
 
-  it('returns empty array on schema validation failure', async () => {
+  it('returns empty modelUpdates on schema validation failure', async () => {
     mockSettingsStore.get.mockReturnValue({})
     makeHttpsResponse(200, JSON.stringify({ generatedAt: '2025-01-15', models: [] }))
 
-    const updates = await checkForUpdates()
-    expect(updates).toHaveLength(0)
+    const { modelUpdates } = await checkForUpdates()
+    expect(modelUpdates).toHaveLength(0)
   })
 
   it('skips model with path-traversal in id', async () => {
@@ -245,8 +248,8 @@ describe('checkForUpdates', () => {
     })
     makeHttpsResponse(200, maliciousManifest)
 
-    const updates = await checkForUpdates()
-    expect(updates).toHaveLength(0)
+    const { modelUpdates } = await checkForUpdates()
+    expect(modelUpdates).toHaveLength(0)
   })
 
   it('skips unknown model ids not in MODEL_DEFINITIONS', async () => {
@@ -266,8 +269,96 @@ describe('checkForUpdates', () => {
     })
     makeHttpsResponse(200, manifest)
 
-    const updates = await checkForUpdates()
-    expect(updates).toHaveLength(0)
+    const { modelUpdates } = await checkForUpdates()
+    expect(modelUpdates).toHaveLength(0)
+  })
+})
+
+describe('checkForUpdates — app update', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // Default: no model updates (all sha256 match)
+    mockSettingsStore.get.mockReturnValue({
+      'whisper-large-v3-turbo': {
+        version: '2025-01-15',
+        sha256: 'cccc' + 'c'.repeat(60),
+        installedAt: ''
+      },
+      'pyannote-community-1': {
+        version: '2025-01-15',
+        sha256: 'bbbb' + 'b'.repeat(60),
+        installedAt: ''
+      }
+    })
+  })
+
+  it('returns appUpdate.available=true when manifest version is newer', async () => {
+    const manifest = JSON.stringify({
+      generatedAt: '2025-01-15T00:00:00Z',
+      latestAppVersion: '1.0.0',
+      models: validManifestModels
+    })
+    makeHttpsResponse(200, manifest)
+
+    const { appUpdate } = await checkForUpdates()
+    expect(appUpdate.available).toBe(true)
+    expect(appUpdate.checkedAt).toBeTruthy()
+  })
+
+  it('returns appUpdate.available=false when versions match', async () => {
+    const manifest = JSON.stringify({
+      generatedAt: '2025-01-15T00:00:00Z',
+      latestAppVersion: '0.3.3',
+      models: validManifestModels
+    })
+    makeHttpsResponse(200, manifest)
+
+    const { appUpdate } = await checkForUpdates()
+    expect(appUpdate.available).toBe(false)
+  })
+
+  it('returns appUpdate.available=false when latestAppVersion is absent', async () => {
+    makeHttpsResponse(200, validManifest)
+
+    const { appUpdate } = await checkForUpdates()
+    expect(appUpdate.available).toBe(false)
+    expect(appUpdate.checkedAt).toBeTruthy()
+  })
+
+  it('returns appUpdate.available=false when installed is newer than manifest', async () => {
+    const manifest = JSON.stringify({
+      generatedAt: '2025-01-15T00:00:00Z',
+      latestAppVersion: '0.2.0',
+      models: validManifestModels
+    })
+    makeHttpsResponse(200, manifest)
+
+    const { appUpdate } = await checkForUpdates()
+    expect(appUpdate.available).toBe(false)
+  })
+
+  it('persists cachedAppUpdateStatus to settings', async () => {
+    const manifest = JSON.stringify({
+      generatedAt: '2025-01-15T00:00:00Z',
+      latestAppVersion: '1.0.0',
+      models: validManifestModels
+    })
+    makeHttpsResponse(200, manifest)
+
+    await checkForUpdates()
+
+    expect(mockSettingsStore.set).toHaveBeenCalledWith(
+      'cachedAppUpdateStatus',
+      expect.objectContaining({ available: true })
+    )
+  })
+
+  it('returns appUpdate.available=false on network error', async () => {
+    makeHttpsError('Connection refused')
+
+    const { appUpdate } = await checkForUpdates()
+    expect(appUpdate.available).toBe(false)
+    expect(appUpdate.checkedAt).toBeNull()
   })
 })
 
@@ -543,5 +634,31 @@ describe('executeUpdates', () => {
     await executeUpdates()
 
     expect(mockDownloadFile).not.toHaveBeenCalled()
+  })
+})
+
+describe('isNewerVersion', () => {
+  it('detects newer patch version', () => {
+    expect(isNewerVersion('0.3.3', '0.3.4')).toBe(true)
+  })
+
+  it('detects newer minor version', () => {
+    expect(isNewerVersion('0.3.3', '0.4.0')).toBe(true)
+  })
+
+  it('detects newer major version', () => {
+    expect(isNewerVersion('0.3.3', '1.0.0')).toBe(true)
+  })
+
+  it('returns false for same version', () => {
+    expect(isNewerVersion('0.3.3', '0.3.3')).toBe(false)
+  })
+
+  it('returns false for older version', () => {
+    expect(isNewerVersion('0.3.3', '0.2.0')).toBe(false)
+  })
+
+  it('returns false when current is newer', () => {
+    expect(isNewerVersion('1.0.0', '0.9.9')).toBe(false)
   })
 })

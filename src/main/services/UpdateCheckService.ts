@@ -11,10 +11,26 @@ import {
 } from '../../shared/validation/model-update-schemas'
 import { sendToRenderer } from '../utils/ipc-helpers'
 import type { ModelDownloadStatus } from '../../shared/types/IpcApi'
-import type { PendingModelUpdate } from '../../shared/types/ModelUpdate'
+import type { PendingModelUpdate, AppUpdateStatus, CheckResult } from '../../shared/types/ModelUpdate'
 import { z } from 'zod'
 
 const MANIFEST_URL = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/manifest.json'
+
+// ─── Version comparison ──────────────────────────────────────────────────────
+
+/** Returns true if `latest` is strictly newer than `current` (semver without pre-release). */
+export function isNewerVersion(current: string, latest: string): boolean {
+  const parse = (v: string): [number, number, number] => {
+    const parts = v.split('.').map(Number)
+    if (parts.length !== 3 || parts.some(isNaN)) return [0, 0, 0]
+    return parts as [number, number, number]
+  }
+  const [cMaj, cMin, cPat] = parse(current)
+  const [lMaj, lMin, lPat] = parse(latest)
+  if (lMaj !== cMaj) return lMaj > cMaj
+  if (lMin !== cMin) return lMin > cMin
+  return lPat > cPat
+}
 
 // ─── Manifest fetch ───────────────────────────────────────────────────────────
 
@@ -74,7 +90,9 @@ function fetchManifestJson(url: string): Promise<unknown> {
 
 // ─── checkForUpdates ─────────────────────────────────────────────────────────
 
-export async function checkForUpdates(): Promise<PendingModelUpdate[]> {
+const NO_APP_UPDATE: AppUpdateStatus = { available: false, checkedAt: null }
+
+export async function checkForUpdates(): Promise<CheckResult> {
   try {
     const raw = await fetchManifestJson(MANIFEST_URL)
     const manifest = ManifestSchema.parse(raw)
@@ -83,12 +101,13 @@ export async function checkForUpdates(): Promise<PendingModelUpdate[]> {
     const installedVersions = settings.get('installedModelVersions') ?? {}
     const definitions = getModelDefinitions()
 
-    const updates: PendingModelUpdate[] = []
+    // ── Model update check ──
+    const modelUpdates: PendingModelUpdate[] = []
 
     for (const manifestModel of manifest.models) {
       // Path-traversal guard on id
       if (manifestModel.id.includes('..') || manifestModel.id.includes('/')) {
-        console.warn(`ModelUpdateService: suspicious model id skipped: ${manifestModel.id}`)
+        console.warn(`UpdateCheckService: suspicious model id skipped: ${manifestModel.id}`)
         continue
       }
 
@@ -100,19 +119,19 @@ export async function checkForUpdates(): Promise<PendingModelUpdate[]> {
       // Find structural info from local MODEL_DEFINITIONS
       const definition = definitions.find((d) => d.id === manifestModel.id)
       if (!definition) {
-        console.warn(`ModelUpdateService: unknown model id in manifest: ${manifestModel.id}`)
+        console.warn(`UpdateCheckService: unknown model id in manifest: ${manifestModel.id}`)
         continue
       }
 
       // Path-traversal guard on relativePath
       if (definition.relativePath.includes('..')) {
         console.warn(
-          `ModelUpdateService: suspicious relativePath skipped: ${definition.relativePath}`
+          `UpdateCheckService: suspicious relativePath skipped: ${definition.relativePath}`
         )
         continue
       }
 
-      updates.push({
+      modelUpdates.push({
         id: manifestModel.id,
         version: manifestModel.version,
         label: manifestModel.label,
@@ -125,15 +144,29 @@ export async function checkForUpdates(): Promise<PendingModelUpdate[]> {
       })
     }
 
-    if (updates.length > 0) {
-      sendToRenderer('modelUpdate:available', updates)
+    if (modelUpdates.length > 0) {
+      sendToRenderer('modelUpdate:available', modelUpdates)
     }
 
-    return updates
+    // ── App update check ──
+    const currentVersion = app.getVersion()
+    const latestVersion = manifest.latestAppVersion ?? null
+    const available =
+      latestVersion !== null && isNewerVersion(currentVersion, latestVersion)
+    const checkedAt = new Date().toISOString()
+
+    const appUpdate: AppUpdateStatus = { available, checkedAt }
+
+    // Persist for offline reads via appUpdate:getStatus
+    settings.set('cachedAppUpdateStatus', appUpdate)
+
+    sendToRenderer('appUpdate:status', appUpdate)
+
+    return { modelUpdates, appUpdate }
   } catch (error) {
     // Non-blocking: update check failures are silently ignored
-    console.log(`ModelUpdateService: Update-Check fehlgeschlagen (ignoriert): ${error}`)
-    return []
+    console.log(`UpdateCheckService: Update-Check fehlgeschlagen (ignoriert): ${error}`)
+    return { modelUpdates: [], appUpdate: NO_APP_UPDATE }
   }
 }
 
@@ -344,9 +377,9 @@ export function cleanupIncompleteUpdates(): void {
   if (existsSync(stagingDir)) {
     try {
       rmSync(stagingDir, { recursive: true })
-      console.log('ModelUpdateService: .staging/ bereinigt')
+      console.log('UpdateCheckService: .staging/ bereinigt')
     } catch (err) {
-      console.error('ModelUpdateService: .staging/ konnte nicht bereinigt werden:', err)
+      console.error('UpdateCheckService: .staging/ konnte nicht bereinigt werden:', err)
     }
   }
 
@@ -377,10 +410,10 @@ export function cleanupIncompleteUpdates(): void {
             mkdirSync(parentDir, { recursive: true })
           }
           renameSync(backupPath, finalPath)
-          console.log(`ModelUpdateService: Backup wiederhergestellt: ${entry}`)
+          console.log(`UpdateCheckService: Backup wiederhergestellt: ${entry}`)
         } catch (err) {
           console.error(
-            `ModelUpdateService: Backup-Wiederherstellung fehlgeschlagen: ${entry}:`,
+            `UpdateCheckService: Backup-Wiederherstellung fehlgeschlagen: ${entry}:`,
             err
           )
         }
@@ -399,7 +432,7 @@ export function cleanupIncompleteUpdates(): void {
       rmSync(backupDir, { recursive: true })
     }
   } catch (err) {
-    console.error('ModelUpdateService: .backup/ cleanup fehlgeschlagen:', err)
+    console.error('UpdateCheckService: .backup/ cleanup fehlgeschlagen:', err)
   }
 }
 
@@ -431,6 +464,23 @@ export function migrateInstalledVersions(): void {
 
   if (migrated > 0) {
     settings.set('installedModelVersions', installedVersions)
-    console.log(`ModelUpdateService: ${migrated} bestehende Modelle migriert`)
+    console.log(`UpdateCheckService: ${migrated} bestehende Modelle migriert`)
   }
+}
+
+// ─── invalidateCachedAppUpdate ───────────────────────────────────────────────
+
+/**
+ * Called at startup: if the user installed a new version (via DMG), the cached
+ * "update available" status is no longer valid. Clear it so the sidebar doesn't
+ * show a stale update hint before the first background check completes.
+ */
+export function invalidateCachedAppUpdateIfNeeded(): void {
+  const settings = getSettings()
+  const cached = settings.get('cachedAppUpdateStatus')
+  if (!cached || !cached.available) return
+
+  // No way to compare without a fresh check — just clear the stale cache.
+  // The startup check will re-populate it shortly.
+  settings.set('cachedAppUpdateStatus', null)
 }

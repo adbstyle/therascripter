@@ -4,15 +4,16 @@ import {
   checkForUpdates,
   triggerUpdateRestart,
   executeUpdates
-} from '../services/ModelUpdateService'
+} from '../services/UpdateCheckService'
 import { getActiveSessionId } from './recording-handlers'
 import { getTaskQueue } from '../services/TaskQueueService'
 import { RestartUpdateSchema } from '../../shared/validation/model-update-schemas'
 
 export function registerModelUpdateHandlers(): void {
-  // Check for updates (returns list of available updates)
+  // Check for updates (returns list of available model updates)
   ipcMain.handle('modelUpdate:check', async () => {
-    return checkForUpdates()
+    const result = await checkForUpdates()
+    return result.modelUpdates
   })
 
   // Restart to apply updates — refuses if recording or processing is active

@@ -1,6 +1,10 @@
 import Store from 'electron-store'
 import type { ThemePreference } from '../../shared/types'
-import type { PendingModelUpdate, InstalledModelVersion } from '../../shared/types/ModelUpdate'
+import type {
+  PendingModelUpdate,
+  InstalledModelVersion,
+  AppUpdateStatus
+} from '../../shared/types/ModelUpdate'
 
 export interface AppSettings {
   activeModels: {
@@ -15,6 +19,7 @@ export interface AppSettings {
   theme: ThemePreference
   installedModelVersions: Record<string, InstalledModelVersion>
   pendingModelUpdates: PendingModelUpdate[] | null
+  cachedAppUpdateStatus: AppUpdateStatus | null
 }
 
 const defaults: AppSettings = {
@@ -29,7 +34,8 @@ const defaults: AppSettings = {
   modelsDownloaded: false,
   theme: 'system',
   installedModelVersions: {},
-  pendingModelUpdates: null
+  pendingModelUpdates: null,
+  cachedAppUpdateStatus: null
 }
 
 let store: Store<AppSettings> | null = null
