@@ -163,7 +163,7 @@ gh "${GH_ARGS[@]}"
 
 echo ""
 echo "→ Aktualisiere manifest.json mit latestAppVersion=$NEW_VERSION …"
-"$ROOT_DIR/scripts/publish-manifest.sh"
+"$ROOT_DIR/scripts/publish-manifest.sh" --app-version-only
 
 echo ""
 echo "✅ Release v$NEW_VERSION erfolgreich erstellt!"

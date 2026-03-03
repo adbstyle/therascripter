@@ -38,5 +38,6 @@ export const RestartUpdateSchema = z.object({
 // App update status (persisted in electron-store, validated on read)
 export const AppUpdateStatusSchema = z.object({
   available: z.boolean(),
+  latestVersion: z.string().nullable(),
   checkedAt: z.string().nullable()
 })

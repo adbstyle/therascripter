@@ -90,7 +90,7 @@ function fetchManifestJson(url: string): Promise<unknown> {
 
 // ─── checkForUpdates ─────────────────────────────────────────────────────────
 
-const NO_APP_UPDATE: AppUpdateStatus = { available: false, checkedAt: null }
+const NO_APP_UPDATE: AppUpdateStatus = { available: false, latestVersion: null, checkedAt: null }
 
 export async function checkForUpdates(): Promise<CheckResult> {
   try {
@@ -155,7 +155,7 @@ export async function checkForUpdates(): Promise<CheckResult> {
       latestVersion !== null && isNewerVersion(currentVersion, latestVersion)
     const checkedAt = new Date().toISOString()
 
-    const appUpdate: AppUpdateStatus = { available, checkedAt }
+    const appUpdate: AppUpdateStatus = { available, latestVersion, checkedAt }
 
     // Persist for offline reads via appUpdate:getStatus
     settings.set('cachedAppUpdateStatus', appUpdate)
@@ -471,16 +471,19 @@ export function migrateInstalledVersions(): void {
 // ─── invalidateCachedAppUpdate ───────────────────────────────────────────────
 
 /**
- * Called at startup: if the user installed a new version (via DMG), the cached
- * "update available" status is no longer valid. Clear it so the sidebar doesn't
- * show a stale update hint before the first background check completes.
+ * Called at startup: if the user installed the update (current version >= cached
+ * latestVersion), clear the stale "update available" cache. If the user has NOT
+ * upgraded, preserve the cache so the sidebar hint appears immediately.
  */
 export function invalidateCachedAppUpdateIfNeeded(): void {
   const settings = getSettings()
   const cached = settings.get('cachedAppUpdateStatus')
   if (!cached || !cached.available) return
 
-  // No way to compare without a fresh check — just clear the stale cache.
-  // The startup check will re-populate it shortly.
-  settings.set('cachedAppUpdateStatus', null)
+  const currentVersion = app.getVersion()
+  if (cached.latestVersion && !isNewerVersion(currentVersion, cached.latestVersion)) {
+    // User installed the update (or a newer version) — clear stale cache
+    settings.set('cachedAppUpdateStatus', null)
+  }
+  // Otherwise: update still pending, keep the cache so sidebar shows hint immediately
 }

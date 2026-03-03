@@ -77,7 +77,7 @@ scripts/publish-manifest.sh       # Generate manifest.json from r2-upload/ + upl
 
 **ConsentBanner:** Shown inside `RecordingView` on first recording — one-time reminder to obtain patient consent. State tracked via electron-store (`consentReminderShown`).
 
-**Model Update System (Iteration 17):** `ModelUpdateService` checks R2 manifest for newer model versions, downloads atomically into a staging directory, and swaps on restart. `model-update-handlers.ts` exposes `modelUpdate.check()`, `modelUpdate.getPending()`, `modelUpdate.apply()` IPC channels.
+**Update System (Iteration 17+18):** `UpdateCheckService` checks R2 manifest for newer model versions and app updates in a single fetch. Model updates download atomically into a staging directory and swap on restart. App updates show a non-blocking sidebar hint + About page button that opens GitHub Releases. `model-update-handlers.ts` exposes model update IPC channels; `app-update-handlers.ts` exposes `appUpdate.getStatus()`, `appUpdate.check()`, `appUpdate.openReleasePage()`. Cached app update status persisted in electron-store.
 
 **Key constraints:**
 - 8 GB minimum RAM budget (~5.2 GB peak during flair NER)
