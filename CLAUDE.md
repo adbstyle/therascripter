@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Shell Commands
+
+- Never put `#` comments inside Bash tool calls — write explanations as plain text before the tool call instead. Comments at the start of a command block break allow-list pattern matching.
+
 ## Project Summary
 
 Therascript is an Electron-based macOS desktop app for local therapy session transcription and anonymization. All processing happens on-device (no cloud). German + Swiss-German dialect support. Targets Apple Silicon Macs (M1-M4), macOS 14+.
