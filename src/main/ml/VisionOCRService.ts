@@ -12,6 +12,15 @@ import { buildPDFTranscript } from '../utils/pdf-transcript-builder'
 /** Timeout per OCR page in milliseconds */
 const PAGE_TIMEOUT_MS = 30_000
 
+/**
+ * Merge hyphenated line breaks produced by OCR (e.g. "Al-\ntersheim" → "Altersheim").
+ * Only joins when the character after the newline is lowercase — preserves real
+ * compound words like "Zürich-\nOerlikon" where uppercase follows.
+ */
+export function dehyphenateOCRText(text: string): string {
+  return text.replace(/([a-zäöüß])-\n([a-zäöüß])/g, '$1$2')
+}
+
 interface VisionOCROutput {
   text: string
   confidence: number
@@ -133,10 +142,10 @@ export class VisionOCRService implements TaskExecutor {
 
         try {
           const result = JSON.parse(stdout) as VisionOCROutput
-          resolve(result.text)
+          resolve(dehyphenateOCRText(result.text))
         } catch {
           // If JSON parsing fails, use raw stdout as text
-          resolve(stdout.trim())
+          resolve(dehyphenateOCRText(stdout.trim()))
         }
       })
     })
