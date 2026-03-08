@@ -28,6 +28,7 @@ export interface Session {
   createdAt: string
   updatedAt: string
   reviewAt: string | null
+  wordCount: number | null
 }
 
 export interface CreateSessionInput {
@@ -51,4 +52,5 @@ export interface UpdateSessionInput {
   entityMap?: EntityMap | null
   errorMessage?: string | null
   reviewAt?: string | null
+  wordCount?: number | null
 }

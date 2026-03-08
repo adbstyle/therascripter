@@ -13,6 +13,7 @@ import { mergeEntities } from './entity-merger'
 import { resolveCoreferences } from './coreference-resolver'
 import { buildEntityMap } from './entity-map-builder'
 import { buildTipTapDocument } from './tiptap-builder'
+import { countWords } from '../../shared/utils/countWords'
 import { resolvePythonSidecar } from './resolve-python'
 import { writeFileAtomic } from '../utils/file-ops'
 
@@ -28,7 +29,11 @@ export class AnonymizationService implements TaskExecutor {
     return join(getDataDir(), 'models', 'ner')
   }
 
-  async execute(task: Task, onProgress: (progress: number) => void, signal?: AbortSignal): Promise<void> {
+  async execute(
+    task: Task,
+    onProgress: (progress: number) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
     const db = getDatabase()
     const sessionService = new SessionService(db)
     const session = sessionService.getSession(task.sessionId)
@@ -100,9 +105,12 @@ export class AnonymizationService implements TaskExecutor {
     const anonymizedPath = sessionService.generateAnonymizedPath(task.sessionId)
     writeFileAtomic(anonymizedPath, JSON.stringify(tiptapDoc, null, 2))
 
+    const wordCount = countWords(tiptapDoc)
+
     sessionService.updateSession(task.sessionId, {
       anonymizedPath,
-      entityMap
+      entityMap,
+      wordCount
     })
 
     onProgress(1)

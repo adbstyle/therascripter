@@ -97,11 +97,14 @@ export function SessionCard({
         <p className="truncate text-sm font-medium text-text-primary">{session.title}</p>
         <div className="flex items-center gap-2">
           <span className={`text-xs font-medium ${statusConfig.color}`}>{statusLabel}</span>
+          {session.wordCount != null && session.status === 'review' && (
+            <span className="text-xs text-text-tertiary">
+              · {session.wordCount.toLocaleString('de-CH')} Wörter
+            </span>
+          )}
         </div>
         {session.status === 'error' && session.errorMessage && (
-          <p className="mt-0.5 line-clamp-3 text-xs text-text-tertiary">
-            {session.errorMessage}
-          </p>
+          <p className="mt-0.5 line-clamp-3 text-xs text-text-tertiary">{session.errorMessage}</p>
         )}
         {session.status === 'error' && onRetry && (
           <button

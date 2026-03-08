@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { EditorState, NodeSelection } from '@tiptap/pm/state'
 import StarterKit from '@tiptap/starter-kit'
@@ -20,6 +20,7 @@ import {
   extendSelectionAndExtractText
 } from '../utils/editorCommands'
 import { serializeDocument } from '../../../shared/utils/serializeDocument'
+import { countWords } from '../../../shared/utils/countWords'
 import type { EntityMap, PlaceholderType, ReviewData, SessionType } from '../../../shared/types'
 import type { TipTapDocument } from '../../../shared/types/TipTapDocument'
 import type { Editor } from '@tiptap/core'
@@ -414,6 +415,12 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     }
   }, [editor, sessionType, toast])
 
+  const liveWordCount = useMemo(
+    () => (editor && !loading ? countWords(editor.getJSON() as TipTapDocument) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [updateCounter, loading, editor]
+  )
+
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -501,10 +508,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           const el = e.currentTarget
           el.classList.add('is-scrolling')
           clearTimeout(scrollTimerRef.current)
-          scrollTimerRef.current = setTimeout(
-            () => el.classList.remove('is-scrolling'),
-            1500
-          )
+          scrollTimerRef.current = setTimeout(() => el.classList.remove('is-scrolling'), 1500)
         }}
       >
         <EditorContent editor={editor} />
@@ -563,6 +567,11 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
                 ? `Gespeichert ${formatTimeAgo(lastSavedAt)}`
                 : ''}
           </span>
+          {liveWordCount != null && (
+            <span className="text-xs text-text-tertiary">
+              {liveWordCount.toLocaleString('de-CH')} Wörter
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3 text-xs text-text-tertiary">
           <span>Cmd+Z Undo</span>
