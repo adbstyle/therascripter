@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { SessionService } from '../SessionService'
+import { applyTestSchema } from '../../db/__tests__/test-utils'
 
 vi.mock('electron', () => ({
   app: {
@@ -15,13 +14,6 @@ vi.mock('../../utils/file-ops', () => ({
   removeFile: (...args: unknown[]) => mockRemoveFile(...args)
 }))
 
-function applySchema(db: Database.Database): void {
-  const migrationsDir = join(__dirname, '..', '..', 'db', 'migrations')
-  db.exec(readFileSync(join(migrationsDir, '001-initial-schema.sql'), 'utf-8'))
-  db.exec(readFileSync(join(migrationsDir, '002-add-diarization-path.sql'), 'utf-8'))
-  db.exec(readFileSync(join(migrationsDir, '003-add-review-at.sql'), 'utf-8'))
-}
-
 describe('SessionService file cleanup', () => {
   let db: Database.Database
   let service: SessionService
@@ -29,7 +21,7 @@ describe('SessionService file cleanup', () => {
   beforeEach(() => {
     db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
-    applySchema(db)
+    applyTestSchema(db)
     service = new SessionService(db)
     mockRemoveFile.mockClear()
   })
@@ -54,14 +46,24 @@ describe('SessionService file cleanup', () => {
     expect(calledPaths).toContain('/mock/home/.therascript/transcripts/test.json')
   })
 
-  it('always attempts to delete convention-based paths (extracted, recovery)', () => {
+  it('always attempts to delete convention-based paths (recovery for audio)', () => {
     const session = service.createSession('Test', 'audio')
 
     service.deleteSession(session.id)
 
     const calledPaths = mockRemoveFile.mock.calls.map((c: unknown[]) => c[0] as string)
-    expect(calledPaths.some((p: string) => p.includes('extracted'))).toBe(true)
     expect(calledPaths.some((p: string) => p.includes('recovery'))).toBe(true)
+    // extracted fallback only applies to PDF sessions
+    expect(calledPaths.some((p: string) => p.includes('extracted'))).toBe(false)
+  })
+
+  it('deletes convention-based extracted path for PDF sessions without extractedPath in DB', () => {
+    const session = service.createSession('Test', 'pdf')
+
+    service.deleteSession(session.id)
+
+    const calledPaths = mockRemoveFile.mock.calls.map((c: unknown[]) => c[0] as string)
+    expect(calledPaths.some((p: string) => p.includes('extracted'))).toBe(true)
   })
 
   it('returns false for non-existent session', () => {

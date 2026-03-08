@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3'
 import { SessionService } from './SessionService'
 import type { EntityMap, SessionType } from '../../shared/types'
 import type { TipTapDocument } from '../../shared/types/TipTapDocument'
+import { countWords } from '../../shared/utils/countWords'
 
 export interface ReviewData {
   document: TipTapDocument
@@ -51,7 +52,8 @@ export class ReviewService {
     // Write TipTap document to filesystem
     writeFileSync(session.anonymizedPath, JSON.stringify(document, null, 2), 'utf-8')
 
-    // Update entity map in database
-    this.sessionService.updateSession(sessionId, { entityMap })
+    // Update entity map and word count in database
+    const wordCount = countWords(document)
+    this.sessionService.updateSession(sessionId, { entityMap, wordCount })
   }
 }

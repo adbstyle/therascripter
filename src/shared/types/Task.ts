@@ -6,7 +6,7 @@ export type TaskType =
   | 'ocr'
   | 'anonymization'
 
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed'
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
 
 export interface Task {
   id: string

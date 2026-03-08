@@ -1,21 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { SessionService } from '../SessionService'
+import { applyTestSchema } from '../../db/__tests__/test-utils'
 
 vi.mock('electron', () => ({
   app: {
     getPath: vi.fn(() => '/mock/home')
   }
 }))
-
-function applySchema(db: Database.Database): void {
-  const migrationsDir = join(__dirname, '..', '..', 'db', 'migrations')
-  db.exec(readFileSync(join(migrationsDir, '001-initial-schema.sql'), 'utf-8'))
-  db.exec(readFileSync(join(migrationsDir, '002-add-diarization-path.sql'), 'utf-8'))
-  db.exec(readFileSync(join(migrationsDir, '003-add-review-at.sql'), 'utf-8'))
-}
 
 describe('SessionService', () => {
   let db: Database.Database
@@ -24,7 +16,7 @@ describe('SessionService', () => {
   beforeEach(() => {
     db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
-    applySchema(db)
+    applyTestSchema(db)
     service = new SessionService(db)
   })
 
@@ -147,6 +139,16 @@ describe('SessionService', () => {
       expect(() => {
         service.updateSession('non-existent', { status: 'review' })
       }).toThrow('Session non-existent not found')
+    })
+
+    it('allows idempotent self-transition (same status → same status)', () => {
+      const session = service.createSession('Test', 'audio')
+      service.updateSession(session.id, { status: 'transcribing' })
+      service.updateSession(session.id, { status: 'diarizing' })
+
+      // diarizing → diarizing should not throw (alignment task triggers this)
+      const updated = service.updateSession(session.id, { status: 'diarizing' })
+      expect(updated?.status).toBe('diarizing')
     })
   })
 

@@ -1,23 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { TaskQueueService } from '../TaskQueueService'
 import { SessionRepository } from '../../db/repositories/SessionRepository'
 import { TaskRepository } from '../../db/repositories/TaskRepository'
 import type { TaskExecutor } from '../task-executors'
+import { applyTestSchema } from '../../db/__tests__/test-utils'
 
 // Mock sendToRenderer since BrowserWindow is not available in tests
 vi.mock('../../utils/ipc-helpers', () => ({
   sendToRenderer: vi.fn()
 }))
-
-function applySchema(db: Database.Database): void {
-  const migrationsDir = join(__dirname, '..', '..', 'db', 'migrations')
-  db.exec(readFileSync(join(migrationsDir, '001-initial-schema.sql'), 'utf-8'))
-  db.exec(readFileSync(join(migrationsDir, '002-add-diarization-path.sql'), 'utf-8'))
-  db.exec(readFileSync(join(migrationsDir, '003-add-review-at.sql'), 'utf-8'))
-}
 
 describe('TaskQueueService', () => {
   let db: Database.Database
@@ -30,7 +22,7 @@ describe('TaskQueueService', () => {
     vi.clearAllMocks()
     db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
-    applySchema(db)
+    applyTestSchema(db)
 
     queue = new TaskQueueService(db)
     sessionRepo = new SessionRepository(db)
@@ -229,6 +221,129 @@ describe('TaskQueueService', () => {
 
       expect(progressCalls.length).toBeGreaterThan(0)
       expect(completedCalls).toHaveLength(4)
+    })
+  })
+
+  describe('task cancellation on failure', () => {
+    it('cancels remaining pending tasks when a task fails', async () => {
+      const failingExecutor: TaskExecutor = {
+        async execute() {
+          throw new Error('Transcription failed')
+        }
+      }
+
+      queue.registerExecutor('transcription', failingExecutor)
+
+      queue.enqueuePipeline(sessionId, 'audio')
+
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
+      const tasks = queue.getSessionTasks(sessionId)
+      const failed = tasks.filter((t) => t.status === 'failed')
+      const cancelled = tasks.filter((t) => t.status === 'cancelled')
+
+      expect(failed).toHaveLength(1)
+      expect(failed[0].type).toBe('transcription')
+      expect(cancelled).toHaveLength(3) // diarization, alignment, anonymization
+    })
+
+    it('does not execute cancelled tasks', async () => {
+      const executionOrder: string[] = []
+
+      const failingTranscription: TaskExecutor = {
+        async execute() {
+          executionOrder.push('transcription')
+          throw new Error('fail')
+        }
+      }
+
+      const trackingExecutor: TaskExecutor = {
+        async execute(task) {
+          executionOrder.push(task.type)
+        }
+      }
+
+      queue.registerExecutor('transcription', failingTranscription)
+      queue.registerExecutor('diarization', trackingExecutor)
+      queue.registerExecutor('alignment', trackingExecutor)
+      queue.registerExecutor('anonymization', trackingExecutor)
+
+      queue.enqueuePipeline(sessionId, 'audio')
+
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      // Only transcription should have executed — the rest were cancelled
+      expect(executionOrder).toEqual(['transcription'])
+    })
+  })
+
+  describe('multi-session processing', () => {
+    it('processes second session after first completes', async () => {
+      const session2 = sessionRepo.create({
+        title: 'Session 2',
+        type: 'audio',
+        status: 'transcribing'
+      })
+
+      const executionOrder: string[] = []
+
+      const trackingExecutor: TaskExecutor = {
+        async execute(task, onProgress) {
+          executionOrder.push(`${task.sessionId.slice(0, 8)}:${task.type}`)
+          onProgress(1)
+        }
+      }
+
+      queue.registerExecutor('transcription', trackingExecutor)
+      queue.registerExecutor('diarization', trackingExecutor)
+      queue.registerExecutor('alignment', trackingExecutor)
+      queue.registerExecutor('anonymization', trackingExecutor)
+
+      queue.enqueuePipeline(sessionId, 'audio')
+      queue.enqueuePipeline(session2.id, 'audio')
+
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
+      // Both sessions should reach review
+      const s1 = sessionRepo.findById(sessionId)
+      const s2 = sessionRepo.findById(session2.id)
+      expect(s1?.status).toBe('review')
+      expect(s2?.status).toBe('review')
+
+      // All 8 tasks should have executed
+      expect(executionOrder).toHaveLength(8)
+    })
+
+    it('second session still processes when first fails', async () => {
+      const session2 = sessionRepo.create({
+        title: 'Session 2',
+        type: 'audio',
+        status: 'transcribing'
+      })
+
+      const failOnFirst: TaskExecutor = {
+        async execute(task, onProgress) {
+          if (task.sessionId === sessionId && task.type === 'transcription') {
+            throw new Error('fail')
+          }
+          onProgress(1)
+        }
+      }
+
+      queue.registerExecutor('transcription', failOnFirst)
+      queue.registerExecutor('diarization', failOnFirst)
+      queue.registerExecutor('alignment', failOnFirst)
+      queue.registerExecutor('anonymization', failOnFirst)
+
+      queue.enqueuePipeline(sessionId, 'audio')
+      queue.enqueuePipeline(session2.id, 'audio')
+
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
+      const s1 = sessionRepo.findById(sessionId)
+      const s2 = sessionRepo.findById(session2.id)
+      expect(s1?.status).toBe('error')
+      expect(s2?.status).toBe('review')
     })
   })
 

@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { SessionService } from '../../services/SessionService'
+import { applyTestSchema } from '../../db/__tests__/test-utils'
 
 vi.mock('electron', () => ({
   ipcMain: {
@@ -13,14 +12,6 @@ vi.mock('electron', () => ({
   }
 }))
 
-function applySchema(db: Database.Database): void {
-  const sql = readFileSync(
-    join(__dirname, '..', '..', 'db', 'migrations', '001-initial-schema.sql'),
-    'utf-8'
-  )
-  db.exec(sql)
-}
-
 describe('session IPC handlers (integration via SessionService)', () => {
   let db: Database.Database
   let service: SessionService
@@ -28,7 +19,7 @@ describe('session IPC handlers (integration via SessionService)', () => {
   beforeEach(() => {
     db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
-    applySchema(db)
+    applyTestSchema(db)
     service = new SessionService(db)
   })
 

@@ -1,6 +1,6 @@
-import { writeFileSync } from 'fs'
 import type { PageData } from '../../shared/types/PDFTypes'
 import type { SessionService } from '../services/SessionService'
+import { writeFileAtomic } from './file-ops'
 
 export function buildPDFTranscript(
   sessionId: string,
@@ -35,6 +35,6 @@ export function buildPDFTranscript(
   }
 
   const transcriptPath = sessionService.generateTranscriptPath(sessionId)
-  writeFileSync(transcriptPath, JSON.stringify(transcriptData, null, 2))
+  writeFileAtomic(transcriptPath, JSON.stringify(transcriptData, null, 2))
   return transcriptPath
 }

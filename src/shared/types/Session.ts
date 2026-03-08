@@ -20,12 +20,15 @@ export interface Session {
   transcriptPath: string | null
   anonymizedPath: string | null
   diarizationPath: string | null
+  alignedTranscriptPath: string | null
   pdfPath: string | null
+  extractedPath: string | null
   entityMap: EntityMap | null
   errorMessage: string | null
   createdAt: string
   updatedAt: string
   reviewAt: string | null
+  wordCount: number | null
 }
 
 export interface CreateSessionInput {
@@ -43,8 +46,11 @@ export interface UpdateSessionInput {
   transcriptPath?: string | null
   anonymizedPath?: string | null
   diarizationPath?: string | null
+  alignedTranscriptPath?: string | null
   pdfPath?: string | null
+  extractedPath?: string | null
   entityMap?: EntityMap | null
   errorMessage?: string | null
   reviewAt?: string | null
+  wordCount?: number | null
 }

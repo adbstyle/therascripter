@@ -1,14 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { TaskRepository } from '../repositories/TaskRepository'
 import { SessionRepository } from '../repositories/SessionRepository'
-
-function applySchema(db: Database.Database): void {
-  const sql = readFileSync(join(__dirname, '..', 'migrations', '001-initial-schema.sql'), 'utf-8')
-  db.exec(sql)
-}
+import { applyTestSchema } from './test-utils'
 
 describe('TaskRepository', () => {
   let db: Database.Database
@@ -19,7 +13,7 @@ describe('TaskRepository', () => {
   beforeEach(() => {
     db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
-    applySchema(db)
+    applyTestSchema(db)
     taskRepo = new TaskRepository(db)
     sessionRepo = new SessionRepository(db)
 

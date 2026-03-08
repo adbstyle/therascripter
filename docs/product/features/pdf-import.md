@@ -2,76 +2,86 @@
 
 ## Overview
 
-Therascript supports importing PDF documents for anonymization. Users can bring in existing therapy reports, referral letters, or other documents containing personal data. The imported PDF is copied into the app's local data directory, a session is created, and the document passes through a three-stage pipeline: text extraction, OCR (if needed), and NER-based anonymization. The original file is never modified.
+Therascript can anonymize existing PDF documents (e.g. reports, referrals, discharge letters). Users import PDFs via drag-and-drop onto the session dashboard or through a file picker button. The original file is never modified -- a copy is stored in `~/.therascript/pdf/` and processed through a three-stage pipeline: text extraction, optional OCR for scanned pages, and NER-based anonymization.
 
 ## Import Methods
 
 ### Drag-and-Drop
 
-Users can drag one or more PDF files directly onto the session dashboard (`SessionDashboard`). The component listens for `dragOver`, `dragLeave`, and `drop` events across the entire dashboard area, including the empty state. During a drag-over, a visual overlay appears with the prompt "PDF hier ablegen". On drop, the renderer extracts native file paths via `webUtils.getPathForFile()` (Electron preload bridge), filters for `.pdf` extensions, and sends them to the main process through the `import:pdf` IPC channel.
+The `SessionDashboard` component registers drag-and-drop handlers on its root container. When the user drags files over the dashboard, a visual overlay appears ("PDF hier ablegen" with a dashed border and highlighted background). On drop, the component filters for `.pdf` files, resolves native file paths via `webUtils.getPathForFile()`, and calls `window.api.import.pdf(pdfPaths)`. Non-PDF files in the drop are silently ignored.
 
 ### File Picker Button
 
-The "PDF importieren" button in the app header triggers a native macOS open-file dialog (`dialog.showOpenDialog`) with multi-selection enabled and a PDF file-type filter. The dialog is invoked through the `import:showPDFDialog` IPC channel. Selected file paths are then passed to the same `import:pdf` handler used by drag-and-drop.
+The header bar contains an import button that triggers `handleImportPDF()` in `App.tsx`. This calls `window.api.import.showPDFDialog()`, which opens a native macOS file dialog (`dialog.showOpenDialog`) configured for multi-selection with a `.pdf` file filter. The dialog title reads "PDF-Dokumente zum Anonymisieren auswahlen". If the user cancels, an empty array is returned and no session is created.
 
-Both methods are guarded by an `isImporting` flag that prevents concurrent imports.
+Both methods set an `isImporting` flag that prevents concurrent imports. The flag is cleared in a `finally` block so it resets even if the import fails.
 
-## File Handling
+## File Handling and Session Creation
 
-When the main process receives file paths via `import:pdf`:
+For each selected file, the `import:pdf` IPC handler in `pdf-handlers.ts` performs these steps:
 
-1. **Validation** -- Each path is checked for existence (`existsSync`) and `.pdf` extension. Non-PDF files and missing files raise an error immediately.
-2. **Session creation** -- A new session is created with `type: 'pdf'` and a title derived from the filename (via `generatePDFTitle`). If the filename is empty or "document", a fallback title with the current date/time is used (e.g. "PDF 08.03.2026 14:30").
-3. **File copy** -- The PDF is copied to `~/.therascript/pdf/<sessionId>.pdf` using `copyFileSync`. The session UUID ensures uniqueness -- the same source file can be imported multiple times, each producing an independent session.
-4. **Session update** -- The `pdfPath` field on the session record is set to the copied file's location.
-5. **Pipeline enqueue** -- The PDF processing pipeline (`extraction` -> `ocr` -> `anonymization`) is enqueued in the task queue.
+1. **Validation** -- Checks that the file exists on disk and has a `.pdf` extension. Throws a German-language error if either check fails.
+2. **Session creation** -- Calls `SessionService.createSession(title, 'pdf')`, which inserts a new session with status `extracting` (audio sessions start as `recording`). The session title is derived from the PDF filename; if the name is empty or literally "document", a timestamp-based fallback is used (`PDF DD.MM.YYYY HH:MM`).
+3. **File copy** -- Copies the source file to `~/.therascript/pdf/<sessionId>.pdf` using `copyFileSync`. The original file is never moved or modified.
+4. **Path storage** -- Updates the session record with the `pdfPath` pointing to the copied file.
+5. **Pipeline enqueue** -- Calls `taskQueue.enqueuePipeline(sessionId, 'pdf')` to schedule the three processing tasks.
+6. **Session list refresh** -- After all files are imported, the renderer refreshes the session list.
 
 ### Copy Failure Rollback
 
-If the file copy fails (e.g. the source is on a disconnected network share), the handler performs a rollback:
+If `copyFileSync` fails (e.g. source is on an ejected volume, permission denied, disk full), the handler rolls back immediately:
 
-- The newly created session is deleted from the database via `sessionService.deleteSession()`.
-- Any partial file at the target path is removed (`unlinkSync`).
-- An error is thrown with the German message: "PDF konnte nicht kopiert werden. Bitte stellen Sie sicher, dass die Datei lokal verfügbar ist."
+- Deletes the just-created session via `sessionService.deleteSession(session.id)`.
+- Attempts to remove any partial file at the target path (`unlinkSync`, errors silently ignored).
+- Throws an error with the message: "PDF konnte nicht kopiert werden. Bitte stellen Sie sicher, dass die Datei lokal verfugbar ist." followed by the filename and system error.
 
 ### Orphaned Session Recovery
 
 Sessions that get stuck in a processing state (e.g. `extracting`, `anonymizing`) with no pending or running tasks are detected at app startup by `recoverOrphanedSessions()`. These sessions are marked with status `error` and the message "Verarbeitung wurde unerwartet abgebrochen."
 
+## Duplicate Detection
+
+The current implementation does not perform explicit duplicate detection based on file content or path. Each import creates a new session with a unique ID and a fresh copy of the PDF. Importing the same file twice results in two independent sessions.
+
 ## PDF Processing Pipeline
 
-The task queue runs three sequential steps for PDF sessions, defined as `['extraction', 'ocr', 'anonymization']`.
+The `TaskQueueService` defines the PDF pipeline as three sequential tasks: `extraction`, `ocr`, `anonymization`. Each task runs to completion before the next begins.
 
-### Step 1: Text Extraction (`PDFExtractionExecutor`)
+### Stage 1: Text Extraction (`PDFExtractionExecutor`)
 
-Uses `pdfjs-dist` (legacy build for ESM compatibility) to extract text from each page.
+Uses `pdfjs-dist` (legacy build for Node.js compatibility) with `standardFontDataUrl` configured for correct font rendering. For each page:
 
-- Loads the PDF from the copied file at `~/.therascript/pdf/<sessionId>.pdf`.
-- Configures `standardFontDataUrl` pointing to pdfjs-dist's bundled font data for correct text rendering.
-- For each page, extracts text content items and joins them into a single string (whitespace-normalized).
-- Classifies each page as `'text'` or `'scanned'` based on a 50-character threshold (`TEXT_PAGE_THRESHOLD`). Pages with fewer than 50 characters of extractable text are considered scanned/image-based.
-- Saves the extraction result (per-page data + PDF metadata like title and author) as JSON to `~/.therascript/extracted/<sessionId>.json`.
-- If all pages are text (no scanned pages), the transcript is built immediately and the session's `transcriptPath` is set. This allows the OCR step to skip quickly.
+1. Extracts text content via `page.getTextContent()`.
+2. Joins all text items, normalizes whitespace.
+3. Classifies the page as `text` (extracted text longer than 50 characters) or `scanned` (50 characters or fewer).
 
-**Password-protected PDFs:** If pdfjs-dist throws an error containing "password" or "encrypted", a specific German error is raised: "Passwortgeschutzte PDFs werden nicht unterstutzt." Password-protected documents are not supported.
+The extraction result (per-page text, content type, and PDF metadata like title/author) is saved to `~/.therascript/extracted/<sessionId>.json`.
+
+**Optimization**: If all pages are classified as `text` (no scanned pages), the transcript is built immediately and the OCR stage will skip.
 
 **Empty PDFs:** Documents with zero pages raise: "Das PDF-Dokument ist leer (0 Seiten)."
 
-### Step 2: Vision OCR (`VisionOCRService`)
+### Stage 2: Vision OCR (`VisionOCRService`)
 
-Runs Apple Vision framework OCR on scanned pages only.
+Runs only on pages classified as `scanned` in stage 1. If there are no scanned pages, the executor returns immediately (progress jumps to 100%).
 
-- Loads the extraction JSON produced by step 1.
-- Filters for pages with `contentType: 'scanned'`.
-- If there are no scanned pages, the step completes immediately (transcript was already built during extraction).
-- For each scanned page, spawns the `vision-ocr` Swift CLI helper (located at `resources/bin/vision-ocr`) as a subprocess via `nice -n 10` (low CPU priority).
-- The CLI receives `--pdf <path> --page <number>` arguments and returns JSON with the OCR text, confidence, and detected language.
-- Each page has a 30-second timeout (`PAGE_TIMEOUT_MS`). If exceeded, the process is killed with SIGTERM.
-- After all scanned pages are processed, the extraction data is updated with OCR text and a transcript is built combining text-extracted and OCR'd pages. The `ocrEngine` is recorded as `'apple-vision-ocr'` (vs. `'pdfjs-dist'` for text-only documents).
+For each scanned page:
 
-### Step 3: Anonymization
+1. Invokes the `vision-ocr` Swift CLI binary (built by `scripts/setup-vision-ocr.sh`) as a subprocess via `nice -n 10` (low CPU priority).
+2. Passes `--pdf <path> --page <number>` arguments.
+3. Parses JSON output containing `text`, `confidence`, `language`, and `pageNumber`.
+4. Updates the extraction data with the OCR text for that page.
+5. Each page has a 30-second timeout (`PAGE_TIMEOUT_MS`); on timeout, the process is killed and the task fails.
 
-The same NER anonymization pipeline used for audio transcripts processes the PDF transcript. This step uses flair NER, regex patterns, and the user's blocklist (Sperrliste) to detect and replace personal data with typed placeholders (e.g. `[PERSON 1]`, `[ORT 1]`).
+After all scanned pages are processed, the combined transcript (text extraction + OCR results) is built and stored.
+
+### Stage 3: Anonymization
+
+The same NER anonymization pipeline used for audio sessions runs on the PDF transcript. This uses flair NER + regex patterns + blocklist (Sperrliste) to detect and replace personal data with numbered placeholders (e.g. `[PERSON 1]`, `[ORT 1]`). The result is a TipTap document opened in the Review Editor.
+
+## Password-Protected PDFs
+
+Not supported. When `pdfjs-dist` encounters an encrypted/password-protected PDF, the error message is detected (checking for "password" or "encrypted" in the error string) and a clear German-language error is thrown: "Passwortgeschutzte PDFs werden nicht unterstutzt."
 
 ## PDF Session vs. Audio Session
 
@@ -86,21 +96,35 @@ The same NER anonymization pipeline used for audio transcripts processes the PDF
 
 ## Progress Reporting
 
-Each pipeline step reports progress to the UI through the task queue's callback mechanism:
+Each pipeline stage reports progress to the UI through the same mechanism used by audio processing:
 
 1. The executor calls `onProgress(value)` with a float between 0 and 1.
-2. `TaskQueueService` persists the progress to the database and sends a `task:progress` IPC event to the renderer with the session ID, task type, and progress value.
-3. On completion, a `task:completed` event is sent. On failure, `task:error` carries the error message.
+2. `TaskQueueService` persists the progress in the database and sends a `task:progress` IPC event to the renderer with `{ sessionId, taskType, progress }`.
+3. The renderer receives progress updates via the `useTaskProgress` hook, which updates the `SessionCard` display.
 
-Progress distribution within the extraction step: 5% for PDF loading, then 85% spread linearly across pages, with the final 10% for saving results. The OCR step allocates 5% upfront and 90% across scanned pages.
+Progress distribution by stage:
+
+| Stage | Progress Range | Granularity |
+|---|---|---|
+| Extraction | 0.05 -- 1.0 | Per page (`0.1 + (page/total) * 0.85`) |
+| OCR | 0.05 -- 0.95 | Per scanned page |
+| Anonymization | Reported by NER executor | Per pipeline phase |
+
+## Session Status Transitions (PDF)
+
+```
+extracting -> anonymizing -> review
+```
+
+The `extraction` and `ocr` task completions both map to session status `anonymizing` (via `TASK_TO_SESSION_STATUS`). The `anonymization` task completion transitions the session to `review`, at which point the user can open the Review Editor to inspect and adjust the anonymized document.
 
 ## Key Source Files
 
 | File | Role |
 |---|---|
-| `src/main/ipc/pdf-handlers.ts` | IPC handlers for `import:pdf` and `import:showPDFDialog` |
-| `src/main/services/PDFExtractionExecutor.ts` | pdfjs-dist text extraction task executor |
-| `src/main/ml/VisionOCRService.ts` | Apple Vision OCR task executor for scanned pages |
-| `src/renderer/src/components/SessionDashboard.tsx` | Drag-and-drop UI + session list |
-| `src/renderer/src/App.tsx` | Header "PDF importieren" button + file picker flow |
-| `src/main/services/TaskQueueService.ts` | Pipeline orchestration and progress dispatch |
+| `src/main/ipc/pdf-handlers.ts` | IPC handlers for import and file dialog |
+| `src/main/services/PDFExtractionExecutor.ts` | Stage 1: pdfjs-dist text extraction |
+| `src/main/ml/VisionOCRService.ts` | Stage 2: Apple Vision OCR for scanned pages |
+| `src/main/services/TaskQueueService.ts` | Pipeline definition and task orchestration |
+| `src/renderer/src/components/SessionDashboard.tsx` | Drag-and-drop UI |
+| `src/renderer/src/App.tsx` | File picker button handler |

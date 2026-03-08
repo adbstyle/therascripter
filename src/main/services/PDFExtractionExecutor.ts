@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { createRequire } from 'module'
 import { dirname, join } from 'path'
 import type { Task } from '../../shared/types'
@@ -7,12 +7,13 @@ import type { TaskExecutor } from './task-executors'
 import { SessionService } from './SessionService'
 import { getDatabase, getDataDir } from '../db/connection'
 import { buildPDFTranscript } from '../utils/pdf-transcript-builder'
+import { writeFileAtomic } from '../utils/file-ops'
 
 /** Minimum characters on a page to consider it a text page (not scanned) */
 const TEXT_PAGE_THRESHOLD = 50
 
 export class PDFExtractionExecutor implements TaskExecutor {
-  async execute(task: Task, onProgress: (progress: number) => void): Promise<void> {
+  async execute(task: Task, onProgress: (progress: number) => void, _signal?: AbortSignal): Promise<void> {
     const db = getDatabase()
     const sessionService = new SessionService(db)
     const session = sessionService.getSession(task.sessionId)
@@ -90,9 +91,10 @@ export class PDFExtractionExecutor implements TaskExecutor {
       }
     }
 
-    const extractedDir = join(getDataDir(), 'extracted')
-    const extractedPath = join(extractedDir, `${task.sessionId}.json`)
-    writeFileSync(extractedPath, JSON.stringify(extractionResult, null, 2))
+    const extractedPath = join(getDataDir(), 'extracted', `${task.sessionId}.json`)
+    writeFileAtomic(extractedPath, JSON.stringify(extractionResult, null, 2))
+
+    sessionService.updateSession(task.sessionId, { extractedPath })
 
     // If all pages have text (no scanned pages), build the transcript directly
     // so the OCR step can skip quickly

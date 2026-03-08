@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Therascript is an Electron-based macOS desktop app for local therapy session transcription and anonymization. All processing happens on-device (no cloud). German + Swiss-German dialect support. Targets Apple Silicon Macs (M1-M4), macOS 14+.
 
-Key documents: `requirements.md` (user stories, NFRs, decisions), `specification.md` (architecture, ML pipeline, data model), `implementation-plan.md` (iteration roadmap), `wireframes.md` (24 screens + UX flows).
+Key docs: `docs/product/` (living product documentation — architecture, features, operations, ADRs). Historical planning docs archived in `docs/archive/`.
 
 ## Commands
 

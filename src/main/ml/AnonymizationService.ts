@@ -1,5 +1,5 @@
 import { spawn } from 'child_process'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
 import type { Task, TranscriptData } from '../../shared/types'
@@ -13,7 +13,9 @@ import { mergeEntities } from './entity-merger'
 import { resolveCoreferences } from './coreference-resolver'
 import { buildEntityMap } from './entity-map-builder'
 import { buildTipTapDocument } from './tiptap-builder'
+import { countWords } from '../../shared/utils/countWords'
 import { resolvePythonSidecar } from './resolve-python'
+import { writeFileAtomic } from '../utils/file-ops'
 
 // Progress line format: "[PROGRESS] 42"
 const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
@@ -27,22 +29,27 @@ export class AnonymizationService implements TaskExecutor {
     return join(getDataDir(), 'models', 'ner')
   }
 
-  async execute(task: Task, onProgress: (progress: number) => void): Promise<void> {
+  async execute(
+    task: Task,
+    onProgress: (progress: number) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
     const db = getDatabase()
     const sessionService = new SessionService(db)
     const session = sessionService.getSession(task.sessionId)
 
-    if (!session?.transcriptPath) {
+    const transcriptSource = session?.alignedTranscriptPath ?? session?.transcriptPath
+    if (!transcriptSource) {
       throw new Error(`Session ${task.sessionId} hat keinen Transkript-Pfad`)
     }
-    if (!existsSync(session.transcriptPath)) {
-      throw new Error(`Transkript nicht gefunden: ${session.transcriptPath}`)
+    if (!existsSync(transcriptSource)) {
+      throw new Error(`Transkript nicht gefunden: ${transcriptSource}`)
     }
 
     onProgress(0.02)
 
-    // 1. Load transcript
-    const transcript = JSON.parse(readFileSync(session.transcriptPath, 'utf-8')) as TranscriptData
+    // 1. Load transcript (prefer aligned version with speaker labels)
+    const transcript = JSON.parse(readFileSync(transcriptSource, 'utf-8')) as TranscriptData
 
     if (!transcript.segments || transcript.segments.length === 0) {
       throw new Error('Transkript enthält keine Segmente für die Anonymisierung')
@@ -51,8 +58,10 @@ export class AnonymizationService implements TaskExecutor {
     onProgress(0.05)
 
     // 2. Run Python NER sidecar (0.05 → 0.50)
-    const nerEntities = await this.runNerSidecar(session.transcriptPath, (nerProgress) =>
-      onProgress(0.05 + nerProgress * 0.45)
+    const nerEntities = await this.runNerSidecar(
+      transcriptSource,
+      (nerProgress) => onProgress(0.05 + nerProgress * 0.45),
+      signal
     )
 
     onProgress(0.5)
@@ -94,11 +103,14 @@ export class AnonymizationService implements TaskExecutor {
 
     // 10. Save results
     const anonymizedPath = sessionService.generateAnonymizedPath(task.sessionId)
-    writeFileSync(anonymizedPath, JSON.stringify(tiptapDoc, null, 2))
+    writeFileAtomic(anonymizedPath, JSON.stringify(tiptapDoc, null, 2))
+
+    const wordCount = countWords(tiptapDoc)
 
     sessionService.updateSession(task.sessionId, {
       anonymizedPath,
-      entityMap
+      entityMap,
+      wordCount
     })
 
     onProgress(1)
@@ -106,7 +118,8 @@ export class AnonymizationService implements TaskExecutor {
 
   private runNerSidecar(
     transcriptPath: string,
-    onProgress: (progress: number) => void
+    onProgress: (progress: number) => void,
+    signal?: AbortSignal
   ): Promise<NerServiceOutput['entities']> {
     return new Promise((resolve, reject) => {
       const { bin, args: prefixArgs } = this.getCommand()
@@ -131,15 +144,35 @@ export class AnonymizationService implements TaskExecutor {
 
       let stdout = ''
       let stderr = ''
+      let settled = false
+      let killTimer: ReturnType<typeof setTimeout> | null = null
 
       // Timeout: 5 minutes should be plenty for NER (<30s typically)
       const timeoutMs = 300_000
       const timeout = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort)
         proc.kill('SIGTERM')
+        settled = true
         reject(
           new Error(`NER-Verarbeitung abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`)
         )
       }, timeoutMs)
+
+      // Watchdog abort: SIGTERM → 5s grace → SIGKILL
+      const onAbort = (): void => {
+        clearTimeout(timeout)
+        proc.kill('SIGTERM')
+        killTimer = setTimeout(() => {
+          try {
+            proc.kill('SIGKILL')
+          } catch {
+            /* already dead */
+          }
+        }, 5_000)
+        settled = true
+        reject(new Error('Verarbeitung reagiert nicht mehr'))
+      }
+      signal?.addEventListener('abort', onAbort, { once: true })
 
       proc.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString()
@@ -158,6 +191,10 @@ export class AnonymizationService implements TaskExecutor {
 
       proc.on('error', (error) => {
         clearTimeout(timeout)
+        if (killTimer) clearTimeout(killTimer)
+        signal?.removeEventListener('abort', onAbort)
+        if (settled) return
+        settled = true
         if (error.message.includes('ENOENT')) {
           const msg = app.isPackaged
             ? `NER-Binary nicht ausführbar: ${bin}. Bitte prüfen Sie die Installation.`
@@ -170,6 +207,10 @@ export class AnonymizationService implements TaskExecutor {
 
       proc.on('close', (code) => {
         clearTimeout(timeout)
+        if (killTimer) clearTimeout(killTimer)
+        signal?.removeEventListener('abort', onAbort)
+
+        if (settled) return
 
         if (code !== 0) {
           const errorLines = stderr
