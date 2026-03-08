@@ -6,7 +6,8 @@ import { ProcessWatchdog } from './ProcessWatchdog'
 import type { TaskExecutor } from './task-executors'
 import { createStubExecutors } from './task-executors'
 import { sendToRenderer } from '../utils/ipc-helpers'
-import type { Task, TaskType, SessionStatus, SessionType } from '../../shared/types'
+import { validateIntermediateFile } from '../utils/file-ops'
+import type { Task, TaskType, Session, SessionStatus, SessionType } from '../../shared/types'
 
 const AUDIO_PIPELINE: TaskType[] = ['transcription', 'diarization', 'alignment', 'anonymization']
 const PDF_PIPELINE: TaskType[] = ['extraction', 'ocr', 'anonymization']
@@ -59,6 +60,71 @@ export class TaskQueueService {
 
   getSessionTasks(sessionId: string): Task[] {
     return this.repository.findBySession(sessionId)
+  }
+
+  retrySession(sessionId: string): void {
+    const session = this.sessionService.getSession(sessionId)
+    if (!session) throw new Error(`Session ${sessionId} nicht gefunden`)
+    if (session.status !== 'error') throw new Error(`Session ${sessionId} ist nicht im Fehlerstatus`)
+
+    const pipeline = session.type === 'audio' ? AUDIO_PIPELINE : PDF_PIPELINE
+    const resumeIndex = this.findResumeIndex(session, pipeline)
+
+    // Remove all non-completed task rows (failed + cancelled)
+    const deleted = this.repository.deleteNonCompletedForSession(sessionId)
+    if (deleted > 0) {
+      console.log(`[TaskQueue] Deleted ${deleted} non-completed tasks for session ${sessionId}`)
+    }
+
+    // Create pending tasks for remaining pipeline steps
+    const remainingSteps = pipeline.slice(resumeIndex)
+    for (const type of remainingSteps) {
+      this.repository.create({ sessionId, type })
+    }
+
+    // Transition session: error → first pending task's processing status
+    const firstStatus = this.getSessionStatusForTask(remainingSteps[0])
+    this.sessionService.updateSession(sessionId, {
+      status: firstStatus ?? 'transcribing',
+      errorMessage: null
+    })
+
+    console.log(
+      `[TaskQueue] Retrying session ${sessionId} from step ${remainingSteps[0]} ` +
+        `(skipping ${resumeIndex} completed step(s))`
+    )
+
+    this.scheduleNext()
+  }
+
+  private findResumeIndex(session: Session, pipeline: TaskType[]): number {
+    // Maps each task type to the session field that proves it completed successfully
+    const outputField: Partial<Record<TaskType, string | null>> = {
+      transcription: session.transcriptPath,
+      diarization: session.diarizationPath,
+      alignment: session.alignedTranscriptPath,
+      extraction: session.extractedPath,
+      anonymization: session.anonymizedPath
+    }
+
+    for (let i = 0; i < pipeline.length; i++) {
+      const taskType = pipeline[i]
+
+      // OCR has no separate output file — always re-run if reached
+      if (taskType === 'ocr') return i
+
+      const filePath = outputField[taskType]
+      if (!filePath) return i
+
+      const result = validateIntermediateFile(filePath)
+      if (!result.ok) {
+        console.warn(`[TaskQueue] Resume validation failed for ${taskType}: ${result.error}`)
+        return i
+      }
+    }
+
+    // All steps have valid output — restart from last step (anonymization)
+    return pipeline.length - 1
   }
 
   recoverStuckTasks(): number {

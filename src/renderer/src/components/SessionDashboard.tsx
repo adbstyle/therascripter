@@ -1,10 +1,17 @@
-import { useCallback, useEffect, useState } from 'react'
-import type { Session } from '../../../shared/types'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { Session, SessionStatus } from '../../../shared/types'
 import { useSessions } from '../hooks/useSessions'
 import { groupSessionsByTime, GROUP_ORDER } from '../utils/groupSessionsByTime'
 import { SessionCard } from './SessionCard'
 import { ConfirmDialog } from './ConfirmDialog'
 import { RenameDialog } from './RenameDialog'
+
+const PROCESSING_STATUSES: SessionStatus[] = [
+  'transcribing',
+  'diarizing',
+  'extracting',
+  'anonymizing'
+]
 
 interface SessionDashboardProps {
   refreshTrigger?: number
@@ -23,6 +30,12 @@ export default function SessionDashboard({
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
   const [renameTarget, setRenameTarget] = useState<Session | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
+
+  // Derive processing state from sessions list (avoids race with brief isProcessing=false between tasks)
+  const isAnyProcessing = useMemo(
+    () => sessions.some((s) => PROCESSING_STATUSES.includes(s.status)),
+    [sessions]
+  )
 
   // Refresh sessions when parent triggers (e.g. after PDF import from header button)
   useEffect(() => {
@@ -82,6 +95,19 @@ export default function SessionDashboard({
     await renameSession(renameTarget.id, title)
     setRenameTarget(null)
   }
+
+  const handleRetry = useCallback(
+    async (sessionId: string): Promise<void> => {
+      try {
+        await window.api.tasks.retry(sessionId)
+        refresh()
+      } catch (err) {
+        console.error('Retry failed:', err)
+        refresh()
+      }
+    },
+    [refresh]
+  )
 
   if (loading) {
     return (
@@ -168,6 +194,12 @@ export default function SessionDashboard({
                     session={session}
                     onRename={() => setRenameTarget(session)}
                     onDelete={() => setDeleteTarget(session)}
+                    onRetry={
+                      session.status === 'error'
+                        ? () => handleRetry(session.id)
+                        : undefined
+                    }
+                    retryDisabled={isAnyProcessing}
                     onClick={
                       session.status === 'review' ? () => onOpenReview?.(session.id) : undefined
                     }

@@ -120,6 +120,15 @@ export class TaskRepository {
     return result.changes > 0
   }
 
+  deleteNonCompletedForSession(sessionId: string): number {
+    const result = this.db
+      .prepare(
+        `DELETE FROM task_queue WHERE session_id = ? AND status IN ('failed', 'cancelled', 'pending')`
+      )
+      .run(sessionId)
+    return result.changes
+  }
+
   cancelPendingForSession(sessionId: string): number {
     const result = this.db
       .prepare(

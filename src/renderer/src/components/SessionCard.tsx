@@ -8,6 +8,8 @@ interface SessionCardProps {
   onRename: () => void
   onDelete: () => void
   onClick?: () => void
+  onRetry?: () => void
+  retryDisabled?: boolean
 }
 
 const STATUS_CONFIG: Record<SessionStatus, { label: string; color: string }> = {
@@ -51,7 +53,9 @@ export function SessionCard({
   session,
   onRename,
   onDelete,
-  onClick
+  onClick,
+  onRetry,
+  retryDisabled
 }: SessionCardProps): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -98,6 +102,19 @@ export function SessionCard({
           <p className="mt-0.5 line-clamp-3 text-xs text-text-tertiary">
             {session.errorMessage}
           </p>
+        )}
+        {session.status === 'error' && onRetry && (
+          <button
+            className="mt-1.5 text-xs font-medium text-primary hover:text-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={(e) => {
+              e.stopPropagation()
+              onRetry()
+            }}
+            disabled={retryDisabled}
+            title={retryDisabled ? 'Eine andere Sitzung wird gerade verarbeitet' : undefined}
+          >
+            Erneut versuchen
+          </button>
         )}
 
         {showProgress && (

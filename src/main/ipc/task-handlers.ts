@@ -11,4 +11,9 @@ export function registerTaskHandlers(): void {
   ipcMain.handle('task:isProcessing', () => {
     return getTaskQueue().isProcessing()
   })
+
+  ipcMain.handle('task:retry', (_event, args: unknown) => {
+    const { sessionId } = GetSessionTasksSchema.parse(args)
+    getTaskQueue().retrySession(sessionId)
+  })
 }

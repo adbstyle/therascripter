@@ -45,6 +45,7 @@ export interface TaskErrorData {
 export interface TasksApi {
   getSessionTasks(sessionId: string): Promise<Task[]>
   isProcessing(): Promise<boolean>
+  retry(sessionId: string): Promise<void>
   onProgress(callback: (data: TaskProgressData) => void): () => void
   onCompleted(callback: (data: TaskCompletedData) => void): () => void
   onError(callback: (data: TaskErrorData) => void): () => void
