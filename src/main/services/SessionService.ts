@@ -11,7 +11,7 @@ const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
   diarizing: ['anonymizing', 'error'],
   extracting: ['anonymizing', 'error'],
   anonymizing: ['review', 'error'],
-  review: ['review', 'error'],
+  review: ['error'],
   error: ['recording', 'transcribing', 'diarizing', 'extracting', 'anonymizing']
 }
 
@@ -99,8 +99,10 @@ export class SessionService {
       session.transcriptPath,
       session.anonymizedPath,
       session.diarizationPath,
+      session.alignedTranscriptPath,
       session.pdfPath,
-      join(dataDir, 'extracted', `${session.id}.json`),
+      session.extractedPath ??
+        (session.type === 'pdf' ? join(dataDir, 'extracted', `${session.id}.json`) : null),
       join(dataDir, 'recovery', `${session.id}.pcm`)
     ]
 
@@ -133,8 +135,23 @@ export class SessionService {
   generateAnonymizedPath(sessionId: string): string {
     return join(getDataDir(), 'anonymized', `${sessionId}.json`)
   }
+
+  generateAlignedTranscriptPath(sessionId: string): string {
+    return join(getDataDir(), 'transcripts', `${sessionId}-aligned.json`)
+  }
 }
 
+// Processing statuses where multiple task types map to the same session status
+// (e.g., both diarization and alignment → 'diarizing'), making self-transitions legitimate.
+const IDEMPOTENT_STATUSES: SessionStatus[] = [
+  'transcribing',
+  'diarizing',
+  'extracting',
+  'anonymizing',
+  'review' // re-anonymization triggers review → review
+]
+
 function isValidTransition(current: SessionStatus, next: SessionStatus): boolean {
+  if (current === next && IDEMPOTENT_STATUSES.includes(current)) return true
   return VALID_TRANSITIONS[current]?.includes(next) ?? false
 }

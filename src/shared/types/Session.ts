@@ -20,7 +20,9 @@ export interface Session {
   transcriptPath: string | null
   anonymizedPath: string | null
   diarizationPath: string | null
+  alignedTranscriptPath: string | null
   pdfPath: string | null
+  extractedPath: string | null
   entityMap: EntityMap | null
   errorMessage: string | null
   createdAt: string
@@ -43,7 +45,9 @@ export interface UpdateSessionInput {
   transcriptPath?: string | null
   anonymizedPath?: string | null
   diarizationPath?: string | null
+  alignedTranscriptPath?: string | null
   pdfPath?: string | null
+  extractedPath?: string | null
   entityMap?: EntityMap | null
   errorMessage?: string | null
   reviewAt?: string | null

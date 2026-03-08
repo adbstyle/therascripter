@@ -1,7 +1,11 @@
 import type { Task, TaskType } from '../../shared/types'
 
 export interface TaskExecutor {
-  execute(task: Task, onProgress: (progress: number) => void): Promise<void>
+  execute(
+    task: Task,
+    onProgress: (progress: number) => void,
+    signal?: AbortSignal
+  ): Promise<void>
 }
 
 function delay(ms: number): Promise<void> {
@@ -9,7 +13,7 @@ function delay(ms: number): Promise<void> {
 }
 
 class StubExecutor implements TaskExecutor {
-  async execute(_task: Task, onProgress: (progress: number) => void): Promise<void> {
+  async execute(_task: Task, onProgress: (progress: number) => void, _signal?: AbortSignal): Promise<void> {
     const steps = 10
     for (let i = 1; i <= steps; i++) {
       await delay(200)

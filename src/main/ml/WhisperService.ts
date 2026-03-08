@@ -1,5 +1,5 @@
 import { spawn } from 'child_process'
-import { existsSync, readFileSync, writeFileSync, statSync, unlinkSync } from 'fs'
+import { existsSync, readFileSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { cpus } from 'os'
 import { app } from 'electron'
@@ -8,6 +8,7 @@ import type { TranscriptData } from '../../shared/types'
 import type { TaskExecutor } from '../services/task-executors'
 import { SessionService } from '../services/SessionService'
 import { getDatabase, getDataDir } from '../db/connection'
+import { writeFileAtomic } from '../utils/file-ops'
 import { removeFillerWords, rebuildSegments } from './filler-removal'
 import { filterSpecialTokens, mergeSubTokens } from './token-processing'
 import type { WhisperToken } from './token-processing'
@@ -38,7 +39,7 @@ export class WhisperService implements TaskExecutor {
     return join(getDataDir(), 'models', 'asr', 'ggml-large-v3-turbo-q5_0.bin')
   }
 
-  async execute(task: Task, onProgress: (progress: number) => void): Promise<void> {
+  async execute(task: Task, onProgress: (progress: number) => void, signal?: AbortSignal): Promise<void> {
     const binaryPath = this.getBinaryPath()
     const modelPath = this.getModelPath()
 
@@ -78,14 +79,15 @@ export class WhisperService implements TaskExecutor {
       modelPath,
       session.audioPath,
       timeoutMs,
-      onProgress
+      onProgress,
+      signal
     )
 
     // Parse output, apply filler removal, save transcript
     const transcript = this.processOutput(whisperOutput)
 
     const transcriptPath = sessionService.generateTranscriptPath(task.sessionId)
-    writeFileSync(transcriptPath, JSON.stringify(transcript, null, 2))
+    writeFileAtomic(transcriptPath, JSON.stringify(transcript, null, 2))
 
     sessionService.updateSession(task.sessionId, { transcriptPath })
   }
@@ -95,7 +97,8 @@ export class WhisperService implements TaskExecutor {
     modelPath: string,
     audioPath: string,
     timeoutMs: number,
-    onProgress: (progress: number) => void
+    onProgress: (progress: number) => void,
+    signal?: AbortSignal
   ): Promise<WhisperJsonOutput> {
     return new Promise((resolve, reject) => {
       // whisper.cpp writes JSON to {audioPath}.json when using -ojf
@@ -121,12 +124,32 @@ export class WhisperService implements TaskExecutor {
       })
 
       let stderr = ''
+      let settled = false
+      let killTimer: ReturnType<typeof setTimeout> | null = null
       const timeout = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort)
         proc.kill('SIGTERM')
+        settled = true
         reject(
           new Error(`Transkription abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`)
         )
       }, timeoutMs)
+
+      // Watchdog abort: SIGTERM → 5s grace → SIGKILL
+      const onAbort = (): void => {
+        clearTimeout(timeout)
+        proc.kill('SIGTERM')
+        killTimer = setTimeout(() => {
+          try {
+            proc.kill('SIGKILL')
+          } catch {
+            /* already dead */
+          }
+        }, 5_000)
+        settled = true
+        reject(new Error('Verarbeitung reagiert nicht mehr'))
+      }
+      signal?.addEventListener('abort', onAbort, { once: true })
 
       proc.stderr?.on('data', (data: Buffer) => {
         const chunk = data.toString()
@@ -142,11 +165,20 @@ export class WhisperService implements TaskExecutor {
 
       proc.on('error', (error) => {
         clearTimeout(timeout)
-        reject(new Error(`whisper-cli konnte nicht gestartet werden: ${error.message}`))
+        if (killTimer) clearTimeout(killTimer)
+        signal?.removeEventListener('abort', onAbort)
+        if (!settled) {
+          settled = true
+          reject(new Error(`whisper-cli konnte nicht gestartet werden: ${error.message}`))
+        }
       })
 
       proc.on('close', (code) => {
         clearTimeout(timeout)
+        if (killTimer) clearTimeout(killTimer)
+        signal?.removeEventListener('abort', onAbort)
+
+        if (settled) return
 
         if (code !== 0) {
           // Extract useful error from stderr

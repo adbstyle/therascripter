@@ -1,5 +1,5 @@
 import { spawn } from 'child_process'
-import { existsSync, statSync, writeFileSync } from 'fs'
+import { existsSync, statSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
 import type { Task } from '../../shared/types'
@@ -7,6 +7,7 @@ import type { DiarizationData, SpeakerSegment } from '../../shared/types'
 import type { TaskExecutor } from '../services/task-executors'
 import { SessionService } from '../services/SessionService'
 import { getDatabase, getDataDir } from '../db/connection'
+import { writeFileAtomic } from '../utils/file-ops'
 import { resolvePythonSidecar } from './resolve-python'
 
 // Progress line format: "[PROGRESS] 42"
@@ -26,7 +27,7 @@ export class PyannoteSidecar implements TaskExecutor {
     return join(getDataDir(), 'models', 'diarization')
   }
 
-  async execute(task: Task, onProgress: (progress: number) => void): Promise<void> {
+  async execute(task: Task, onProgress: (progress: number) => void, signal?: AbortSignal): Promise<void> {
     const { bin, args: prefixArgs } = this.getCommand()
 
     if (!existsSync(bin)) {
@@ -59,7 +60,8 @@ export class PyannoteSidecar implements TaskExecutor {
       prefixArgs,
       session.audioPath,
       timeoutMs,
-      onProgress
+      onProgress,
+      signal
     )
 
     // Parse RTTM output
@@ -70,7 +72,7 @@ export class PyannoteSidecar implements TaskExecutor {
 
     // Save diarization results
     const diarizationPath = sessionService.generateDiarizationPath(task.sessionId)
-    writeFileSync(diarizationPath, JSON.stringify(diarization, null, 2))
+    writeFileAtomic(diarizationPath, JSON.stringify(diarization, null, 2))
 
     sessionService.updateSession(task.sessionId, { diarizationPath })
   }
@@ -80,7 +82,8 @@ export class PyannoteSidecar implements TaskExecutor {
     prefixArgs: string[],
     audioPath: string,
     timeoutMs: number,
-    onProgress: (progress: number) => void
+    onProgress: (progress: number) => void,
+    signal?: AbortSignal
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       const modelDir = this.getModelDir()
@@ -109,10 +112,30 @@ export class PyannoteSidecar implements TaskExecutor {
 
       let stdout = ''
       let stderr = ''
+      let settled = false
+      let killTimer: ReturnType<typeof setTimeout> | null = null
       const timeout = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort)
         proc.kill('SIGTERM')
+        settled = true
         reject(new Error(`Diarization abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`))
       }, timeoutMs)
+
+      // Watchdog abort: SIGTERM → 5s grace → SIGKILL
+      const onAbort = (): void => {
+        clearTimeout(timeout)
+        proc.kill('SIGTERM')
+        killTimer = setTimeout(() => {
+          try {
+            proc.kill('SIGKILL')
+          } catch {
+            /* already dead */
+          }
+        }, 5_000)
+        settled = true
+        reject(new Error('Verarbeitung reagiert nicht mehr'))
+      }
+      signal?.addEventListener('abort', onAbort, { once: true })
 
       proc.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString()
@@ -132,6 +155,10 @@ export class PyannoteSidecar implements TaskExecutor {
 
       proc.on('error', (error) => {
         clearTimeout(timeout)
+        if (killTimer) clearTimeout(killTimer)
+        signal?.removeEventListener('abort', onAbort)
+        if (settled) return
+        settled = true
         if (error.message.includes('ENOENT')) {
           const msg = app.isPackaged
             ? `Diarization-Binary nicht ausführbar: ${bin}. Bitte prüfen Sie die Installation.`
@@ -144,6 +171,10 @@ export class PyannoteSidecar implements TaskExecutor {
 
       proc.on('close', (code) => {
         clearTimeout(timeout)
+        if (killTimer) clearTimeout(killTimer)
+        signal?.removeEventListener('abort', onAbort)
+
+        if (settled) return
 
         if (code !== 0) {
           const errorLines = stderr

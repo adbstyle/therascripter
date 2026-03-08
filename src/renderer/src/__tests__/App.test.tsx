@@ -36,6 +36,7 @@ beforeEach(() => {
     tasks: {
       getSessionTasks: vi.fn().mockResolvedValue([]),
       isProcessing: vi.fn().mockResolvedValue(false),
+      retry: vi.fn().mockResolvedValue(undefined),
       onProgress: vi.fn().mockReturnValue(() => {}),
       onCompleted: vi.fn().mockReturnValue(() => {}),
       onError: vi.fn().mockReturnValue(() => {})

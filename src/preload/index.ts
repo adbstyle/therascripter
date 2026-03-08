@@ -50,6 +50,7 @@ const api: IpcApi = {
   tasks: {
     getSessionTasks: (sessionId) => ipcRenderer.invoke('task:getSessionTasks', { sessionId }),
     isProcessing: () => ipcRenderer.invoke('task:isProcessing'),
+    retry: (sessionId) => ipcRenderer.invoke('task:retry', { sessionId }),
     onProgress: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, data: TaskProgressData): void =>
         callback(data)
