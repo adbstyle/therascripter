@@ -1,22 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { SessionRepository } from '../repositories/SessionRepository'
 import type { EntityMap } from '../../../shared/types'
-
-function applySchema(db: Database.Database): void {
-  const migrationsDir = join(__dirname, '..', 'migrations')
-  db.exec(readFileSync(join(migrationsDir, '001-initial-schema.sql'), 'utf-8'))
-  db.exec(readFileSync(join(migrationsDir, '002-add-diarization-path.sql'), 'utf-8'))
-  db.exec(readFileSync(join(migrationsDir, '003-add-review-at.sql'), 'utf-8'))
-  db.exec(
-    readFileSync(
-      join(migrationsDir, '005-add-aligned-transcript-and-extracted-paths.sql'),
-      'utf-8'
-    )
-  )
-}
+import { applyTestSchema } from './test-utils'
 
 describe('SessionRepository', () => {
   let db: Database.Database
@@ -25,7 +11,7 @@ describe('SessionRepository', () => {
   beforeEach(() => {
     db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
-    applySchema(db)
+    applyTestSchema(db)
     repo = new SessionRepository(db)
   })
 

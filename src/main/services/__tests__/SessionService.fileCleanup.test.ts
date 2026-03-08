@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { SessionService } from '../SessionService'
+import { applyTestSchema } from '../../db/__tests__/test-utils'
 
 vi.mock('electron', () => ({
   app: {
@@ -15,19 +14,6 @@ vi.mock('../../utils/file-ops', () => ({
   removeFile: (...args: unknown[]) => mockRemoveFile(...args)
 }))
 
-function applySchema(db: Database.Database): void {
-  const migrationsDir = join(__dirname, '..', '..', 'db', 'migrations')
-  db.exec(readFileSync(join(migrationsDir, '001-initial-schema.sql'), 'utf-8'))
-  db.exec(readFileSync(join(migrationsDir, '002-add-diarization-path.sql'), 'utf-8'))
-  db.exec(readFileSync(join(migrationsDir, '003-add-review-at.sql'), 'utf-8'))
-  db.exec(
-    readFileSync(
-      join(migrationsDir, '005-add-aligned-transcript-and-extracted-paths.sql'),
-      'utf-8'
-    )
-  )
-}
-
 describe('SessionService file cleanup', () => {
   let db: Database.Database
   let service: SessionService
@@ -35,7 +21,7 @@ describe('SessionService file cleanup', () => {
   beforeEach(() => {
     db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
-    applySchema(db)
+    applyTestSchema(db)
     service = new SessionService(db)
     mockRemoveFile.mockClear()
   })

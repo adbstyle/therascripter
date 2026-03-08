@@ -1,13 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { BlocklistRepository } from '../repositories/BlocklistRepository'
-
-function applySchema(db: Database.Database): void {
-  const sql = readFileSync(join(__dirname, '..', 'migrations', '001-initial-schema.sql'), 'utf-8')
-  db.exec(sql)
-}
+import { applyTestSchema } from './test-utils'
 
 describe('BlocklistRepository', () => {
   let db: Database.Database
@@ -16,7 +10,7 @@ describe('BlocklistRepository', () => {
   beforeEach(() => {
     db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
-    applySchema(db)
+    applyTestSchema(db)
     repo = new BlocklistRepository(db)
   })
 

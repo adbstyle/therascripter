@@ -1,31 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
-import { readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { ReviewService } from '../ReviewService'
 import { SessionService } from '../SessionService'
 import type { TipTapDocument } from '../../../shared/types/TipTapDocument'
 import type { EntityMap } from '../../../shared/types'
+import { applyTestSchema } from '../../db/__tests__/test-utils'
 
 vi.mock('electron', () => ({
   app: {
     getPath: vi.fn(() => '/mock/home')
   }
 }))
-
-function applySchema(db: Database.Database): void {
-  const migrationsDir = join(__dirname, '..', '..', 'db', 'migrations')
-  db.exec(readFileSync(join(migrationsDir, '001-initial-schema.sql'), 'utf-8'))
-  db.exec(readFileSync(join(migrationsDir, '002-add-diarization-path.sql'), 'utf-8'))
-  db.exec(readFileSync(join(migrationsDir, '003-add-review-at.sql'), 'utf-8'))
-  db.exec(
-    readFileSync(
-      join(migrationsDir, '005-add-aligned-transcript-and-extracted-paths.sql'),
-      'utf-8'
-    )
-  )
-}
 
 const sampleDoc: TipTapDocument = {
   type: 'doc',
@@ -68,7 +56,7 @@ describe('ReviewService', () => {
   beforeEach(() => {
     db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
-    applySchema(db)
+    applyTestSchema(db)
     sessionService = new SessionService(db)
     reviewService = new ReviewService(db)
 

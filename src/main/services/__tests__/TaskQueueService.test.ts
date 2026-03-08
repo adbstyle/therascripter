@@ -1,30 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { TaskQueueService } from '../TaskQueueService'
 import { SessionRepository } from '../../db/repositories/SessionRepository'
 import { TaskRepository } from '../../db/repositories/TaskRepository'
 import type { TaskExecutor } from '../task-executors'
+import { applyTestSchema } from '../../db/__tests__/test-utils'
 
 // Mock sendToRenderer since BrowserWindow is not available in tests
 vi.mock('../../utils/ipc-helpers', () => ({
   sendToRenderer: vi.fn()
 }))
-
-function applySchema(db: Database.Database): void {
-  const migrationsDir = join(__dirname, '..', '..', 'db', 'migrations')
-  db.exec(readFileSync(join(migrationsDir, '001-initial-schema.sql'), 'utf-8'))
-  db.exec(readFileSync(join(migrationsDir, '002-add-diarization-path.sql'), 'utf-8'))
-  db.exec(readFileSync(join(migrationsDir, '003-add-review-at.sql'), 'utf-8'))
-  db.exec(readFileSync(join(migrationsDir, '004-add-task-cancelled-status.sql'), 'utf-8'))
-  db.exec(
-    readFileSync(
-      join(migrationsDir, '005-add-aligned-transcript-and-extracted-paths.sql'),
-      'utf-8'
-    )
-  )
-}
 
 describe('TaskQueueService', () => {
   let db: Database.Database
@@ -37,7 +22,7 @@ describe('TaskQueueService', () => {
     vi.clearAllMocks()
     db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
-    applySchema(db)
+    applyTestSchema(db)
 
     queue = new TaskQueueService(db)
     sessionRepo = new SessionRepository(db)
