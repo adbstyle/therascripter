@@ -120,6 +120,16 @@ export class TaskRepository {
     return result.changes > 0
   }
 
+  cancelPendingForSession(sessionId: string): number {
+    const result = this.db
+      .prepare(
+        `UPDATE task_queue SET status = 'cancelled', completed_at = ?
+         WHERE session_id = ? AND status = 'pending'`
+      )
+      .run(new Date().toISOString(), sessionId)
+    return result.changes
+  }
+
   resetRunningToPending(): number {
     const result = this.db
       .prepare(

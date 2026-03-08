@@ -148,6 +148,16 @@ describe('SessionService', () => {
         service.updateSession('non-existent', { status: 'review' })
       }).toThrow('Session non-existent not found')
     })
+
+    it('allows idempotent self-transition (same status → same status)', () => {
+      const session = service.createSession('Test', 'audio')
+      service.updateSession(session.id, { status: 'transcribing' })
+      service.updateSession(session.id, { status: 'diarizing' })
+
+      // diarizing → diarizing should not throw (alignment task triggers this)
+      const updated = service.updateSession(session.id, { status: 'diarizing' })
+      expect(updated?.status).toBe('diarizing')
+    })
   })
 
   describe('updateSession — non-status updates', () => {

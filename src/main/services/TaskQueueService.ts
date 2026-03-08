@@ -19,12 +19,15 @@ const TASK_TO_SESSION_STATUS: Partial<Record<TaskType, SessionStatus>> = {
   anonymization: 'review'
 }
 
+const RECOVERY_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
+
 export class TaskQueueService {
   private repository: TaskRepository
   private sessionService: SessionService
   private executors: Map<TaskType, TaskExecutor>
   private processing = false
   private shouldStop = false
+  private recoveryTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(db: Database.Database) {
     this.repository = new TaskRepository(db)
@@ -43,6 +46,8 @@ export class TaskQueueService {
     for (const type of pipeline) {
       tasks.push(this.repository.create({ sessionId, type }))
     }
+
+    console.log(`[TaskQueue] Enqueued ${pipeline.length} tasks for session ${sessionId} (${sessionType})`)
 
     // Kick off processing if not already running
     this.scheduleNext()
@@ -84,9 +89,10 @@ export class TaskQueueService {
             status: 'error',
             errorMessage: 'Verarbeitung wurde unerwartet abgebrochen.'
           })
+          console.log(`[TaskQueue] Recovered orphaned session ${session.id} (was ${session.status})`)
           recovered++
-        } catch {
-          // Best effort
+        } catch (err) {
+          console.error(`[TaskQueue] Failed to recover orphaned session ${session.id}:`, err)
         }
       }
     }
@@ -96,11 +102,13 @@ export class TaskQueueService {
 
   start(): void {
     this.shouldStop = false
+    this.startPeriodicRecovery()
     this.scheduleNext()
   }
 
   stop(): void {
     this.shouldStop = true
+    this.stopPeriodicRecovery()
   }
 
   isProcessing(): boolean {
@@ -127,15 +135,18 @@ export class TaskQueueService {
     if (!task) return
 
     this.processing = true
+    console.log(`[TaskQueue] Starting task ${task.type} for session ${task.sessionId}`)
 
     const executor = this.executors.get(task.type)
     if (!executor) {
+      const error = `No executor registered for task type: ${task.type}`
+      console.error(`[TaskQueue] ${error}`)
       this.repository.update(task.id, {
         status: 'failed',
-        error: `No executor registered for task type: ${task.type}`,
+        error,
         completedAt: new Date().toISOString()
       })
-      this.handleTaskFailure(task, `No executor registered for task type: ${task.type}`)
+      this.handleTaskFailure(task, error)
       this.processing = false
       this.scheduleNext()
       return
@@ -166,6 +177,8 @@ export class TaskQueueService {
         completedAt: new Date().toISOString()
       })
 
+      console.log(`[TaskQueue] Task ${task.type} completed for session ${task.sessionId}`)
+
       // Update session status based on completed task
       this.handleTaskCompletion(task)
 
@@ -176,6 +189,7 @@ export class TaskQueueService {
       })
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
+      console.error(`[TaskQueue] Task ${task.type} failed for session ${task.sessionId}:`, errorMessage)
 
       this.repository.update(task.id, {
         status: 'failed',
@@ -209,8 +223,8 @@ export class TaskQueueService {
       // All tasks done — set final status
       try {
         this.sessionService.updateSession(task.sessionId, { status: 'review' })
-      } catch {
-        // Status transition may fail if already in target state
+      } catch (err) {
+        console.error(`[TaskQueue] Failed to transition session ${task.sessionId} to review:`, err)
       }
     } else {
       // Determine next status from the next pending task type
@@ -219,8 +233,11 @@ export class TaskQueueService {
       if (statusForNextTask) {
         try {
           this.sessionService.updateSession(task.sessionId, { status: statusForNextTask })
-        } catch {
-          // Status transition may fail if already in target state
+        } catch (err) {
+          console.error(
+            `[TaskQueue] Failed to transition session ${task.sessionId} to ${statusForNextTask}:`,
+            err
+          )
         }
       }
     }
@@ -239,14 +256,23 @@ export class TaskQueueService {
   }
 
   private handleTaskFailure(task: Task, errorMessage: string): void {
+    // Cancel remaining pending tasks for this session
+    const cancelled = this.repository.cancelPendingForSession(task.sessionId)
+    if (cancelled > 0) {
+      console.log(`[TaskQueue] Cancelled ${cancelled} pending tasks for session ${task.sessionId}`)
+    }
+
     // Set session to error state
     try {
       this.sessionService.updateSession(task.sessionId, {
         status: 'error',
         errorMessage
       })
-    } catch {
-      // Best effort
+    } catch (err) {
+      console.error(
+        `[TaskQueue] Failed to set session ${task.sessionId} to error state:`,
+        err
+      )
     }
 
     // Notify renderer
@@ -255,6 +281,32 @@ export class TaskQueueService {
       taskType: task.type,
       error: errorMessage
     })
+  }
+
+  private startPeriodicRecovery(): void {
+    this.stopPeriodicRecovery()
+    this.recoveryTimer = setInterval(() => {
+      if (this.processing || this.shouldStop) return
+      try {
+        const stuck = this.recoverStuckTasks()
+        const orphaned = this.recoverOrphanedSessions()
+        if (stuck > 0 || orphaned > 0) {
+          console.log(
+            `[TaskQueue] Periodic recovery: ${stuck} stuck tasks, ${orphaned} orphaned sessions`
+          )
+          this.scheduleNext()
+        }
+      } catch (err) {
+        console.error('[TaskQueue] Periodic recovery failed:', err)
+      }
+    }, RECOVERY_INTERVAL_MS)
+  }
+
+  private stopPeriodicRecovery(): void {
+    if (this.recoveryTimer) {
+      clearInterval(this.recoveryTimer)
+      this.recoveryTimer = null
+    }
   }
 }
 
