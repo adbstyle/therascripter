@@ -1,5 +1,5 @@
 import { spawn } from 'child_process'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
 import type { Task, TranscriptData } from '../../shared/types'
@@ -14,6 +14,7 @@ import { resolveCoreferences } from './coreference-resolver'
 import { buildEntityMap } from './entity-map-builder'
 import { buildTipTapDocument } from './tiptap-builder'
 import { resolvePythonSidecar } from './resolve-python'
+import { writeFileAtomic } from '../utils/file-ops'
 
 // Progress line format: "[PROGRESS] 42"
 const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
@@ -32,17 +33,18 @@ export class AnonymizationService implements TaskExecutor {
     const sessionService = new SessionService(db)
     const session = sessionService.getSession(task.sessionId)
 
-    if (!session?.transcriptPath) {
+    const transcriptSource = session?.alignedTranscriptPath ?? session?.transcriptPath
+    if (!transcriptSource) {
       throw new Error(`Session ${task.sessionId} hat keinen Transkript-Pfad`)
     }
-    if (!existsSync(session.transcriptPath)) {
-      throw new Error(`Transkript nicht gefunden: ${session.transcriptPath}`)
+    if (!existsSync(transcriptSource)) {
+      throw new Error(`Transkript nicht gefunden: ${transcriptSource}`)
     }
 
     onProgress(0.02)
 
-    // 1. Load transcript
-    const transcript = JSON.parse(readFileSync(session.transcriptPath, 'utf-8')) as TranscriptData
+    // 1. Load transcript (prefer aligned version with speaker labels)
+    const transcript = JSON.parse(readFileSync(transcriptSource, 'utf-8')) as TranscriptData
 
     if (!transcript.segments || transcript.segments.length === 0) {
       throw new Error('Transkript enthält keine Segmente für die Anonymisierung')
@@ -51,7 +53,7 @@ export class AnonymizationService implements TaskExecutor {
     onProgress(0.05)
 
     // 2. Run Python NER sidecar (0.05 → 0.50)
-    const nerEntities = await this.runNerSidecar(session.transcriptPath, (nerProgress) =>
+    const nerEntities = await this.runNerSidecar(transcriptSource, (nerProgress) =>
       onProgress(0.05 + nerProgress * 0.45)
     )
 
@@ -94,7 +96,7 @@ export class AnonymizationService implements TaskExecutor {
 
     // 10. Save results
     const anonymizedPath = sessionService.generateAnonymizedPath(task.sessionId)
-    writeFileSync(anonymizedPath, JSON.stringify(tiptapDoc, null, 2))
+    writeFileAtomic(anonymizedPath, JSON.stringify(tiptapDoc, null, 2))
 
     sessionService.updateSession(task.sessionId, {
       anonymizedPath,

@@ -1,5 +1,5 @@
 import { spawn } from 'child_process'
-import { existsSync, statSync, writeFileSync } from 'fs'
+import { existsSync, statSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
 import type { Task } from '../../shared/types'
@@ -7,6 +7,7 @@ import type { DiarizationData, SpeakerSegment } from '../../shared/types'
 import type { TaskExecutor } from '../services/task-executors'
 import { SessionService } from '../services/SessionService'
 import { getDatabase, getDataDir } from '../db/connection'
+import { writeFileAtomic } from '../utils/file-ops'
 import { resolvePythonSidecar } from './resolve-python'
 
 // Progress line format: "[PROGRESS] 42"
@@ -70,7 +71,7 @@ export class PyannoteSidecar implements TaskExecutor {
 
     // Save diarization results
     const diarizationPath = sessionService.generateDiarizationPath(task.sessionId)
-    writeFileSync(diarizationPath, JSON.stringify(diarization, null, 2))
+    writeFileAtomic(diarizationPath, JSON.stringify(diarization, null, 2))
 
     sessionService.updateSession(task.sessionId, { diarizationPath })
   }

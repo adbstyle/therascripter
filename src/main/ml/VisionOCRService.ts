@@ -52,8 +52,9 @@ export class VisionOCRService implements TaskExecutor {
       throw new Error(`Session ${task.sessionId} hat keinen PDF-Pfad`)
     }
 
-    // Load extraction data
-    const extractedPath = join(getDataDir(), 'extracted', `${task.sessionId}.json`)
+    // Load extraction data from DB-stored path (fallback for pre-migration sessions)
+    const extractedPath =
+      session.extractedPath ?? join(getDataDir(), 'extracted', `${task.sessionId}.json`)
     if (!existsSync(extractedPath)) {
       throw new Error(`Extraktionsdaten nicht gefunden: ${extractedPath}`)
     }

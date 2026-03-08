@@ -19,6 +19,12 @@ function applySchema(db: Database.Database): void {
   db.exec(readFileSync(join(migrationsDir, '001-initial-schema.sql'), 'utf-8'))
   db.exec(readFileSync(join(migrationsDir, '002-add-diarization-path.sql'), 'utf-8'))
   db.exec(readFileSync(join(migrationsDir, '003-add-review-at.sql'), 'utf-8'))
+  db.exec(
+    readFileSync(
+      join(migrationsDir, '005-add-aligned-transcript-and-extracted-paths.sql'),
+      'utf-8'
+    )
+  )
 }
 
 const sampleDoc: TipTapDocument = {

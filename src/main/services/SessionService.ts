@@ -99,8 +99,10 @@ export class SessionService {
       session.transcriptPath,
       session.anonymizedPath,
       session.diarizationPath,
+      session.alignedTranscriptPath,
       session.pdfPath,
-      join(dataDir, 'extracted', `${session.id}.json`),
+      session.extractedPath ??
+        (session.type === 'pdf' ? join(dataDir, 'extracted', `${session.id}.json`) : null),
       join(dataDir, 'recovery', `${session.id}.pcm`)
     ]
 
@@ -132,6 +134,10 @@ export class SessionService {
 
   generateAnonymizedPath(sessionId: string): string {
     return join(getDataDir(), 'anonymized', `${sessionId}.json`)
+  }
+
+  generateAlignedTranscriptPath(sessionId: string): string {
+    return join(getDataDir(), 'transcripts', `${sessionId}-aligned.json`)
   }
 }
 

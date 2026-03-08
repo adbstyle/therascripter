@@ -20,6 +20,12 @@ function applySchema(db: Database.Database): void {
   db.exec(readFileSync(join(migrationsDir, '001-initial-schema.sql'), 'utf-8'))
   db.exec(readFileSync(join(migrationsDir, '002-add-diarization-path.sql'), 'utf-8'))
   db.exec(readFileSync(join(migrationsDir, '003-add-review-at.sql'), 'utf-8'))
+  db.exec(
+    readFileSync(
+      join(migrationsDir, '005-add-aligned-transcript-and-extracted-paths.sql'),
+      'utf-8'
+    )
+  )
 }
 
 describe('SessionService file cleanup', () => {
@@ -54,14 +60,24 @@ describe('SessionService file cleanup', () => {
     expect(calledPaths).toContain('/mock/home/.therascript/transcripts/test.json')
   })
 
-  it('always attempts to delete convention-based paths (extracted, recovery)', () => {
+  it('always attempts to delete convention-based paths (recovery for audio)', () => {
     const session = service.createSession('Test', 'audio')
 
     service.deleteSession(session.id)
 
     const calledPaths = mockRemoveFile.mock.calls.map((c: unknown[]) => c[0] as string)
-    expect(calledPaths.some((p: string) => p.includes('extracted'))).toBe(true)
     expect(calledPaths.some((p: string) => p.includes('recovery'))).toBe(true)
+    // extracted fallback only applies to PDF sessions
+    expect(calledPaths.some((p: string) => p.includes('extracted'))).toBe(false)
+  })
+
+  it('deletes convention-based extracted path for PDF sessions without extractedPath in DB', () => {
+    const session = service.createSession('Test', 'pdf')
+
+    service.deleteSession(session.id)
+
+    const calledPaths = mockRemoveFile.mock.calls.map((c: unknown[]) => c[0] as string)
+    expect(calledPaths.some((p: string) => p.includes('extracted'))).toBe(true)
   })
 
   it('returns false for non-existent session', () => {

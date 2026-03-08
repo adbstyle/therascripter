@@ -1,5 +1,5 @@
 import { spawn } from 'child_process'
-import { existsSync, readFileSync, writeFileSync, statSync, unlinkSync } from 'fs'
+import { existsSync, readFileSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { cpus } from 'os'
 import { app } from 'electron'
@@ -8,6 +8,7 @@ import type { TranscriptData } from '../../shared/types'
 import type { TaskExecutor } from '../services/task-executors'
 import { SessionService } from '../services/SessionService'
 import { getDatabase, getDataDir } from '../db/connection'
+import { writeFileAtomic } from '../utils/file-ops'
 import { removeFillerWords, rebuildSegments } from './filler-removal'
 import { filterSpecialTokens, mergeSubTokens } from './token-processing'
 import type { WhisperToken } from './token-processing'
@@ -85,7 +86,7 @@ export class WhisperService implements TaskExecutor {
     const transcript = this.processOutput(whisperOutput)
 
     const transcriptPath = sessionService.generateTranscriptPath(task.sessionId)
-    writeFileSync(transcriptPath, JSON.stringify(transcript, null, 2))
+    writeFileAtomic(transcriptPath, JSON.stringify(transcript, null, 2))
 
     sessionService.updateSession(task.sessionId, { transcriptPath })
   }
