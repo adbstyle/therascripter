@@ -1,6 +1,8 @@
+import { statSync } from 'fs'
 import type Database from 'better-sqlite3'
 import { TaskRepository } from '../db/repositories/TaskRepository'
 import { SessionService } from './SessionService'
+import { ProcessWatchdog } from './ProcessWatchdog'
 import type { TaskExecutor } from './task-executors'
 import { createStubExecutors } from './task-executors'
 import { sendToRenderer } from '../utils/ipc-helpers'
@@ -158,17 +160,29 @@ export class TaskQueueService {
       startedAt: new Date().toISOString()
     })
 
-    try {
-      await executor.execute(task, (progress: number) => {
-        // Update DB progress
-        this.repository.update(task.id, { progress })
-        // Notify renderer
-        sendToRenderer('task:progress', {
-          sessionId: task.sessionId,
-          taskType: task.type,
-          progress
-        })
+    // Set up watchdog with AbortController
+    const controller = new AbortController()
+    const audioDurationSec = this.getAudioDurationSec(task)
+    const watchdog = new ProcessWatchdog({
+      taskType: task.type,
+      audioDurationSec,
+      onStall: () => controller.abort()
+    })
+
+    const onProgress = (progress: number): void => {
+      watchdog.heartbeat()
+      this.repository.update(task.id, { progress })
+      sendToRenderer('task:progress', {
+        sessionId: task.sessionId,
+        taskType: task.type,
+        progress
       })
+    }
+
+    watchdog.start()
+
+    try {
+      await executor.execute(task, onProgress, controller.signal)
 
       // Mark completed
       this.repository.update(task.id, {
@@ -188,8 +202,15 @@ export class TaskQueueService {
         taskType: task.type
       })
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      console.error(`[TaskQueue] Task ${task.type} failed for session ${task.sessionId}:`, errorMessage)
+      const errorMessage = controller.signal.aborted
+        ? 'Verarbeitung reagiert nicht mehr'
+        : error instanceof Error
+          ? error.message
+          : String(error)
+      console.error(
+        `[TaskQueue] Task ${task.type} failed for session ${task.sessionId}:`,
+        errorMessage
+      )
 
       this.repository.update(task.id, {
         status: 'failed',
@@ -198,13 +219,27 @@ export class TaskQueueService {
       })
 
       this.handleTaskFailure(task, errorMessage)
+    } finally {
+      watchdog.stop()
+      this.processing = false
+
+      // Process next task (use setTimeout to avoid stack overflow on long chains)
+      if (!this.shouldStop) {
+        setTimeout(() => this.scheduleNext(), 0)
+      }
     }
+  }
 
-    this.processing = false
-
-    // Process next task (use setTimeout to avoid stack overflow on long chains)
-    if (!this.shouldStop) {
-      setTimeout(() => this.scheduleNext(), 0)
+  private getAudioDurationSec(task: Task): number | undefined {
+    if (task.type !== 'transcription') return undefined
+    try {
+      const session = this.sessionService.getSession(task.sessionId)
+      if (!session?.audioPath) return undefined
+      const stats = statSync(session.audioPath)
+      const WAV_HEADER_SIZE = 44
+      return Math.max(0, stats.size - WAV_HEADER_SIZE) / (48000 * 2) // 48kHz 16-bit mono
+    } catch {
+      return undefined
     }
   }
 

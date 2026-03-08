@@ -13,7 +13,7 @@ import { writeFileAtomic } from '../utils/file-ops'
 const TEXT_PAGE_THRESHOLD = 50
 
 export class PDFExtractionExecutor implements TaskExecutor {
-  async execute(task: Task, onProgress: (progress: number) => void): Promise<void> {
+  async execute(task: Task, onProgress: (progress: number) => void, _signal?: AbortSignal): Promise<void> {
     const db = getDatabase()
     const sessionService = new SessionService(db)
     const session = sessionService.getSession(task.sessionId)

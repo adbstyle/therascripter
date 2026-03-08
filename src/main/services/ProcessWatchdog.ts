@@ -1,0 +1,81 @@
+import type { TaskType } from '../../shared/types'
+
+const POLL_INTERVAL_MS = 15_000
+
+// Per-service stall thresholds (conservative, M1-based)
+const STALL_THRESHOLDS: Partial<Record<TaskType, number>> = {
+  diarization: 120_000,
+  anonymization: 120_000,
+  ocr: 60_000
+}
+
+// In-process executors — watchdog is a no-op for these
+const IN_PROCESS_TASKS: TaskType[] = ['alignment', 'extraction']
+
+export interface WatchdogConfig {
+  taskType: TaskType
+  audioDurationSec?: number
+  onStall: () => void
+}
+
+export class ProcessWatchdog {
+  private lastHeartbeatAt = Date.now()
+  private timer: ReturnType<typeof setInterval> | null = null
+  private fired = false
+  private readonly stallThresholdMs: number
+  private readonly onStall: () => void
+  private readonly skip: boolean
+
+  constructor(config: WatchdogConfig) {
+    this.onStall = config.onStall
+    this.skip = IN_PROCESS_TASKS.includes(config.taskType)
+    this.stallThresholdMs = this.computeThreshold(config.taskType, config.audioDurationSec)
+  }
+
+  start(): void {
+    if (this.skip || this.timer !== null) return
+
+    this.lastHeartbeatAt = Date.now()
+    this.fired = false
+
+    this.timer = setInterval(() => {
+      this.check()
+    }, POLL_INTERVAL_MS)
+  }
+
+  heartbeat(): void {
+    this.lastHeartbeatAt = Date.now()
+  }
+
+  stop(): void {
+    if (this.timer) {
+      clearInterval(this.timer)
+      this.timer = null
+    }
+  }
+
+  private check(): void {
+    if (this.fired) return
+
+    const elapsed = Date.now() - this.lastHeartbeatAt
+    if (elapsed > this.stallThresholdMs) {
+      this.fired = true
+      console.log(
+        `[Watchdog] Stall detected: no progress for ${Math.round(elapsed / 1000)}s` +
+          ` (threshold: ${Math.round(this.stallThresholdMs / 1000)}s)`
+      )
+      this.onStall()
+    }
+  }
+
+  private computeThreshold(taskType: TaskType, audioDurationSec?: number): number {
+    if (taskType === 'transcription') {
+      // Dynamic threshold: audioDuration / 40 gives the expected gap between
+      // whisper.cpp 5%-step progress events. Minimum 120s.
+      const dynamicSec = (audioDurationSec ?? 0) / 40
+      return Math.max(dynamicSec, 120) * 1000
+    }
+
+    return STALL_THRESHOLDS[taskType] ?? 120_000
+  }
+}
