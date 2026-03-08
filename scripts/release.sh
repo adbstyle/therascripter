@@ -163,7 +163,10 @@ gh "${GH_ARGS[@]}"
 
 echo ""
 echo "→ Aktualisiere manifest.json mit latestAppVersion=$NEW_VERSION …"
-"$ROOT_DIR/scripts/publish-manifest.sh" --app-version-only
+if ! "$ROOT_DIR/scripts/publish-manifest.sh" --app-version-only; then
+  echo "⚠️  Manifest-Update fehlgeschlagen. Bitte manuell ausführen:"
+  echo "   scripts/publish-manifest.sh --app-version-only"
+fi
 
 echo ""
 echo "✅ Release v$NEW_VERSION erfolgreich erstellt!"

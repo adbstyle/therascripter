@@ -26,7 +26,7 @@ export function useAppUpdate(): UseAppUpdateResult {
       const result: CheckResult = await window.api.appUpdate.check()
       setStatus(result.appUpdate)
     } catch {
-      setStatus({ available: false, latestVersion: null, checkedAt: null })
+      // Preserve existing status — don't overwrite a known "update available" with nulls
     } finally {
       setChecking(false)
     }

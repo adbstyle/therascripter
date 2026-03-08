@@ -10,7 +10,7 @@ export function registerAppUpdateHandlers(): void {
   ipcMain.handle('appUpdate:getStatus', () => {
     const raw = getSettings().get('cachedAppUpdateStatus')
     const parsed = AppUpdateStatusSchema.safeParse(raw)
-    if (!parsed.success) return { available: false, checkedAt: null }
+    if (!parsed.success) return { available: false, latestVersion: null, checkedAt: null }
     return parsed.data
   })
 
