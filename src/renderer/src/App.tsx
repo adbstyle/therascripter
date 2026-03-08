@@ -23,6 +23,11 @@ export default function App(): React.JSX.Element {
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [isImporting, setIsImporting] = useState(false)
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null)
+  const [appVersion, setAppVersion] = useState<string | null>(null)
+
+  useEffect(() => {
+    window.api.system.aboutInfo().then((info) => setAppVersion(info.version))
+  }, [])
 
   const handleImportPDF = useCallback(async () => {
     if (isImporting) return
@@ -158,7 +163,7 @@ export default function App(): React.JSX.Element {
           ) : (
             <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
               <span>&#128274;</span>
-              <span>Lokal</span>
+              <span>v{appVersion ?? '\u2026'}</span>
             </div>
           )}
         </aside>
