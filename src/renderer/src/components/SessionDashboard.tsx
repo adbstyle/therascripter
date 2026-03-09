@@ -184,7 +184,7 @@ export default function SessionDashboard({
 
           return (
             <div key={group} className="mb-6">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+              <h3 className="sticky -top-4 z-10 bg-surface-0 pb-2 pt-4 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
                 {group}
               </h3>
               <div className="flex flex-col gap-2">
