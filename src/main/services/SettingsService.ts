@@ -17,6 +17,7 @@ export interface AppSettings {
   consentReminderShown: boolean
   modelsDownloaded: boolean
   theme: ThemePreference
+  reviewPanelOpen: boolean
   installedModelVersions: Record<string, InstalledModelVersion>
   pendingModelUpdates: PendingModelUpdate[] | null
   cachedAppUpdateStatus: AppUpdateStatus | null
@@ -33,6 +34,7 @@ const defaults: AppSettings = {
   consentReminderShown: false,
   modelsDownloaded: false,
   theme: 'system',
+  reviewPanelOpen: false,
   installedModelVersions: {},
   pendingModelUpdates: null,
   cachedAppUpdateStatus: null

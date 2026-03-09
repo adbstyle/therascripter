@@ -3,22 +3,7 @@ import { createPortal } from 'react-dom'
 import { NodeViewWrapper } from '@tiptap/react'
 import type { NodeViewProps } from '@tiptap/react'
 import type { PlaceholderType, EntitySource } from '../../../../shared/types'
-
-const CHIP_STYLES: Record<PlaceholderType, string> = {
-  PERSON: 'bg-chip-person-bg text-chip-person-text',
-  ORT: 'bg-chip-ort-bg text-chip-ort-text',
-  DATUM: 'bg-chip-datum-bg text-chip-datum-text',
-  KONTAKT: 'bg-chip-kontakt-bg text-chip-kontakt-text',
-  ORGANISATION: 'bg-chip-organisation-bg text-chip-organisation-text',
-  MEDIZINISCH: 'bg-chip-medizinisch-bg text-chip-medizinisch-text',
-  SONSTIGES: 'bg-chip-sonstiges-bg text-chip-sonstiges-text'
-}
-
-const SOURCE_LABELS: Record<EntitySource, { icon: string; label: string }> = {
-  ner: { icon: '\uD83E\uDD16', label: 'Automatisch erkannt (NER)' },
-  blocklist: { icon: '\uD83D\uDCD6', label: 'Sperrliste' },
-  manual: { icon: '\u270F\uFE0F', label: 'Manuell markiert' }
-}
+import { CHIP_STYLES, SOURCE_LABELS } from '../../constants/editorConstants'
 
 type TooltipPos = {
   x: number

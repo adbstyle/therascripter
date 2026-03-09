@@ -5,7 +5,8 @@ const settingsKeySchema = z.enum([
   'firstLaunchDone',
   'consentReminderShown',
   'modelsDownloaded',
-  'theme'
+  'theme',
+  'reviewPanelOpen'
 ])
 
 export const SettingsGetSchema = z.object({

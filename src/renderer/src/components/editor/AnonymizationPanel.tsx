@@ -1,0 +1,130 @@
+import { CHIP_STYLES, SOURCE_LABELS } from '../../constants/editorConstants'
+import type {
+  AnonymizationOverviewData,
+  EntityTypeGroup,
+  AnonymizedIdentity,
+  OriginalVariant
+} from '../../hooks/useAnonymizationOverview'
+
+interface AnonymizationPanelProps {
+  data: AnonymizationOverviewData
+  isOpen: boolean
+  onRevert: (entityId: string) => void
+}
+
+export function AnonymizationPanel({
+  data,
+  isOpen,
+  onRevert
+}: AnonymizationPanelProps): React.JSX.Element {
+  return (
+    <div
+      className={`flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out ${isOpen ? 'w-[300px]' : 'w-0'}`}
+    >
+      <div className="flex h-full w-[300px] flex-col border-l border-border bg-surface-1">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-text-primary">Anonymisierungen</h3>
+            {data.totalChips > 0 && (
+              <span className="rounded-full bg-surface-3 px-1.5 py-0.5 text-[11px] font-medium text-text-secondary">
+                {data.totalChips}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-3 py-3">
+          {data.totalIdentities === 0 ? (
+            <p className="py-8 text-center text-sm text-text-tertiary">
+              Keine Anonymisierungen
+            </p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {data.groups.map((group) => (
+                <TypeGroupSection key={group.type} group={group} onRevert={onRevert} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TypeGroupSection({
+  group,
+  onRevert
+}: {
+  group: EntityTypeGroup
+  onRevert: (entityId: string) => void
+}): React.JSX.Element {
+  const chipStyle = CHIP_STYLES[group.type] ?? CHIP_STYLES.SONSTIGES
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2">
+        <span
+          className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${chipStyle}`}
+        >
+          {group.label}
+        </span>
+      </div>
+      <div className="flex flex-col gap-2">
+        {group.identities.map((identity) => (
+          <IdentityRow key={identity.entityId} identity={identity} onRevert={onRevert} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function IdentityRow({
+  identity,
+  onRevert
+}: {
+  identity: AnonymizedIdentity
+  onRevert: (entityId: string) => void
+}): React.JSX.Element {
+  const chipStyle = CHIP_STYLES[identity.type] ?? CHIP_STYLES.SONSTIGES
+
+  return (
+    <div className="rounded-lg border border-border bg-surface-0 px-3 py-2">
+      <div className="flex items-center justify-between">
+        <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${chipStyle}`}>
+          {identity.placeholder}
+        </span>
+        <button
+          className="flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary"
+          onClick={() => onRevert(identity.entityId)}
+          title={`${identity.placeholder} rückgängig machen (${identity.totalCount} Vorkommen)`}
+          aria-label={`${identity.placeholder} rückgängig machen`}
+        >
+          &#8617;
+        </button>
+      </div>
+      <div className="mt-1.5 flex flex-col gap-1">
+        {identity.variants.map((variant) => (
+          <VariantRow key={`${variant.source}::${variant.text}`} variant={variant} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function VariantRow({ variant }: { variant: OriginalVariant }): React.JSX.Element {
+  const sourceInfo = SOURCE_LABELS[variant.source] ?? SOURCE_LABELS.ner
+
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-text-secondary">
+      <span className="truncate" title={variant.text}>
+        &ldquo;{variant.text}&rdquo;
+      </span>
+      {variant.count > 1 && (
+        <span className="flex-shrink-0 text-text-tertiary">{variant.count}x</span>
+      )}
+      <span className="flex-shrink-0" title={sourceInfo.label} aria-label={sourceInfo.label}>
+        {sourceInfo.icon}
+      </span>
+    </div>
+  )
+}

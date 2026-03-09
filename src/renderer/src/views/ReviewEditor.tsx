@@ -21,6 +21,8 @@ import {
 } from '../utils/editorCommands'
 import { serializeDocument } from '../../../shared/utils/serializeDocument'
 import { countWords } from '../../../shared/utils/countWords'
+import { useAnonymizationOverview } from '../hooks/useAnonymizationOverview'
+import { AnonymizationPanel } from '../components/editor/AnonymizationPanel'
 import type { EntityMap, PlaceholderType, ReviewData, SessionType } from '../../../shared/types'
 import type { TipTapDocument } from '../../../shared/types/TipTapDocument'
 import type { Editor } from '@tiptap/core'
@@ -54,15 +56,31 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const [showMenu, setShowMenu] = useState(false)
   const [showRenameDialog, setShowRenameDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(false)
   const entityMapRef = useRef<EntityMap>({})
   const editorRef = useRef<Editor | null>(null)
   const blocklistUndoStackRef = useRef<BlocklistUndoEntry[]>([])
+  const handleBatchRemoveRef = useRef<(entityId: string) => void>(() => {})
   const menuRef = useRef<HTMLDivElement>(null)
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(() => () => clearTimeout(scrollTimerRef.current), [])
 
   const closeMenu = useCallback(() => setShowMenu(false), [])
   useClickOutside(menuRef, closeMenu)
+
+  useEffect(() => {
+    window.api.settings.get('reviewPanelOpen').then((val) => {
+      if (typeof val === 'boolean') setPanelOpen(val)
+    })
+  }, [])
+
+  const togglePanel = useCallback(() => {
+    setPanelOpen((prev) => {
+      const next = !prev
+      window.api.settings.set('reviewPanelOpen', next)
+      return next
+    })
+  }, [])
 
   /** Update entityMap in both state and ref, and trigger auto-save */
   const updateEntityMap = useCallback((updated: EntityMap) => {
@@ -101,12 +119,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
             editorRef.current
           ) {
             const entityId = selection.node.attrs.entityId as string
-            const updated = batchRemovePlaceholder(
-              editorRef.current,
-              entityId,
-              entityMapRef.current
-            )
-            updateEntityMap(updated)
+            handleBatchRemoveRef.current(entityId)
             return true // Prevent default single-node deletion
           }
         }
@@ -311,11 +324,24 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const handleBatchRemove = useCallback(
     (entityId: string) => {
       if (!editor) return
+
+      // Sync blocklist undo stack: mark matching entries as undone + delete from SQLite
+      for (const entry of blocklistUndoStackRef.current) {
+        if (entry.entityId === entityId && !entry.undone) {
+          entry.undone = true
+          window.api.blocklist.delete(entry.entryId)
+        }
+      }
+
       const updated = batchRemovePlaceholder(editor, entityId, entityMapRef.current)
       updateEntityMap(updated)
+
+      // Refocus editor so Cmd+Z undo works immediately after sidebar action
+      editor.commands.focus()
     },
     [editor, updateEntityMap]
   )
+  handleBatchRemoveRef.current = handleBatchRemove
 
   /** Handle manual anonymization of the current selection */
   const handleAnonymize = useCallback(
@@ -421,6 +447,8 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     [updateCounter, loading, editor]
   )
 
+  const overviewData = useAnonymizationOverview(editor, updateCounter)
+
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -466,6 +494,15 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           >
             &#128203; Kopieren
           </button>
+          <button
+            className={`titlebar-no-drag flex items-center justify-center rounded-lg border border-border-strong px-3 py-2 text-sm font-semibold transition-colors hover:bg-surface-1 ${panelOpen ? 'bg-surface-2 text-text-primary' : 'bg-surface-0 text-text-secondary'}`}
+            onClick={togglePanel}
+            aria-label="Anonymisierungen anzeigen"
+            aria-pressed={panelOpen}
+            title="Anonymisierungen"
+          >
+            &#9776;
+          </button>
           <div ref={menuRef} className="titlebar-no-drag relative">
             <button
               className="flex items-center justify-center rounded-lg border border-border-strong bg-surface-0 px-3 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
@@ -500,18 +537,25 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
         </div>
       </header>
 
-      {/* Editor */}
-      <div
-        className="editor-scroll flex-1 overflow-y-auto"
-        onContextMenu={handleContextMenu}
-        onScroll={(e) => {
-          const el = e.currentTarget
-          el.classList.add('is-scrolling')
-          clearTimeout(scrollTimerRef.current)
-          scrollTimerRef.current = setTimeout(() => el.classList.remove('is-scrolling'), 1500)
-        }}
-      >
-        <EditorContent editor={editor} />
+      {/* Editor + Panel row */}
+      <div className="flex min-h-0 flex-1">
+        <div
+          className="editor-scroll min-w-0 flex-1 overflow-y-auto"
+          onContextMenu={handleContextMenu}
+          onScroll={(e) => {
+            const el = e.currentTarget
+            el.classList.add('is-scrolling')
+            clearTimeout(scrollTimerRef.current)
+            scrollTimerRef.current = setTimeout(() => el.classList.remove('is-scrolling'), 1500)
+          }}
+        >
+          <EditorContent editor={editor} />
+        </div>
+        <AnonymizationPanel
+          data={overviewData}
+          isOpen={panelOpen}
+          onRevert={handleBatchRemove}
+        />
       </div>
 
       {/* Context menu */}

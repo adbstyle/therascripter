@@ -15,12 +15,15 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     transcriptPath: null,
     anonymizedPath: null,
     diarizationPath: null,
+    alignedTranscriptPath: null,
     pdfPath: null,
+    extractedPath: null,
     entityMap: null,
     errorMessage: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     reviewAt: null,
+    wordCount: null,
     ...overrides
   }
 }
