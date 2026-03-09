@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Session, SessionStatus } from '../../../shared/types'
 import { useSessions } from '../hooks/useSessions'
 import { groupSessionsByTime, GROUP_ORDER } from '../utils/groupSessionsByTime'
@@ -18,18 +18,32 @@ interface SessionDashboardProps {
   isImporting?: boolean
   onImportingChange?: (importing: boolean) => void
   onOpenReview?: (sessionId: string) => void
+  scrollToSessionId?: string | null
 }
 
 export default function SessionDashboard({
   refreshTrigger,
   isImporting,
   onImportingChange,
-  onOpenReview
+  onOpenReview,
+  scrollToSessionId
 }: SessionDashboardProps): React.JSX.Element {
   const { sessions, loading, error, refresh, deleteSession, renameSession } = useSessions()
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
   const [renameTarget, setRenameTarget] = useState<Session | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
+
+  // Scroll to a specific session card after returning from review
+  useLayoutEffect(() => {
+    if (!scrollToSessionId || loading || sessions.length === 0) return
+    const card = scrollContainerRef.current?.querySelector(
+      `[data-session-id="${scrollToSessionId}"]`
+    )
+    if (card) {
+      card.scrollIntoView({ block: 'center', behavior: 'instant' })
+    }
+  }, [scrollToSessionId, loading, sessions.length])
 
   // Derive processing state from sessions list (avoids race with brief isProcessing=false between tasks)
   const isAnyProcessing = useMemo(
@@ -167,6 +181,7 @@ export default function SessionDashboard({
   return (
     <>
       <div
+        ref={scrollContainerRef}
         className={`relative flex-1 overflow-y-auto px-6 py-4 transition-colors ${isDragOver ? 'bg-primary-light' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -189,21 +204,22 @@ export default function SessionDashboard({
               </h3>
               <div className="flex flex-col gap-2">
                 {groupSessions.map((session) => (
-                  <SessionCard
-                    key={session.id}
-                    session={session}
-                    onRename={() => setRenameTarget(session)}
-                    onDelete={() => setDeleteTarget(session)}
-                    onRetry={
-                      session.status === 'error'
-                        ? () => handleRetry(session.id)
-                        : undefined
-                    }
-                    retryDisabled={isAnyProcessing}
-                    onClick={
-                      session.status === 'review' ? () => onOpenReview?.(session.id) : undefined
-                    }
-                  />
+                  <div key={session.id} data-session-id={session.id}>
+                    <SessionCard
+                      session={session}
+                      onRename={() => setRenameTarget(session)}
+                      onDelete={() => setDeleteTarget(session)}
+                      onRetry={
+                        session.status === 'error'
+                          ? () => handleRetry(session.id)
+                          : undefined
+                      }
+                      retryDisabled={isAnyProcessing}
+                      onClick={
+                        session.status === 'review' ? () => onOpenReview?.(session.id) : undefined
+                      }
+                    />
+                  </div>
                 ))}
               </div>
             </div>
