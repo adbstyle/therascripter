@@ -10,6 +10,7 @@ interface SessionCardProps {
   onClick?: () => void
   onRetry?: () => void
   retryDisabled?: boolean
+  'data-session-id'?: string
 }
 
 const STATUS_CONFIG: Record<SessionStatus, { label: string; color: string }> = {
@@ -55,7 +56,8 @@ export function SessionCard({
   onDelete,
   onClick,
   onRetry,
-  retryDisabled
+  retryDisabled,
+  'data-session-id': dataSessionId
 }: SessionCardProps): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -78,6 +80,7 @@ export function SessionCard({
   return (
     <div
       className={`group relative flex items-center gap-3 rounded-lg border border-border bg-surface-0 px-4 py-3 transition-colors hover:border-border-strong ${onClick ? 'cursor-pointer hover:shadow-sm' : ''}`}
+      data-session-id={dataSessionId}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}

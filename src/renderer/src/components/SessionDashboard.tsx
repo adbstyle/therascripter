@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Session, SessionStatus } from '../../../shared/types'
 import { useSessions } from '../hooks/useSessions'
 import { groupSessionsByTime, GROUP_ORDER } from '../utils/groupSessionsByTime'
@@ -18,18 +18,39 @@ interface SessionDashboardProps {
   isImporting?: boolean
   onImportingChange?: (importing: boolean) => void
   onOpenReview?: (sessionId: string) => void
+  scrollToSessionId?: string | null
+  onScrollComplete?: () => void
 }
 
 export default function SessionDashboard({
   refreshTrigger,
   isImporting,
   onImportingChange,
-  onOpenReview
+  onOpenReview,
+  scrollToSessionId,
+  onScrollComplete
 }: SessionDashboardProps): React.JSX.Element {
   const { sessions, loading, error, refresh, deleteSession, renameSession } = useSessions()
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
   const [renameTarget, setRenameTarget] = useState<Session | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
+
+  // Scroll to a specific session card after returning from review
+  useLayoutEffect(() => {
+    if (!scrollToSessionId || loading || sessions.length === 0) return
+    const card = scrollContainerRef.current?.querySelector<HTMLElement>(
+      `[data-session-id="${scrollToSessionId}"]`
+    )
+    if (card) {
+      card.scrollIntoView({ block: 'center', behavior: 'instant' })
+      card.classList.add('session-highlight')
+      card.addEventListener('animationend', () => card.classList.remove('session-highlight'), {
+        once: true
+      })
+      onScrollComplete?.()
+    }
+  }, [scrollToSessionId, loading, sessions.length, onScrollComplete])
 
   // Derive processing state from sessions list (avoids race with brief isProcessing=false between tasks)
   const isAnyProcessing = useMemo(
@@ -167,6 +188,7 @@ export default function SessionDashboard({
   return (
     <>
       <div
+        ref={scrollContainerRef}
         className={`relative flex-1 overflow-y-auto px-6 py-4 transition-colors ${isDragOver ? 'bg-primary-light' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -184,7 +206,7 @@ export default function SessionDashboard({
 
           return (
             <div key={group} className="mb-6">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+              <h3 className="sticky -top-4 z-10 bg-surface-0 pb-2 pt-4 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
                 {group}
               </h3>
               <div className="flex flex-col gap-2">
@@ -192,6 +214,7 @@ export default function SessionDashboard({
                   <SessionCard
                     key={session.id}
                     session={session}
+                    data-session-id={session.id}
                     onRename={() => setRenameTarget(session)}
                     onDelete={() => setDeleteTarget(session)}
                     onRetry={

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import SessionDashboard from './components/SessionDashboard'
 import RecordingView from './components/RecordingView'
 import FirstLaunchScreen from './components/FirstLaunchScreen'
@@ -23,6 +23,7 @@ export default function App(): React.JSX.Element {
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [isImporting, setIsImporting] = useState(false)
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null)
+  const scrollToSessionId = useRef<string | null>(null)
   const [appVersion, setAppVersion] = useState<string | null>(null)
 
   useEffect(() => {
@@ -72,9 +73,14 @@ export default function App(): React.JSX.Element {
   }, [clearUpdates])
 
   const handleCloseReview = useCallback(() => {
+    scrollToSessionId.current = reviewSessionId
     setReviewSessionId(null)
     setCurrentView('sessions')
     setRefreshTrigger((v) => v + 1)
+  }, [reviewSessionId])
+
+  const handleScrollComplete = useCallback(() => {
+    scrollToSessionId.current = null
   }, [])
 
   const handleRestartForUpdate = useCallback(async () => {
@@ -204,6 +210,8 @@ export default function App(): React.JSX.Element {
               isImporting={isImporting}
               onImportingChange={setIsImporting}
               onOpenReview={handleOpenReview}
+              scrollToSessionId={scrollToSessionId.current}
+              onScrollComplete={handleScrollComplete}
             />
           ) : (
             <Settings />

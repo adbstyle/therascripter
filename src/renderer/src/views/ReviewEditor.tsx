@@ -474,20 +474,20 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Header */}
-      <header className="titlebar-drag flex items-center justify-between border-b border-border px-6 py-4">
-        <div className="flex items-center gap-3">
+      <header className="titlebar-drag flex items-center justify-between gap-4 border-b border-border px-6 py-4">
+        <div className="flex min-w-0 items-center gap-3">
           <button
-            className="titlebar-no-drag rounded-md px-2 py-1 text-sm text-text-tertiary hover:bg-surface-2 hover:text-text-secondary"
+            className="titlebar-no-drag shrink-0 rounded-md px-2 py-1 text-sm text-text-tertiary hover:bg-surface-2 hover:text-text-secondary"
             onClick={onBack}
           >
             &larr; Zurück
           </button>
-          <span className="text-lg" aria-hidden="true">
+          <span className="shrink-0 text-lg" aria-hidden="true">
             {sessionType === 'audio' ? '\uD83C\uDFA4' : '\uD83D\uDCC4'}
           </span>
-          <h2 className="text-lg font-semibold text-text-primary">{sessionTitle}</h2>
+          <h2 className="truncate text-lg font-semibold text-text-primary">{sessionTitle}</h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <button
             className="titlebar-no-drag flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface-0 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
             onClick={handleExportClipboard}

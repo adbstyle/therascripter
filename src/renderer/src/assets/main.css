@@ -168,6 +168,22 @@
   --tw-ring-offset-color: var(--color-surface-0);
 }
 
+/* Session card highlight after returning from review */
+@keyframes session-highlight {
+  0% {
+    background-color: var(--color-surface-3);
+    border-color: var(--color-border-strong);
+  }
+  100% {
+    background-color: var(--color-surface-0);
+    border-color: var(--color-border);
+  }
+}
+
+.session-highlight {
+  animation: session-highlight 0.8s ease-out !important;
+}
+
 /* titleBarStyle: 'hiddenInset' removes the native title bar drag region.
    We must define our own drag regions via -webkit-app-region: drag. */
 .titlebar-drag {
