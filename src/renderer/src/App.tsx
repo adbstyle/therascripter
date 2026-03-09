@@ -79,6 +79,10 @@ export default function App(): React.JSX.Element {
     setRefreshTrigger((v) => v + 1)
   }, [reviewSessionId])
 
+  const handleScrollComplete = useCallback(() => {
+    scrollToSessionId.current = null
+  }, [])
+
   const handleRestartForUpdate = useCallback(async () => {
     if (!availableUpdates) return
 
@@ -207,6 +211,7 @@ export default function App(): React.JSX.Element {
               onImportingChange={setIsImporting}
               onOpenReview={handleOpenReview}
               scrollToSessionId={scrollToSessionId.current}
+              onScrollComplete={handleScrollComplete}
             />
           ) : (
             <Settings />

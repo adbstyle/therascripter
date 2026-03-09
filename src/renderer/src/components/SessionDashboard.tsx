@@ -19,6 +19,7 @@ interface SessionDashboardProps {
   onImportingChange?: (importing: boolean) => void
   onOpenReview?: (sessionId: string) => void
   scrollToSessionId?: string | null
+  onScrollComplete?: () => void
 }
 
 export default function SessionDashboard({
@@ -26,7 +27,8 @@ export default function SessionDashboard({
   isImporting,
   onImportingChange,
   onOpenReview,
-  scrollToSessionId
+  scrollToSessionId,
+  onScrollComplete
 }: SessionDashboardProps): React.JSX.Element {
   const { sessions, loading, error, refresh, deleteSession, renameSession } = useSessions()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -37,13 +39,18 @@ export default function SessionDashboard({
   // Scroll to a specific session card after returning from review
   useLayoutEffect(() => {
     if (!scrollToSessionId || loading || sessions.length === 0) return
-    const card = scrollContainerRef.current?.querySelector(
+    const card = scrollContainerRef.current?.querySelector<HTMLElement>(
       `[data-session-id="${scrollToSessionId}"]`
     )
     if (card) {
       card.scrollIntoView({ block: 'center', behavior: 'instant' })
+      card.classList.add('session-highlight')
+      card.addEventListener('animationend', () => card.classList.remove('session-highlight'), {
+        once: true
+      })
+      onScrollComplete?.()
     }
-  }, [scrollToSessionId, loading, sessions.length])
+  }, [scrollToSessionId, loading, sessions.length, onScrollComplete])
 
   // Derive processing state from sessions list (avoids race with brief isProcessing=false between tasks)
   const isAnyProcessing = useMemo(
@@ -204,22 +211,22 @@ export default function SessionDashboard({
               </h3>
               <div className="flex flex-col gap-2">
                 {groupSessions.map((session) => (
-                  <div key={session.id} data-session-id={session.id}>
-                    <SessionCard
-                      session={session}
-                      onRename={() => setRenameTarget(session)}
-                      onDelete={() => setDeleteTarget(session)}
-                      onRetry={
-                        session.status === 'error'
-                          ? () => handleRetry(session.id)
-                          : undefined
-                      }
-                      retryDisabled={isAnyProcessing}
-                      onClick={
-                        session.status === 'review' ? () => onOpenReview?.(session.id) : undefined
-                      }
-                    />
-                  </div>
+                  <SessionCard
+                    key={session.id}
+                    session={session}
+                    data-session-id={session.id}
+                    onRename={() => setRenameTarget(session)}
+                    onDelete={() => setDeleteTarget(session)}
+                    onRetry={
+                      session.status === 'error'
+                        ? () => handleRetry(session.id)
+                        : undefined
+                    }
+                    retryDisabled={isAnyProcessing}
+                    onClick={
+                      session.status === 'review' ? () => onOpenReview?.(session.id) : undefined
+                    }
+                  />
                 ))}
               </div>
             </div>
