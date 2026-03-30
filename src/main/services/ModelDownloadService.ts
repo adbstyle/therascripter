@@ -59,7 +59,7 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     relativePath: 'diarization',
     checkPath: 'diarization/models--pyannote--speaker-diarization-3.1',
     sizeBytes: 30_461_603,
-    sha256: '81ec9fc7551884e8b7b47fbb07eb67c787220d92673c9c00a2677d2d78c2f186',
+    sha256: 'b42e8aee7cf5eb330f4d5519216f9035dc1defad871097977fa9cecc11edb570',
     archive: true
   },
   {
@@ -69,7 +69,7 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     relativePath: 'ner',
     checkPath: 'ner/models/ner-german-large',
     sizeBytes: 1_741_705_466,
-    sha256: 'f512eca0bed5372ea691b7f0e92e29dd02cd4d57fed6adf406cf884a817133e3',
+    sha256: 'a34f6315659a34991930dae5d7a2bc2f3ee24ff6eb70dcd4d41e3aca7a5253e6',
     archive: true
   }
 ]
