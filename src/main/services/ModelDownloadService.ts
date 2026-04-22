@@ -71,6 +71,22 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     speedScore: 0.9
   },
   {
+    id: 'whisper-large-v3-turbo-swiss',
+    label: 'Whisper Large V3 Turbo (Swiss-German)',
+    url: `${R2_CDN}/whisper-ggml-large-v3-turbo-swiss-q5_0.bin`,
+    relativePath: 'asr/ggml-large-v3-turbo-swiss-q5_0.bin',
+    checkPath: 'asr/ggml-large-v3-turbo-swiss-q5_0.bin',
+    sizeBytes: 0, // TBD: set after model conversion in scripts/convert-hf-whisper.sh
+    sha256: 'PENDING_UPLOAD', // TBD: set after model conversion
+    group: 'asr',
+    isRequired: false,
+    description:
+      'Spezialisiert auf starke Schweizerdeutsch-Dialekte (Basis: Flurin17/whisper-large-v3-turbo-swiss-german). Merklich präzisere Transkription bei ausgeprägter Mundart. Nicht geeignet für andere Sprachen.',
+    languages: ['de-CH', 'de'],
+    accuracyScore: 0.9,
+    speedScore: 0.85
+  },
+  {
     id: 'pyannote-community-1',
     label: 'Sprechererkennung (pyannote-community-1)',
     url: `${R2_CDN}/pyannote-models.tar.gz`,
