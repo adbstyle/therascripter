@@ -41,7 +41,8 @@ import {
   getAsrModels,
   getRequiredModels,
   getModelById,
-  getModelsToLoadOnFirstLaunch
+  getModelsToLoadOnFirstLaunch,
+  downloadSingleModel
 } from '../ModelDownloadService'
 
 describe('ModelDownloadService catalog helpers', () => {
@@ -80,5 +81,19 @@ describe('ModelDownloadService catalog helpers', () => {
       'flair-ner-german-large',
       'pyannote-community-1'
     ])
+  })
+})
+
+describe('downloadSingleModel', () => {
+  it('throws when model id is unknown', async () => {
+    await expect(downloadSingleModel('does-not-exist')).rejects.toThrow(
+      /unbekanntes Modell/i
+    )
+  })
+
+  it('throws when model is not in group "asr"', async () => {
+    await expect(downloadSingleModel('pyannote-community-1')).rejects.toThrow(
+      /nur ASR-Modelle/i
+    )
   })
 })
