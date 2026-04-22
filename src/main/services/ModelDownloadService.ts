@@ -473,3 +473,25 @@ export async function deleteModel(id: string): Promise<void> {
   delete installed[id]
   settings.set('installedModelVersions', installed)
 }
+
+/**
+ * Wechselt das aktive ASR-Modell. Das Modell muss:
+ *   - existieren (bekannte ID)
+ *   - in der ASR-Gruppe liegen
+ *   - auf Disk installiert sein
+ */
+export function setActiveAsrModel(id: string): void {
+  const def = getModelById(id)
+  if (!def) {
+    throw new Error(`Aktivieren: unbekanntes Modell "${id}"`)
+  }
+  if (def.group !== 'asr') {
+    throw new Error(`Aktivieren: "${def.label}" ist keine ASR-Engine`)
+  }
+  if (!isModelInstalled(id)) {
+    throw new Error(`Aktivieren: "${def.label}" ist nicht installiert`)
+  }
+  const settings = getSettings()
+  const current = settings.get('activeModels')
+  settings.set('activeModels', { ...current, transcription: id })
+}

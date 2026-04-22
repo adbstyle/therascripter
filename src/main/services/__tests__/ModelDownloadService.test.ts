@@ -43,7 +43,8 @@ import {
   getModelById,
   getModelsToLoadOnFirstLaunch,
   downloadSingleModel,
-  deleteModel
+  deleteModel,
+  setActiveAsrModel
 } from '../ModelDownloadService'
 
 describe('ModelDownloadService catalog helpers', () => {
@@ -111,5 +112,22 @@ describe('deleteModel', () => {
   it('throws when attempting to delete the active asr model', async () => {
     // Mock returns activeModels.transcription = 'whisper-large-v3-turbo'
     await expect(deleteModel('whisper-large-v3-turbo')).rejects.toThrow(/aktiv/i)
+  })
+})
+
+describe('setActiveAsrModel', () => {
+  it('throws when model id is unknown', () => {
+    expect(() => setActiveAsrModel('nope')).toThrow(/unbekanntes Modell/i)
+  })
+
+  it('throws when model is not asr group', () => {
+    expect(() => setActiveAsrModel('pyannote-community-1')).toThrow(/keine ASR/i)
+  })
+
+  it('throws when model is not installed', () => {
+    // Swiss-German is in the catalog but not on disk (existsSync mocked to false)
+    expect(() => setActiveAsrModel('whisper-large-v3-turbo-swiss')).toThrow(
+      /nicht installiert/i
+    )
   })
 })
