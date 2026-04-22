@@ -1,4 +1,5 @@
 import type { ModelCatalogEntry } from '../../../../shared/validation/model-catalog-schemas'
+import { formatBytes } from '../../utils/formatBytes'
 
 interface Props {
   model: ModelCatalogEntry
@@ -11,11 +12,10 @@ interface Props {
   onActivate: () => void
 }
 
-function formatBytes(bytes: number): string {
+/** Zeigt '—' für unbekannte Grössen (Platzhalter-Modelle vor R2-Upload). */
+function formatModelSize(bytes: number): string {
   if (bytes === 0) return '—'
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${Math.round(bytes / (1024 * 1024))} MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+  return formatBytes(bytes)
 }
 
 function formatLanguage(code: string): string {
@@ -73,7 +73,7 @@ export default function AsrModelCard({
 
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {model.languages?.map((lang) => <Chip key={lang}>{formatLanguage(lang)}</Chip>)}
-            <Chip>{formatBytes(model.sizeBytes)}</Chip>
+            <Chip>{formatModelSize(model.sizeBytes)}</Chip>
           </div>
 
           {model.description && (

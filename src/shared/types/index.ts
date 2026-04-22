@@ -31,6 +31,7 @@ export type {
   ModelStatusInfo,
   DiskSpaceInfo,
   ModelDownloadApi,
+  ModelCatalogApi,
   ModelUpdateRestartResult,
   ModelUpdateApi,
   AppUpdateApi,

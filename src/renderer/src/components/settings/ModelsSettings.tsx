@@ -3,12 +3,8 @@ import type { ModelCatalogEntry } from '../../../../shared/validation/model-cata
 import type { ModelDownloadStatus } from '../../../../shared/types/IpcApi'
 import { useToast } from '../../hooks/useToast'
 import { ConfirmDialog } from '../ConfirmDialog'
+import { formatBytes } from '../../utils/formatBytes'
 import AsrModelCard from './AsrModelCard'
-
-function formatBytesShort(bytes: number): string {
-  if (bytes < 1024 * 1024 * 1024) return `${Math.round(bytes / (1024 * 1024))} MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
-}
 
 export default function ModelsSettings(): React.JSX.Element {
   const toast = useToast()
@@ -64,7 +60,7 @@ export default function ModelsSettings(): React.JSX.Element {
       const updated = await window.api.modelCatalog.delete(model.id)
       setModels(updated)
       toast.success(
-        `"${model.label}" gelöscht — ${formatBytesShort(model.sizeBytes)} freigegeben.`
+        `"${model.label}" gelöscht — ${formatBytes(model.sizeBytes)} freigegeben.`
       )
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
@@ -154,7 +150,7 @@ export default function ModelsSettings(): React.JSX.Element {
       {deleteCandidate && (
         <ConfirmDialog
           title={`${deleteCandidate.label} löschen?`}
-          message={`${formatBytesShort(deleteCandidate.sizeBytes)} werden freigegeben. Du kannst das Modell später jederzeit erneut herunterladen.`}
+          message={`${formatBytes(deleteCandidate.sizeBytes)} werden freigegeben. Du kannst das Modell später jederzeit erneut herunterladen.`}
           confirmLabel="Löschen"
           destructive
           onConfirm={() => handleDeleteConfirmed(deleteCandidate)}
