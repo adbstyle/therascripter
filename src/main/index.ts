@@ -16,6 +16,7 @@ import { registerPDFHandlers } from './ipc/pdf-handlers'
 import { registerReviewHandlers } from './ipc/review-handlers'
 import { registerSystemHandlers } from './ipc/system-handlers'
 import { registerModelDownloadHandlers } from './ipc/model-download-handlers'
+import { registerModelCatalogHandlers } from './ipc/model-catalog-handlers'
 import { registerModelUpdateHandlers } from './ipc/model-update-handlers'
 import { initTray, getTray } from './services/TrayService'
 import {
@@ -157,6 +158,7 @@ app.whenReady().then(() => {
   registerReviewHandlers()
   registerSystemHandlers()
   registerModelDownloadHandlers()
+  registerModelCatalogHandlers()
   registerModelUpdateHandlers()
   registerAppUpdateHandlers()
 
