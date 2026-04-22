@@ -63,13 +63,11 @@ source "$VENV/bin/activate"
 pip install --quiet --upgrade pip
 pip install --quiet torch transformers huggingface_hub
 
-# 3. HF-Modell herunterladen
+# 3. HF-Modell herunterladen (hf ist der neue CLI; huggingface-cli ist deprecated seit 2025)
 if [ ! -d "$MODEL_DIR/$(basename "$HF_REPO")" ]; then
   echo "-> Lade $HF_REPO herunter"
   mkdir -p "$MODEL_DIR"
-  huggingface-cli download "$HF_REPO" \
-    --local-dir "$MODEL_DIR/$(basename "$HF_REPO")" \
-    --local-dir-use-symlinks False
+  hf download "$HF_REPO" --local-dir "$MODEL_DIR/$(basename "$HF_REPO")"
 fi
 
 # 4. ggml-Conversion. Script legt ggml-model.bin in $WORK_DIR ab.
@@ -81,25 +79,38 @@ python "$WHISPER_CPP_DIR/models/convert-h5-to-ggml.py" \
   "$WORK_DIR"
 mv "$WORK_DIR/ggml-model.bin" "$GGML_RAW"
 
-# 5. whisper.cpp bauen (ohne --target, weil der Binary-Name je Version
-#    zwischen `quantize` und `whisper-quantize` wechselt).
-if [ ! -d "$WHISPER_CPP_DIR/build" ]; then
-  echo "-> Baue whisper.cpp"
-  (cd "$WHISPER_CPP_DIR" && cmake -B build && cmake --build build -j)
-fi
-
-# 6. Quantize-Binary finden (Name variiert nach whisper.cpp-Version)
+# 5/6. Quantize-Binary finden. Reihenfolge:
+#   1. Homebrew (whisper-cpp formula installiert whisper-quantize) — bevorzugt,
+#      weil cmake-Build aus Source oft an Xcode-SDK-Problemen scheitert.
+#   2. Lokal gebautes whisper.cpp (Fallback, falls Homebrew-Version fehlt).
 QUANTIZE_BIN=""
-for candidate in "$WHISPER_CPP_DIR/build/bin/quantize" \
-                 "$WHISPER_CPP_DIR/build/bin/whisper-quantize"; do
+for candidate in "/opt/homebrew/bin/whisper-quantize" \
+                 "/usr/local/bin/whisper-quantize" \
+                 "$WHISPER_CPP_DIR/build/bin/whisper-quantize" \
+                 "$WHISPER_CPP_DIR/build/bin/quantize"; do
   if [ -x "$candidate" ]; then
     QUANTIZE_BIN="$candidate"
     break
   fi
 done
+
 if [ -z "$QUANTIZE_BIN" ]; then
-  echo "Error: quantize-Binary nicht gefunden in $WHISPER_CPP_DIR/build/bin/" >&2
-  ls "$WHISPER_CPP_DIR/build/bin/" >&2
+  echo "-> Kein quantize-Binary gefunden — baue whisper.cpp aus Source"
+  if [ ! -d "$WHISPER_CPP_DIR/build" ]; then
+    (cd "$WHISPER_CPP_DIR" && cmake -B build && cmake --build build -j)
+  fi
+  for candidate in "$WHISPER_CPP_DIR/build/bin/whisper-quantize" \
+                   "$WHISPER_CPP_DIR/build/bin/quantize"; do
+    if [ -x "$candidate" ]; then
+      QUANTIZE_BIN="$candidate"
+      break
+    fi
+  done
+fi
+
+if [ -z "$QUANTIZE_BIN" ]; then
+  echo "Error: quantize-Binary nicht gefunden. Installiere Homebrew whisper-cpp:" >&2
+  echo "  brew install whisper-cpp" >&2
   exit 1
 fi
 
