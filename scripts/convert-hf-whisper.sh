@@ -23,6 +23,13 @@ fi
 HF_REPO="$1"
 OUT_NAME="$2"
 
+# Python 3.14 is too new for current torch wheels → default to 3.12, allow override.
+PYTHON_BIN="${PYTHON_BIN:-python3.12}"
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  echo "Error: $PYTHON_BIN nicht gefunden. Setze PYTHON_BIN=python3.x explizit." >&2
+  exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 WORK_DIR="$PROJECT_ROOT/build/convert-hf-whisper"
@@ -49,7 +56,7 @@ fi
 # 2. Python-Deps in ein venv, um System-Python nicht zu verschmutzen
 VENV="$WORK_DIR/venv"
 if [ ! -d "$VENV" ]; then
-  python3 -m venv "$VENV"
+  "$PYTHON_BIN" -m venv "$VENV"
 fi
 # shellcheck disable=SC1091
 source "$VENV/bin/activate"
