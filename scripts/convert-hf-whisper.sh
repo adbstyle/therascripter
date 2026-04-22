@@ -46,6 +46,17 @@ if [ ! -d "$WHISPER_CPP_DIR" ]; then
   git clone --depth 1 https://github.com/ggml-org/whisper.cpp "$WHISPER_CPP_DIR"
 fi
 
+# 1a-patch: convert-h5-to-ggml.py unterstützt BFloat16 nicht out-of-the-box.
+# Flurin17 und viele andere HF-Whisper-Fine-Tunes werden in bf16 gespeichert.
+# Fix: .float()-Cast vor .numpy() einfügen. Idempotent via grep-Check.
+CONVERT_SCRIPT="$WHISPER_CPP_DIR/models/convert-h5-to-ggml.py"
+if ! grep -q 'squeeze()\.float()\.numpy()' "$CONVERT_SCRIPT"; then
+  echo "-> Patche $CONVERT_SCRIPT (BFloat16-Support)"
+  # macOS sed braucht '' nach -i
+  sed -i '' 's|list_vars\[src\]\.squeeze()\.numpy()|list_vars[src].squeeze().float().numpy()|g' \
+    "$CONVERT_SCRIPT"
+fi
+
 # 1b. openai/whisper-Repo clonen - convert-h5-to-ggml.py erwartet das
 #     als zweites Argument (Quelle: Mel-Filter-Assets + Tokenizer-Artefakte).
 if [ ! -d "$OPENAI_WHISPER_DIR" ]; then
