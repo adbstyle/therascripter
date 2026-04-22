@@ -76,8 +76,8 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     url: `${R2_CDN}/whisper-ggml-large-v3-turbo-swiss-q5_0.bin`,
     relativePath: 'asr/ggml-large-v3-turbo-swiss-q5_0.bin',
     checkPath: 'asr/ggml-large-v3-turbo-swiss-q5_0.bin',
-    sizeBytes: 0, // TBD: set after model conversion in scripts/convert-hf-whisper.sh
-    sha256: 'PENDING_UPLOAD', // TBD: set after model conversion
+    sizeBytes: 574_041_195,
+    sha256: '2d56e773724a247360067b527417842b81d25ff891fed014341a6844f15ea612',
     group: 'asr',
     isRequired: false,
     description:
