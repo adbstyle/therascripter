@@ -2,6 +2,8 @@
 
 Therascript relies on three ML models that are downloaded on first launch and kept up to date via an R2-hosted manifest. App updates are surfaced separately through a non-blocking hint.
 
+Since v0.5 the ASR-Modell (Transkription) is **auswählbar** aus einem Katalog — Default ist das multilinguale Turbo-Modell, optional kann ein Schweizerdeutsch-Fine-Tune installiert werden. Siehe [ASR Model Catalog](#asr-model-catalog) unten.
+
 ## First Launch Flow
 
 On startup, `App.tsx` calls `modelDownload:status` (which runs `checkModelsExist()`) to determine whether all models are present. If any model is missing, `modelsReady` is `false` and the app renders `FirstLaunchScreen` instead of the main UI.
@@ -248,3 +250,50 @@ The `cachedAppUpdateStatus` electron-store key follows this lifecycle:
 | `appUpdate:check` | handle | Triggers full manifest check (model + app) |
 | `appUpdate:openReleasePage` | handle | Opens GitHub Releases in default browser |
 | `appUpdate:status` | send | Pushes app update status to renderer |
+
+## ASR Model Catalog
+
+Seit v0.5 ist das ASR-Modell auswählbar. `ModelDefinition` hat zwei neue Kategorisierungs-Felder:
+
+- **`group`**: `'asr' | 'diarization' | 'ner'` — legt fest, welche Helper greifen (`getAsrModels()`, `getRequiredModels()`)
+- **`isRequired`**: Pflicht-Modelle werden auf First-Launch automatisch geladen und können nicht gelöscht werden. Nur `pyannote-community-1` + `flair-ner-german-large` sind Pflicht.
+
+### First-Launch-Scope
+
+`checkModelsExist()` ruft intern `checkRequiredAndActiveAsrExist(activeAsrId)` → lädt **nur** die Pflicht-Modelle **plus** das aktive ASR-Modell (`activeModels.transcription` aus electron-store). Optionale ASR-Alternativen werden erst auf User-Wunsch via Settings → Modelle heruntergeladen.
+
+### Verfügbare ASR-Modelle (Stand v0.5)
+
+| ID | Sprachen | Grösse | Szenario |
+|---|---|---|---|
+| `whisper-large-v3-turbo` (Default) | Multilingual | 574 MB | Standard — funktioniert mit Hochdeutsch, Englisch, etc. |
+| `whisper-large-v3-turbo-swiss` | Schweizerdeutsch, Hochdeutsch | ~574 MB | Spezialist-Modell (Basis: Flurin17/whisper-large-v3-turbo-swiss-german). Merklich bessere Erkennung bei starken Dialekten, nicht für andere Sprachen geeignet. |
+
+### Settings → Modelle
+
+Der Tab in `src/renderer/src/views/Settings.tsx` rendert `ModelsSettings.tsx`. Die Komponente:
+
+- listet ASR-Modelle in zwei Sektionen (Installiert / Zum Download verfügbar)
+- zeigt Active-Badge, Sprach-Chips, Grössenangabe, Beschreibungs-Prosa
+- bietet Herunterladen / Löschen / Aktivieren / Download-Abbrechen
+- nutzt `ConfirmDialog` + `useToast()` für Destructive-/Success-Feedback
+- zeigt die Pflicht-Modelle read-only als Info-Block
+
+### IPC-Channels
+
+| Channel | Direction | Purpose |
+|---------|-----------|---------|
+| `modelCatalog:listAsr` | handle | Gibt alle ASR-Modelle mit `isInstalled`/`isActive` zurück |
+| `modelCatalog:download` | handle | Lädt ein einzelnes ASR-Modell (mit `abortSignal`-Singleton) |
+| `modelCatalog:delete` | handle | Löscht Modell (Guards: nicht Pflicht, nicht aktiv) |
+| `modelCatalog:setActive` | handle | Wechselt `activeModels.transcription` (Guard: installiert) |
+| `modelCatalog:cancelDownload` | handle | Bricht laufenden Download ab |
+
+### Release-Flow für neue ASR-Modelle
+
+1. `scripts/convert-hf-whisper.sh <hf-repo> <output-basename>` — konvertiert ein HuggingFace-Whisper-Modell via `convert-h5-to-ggml.py` + quantisiert auf `q5_0`. Output: `r2-upload/<basename>.bin`. Druckt SHA-256 + Grösse.
+2. Datei auf R2 hochladen (via `aws s3 cp`)
+3. Eintrag in `MODEL_DEFINITIONS` (`ModelDownloadService.ts`) ergänzen: `group: 'asr'`, `isRequired: false`, `description`, `languages`, `accuracyScore`, `speedScore`, korrekter SHA-256 und `sizeBytes`
+4. Manifest-Array in `scripts/publish-manifest.sh` um den neuen Eintrag erweitern
+5. `scripts/publish-manifest.sh` laufen lassen
+6. App-Release (Hash-Sync — siehe CLAUDE.md "Model hash sync")
