@@ -246,11 +246,13 @@ export class WhisperService implements TaskExecutor {
 
     const duration = cleanedWords.length > 0 ? cleanedWords[cleanedWords.length - 1].end : 0
 
+    const activeAsrId = getSettings().get('activeModels').transcription
+
     return {
       words: cleanedWords,
       segments,
       metadata: {
-        model: 'whisper-large-v3-turbo-q5_0',
+        model: activeAsrId,
         language: 'de',
         duration
       }
