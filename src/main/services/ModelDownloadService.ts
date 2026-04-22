@@ -214,7 +214,7 @@ export async function startModelDownload(): Promise<void> {
   const overallTotal = getOverallModelSize()
   let overallDownloaded = 0
 
-  for (const model of MODEL_DEFINITIONS) {
+  for (const model of getModelsToLoad()) {
     const checkTarget = join(modelsDir, model.checkPath)
 
     // Skip already downloaded/extracted models
