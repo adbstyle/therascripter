@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, statSync, unlinkSync } from 'fs'
+import { existsSync, mkdirSync, rmSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { BrowserWindow } from 'electron'
 import { getDataDir } from '../db/connection'
@@ -430,4 +430,46 @@ export async function downloadSingleModel(id: string): Promise<void> {
 
   sendProgress({ state: 'complete' })
   abortSignal = null
+}
+
+/**
+ * Löscht ein einzelnes Modell von Disk. Verboten für:
+ *   - unbekannte IDs
+ *   - Pflicht-Modelle (isRequired)
+ *   - das aktuell aktive ASR-Modell
+ */
+export async function deleteModel(id: string): Promise<void> {
+  const def = getModelById(id)
+  if (!def) {
+    throw new Error(`Löschen: unbekanntes Modell "${id}"`)
+  }
+  if (def.isRequired) {
+    throw new Error(`Löschen: "${def.label}" ist ein Pflicht-Modell und nicht löschbar`)
+  }
+
+  const settings = getSettings()
+  const activeAsr = settings.get('activeModels').transcription
+  if (activeAsr === id) {
+    throw new Error(
+      `Löschen: "${def.label}" ist aktuell aktiv. Zuerst anderes Modell aktivieren.`
+    )
+  }
+
+  const modelsDir = getModelsDir()
+  const target = join(modelsDir, def.checkPath)
+  if (existsSync(target)) {
+    rmSync(target, { recursive: true, force: true })
+  }
+  const archivePath = join(modelsDir, `${def.id}.tar.gz`)
+  if (existsSync(archivePath)) {
+    try {
+      unlinkSync(archivePath)
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  const installed = { ...settings.get('installedModelVersions') }
+  delete installed[id]
+  settings.set('installedModelVersions', installed)
 }

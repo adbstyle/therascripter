@@ -42,7 +42,8 @@ import {
   getRequiredModels,
   getModelById,
   getModelsToLoadOnFirstLaunch,
-  downloadSingleModel
+  downloadSingleModel,
+  deleteModel
 } from '../ModelDownloadService'
 
 describe('ModelDownloadService catalog helpers', () => {
@@ -95,5 +96,20 @@ describe('downloadSingleModel', () => {
     await expect(downloadSingleModel('pyannote-community-1')).rejects.toThrow(
       /nur ASR-Modelle/i
     )
+  })
+})
+
+describe('deleteModel', () => {
+  it('throws when model id is unknown', async () => {
+    await expect(deleteModel('does-not-exist')).rejects.toThrow(/unbekanntes Modell/i)
+  })
+
+  it('throws when model is required', async () => {
+    await expect(deleteModel('pyannote-community-1')).rejects.toThrow(/Pflicht-Modell/i)
+  })
+
+  it('throws when attempting to delete the active asr model', async () => {
+    // Mock returns activeModels.transcription = 'whisper-large-v3-turbo'
+    await expect(deleteModel('whisper-large-v3-turbo')).rejects.toThrow(/aktiv/i)
   })
 })
