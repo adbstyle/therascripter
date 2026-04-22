@@ -1,0 +1,84 @@
+import { describe, it, expect, vi } from 'vitest'
+
+// ─── Mocks ────────────────────────────────────────────────────────────────────
+
+vi.mock('electron', () => ({
+  app: { getPath: vi.fn().mockReturnValue('/tmp/therascript-test') },
+  BrowserWindow: { getAllWindows: vi.fn().mockReturnValue([]) }
+}))
+
+vi.mock('../../db/connection', () => ({
+  getDataDir: () => '/tmp/therascript-test'
+}))
+
+const mockSettingsStore = {
+  get: vi.fn((key: string) => {
+    if (key === 'activeModels') {
+      return { transcription: 'whisper-large-v3-turbo' }
+    }
+    return undefined
+  }),
+  set: vi.fn()
+}
+vi.mock('../SettingsService', () => ({
+  getSettings: () => mockSettingsStore,
+  initSettings: () => mockSettingsStore
+}))
+
+vi.mock('fs', () => {
+  const fsMock = {
+    existsSync: vi.fn().mockReturnValue(false),
+    mkdirSync: vi.fn(),
+    statSync: vi.fn(),
+    unlinkSync: vi.fn(),
+    rmSync: vi.fn()
+  }
+  return { ...fsMock, default: fsMock }
+})
+
+// Import after mocks
+import {
+  getAsrModels,
+  getRequiredModels,
+  getModelById,
+  getModelsToLoadOnFirstLaunch
+} from '../ModelDownloadService'
+
+describe('ModelDownloadService catalog helpers', () => {
+  it('getAsrModels returns all models with group="asr"', () => {
+    const asrs = getAsrModels()
+    expect(asrs.length).toBeGreaterThanOrEqual(2)
+    expect(asrs.every((m) => m.group === 'asr')).toBe(true)
+  })
+
+  it('getRequiredModels returns pyannote and flair but no asr', () => {
+    const required = getRequiredModels()
+    expect(required.map((m) => m.id).sort()).toEqual([
+      'flair-ner-german-large',
+      'pyannote-community-1'
+    ])
+  })
+
+  it('getModelById returns definition or null', () => {
+    expect(getModelById('whisper-large-v3-turbo')?.group).toBe('asr')
+    expect(getModelById('does-not-exist')).toBeNull()
+  })
+
+  it('getModelsToLoadOnFirstLaunch returns required + activeAsrId', () => {
+    const loaded = getModelsToLoadOnFirstLaunch('whisper-large-v3-turbo')
+    const ids = loaded.map((m) => m.id).sort()
+    expect(ids).toEqual([
+      'flair-ner-german-large',
+      'pyannote-community-1',
+      'whisper-large-v3-turbo'
+    ])
+  })
+
+  it('getModelsToLoadOnFirstLaunch falls back gracefully on unknown activeAsrId', () => {
+    const loaded = getModelsToLoadOnFirstLaunch('nonexistent')
+    expect(loaded.map((m) => m.id).sort()).toEqual([
+      'flair-ner-german-large',
+      'pyannote-community-1'
+    ])
+  })
+})

@@ -118,6 +118,52 @@ export function getModelDefinitions(): ModelDefinition[] {
   return MODEL_DEFINITIONS
 }
 
+export function getAsrModels(): ModelDefinition[] {
+  return MODEL_DEFINITIONS.filter((m) => m.group === 'asr')
+}
+
+export function getRequiredModels(): ModelDefinition[] {
+  return MODEL_DEFINITIONS.filter((m) => m.isRequired === true)
+}
+
+export function getModelById(id: string): ModelDefinition | null {
+  return MODEL_DEFINITIONS.find((m) => m.id === id) ?? null
+}
+
+/**
+ * Modelle, die auf First-Launch heruntergeladen werden müssen:
+ * alle required + das aktive ASR-Modell (falls gültig).
+ */
+export function getModelsToLoadOnFirstLaunch(activeAsrId: string): ModelDefinition[] {
+  const required = getRequiredModels()
+  const active = getModelById(activeAsrId)
+  if (active && active.group === 'asr') {
+    return [...required, active].filter(
+      (m, i, arr) => arr.findIndex((x) => x.id === m.id) === i
+    )
+  }
+  return required
+}
+
+/**
+ * Prüft, ob die Minimal-Menge (required + aktives ASR) installiert ist.
+ * Ersatz für checkModelsExist(), das alle Modelle erwartete.
+ */
+export function checkRequiredAndActiveAsrExist(activeAsrId: string): boolean {
+  const modelsDir = getModelsDir()
+  const toCheck = getModelsToLoadOnFirstLaunch(activeAsrId)
+  return toCheck.every((m) => existsSync(join(modelsDir, m.checkPath)))
+}
+
+/**
+ * Prüft, ob ein einzelnes Modell installiert ist (für UI-Status).
+ */
+export function isModelInstalled(id: string): boolean {
+  const def = getModelById(id)
+  if (!def) return false
+  return existsSync(join(getModelsDir(), def.checkPath))
+}
+
 export function getModelsDir(): string {
   return join(getDataDir(), 'models')
 }
