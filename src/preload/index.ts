@@ -112,6 +112,13 @@ const api: IpcApi = {
       }
     }
   },
+  modelCatalog: {
+    listAsr: () => ipcRenderer.invoke('modelCatalog:listAsr'),
+    download: (id: string) => ipcRenderer.invoke('modelCatalog:download', { id }),
+    delete: (id: string) => ipcRenderer.invoke('modelCatalog:delete', { id }),
+    setActive: (id: string) => ipcRenderer.invoke('modelCatalog:setActive', { id }),
+    cancelDownload: () => ipcRenderer.invoke('modelCatalog:cancelDownload')
+  },
   modelUpdate: {
     check: () => ipcRenderer.invoke('modelUpdate:check'),
     restart: (updates: PendingModelUpdate[]) =>
