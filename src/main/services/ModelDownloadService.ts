@@ -169,27 +169,27 @@ export function getModelsDir(): string {
 }
 
 export function checkModelsExist(): boolean {
-  const modelsDir = getModelsDir()
-  return MODEL_DEFINITIONS.every((model) => {
-    const checkTarget = join(modelsDir, model.checkPath)
-    return existsSync(checkTarget)
-  })
+  const activeAsrId = getSettings().get('activeModels').transcription
+  return checkRequiredAndActiveAsrExist(activeAsrId)
+}
+
+export function getModelsToLoad(): ModelDefinition[] {
+  const activeAsrId = getSettings().get('activeModels').transcription
+  return getModelsToLoadOnFirstLaunch(activeAsrId)
 }
 
 export function getOverallModelSize(): number {
-  return MODEL_DEFINITIONS.reduce((sum, m) => sum + m.sizeBytes, 0)
+  return getModelsToLoad().reduce((sum, m) => sum + m.sizeBytes, 0)
 }
 
 export function getAlreadyDownloadedBytes(): number {
   const modelsDir = getModelsDir()
   let total = 0
-  for (const model of MODEL_DEFINITIONS) {
+  for (const model of getModelsToLoad()) {
     const checkTarget = join(modelsDir, model.checkPath)
     if (existsSync(checkTarget)) {
-      // Model already extracted/downloaded — count full size
       total += model.sizeBytes
     } else if (!model.archive) {
-      // Check for partial download of flat file
       const partialPath = join(modelsDir, model.relativePath) + '.partial'
       if (existsSync(partialPath)) {
         total += statSync(partialPath).size
