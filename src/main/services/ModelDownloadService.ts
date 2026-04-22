@@ -56,12 +56,19 @@ export type ModelDownloadStatus =
 const MODEL_DEFINITIONS: ModelDefinition[] = [
   {
     id: 'whisper-large-v3-turbo',
-    label: 'Spracherkennung (whisper-large-v3-turbo)',
+    label: 'Whisper Large V3 Turbo (Multilingual)',
     url: `${R2_CDN}/whisper-ggml-large-v3-turbo-q5_0.bin`,
     relativePath: 'asr/ggml-large-v3-turbo-q5_0.bin',
     checkPath: 'asr/ggml-large-v3-turbo-q5_0.bin',
     sizeBytes: 574_041_195,
-    sha256: '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2'
+    sha256: '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2',
+    group: 'asr',
+    isRequired: false,
+    description:
+      'Schnelles multilinguales Modell. Empfohlen wenn Sitzungen auch auf Hochdeutsch oder anderen Sprachen geführt werden, oder wenn Schweizerdeutsch im Dialekt eher moderat ausgeprägt ist.',
+    languages: ['multi'],
+    accuracyScore: 0.8,
+    speedScore: 0.9
   },
   {
     id: 'pyannote-community-1',
@@ -71,7 +78,9 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     checkPath: 'diarization/models--pyannote--speaker-diarization-3.1',
     sizeBytes: 30_461_603,
     sha256: 'b42e8aee7cf5eb330f4d5519216f9035dc1defad871097977fa9cecc11edb570',
-    archive: true
+    archive: true,
+    group: 'diarization',
+    isRequired: true
   },
   {
     id: 'flair-ner-german-large',
@@ -81,7 +90,9 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     checkPath: 'ner/models/ner-german-large',
     sizeBytes: 1_741_705_466,
     sha256: 'a34f6315659a34991930dae5d7a2bc2f3ee24ff6eb70dcd4d41e3aca7a5253e6',
-    archive: true
+    archive: true,
+    group: 'ner',
+    isRequired: true
   }
 ]
 
