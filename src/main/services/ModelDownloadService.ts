@@ -22,9 +22,7 @@ export interface ModelDefinition {
   archive?: boolean
   // Path to check for existence (relative to modelsDir). Used by checkModelsExist().
   checkPath: string
-  // Optional in Task 1 to keep existing MODEL_DEFINITIONS valid; populated in Task 2.
   group?: ModelGroup
-  // Default (undefined) = false. Required models download on first-launch, can't be deleted.
   isRequired?: boolean
   // ASR-only UI metadata
   description?: string
