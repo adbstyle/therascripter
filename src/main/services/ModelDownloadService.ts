@@ -380,12 +380,10 @@ export async function downloadSingleModel(id: string): Promise<void> {
     abortSignal
   )
 
+  // Error-Reporting läuft ausschliesslich via thrown Error → IPC-Rejection → Renderer-Toast.
+  // Kein sendProgress({state:'error'}) hier, sonst würde der Renderer den Toast doppelt zeigen
+  // (einmal via modelDownload:status-Subscription, einmal via IPC-Catch in ModelsSettings).
   if (!result.success) {
-    sendProgress({
-      state: 'error',
-      error: result.error ?? 'Download fehlgeschlagen',
-      modelId: def.id
-    })
     abortSignal = null
     throw new Error(result.error ?? 'Download fehlgeschlagen')
   }
@@ -398,11 +396,6 @@ export async function downloadSingleModel(id: string): Promise<void> {
     } catch {
       /* non-fatal */
     }
-    sendProgress({
-      state: 'error',
-      error: `SHA-256-Prüfung fehlgeschlagen für ${def.label}`,
-      modelId: def.id
-    })
     abortSignal = null
     throw new Error(`SHA-256-Prüfung fehlgeschlagen für ${def.label}`)
   }
@@ -418,11 +411,6 @@ export async function downloadSingleModel(id: string): Promise<void> {
       } catch {
         /* non-fatal */
       }
-      sendProgress({
-        state: 'error',
-        error: extractResult.error ?? 'Entpacken fehlgeschlagen',
-        modelId: def.id
-      })
       abortSignal = null
       throw new Error(extractResult.error ?? 'Entpacken fehlgeschlagen')
     }
