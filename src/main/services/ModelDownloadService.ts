@@ -63,9 +63,25 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     group: 'asr',
     isRequired: false,
     description:
-      'Schnelles multilinguales Modell. Empfohlen wenn Sitzungen auch auf Hochdeutsch oder anderen Sprachen geführt werden, oder wenn Schweizerdeutsch im Dialekt eher moderat ausgeprägt ist.',
+      'Unterstützt alle Sprachen (Deutsch, Englisch, Französisch, Italienisch, …). Empfohlen als Standardmodell oder wenn Sitzungen mehrsprachig geführt werden.',
     languages: ['multi'],
     accuracyScore: 0.8,
+    speedScore: 0.9
+  },
+  {
+    id: 'whisper-large-v3-turbo-german',
+    label: 'Whisper Large V3 Turbo (German)',
+    url: `${R2_CDN}/whisper-ggml-large-v3-turbo-german-q5_0.bin`,
+    relativePath: 'asr/ggml-large-v3-turbo-german-q5_0.bin',
+    checkPath: 'asr/ggml-large-v3-turbo-german-q5_0.bin',
+    sizeBytes: 574_041_195,
+    sha256: '15e92e3db0993c52fffa781513eec9253475331c1be808f8fb409285c9d9d030',
+    group: 'asr',
+    isRequired: false,
+    description:
+      'Auf Hochdeutsch optimiert (Basis: primeline/whisper-large-v3-turbo-german). Präziser bei Standarddeutsch als das multilinguale Modell. Nicht geeignet für starke Schweizerdeutsch-Mundart oder andere Sprachen.',
+    languages: ['de'],
+    accuracyScore: 0.87,
     speedScore: 0.9
   },
   {
