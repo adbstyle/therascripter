@@ -29,6 +29,7 @@ export interface ModelDefinition {
   languages?: string[]
   accuracyScore?: number
   speedScore?: number
+  hfIdentifier?: string
 }
 
 export interface ModelDownloadProgress {
