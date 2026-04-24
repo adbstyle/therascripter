@@ -18,10 +18,23 @@ export const ModelCatalogEntrySchema = z.object({
 
 export type ModelCatalogEntry = z.infer<typeof ModelCatalogEntrySchema>
 
+const modelIdStringSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z0-9.-]+$/i, 'nur a-z, 0-9, Bindestrich und Punkt erlaubt')
+
 export const ModelIdPayloadSchema = z.object({
-  id: z
-    .string()
-    .min(1)
-    .max(64)
-    .regex(/^[a-z0-9-]+$/i, 'nur a-z, 0-9 und Bindestrich erlaubt')
+  id: modelIdStringSchema
+})
+
+/** Payload für modelCatalog:list(group). */
+export const ListModelsPayloadSchema = z.object({
+  group: ModelGroupSchema
+})
+
+/** Payload für modelCatalog:setActive — braucht group, um den Settings-Slot zu adressieren. */
+export const SetActiveModelPayloadSchema = z.object({
+  group: ModelGroupSchema,
+  id: modelIdStringSchema
 })
