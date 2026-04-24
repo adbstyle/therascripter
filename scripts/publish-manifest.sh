@@ -73,7 +73,7 @@ declare -a MODELS=(
   "whisper-large-v3-turbo|whisper-ggml-large-v3-turbo-q5_0.bin|Whisper Large V3 Turbo (Multilingual)|asr/ggml-large-v3-turbo-q5_0.bin|false|asr/ggml-large-v3-turbo-q5_0.bin"
   "whisper-large-v3-turbo-german|whisper-ggml-large-v3-turbo-german-q5_0.bin|Whisper Large V3 Turbo (German)|asr/ggml-large-v3-turbo-german-q5_0.bin|false|asr/ggml-large-v3-turbo-german-q5_0.bin"
   "whisper-large-v3-turbo-swiss|whisper-ggml-large-v3-turbo-swiss-q5_0.bin|Whisper Large V3 Turbo (Swiss-German)|asr/ggml-large-v3-turbo-swiss-q5_0.bin|false|asr/ggml-large-v3-turbo-swiss-q5_0.bin"
-  "pyannote-community-1|pyannote-models.tar.gz|Sprechererkennung (pyannote-community-1)|diarization|true|diarization/models--pyannote--speaker-diarization-3.1"
+  "pyannote-suite|pyannote-suite.tar.gz|Sprechererkennung (pyannote)|diarization|true|diarization/models--pyannote--speaker-diarization-community-1"
   "flair-ner-german-large|flair-ner-german-large.tar.gz|Anonymisierung (flair-ner-german-large)|ner|true|ner/models/ner-german-large"
 )
 

@@ -5,7 +5,7 @@ export interface SpeakerSegment {
 }
 
 export interface DiarizationMetadata {
-  model: string // "pyannote-community-1"
+  model: string // "pyannote-suite"
   duration: number // total audio duration in seconds
 }
 

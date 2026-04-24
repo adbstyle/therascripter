@@ -4,10 +4,11 @@ import { BrowserWindow } from 'electron'
 import { getDataDir } from '../db/connection'
 import { getSettings } from './SettingsService'
 import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
+import type { ModelGroup } from '../../shared/validation/model-catalog-schemas'
 
 const R2_CDN = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev'
 
-export type ModelGroup = 'asr' | 'diarization' | 'ner'
+export type { ModelGroup }
 
 export interface ModelDefinition {
   id: string
@@ -24,11 +25,12 @@ export interface ModelDefinition {
   checkPath: string
   group?: ModelGroup
   isRequired?: boolean
-  // ASR-only UI metadata
   description?: string
   languages?: string[]
   accuracyScore?: number
   speedScore?: number
+  // Nur für Diarization relevant — pyannote-Pipelines laden via from_pretrained(hfIdentifier).
+  hfIdentifier?: string
 }
 
 export interface ModelDownloadProgress {
@@ -101,13 +103,15 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     speedScore: 0.85
   },
   {
-    id: 'pyannote-community-1',
-    label: 'Sprechererkennung (pyannote-community-1)',
-    url: `${R2_CDN}/pyannote-models.tar.gz`,
+    id: 'pyannote-suite',
+    label: 'Sprechererkennung (pyannote)',
+    url: `${R2_CDN}/pyannote-suite.tar.gz`,
     relativePath: 'diarization',
-    checkPath: 'diarization/models--pyannote--speaker-diarization-3.1',
-    sizeBytes: 30_461_603,
-    sha256: 'b42e8aee7cf5eb330f4d5519216f9035dc1defad871097977fa9cecc11edb570',
+    // Community-1-Ordner ist Teil der Suite und wird von pyannote 4.x auch für die 3.1-Pipeline
+    // als PLDA-Quelle geladen. Wenn er da ist, ist die ganze Suite funktional.
+    checkPath: 'diarization/models--pyannote--speaker-diarization-community-1',
+    sizeBytes: 60_664_796,
+    sha256: 'ba9a241906fb9880791f448f959b12beae39d7e0ed066eaf62b7bcec805bc87e',
     archive: true,
     group: 'diarization',
     isRequired: true
@@ -132,8 +136,13 @@ export function getModelDefinitions(): ModelDefinition[] {
   return MODEL_DEFINITIONS
 }
 
+export function getModelsByGroup(group: ModelGroup): ModelDefinition[] {
+  return MODEL_DEFINITIONS.filter((m) => m.group === group)
+}
+
+/** Backward-Compat-Alias — weiterhin verwendet von First-Launch + Update-Check. */
 export function getAsrModels(): ModelDefinition[] {
-  return MODEL_DEFINITIONS.filter((m) => m.group === 'asr')
+  return getModelsByGroup('asr')
 }
 
 export function getRequiredModels(): ModelDefinition[] {
@@ -144,29 +153,64 @@ export function getModelById(id: string): ModelDefinition | null {
   return MODEL_DEFINITIONS.find((m) => m.id === id) ?? null
 }
 
-/**
- * Modelle, die auf First-Launch heruntergeladen werden müssen:
- * alle required + das aktive ASR-Modell (falls gültig).
- */
-export function getModelsToLoadOnFirstLaunch(activeAsrId: string): ModelDefinition[] {
-  const required = getRequiredModels()
-  const active = getModelById(activeAsrId)
-  if (active && active.group === 'asr') {
-    return [...required, active].filter(
-      (m, i, arr) => arr.findIndex((x) => x.id === m.id) === i
-    )
-  }
-  return required
+/** Liefert die aktuell aktive Model-ID für eine Gruppe aus den Settings. */
+export function getActiveModelId(group: ModelGroup): string {
+  const active = getSettings().get('activeModels')
+  if (group === 'asr') return active.transcription
+  if (group === 'diarization') return active.diarization
+  if (group === 'ner') return active.ner
+  throw new Error(`Keine aktive Modell-Konfiguration für Gruppe "${group}"`)
 }
 
 /**
- * Prüft, ob die Minimal-Menge (required + aktives ASR) installiert ist.
- * Ersatz für checkModelsExist(), das alle Modelle erwartete.
+ * Modelle, die auf First-Launch heruntergeladen werden müssen, in Pipeline-Reihenfolge:
+ *   1. aktives ASR-Modell (Transkription, User-wählbar)
+ *   2. alle isRequired-Modelle in Definition-Reihenfolge
+ *      (derzeit: pyannote-suite für Sprechererkennung, flair für Anonymisierung)
+ *
+ * Die Pipeline-Wahl innerhalb der pyannote-Suite (3.1 vs community-1) ist
+ * eine Runtime-Konfiguration und beeinflusst den Download nicht — die Suite
+ * enthält beide Pipelines.
+ *
+ * `activeDiarId` wird aus Backward-Compat-Gründen akzeptiert, aber ignoriert.
  */
-export function checkRequiredAndActiveAsrExist(activeAsrId: string): boolean {
+export function getModelsToLoadOnFirstLaunch(
+  activeAsrId: string,
+  _activeDiarId?: string
+): ModelDefinition[] {
+  const seen = new Set<string>()
+  const out: ModelDefinition[] = []
+
+  const activeAsr = getModelById(activeAsrId)
+  if (activeAsr && activeAsr.group === 'asr' && !seen.has(activeAsr.id)) {
+    seen.add(activeAsr.id)
+    out.push(activeAsr)
+  }
+  for (const m of getRequiredModels()) {
+    if (!seen.has(m.id)) {
+      seen.add(m.id)
+      out.push(m)
+    }
+  }
+  return out
+}
+
+/**
+ * Prüft, ob die Minimal-Menge (required + aktives ASR + aktives Diarization) installiert ist.
+ */
+export function checkRequiredAndActiveExist(
+  activeAsrId: string,
+  activeDiarId: string
+): boolean {
   const modelsDir = getModelsDir()
-  const toCheck = getModelsToLoadOnFirstLaunch(activeAsrId)
+  const toCheck = getModelsToLoadOnFirstLaunch(activeAsrId, activeDiarId)
   return toCheck.every((m) => existsSync(join(modelsDir, m.checkPath)))
+}
+
+/** Backward-Compat-Alias. */
+export function checkRequiredAndActiveAsrExist(activeAsrId: string): boolean {
+  const activeDiar = getSettings().get('activeModels').diarization
+  return checkRequiredAndActiveExist(activeAsrId, activeDiar)
 }
 
 /**
@@ -183,13 +227,13 @@ export function getModelsDir(): string {
 }
 
 export function checkModelsExist(): boolean {
-  const activeAsrId = getSettings().get('activeModels').transcription
-  return checkRequiredAndActiveAsrExist(activeAsrId)
+  const active = getSettings().get('activeModels')
+  return checkRequiredAndActiveExist(active.transcription, active.diarization)
 }
 
 export function getModelsToLoad(): ModelDefinition[] {
-  const activeAsrId = getSettings().get('activeModels').transcription
-  return getModelsToLoadOnFirstLaunch(activeAsrId)
+  const active = getSettings().get('activeModels')
+  return getModelsToLoadOnFirstLaunch(active.transcription, active.diarization)
 }
 
 export function getOverallModelSize(): number {
@@ -220,6 +264,16 @@ function sendProgress(status: ModelDownloadStatus): void {
   }
 }
 
+function assertFinalSha256(model: ModelDefinition): void {
+  if (model.sha256.startsWith('PENDING_')) {
+    throw new Error(
+      `Modell "${model.label}" (${model.id}) hat noch keinen finalen SHA-256 ` +
+        `(Wert: "${model.sha256}"). Das deutet auf ein nicht abgeschlossenes Packaging hin — ` +
+        `erst scripts/package-models.sh + scripts/publish-manifest.sh ausführen und die Hashes setzen.`
+    )
+  }
+}
+
 export async function startModelDownload(): Promise<void> {
   if (abortSignal && !abortSignal.aborted) return // Already downloading
 
@@ -239,6 +293,18 @@ export async function startModelDownload(): Promise<void> {
 
     if (abortSignal.aborted) {
       sendProgress({ state: 'error', error: 'Download abgebrochen', modelId: model.id })
+      return
+    }
+
+    try {
+      assertFinalSha256(model)
+    } catch (err) {
+      sendProgress({
+        state: 'error',
+        error: err instanceof Error ? err.message : String(err),
+        modelId: model.id
+      })
+      abortSignal = null
       return
     }
 
@@ -369,6 +435,13 @@ export async function downloadSingleModel(id: string): Promise<void> {
     return
   }
 
+  try {
+    assertFinalSha256(def)
+  } catch (err) {
+    abortSignal = null
+    throw err
+  }
+
   const targetPath = def.archive
     ? join(modelsDir, `${def.id}.tar.gz`)
     : join(modelsDir, def.relativePath)
@@ -437,8 +510,8 @@ export async function downloadSingleModel(id: string): Promise<void> {
 /**
  * Löscht ein einzelnes Modell von Disk. Verboten für:
  *   - unbekannte IDs
- *   - Pflicht-Modelle (isRequired)
- *   - das aktuell aktive ASR-Modell
+ *   - Pflicht-Modelle (isRequired, z.B. flair NER)
+ *   - das aktuell aktive Modell einer group-required Gruppe (ASR, Diarization)
  */
 export async function deleteModel(id: string): Promise<void> {
   const def = getModelById(id)
@@ -450,10 +523,10 @@ export async function deleteModel(id: string): Promise<void> {
   }
 
   const settings = getSettings()
-  const activeAsr = settings.get('activeModels').transcription
-  if (activeAsr === id) {
+  const active = settings.get('activeModels')
+  if (def.group === 'asr' && active.transcription === id) {
     throw new Error(
-      `Löschen: "${def.label}" ist aktuell aktiv. Zuerst anderes Modell aktivieren.`
+      `Löschen: "${def.label}" ist aktuell als ASR-Modell aktiv. Zuerst anderes Modell aktivieren.`
     )
   }
 
@@ -476,24 +549,40 @@ export async function deleteModel(id: string): Promise<void> {
   settings.set('installedModelVersions', installed)
 }
 
+// Explizites Mapping Group → Settings-Key. Der TypeScript-Compiler erzwingt Vollständigkeit:
+// Wird ModelGroup um einen neuen Wert erweitert, schlägt der Build fehl,
+// solange das Mapping nicht erweitert wird. Das verhindert silent-wrong-key-writes.
+const GROUP_TO_SETTINGS_KEY: Record<ModelGroup, 'transcription' | 'diarization' | 'ner'> = {
+  asr: 'transcription',
+  diarization: 'diarization',
+  ner: 'ner'
+}
+
 /**
- * Wechselt das aktive ASR-Modell. Das Modell muss:
+ * Wechselt das aktive Modell einer Gruppe. Das Modell muss:
  *   - existieren (bekannte ID)
- *   - in der ASR-Gruppe liegen
+ *   - in der angegebenen Gruppe liegen
  *   - auf Disk installiert sein
  */
-export function setActiveAsrModel(id: string): void {
+export function setActiveModel(group: ModelGroup, id: string): void {
   const def = getModelById(id)
   if (!def) {
     throw new Error(`Aktivieren: unbekanntes Modell "${id}"`)
   }
-  if (def.group !== 'asr') {
-    throw new Error(`Aktivieren: "${def.label}" ist keine ASR-Engine`)
+  if (def.group !== group) {
+    throw new Error(
+      `Aktivieren: "${def.label}" ist ${def.group ?? 'ungruppiert'}, erwartet wurde ${group}`
+    )
   }
   if (!isModelInstalled(id)) {
     throw new Error(`Aktivieren: "${def.label}" ist nicht installiert`)
   }
   const settings = getSettings()
   const current = settings.get('activeModels')
-  settings.set('activeModels', { ...current, transcription: id })
+  settings.set('activeModels', { ...current, [GROUP_TO_SETTINGS_KEY[group]]: id })
+}
+
+/** Backward-Compat-Alias. */
+export function setActiveAsrModel(id: string): void {
+  setActiveModel('asr', id)
 }

@@ -9,6 +9,7 @@ import { SessionService } from '../services/SessionService'
 import { getDatabase, getDataDir } from '../db/connection'
 import { writeFileAtomic } from '../utils/file-ops'
 import { resolvePythonSidecar } from './resolve-python'
+import { getSettings } from '../services/SettingsService'
 
 // Progress line format: "[PROGRESS] 42"
 const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
@@ -54,11 +55,14 @@ export class PyannoteSidecar implements TaskExecutor {
     const audioDurationEstimate = Math.max(0, audioStats.size - WAV_HEADER_SIZE) / (48000 * 2) // 48kHz 16-bit mono
     const timeoutMs = Math.max(audioDurationEstimate * 4 * 1000, 120_000) // min 2 minutes
 
+    const activePipeline = getSettings().get('activeModels').diarizationPipeline
+
     // Run pyannote diarization
     const rttmOutput = await this.runPyannote(
       bin,
       prefixArgs,
       session.audioPath,
+      activePipeline,
       timeoutMs,
       onProgress,
       signal
@@ -68,7 +72,7 @@ export class PyannoteSidecar implements TaskExecutor {
     const segments = parseRTTM(rttmOutput)
 
     // Build diarization data
-    const diarization = buildDiarizationData(segments, audioDurationEstimate)
+    const diarization = buildDiarizationData(segments, audioDurationEstimate, activePipeline)
 
     // Save diarization results
     const diarizationPath = sessionService.generateDiarizationPath(task.sessionId)
@@ -81,6 +85,7 @@ export class PyannoteSidecar implements TaskExecutor {
     bin: string,
     prefixArgs: string[],
     audioPath: string,
+    hfModel: string,
     timeoutMs: number,
     onProgress: (progress: number) => void,
     signal?: AbortSignal
@@ -93,6 +98,8 @@ export class PyannoteSidecar implements TaskExecutor {
         audioPath,
         '--model-dir',
         modelDir,
+        '--hf-model',
+        hfModel,
         '--min-speakers',
         '1',
         '--max-speakers',
@@ -235,7 +242,8 @@ export function parseRTTM(rttm: string): SpeakerSegment[] {
 // Exported for testing
 export function buildDiarizationData(
   segments: SpeakerSegment[],
-  duration: number
+  duration: number,
+  modelId: string
 ): DiarizationData {
   const uniqueSpeakers = new Set(segments.map((s) => s.label))
 
@@ -243,7 +251,7 @@ export function buildDiarizationData(
     speakers: segments,
     speakerCount: uniqueSpeakers.size,
     metadata: {
-      model: 'pyannote-community-1',
+      model: modelId,
       duration
     }
   }

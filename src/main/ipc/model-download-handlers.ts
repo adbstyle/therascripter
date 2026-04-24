@@ -3,7 +3,7 @@ import { statfsSync } from 'fs'
 import { getDataDir } from '../db/connection'
 import {
   checkModelsExist,
-  getModelDefinitions,
+  getModelsToLoad,
   getOverallModelSize,
   startModelDownload
 } from '../services/ModelDownloadService'
@@ -14,7 +14,10 @@ export function registerModelDownloadHandlers(): void {
   ipcMain.handle('modelDownload:status', () => {
     return {
       modelsReady: checkModelsExist(),
-      models: getModelDefinitions().map((m) => ({
+      // Nur Modelle, die tatsächlich auf First-Launch geladen werden (Pflicht + aktives ASR + aktives Diar),
+      // nicht den ganzen Katalog. Sonst zeigt der FirstLaunchScreen ✓-Häkchen für alle positions
+      // vor dem aktuellen Download-Index, egal ob die Modelle tatsächlich installiert sind.
+      models: getModelsToLoad().map((m) => ({
         id: m.id,
         label: m.label,
         sizeBytes: m.sizeBytes

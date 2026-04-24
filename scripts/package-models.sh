@@ -8,6 +8,49 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 OUTPUT_DIR="$PROJECT_ROOT/r2-upload"
 MODELS_DIR="$HOME/.therascript/models"
 
+# Pyannote-Suite Packaging.
+#
+# pyannote 4.x lädt hardcoded die PLDA-Files aus pyannote/speaker-diarization-community-1,
+# auch wenn die aktive Pipeline 3.1 ist (siehe speaker_diarization.py:206-231 in der
+# installierten pyannote.audio-Version). Deshalb müssen BEIDE Pipelines + ihre
+# Sub-Models zusammen ausgeliefert werden — ein User-Toggle zwischen 3.1 und community-1
+# ist nur eine Runtime-Konfiguration, keine separate Installation.
+#
+# Wir packen die vier benötigten HF-Cache-Ordner in ein einziges Tarball:
+#   - models--pyannote--speaker-diarization-3.1/
+#   - models--pyannote--speaker-diarization-community-1/
+#   - models--pyannote--segmentation-3.0/            (referenziert von 3.1)
+#   - models--pyannote--wespeaker-voxceleb-resnet34-LM/  (referenziert von 3.1)
+#
+# Bricht mit exit 1 ab, wenn einer der vier Ordner im Cache fehlt.
+package_pyannote_suite() {
+  local OUTPUT_NAME="pyannote-suite.tar.gz"
+  local REQUIRED=(
+    models--pyannote--speaker-diarization-3.1
+    models--pyannote--speaker-diarization-community-1
+    models--pyannote--segmentation-3.0
+    models--pyannote--wespeaker-voxceleb-resnet34-LM
+  )
+
+  local TMP_DIR
+  TMP_DIR=$(mktemp -d)
+
+  for SUB in "${REQUIRED[@]}"; do
+    local SRC="$MODELS_DIR/diarization/$SUB"
+    if [ ! -d "$SRC" ]; then
+      echo "  FEHLER: $SUB fehlt im Cache — pyannote-Suite braucht alle vier Sub-Modelle." >&2
+      echo "          Bitte zuerst scripts/setup-pyannote.sh --all-models ausführen." >&2
+      rm -rf "$TMP_DIR"
+      return 1
+    fi
+    cp -R "$SRC" "$TMP_DIR/"
+  done
+
+  tar -czf "$OUTPUT_DIR/$OUTPUT_NAME" -C "$TMP_DIR" .
+  rm -rf "$TMP_DIR"
+  echo "  -> $OUTPUT_NAME"
+}
+
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
@@ -22,13 +65,15 @@ else
   echo "  SKIP: Whisper-Modell nicht gefunden: $WHISPER_MODEL"
 fi
 
-# Pyannote models (archive contents extracted INTO diarization/)
-if [ -d "$MODELS_DIR/diarization" ]; then
-  tar -czf "$OUTPUT_DIR/pyannote-models.tar.gz" -C "$MODELS_DIR/diarization" .
-  echo "  -> pyannote-models.tar.gz"
-else
-  echo "  SKIP: Pyannote-Modelle nicht gefunden: $MODELS_DIR/diarization"
+# Whisper Swiss-German (flat file, optional)
+WHISPER_SWISS="$MODELS_DIR/asr/ggml-large-v3-turbo-swiss-q5_0.bin"
+if [ -f "$WHISPER_SWISS" ]; then
+  cp "$WHISPER_SWISS" "$OUTPUT_DIR/whisper-ggml-large-v3-turbo-swiss-q5_0.bin"
+  echo "  -> whisper-ggml-large-v3-turbo-swiss-q5_0.bin"
 fi
+
+# Pyannote-Suite — monolithisches Paket mit allen vier benötigten Sub-Modellen
+package_pyannote_suite || exit 1
 
 # flair NER model (archive contents extracted INTO ner/)
 if [ -d "$MODELS_DIR/ner" ]; then
