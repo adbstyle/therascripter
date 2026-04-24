@@ -10,12 +10,12 @@ import {
   isModelInstalled,
   setActiveModel
 } from '../services/ModelDownloadService'
-import type { ModelGroup } from '../services/ModelDownloadService'
 import {
   ListModelsPayloadSchema,
   ModelIdPayloadSchema,
   SetActiveModelPayloadSchema,
-  type ModelCatalogEntry
+  type ModelCatalogEntry,
+  type ModelGroup
 } from '../../shared/validation/model-catalog-schemas'
 
 function buildCatalogEntries(group: ModelGroup): ModelCatalogEntry[] {

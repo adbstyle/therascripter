@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 export const ModelGroupSchema = z.enum(['asr', 'diarization', 'ner'])
+export type ModelGroup = z.infer<typeof ModelGroupSchema>
 
 export const ModelCatalogEntrySchema = z.object({
   id: z.string().min(1).max(64),

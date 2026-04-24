@@ -4,7 +4,7 @@ import type { BlocklistEntry } from './NerTypes'
 import type { EntityMap, PlaceholderType } from './EntityMap'
 import type { TipTapDocument } from './TipTapDocument'
 import type { PendingModelUpdate, AppUpdateStatus, CheckResult } from './ModelUpdate'
-import type { ModelCatalogEntry } from '../validation/model-catalog-schemas'
+import type { ModelCatalogEntry, ModelGroup } from '../validation/model-catalog-schemas'
 
 export interface SessionApi {
   list(): Promise<Session[]>
@@ -158,14 +158,11 @@ export interface AppUpdateApi {
 }
 
 export interface ModelCatalogApi {
-  list(group: 'asr' | 'diarization' | 'ner'): Promise<ModelCatalogEntry[]>
+  list(group: ModelGroup): Promise<ModelCatalogEntry[]>
   listAsr(): Promise<ModelCatalogEntry[]>
   download(id: string): Promise<ModelCatalogEntry[]>
   delete(id: string): Promise<ModelCatalogEntry[]>
-  setActive(
-    group: 'asr' | 'diarization' | 'ner',
-    id: string
-  ): Promise<ModelCatalogEntry[]>
+  setActive(group: ModelGroup, id: string): Promise<ModelCatalogEntry[]>
   cancelDownload(): Promise<void>
 }
 

@@ -6,7 +6,8 @@ Processes an audio file and outputs speaker segments in RTTM format to stdout.
 Progress is reported to stderr for parsing by the Electron main process.
 
 Usage:
-    python3 diarize.py --audio <path> [--model-dir <path>] [--min-speakers 1] [--max-speakers 4]
+    python3 diarize.py --audio <path> --hf-model <hf-pipeline-identifier>
+                       [--model-dir <path>] [--min-speakers 1] [--max-speakers 4]
                        [--collar 0.5]
 
 Output format (RTTM, one line per speaker segment):

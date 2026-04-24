@@ -4,10 +4,11 @@ import { BrowserWindow } from 'electron'
 import { getDataDir } from '../db/connection'
 import { getSettings } from './SettingsService'
 import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
+import type { ModelGroup } from '../../shared/validation/model-catalog-schemas'
 
 const R2_CDN = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev'
 
-export type ModelGroup = 'asr' | 'diarization' | 'ner'
+export type { ModelGroup }
 
 export interface ModelDefinition {
   id: string
@@ -24,11 +25,11 @@ export interface ModelDefinition {
   checkPath: string
   group?: ModelGroup
   isRequired?: boolean
-  // ASR-only UI metadata
   description?: string
   languages?: string[]
   accuracyScore?: number
   speedScore?: number
+  // Nur für Diarization relevant — pyannote-Pipelines laden via from_pretrained(hfIdentifier).
   hfIdentifier?: string
 }
 
@@ -131,7 +132,7 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     group: 'diarization',
     isRequired: false,
     description:
-      'Community-Variante mit besserer Performance auf Deutsch (DER ca. 8.3% laut HF). Experimentell, benötigt HuggingFace-Terms-Accept beim Packaging.',
+      'Community-Variante mit besserer Performance auf Deutsch (DER ca. 8.3 % laut HF). Experimentell.',
     languages: ['de', 'multi'],
     accuracyScore: 0.9,
     speedScore: 0.9,
