@@ -18,6 +18,17 @@ function getChipName(): string {
   }
 }
 
+function getMacOSVersion(): string {
+  try {
+    return execSync('sw_vers -productVersion', {
+      encoding: 'utf-8',
+      timeout: 3000
+    }).trim()
+  } catch {
+    return `Darwin ${release()}`
+  }
+}
+
 function getFileVaultStatus(): boolean | null {
   try {
     const output = execSync('fdesetup status', { encoding: 'utf-8', timeout: 3000 })
@@ -70,7 +81,7 @@ export function registerSystemHandlers(): void {
     return {
       version: app.getVersion(),
       electronVersion: process.versions.electron,
-      osVersion: release(),
+      osVersion: getMacOSVersion(),
       chip: getChipName(),
       totalMemoryGB: Math.round(totalmem() / (1024 * 1024 * 1024)),
       fileVaultActive: getFileVaultStatus(),
