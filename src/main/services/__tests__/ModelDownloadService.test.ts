@@ -86,6 +86,18 @@ describe('ModelDownloadService catalog helpers', () => {
     const loaded = getModelsToLoadOnFirstLaunch('nonexistent', 'also-nonexistent')
     expect(loaded.map((m) => m.id).sort()).toEqual(['flair-ner-german-large'])
   })
+
+  it('getModelsToLoadOnFirstLaunch returns models in pipeline order (asr, diarization, ner)', () => {
+    const loaded = getModelsToLoadOnFirstLaunch(
+      'whisper-large-v3-turbo',
+      'pyannote-speaker-diarization-3.1'
+    )
+    expect(loaded.map((m) => m.id)).toEqual([
+      'whisper-large-v3-turbo',
+      'pyannote-speaker-diarization-3.1',
+      'flair-ner-german-large'
+    ])
+  })
 })
 
 describe('downloadSingleModel', () => {

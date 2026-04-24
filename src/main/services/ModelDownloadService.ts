@@ -185,10 +185,12 @@ export function getActiveModelId(group: ModelGroup): string {
 }
 
 /**
- * Modelle, die auf First-Launch heruntergeladen werden müssen:
- * - alle isRequired-Modelle (NER)
- * - das aktive ASR-Modell
- * - das aktive Diarization-Modell
+ * Modelle, die auf First-Launch heruntergeladen werden müssen, in Pipeline-Reihenfolge:
+ *   1. aktives ASR-Modell (Transkription)
+ *   2. aktives Diarization-Modell (Sprechererkennung)
+ *   3. alle isRequired-Modelle (NER/flair)
+ * Diese Reihenfolge entspricht dem Audio-Pipeline-Flow und wird 1:1 im
+ * FirstLaunchScreen als Download-Liste angezeigt.
  */
 export function getModelsToLoadOnFirstLaunch(
   activeAsrId: string,
@@ -196,12 +198,7 @@ export function getModelsToLoadOnFirstLaunch(
 ): ModelDefinition[] {
   const seen = new Set<string>()
   const out: ModelDefinition[] = []
-  for (const m of getRequiredModels()) {
-    if (!seen.has(m.id)) {
-      seen.add(m.id)
-      out.push(m)
-    }
-  }
+
   const activeAsr = getModelById(activeAsrId)
   if (activeAsr && activeAsr.group === 'asr' && !seen.has(activeAsr.id)) {
     seen.add(activeAsr.id)
@@ -211,6 +208,12 @@ export function getModelsToLoadOnFirstLaunch(
   if (activeDiar && activeDiar.group === 'diarization' && !seen.has(activeDiar.id)) {
     seen.add(activeDiar.id)
     out.push(activeDiar)
+  }
+  for (const m of getRequiredModels()) {
+    if (!seen.has(m.id)) {
+      seen.add(m.id)
+      out.push(m)
+    }
   }
   return out
 }
