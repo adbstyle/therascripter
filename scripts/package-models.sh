@@ -10,12 +10,17 @@ MODELS_DIR="$HOME/.therascript/models"
 
 # Liest aus einem pyannote-Pipeline-config.yaml die referenzierten Sub-Model-Slugs
 # (z.B. "pyannote/segmentation-3.0" → "models--pyannote--segmentation-3.0").
+# Ignoriert interne Referenzen wie "$model/segmentation" (community-1 bundlet die
+# Sub-Modelle direkt im eigenen Snapshot — keine externe HF-Cache-Dir nötig).
 # Gibt die HuggingFace-Cache-Dir-Namen zeilenweise auf stdout aus.
 pyannote_submodel_dirs() {
   local CONFIG="$1"
   [ -f "$CONFIG" ] || return 0
-  grep -E '^\s+(embedding|segmentation):' "$CONFIG" \
+  # Regex verlangt ein nicht-whitespace Value nach dem ":" — sonst matched auch
+  # "  segmentation:" unter dem params-Block (ohne Wert).
+  grep -E '^\s+(embedding|segmentation):[[:space:]]+[^[:space:]]' "$CONFIG" \
     | awk '{print $2}' \
+    | grep -v '^\$model/' \
     | sed 's|/|--|g' \
     | sed 's|^|models--|'
 }
