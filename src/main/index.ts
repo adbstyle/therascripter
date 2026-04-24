@@ -18,6 +18,7 @@ import { registerSystemHandlers } from './ipc/system-handlers'
 import { registerModelDownloadHandlers } from './ipc/model-download-handlers'
 import { registerModelCatalogHandlers } from './ipc/model-catalog-handlers'
 import { registerModelUpdateHandlers } from './ipc/model-update-handlers'
+import { registerPipelineHandlers } from './ipc/pipeline-handlers'
 import { initTray, getTray } from './services/TrayService'
 import {
   startAutoDeletion,
@@ -160,6 +161,7 @@ app.whenReady().then(() => {
   registerModelDownloadHandlers()
   registerModelCatalogHandlers()
   registerModelUpdateHandlers()
+  registerPipelineHandlers()
   registerAppUpdateHandlers()
 
   setupCSP()

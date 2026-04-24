@@ -441,6 +441,17 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     }
   }, [editor, sessionType, toast])
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (showRenameDialog || showDeleteDialog || showMenu || contextMenu || blocklistConfirm)
+        return
+      onBack()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onBack, showRenameDialog, showDeleteDialog, showMenu, contextMenu, blocklistConfirm])
+
   const liveWordCount = useMemo(
     () => (editor && !loading ? countWords(editor.getJSON() as TipTapDocument) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -476,12 +487,6 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
       {/* Header */}
       <header className="titlebar-drag flex items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="flex min-w-0 items-center gap-3">
-          <button
-            className="titlebar-no-drag shrink-0 rounded-md px-2 py-1 text-sm text-text-tertiary hover:bg-surface-2 hover:text-text-secondary"
-            onClick={onBack}
-          >
-            &larr; Zurück
-          </button>
           <span className="shrink-0 text-lg" aria-hidden="true">
             {sessionType === 'audio' ? '\uD83C\uDFA4' : '\uD83D\uDCC4'}
           </span>
@@ -493,15 +498,6 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
             onClick={handleExportClipboard}
           >
             &#128203; Kopieren
-          </button>
-          <button
-            className={`titlebar-no-drag flex items-center justify-center rounded-lg border border-border-strong px-3 py-2 text-sm font-semibold transition-colors hover:bg-surface-1 ${panelOpen ? 'bg-surface-2 text-text-primary' : 'bg-surface-0 text-text-secondary'}`}
-            onClick={togglePanel}
-            aria-label="Anonymisierungen anzeigen"
-            aria-pressed={panelOpen}
-            title="Anonymisierungen"
-          >
-            &#9776;
           </button>
           <div ref={menuRef} className="titlebar-no-drag relative">
             <button
@@ -534,6 +530,23 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
               </div>
             )}
           </div>
+          <button
+            className={`titlebar-no-drag flex shrink-0 items-center justify-center rounded-lg border border-border-strong px-3 py-2 text-sm font-semibold transition-colors hover:bg-surface-1 ${panelOpen ? 'bg-surface-2 text-text-primary' : 'bg-surface-0 text-text-secondary'}`}
+            onClick={togglePanel}
+            aria-label="Anonymisierungen anzeigen"
+            aria-pressed={panelOpen}
+            title="Anonymisierungen"
+          >
+            &#9776;
+          </button>
+          <button
+            className="titlebar-no-drag flex shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface-0 px-3 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
+            onClick={onBack}
+            aria-label="Editor schließen"
+            title="Schließen (Esc)"
+          >
+            &#10005;
+          </button>
         </div>
       </header>
 

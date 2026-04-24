@@ -52,7 +52,7 @@ vi.mock('../ModelDownloadService', () => ({
       archive: false
     },
     {
-      id: 'pyannote-community-1',
+      id: 'pyannote-suite',
       label: 'Sprechererkennung',
       url: 'https://example.com/pyannote.tar.gz',
       sha256: 'bbbb' + 'b'.repeat(60),
@@ -131,7 +131,7 @@ const validManifestModels = [
     sizeBytes: 100
   },
   {
-    id: 'pyannote-community-1',
+    id: 'pyannote-suite',
     version: '2025-02-01',
     label: 'Sprechererkennung',
     url: 'https://example.com/pyannote.tar.gz',
@@ -159,7 +159,7 @@ describe('checkForUpdates', () => {
         sha256: 'aaaa' + 'a'.repeat(60),
         installedAt: ''
       },
-      'pyannote-community-1': {
+      'pyannote-suite': {
         version: '2025-01-15',
         sha256: 'bbbb' + 'b'.repeat(60),
         installedAt: ''
@@ -183,7 +183,7 @@ describe('checkForUpdates', () => {
         sha256: 'cccc' + 'c'.repeat(60),
         installedAt: ''
       },
-      'pyannote-community-1': {
+      'pyannote-suite': {
         version: '2025-01-15',
         sha256: 'bbbb' + 'b'.repeat(60),
         installedAt: ''
@@ -288,7 +288,7 @@ describe('checkForUpdates — app update', () => {
         sha256: 'cccc' + 'c'.repeat(60),
         installedAt: ''
       },
-      'pyannote-community-1': {
+      'pyannote-suite': {
         version: '2025-01-15',
         sha256: 'bbbb' + 'b'.repeat(60),
         installedAt: ''
@@ -473,7 +473,7 @@ describe('migrateInstalledVersions', () => {
           version: 'pre-update',
           sha256: '' // empty — forces update on first manifest check
         }),
-        'pyannote-community-1': expect.objectContaining({
+        'pyannote-suite': expect.objectContaining({
           version: 'pre-update',
           sha256: '' // empty — forces update on first manifest check
         })
@@ -492,7 +492,7 @@ describe('migrateInstalledVersions', () => {
 
     const call = mockSettingsStore.set.mock.calls[0]
     const versions = call[1] as Record<string, unknown>
-    expect(versions['pyannote-community-1']).toBeDefined()
+    expect(versions['pyannote-suite']).toBeDefined()
     expect(versions['whisper-large-v3-turbo']).toBeUndefined()
   })
 
@@ -573,7 +573,7 @@ describe('executeUpdates', () => {
   it('extracts tar.gz archive before swapping', async () => {
     const archiveUpdate = {
       ...pendingUpdate,
-      id: 'pyannote-community-1',
+      id: 'pyannote-suite',
       relativePath: 'diarization',
       archive: true as const,
       checkPath: 'diarization/models--pyannote--speaker-diarization-3.1'

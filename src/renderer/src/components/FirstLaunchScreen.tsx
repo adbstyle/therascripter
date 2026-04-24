@@ -110,8 +110,18 @@ export default function FirstLaunchScreen({
         {!started && (
           <div className="mb-8 text-center">
             <p className="mb-6 text-sm text-text-secondary">
-              Für die erste Einrichtung werden ML-Modelle heruntergeladen (~2.2 GB). Dies ist der
-              einzige Zeitpunkt, an dem eine Internetverbindung nötig ist.
+              Zum Start werden die Standard-ML-Modelle heruntergeladen
+              {modelInfo && modelInfo.models.length > 0 && (
+                <>
+                  {' '}(
+                  {formatBytes(
+                    modelInfo.models.reduce((sum, m) => sum + m.sizeBytes, 0)
+                  )}
+                  )
+                </>
+              )}
+              . Weitere oder alternative Modelle können Sie jederzeit unter Einstellungen &rarr;
+              Modelle hinzufügen.
             </p>
             <button
               className="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"

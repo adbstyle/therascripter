@@ -4,18 +4,19 @@ import type { ModelDownloadStatus } from '../../../../shared/types/IpcApi'
 import { useToast } from '../../hooks/useToast'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { formatBytes } from '../../utils/formatBytes'
-import AsrModelCard from './AsrModelCard'
+import ModelCard from './ModelCard'
+import DiarizationPipelineSection from './DiarizationPipelineSection'
 
 export default function ModelsSettings(): React.JSX.Element {
   const toast = useToast()
-  const [models, setModels] = useState<ModelCatalogEntry[]>([])
+  const [asrModels, setAsrModels] = useState<ModelCatalogEntry[]>([])
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [progress, setProgress] = useState<number | undefined>(undefined)
   const [deleteCandidate, setDeleteCandidate] = useState<ModelCatalogEntry | null>(null)
 
   const reload = async (): Promise<void> => {
-    const list = await window.api.modelCatalog.listAsr()
-    setModels(list)
+    const asr = await window.api.modelCatalog.list('asr')
+    setAsrModels(asr)
   }
 
   useEffect(() => {
@@ -40,7 +41,7 @@ export default function ModelsSettings(): React.JSX.Element {
     setDownloadingId(id)
     try {
       const updated = await window.api.modelCatalog.download(id)
-      setModels(updated)
+      setAsrModels(updated)
       toast.success('Modell erfolgreich heruntergeladen.')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
@@ -58,7 +59,7 @@ export default function ModelsSettings(): React.JSX.Element {
     setDeleteCandidate(null)
     try {
       const updated = await window.api.modelCatalog.delete(model.id)
-      setModels(updated)
+      setAsrModels(updated)
       toast.success(
         `"${model.label}" gelöscht — ${formatBytes(model.sizeBytes)} freigegeben.`
       )
@@ -69,8 +70,8 @@ export default function ModelsSettings(): React.JSX.Element {
 
   const handleActivate = async (model: ModelCatalogEntry): Promise<void> => {
     try {
-      const updated = await window.api.modelCatalog.setActive(model.id)
-      setModels(updated)
+      const updated = await window.api.modelCatalog.setActive(model.group, model.id)
+      setAsrModels(updated)
       toast.success(
         `"${model.label}" aktiviert. Neue Transkriptionen verwenden ab jetzt dieses Modell — bereits verarbeitete Sitzungen bleiben unverändert.`
       )
@@ -79,61 +80,69 @@ export default function ModelsSettings(): React.JSX.Element {
     }
   }
 
-  const installed = models.filter((m) => m.isInstalled)
-  const available = models.filter((m) => !m.isInstalled)
+  const installed = asrModels.filter((m) => m.isInstalled)
+  const available = asrModels.filter((m) => !m.isInstalled)
   const anyBusy = downloadingId !== null
 
   return (
-    <div className="space-y-6 p-6">
-      <section>
-        <h2 className="mb-1 text-lg font-semibold">Transkriptions-Modelle</h2>
-        <p className="text-sm text-text-secondary">
-          Wähle das Modell, das für die Transkription deiner Sitzungen verwendet werden soll.
-          Ein Modellwechsel wirkt sich nur auf neue Transkriptionen aus.
-        </p>
+    <div className="space-y-8 p-6">
+      <section className="space-y-3">
+        <div>
+          <h2 className="mb-1 text-lg font-semibold">Transkriptions-Modelle</h2>
+          <p className="text-sm text-text-secondary">
+            Wähle das Modell, das für die Transkription deiner Sitzungen verwendet
+            werden soll. Ein Modellwechsel wirkt sich nur auf neue Transkriptionen aus.
+          </p>
+        </div>
+
+        {installed.length > 0 && (
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-text-tertiary">Installiert</h3>
+            <div className="space-y-3">
+              {installed.map((m) => (
+                <ModelCard
+                  key={m.id}
+                  model={m}
+                  activeUsageLabel="Wird für Transkription verwendet"
+                  downloading={downloadingId === m.id}
+                  progress={downloadingId === m.id ? progress : undefined}
+                  anyBusy={anyBusy}
+                  onDownload={() => handleDownload(m.id)}
+                  onCancelDownload={handleCancelDownload}
+                  onDelete={() => setDeleteCandidate(m)}
+                  onActivate={() => handleActivate(m)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {available.length > 0 && (
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-text-tertiary">
+              Zum Download verfügbar
+            </h3>
+            <div className="space-y-3">
+              {available.map((m) => (
+                <ModelCard
+                  key={m.id}
+                  model={m}
+                  activeUsageLabel="Wird für Transkription verwendet"
+                  downloading={downloadingId === m.id}
+                  progress={downloadingId === m.id ? progress : undefined}
+                  anyBusy={anyBusy}
+                  onDownload={() => handleDownload(m.id)}
+                  onCancelDownload={handleCancelDownload}
+                  onDelete={() => setDeleteCandidate(m)}
+                  onActivate={() => handleActivate(m)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
-      {installed.length > 0 && (
-        <section>
-          <h3 className="mb-2 text-sm font-medium text-text-tertiary">Installiert</h3>
-          <div className="space-y-3">
-            {installed.map((m) => (
-              <AsrModelCard
-                key={m.id}
-                model={m}
-                downloading={downloadingId === m.id}
-                progress={downloadingId === m.id ? progress : undefined}
-                anyBusy={anyBusy}
-                onDownload={() => handleDownload(m.id)}
-                onCancelDownload={handleCancelDownload}
-                onDelete={() => setDeleteCandidate(m)}
-                onActivate={() => handleActivate(m)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {available.length > 0 && (
-        <section>
-          <h3 className="mb-2 text-sm font-medium text-text-tertiary">Zum Download verfügbar</h3>
-          <div className="space-y-3">
-            {available.map((m) => (
-              <AsrModelCard
-                key={m.id}
-                model={m}
-                downloading={downloadingId === m.id}
-                progress={downloadingId === m.id ? progress : undefined}
-                anyBusy={anyBusy}
-                onDownload={() => handleDownload(m.id)}
-                onCancelDownload={handleCancelDownload}
-                onDelete={() => setDeleteCandidate(m)}
-                onActivate={() => handleActivate(m)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+      <DiarizationPipelineSection />
 
       <section>
         <h3 className="mb-2 text-sm font-medium text-text-tertiary">Pflicht-Modelle</h3>
@@ -142,7 +151,7 @@ export default function ModelsSettings(): React.JSX.Element {
           automatisch aktuell gehalten.
         </p>
         <ul className="space-y-1 rounded-md border border-border bg-surface-1 p-3 text-xs text-text-tertiary">
-          <li>Sprechererkennung (pyannote-community-1)</li>
+          <li>Sprechererkennung (pyannote-suite)</li>
           <li>Anonymisierung (flair-ner-german-large)</li>
         </ul>
       </section>

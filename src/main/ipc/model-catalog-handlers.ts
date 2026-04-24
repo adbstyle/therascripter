@@ -1,33 +1,37 @@
 import { ipcMain } from 'electron'
 import { z } from 'zod'
-import { getSettings } from '../services/SettingsService'
 import {
   abortModelDownload,
   deleteModel,
   downloadSingleModel,
-  getAsrModels,
+  getActiveModelId,
+  getModelById,
+  getModelsByGroup,
   isModelInstalled,
-  setActiveAsrModel
+  setActiveModel
 } from '../services/ModelDownloadService'
 import {
+  ListModelsPayloadSchema,
   ModelIdPayloadSchema,
-  type ModelCatalogEntry
+  SetActiveModelPayloadSchema,
+  type ModelCatalogEntry,
+  type ModelGroup
 } from '../../shared/validation/model-catalog-schemas'
 
-function buildCatalogEntries(): ModelCatalogEntry[] {
-  const activeAsr = getSettings().get('activeModels').transcription
-  return getAsrModels().map((def) => ({
+function buildCatalogEntries(group: ModelGroup): ModelCatalogEntry[] {
+  const activeId = getActiveModelId(group)
+  return getModelsByGroup(group).map((def) => ({
     id: def.id,
     label: def.label,
     description: def.description,
     sizeBytes: def.sizeBytes,
-    group: 'asr' as const,
+    group,
     isRequired: def.isRequired === true,
     languages: def.languages,
     accuracyScore: def.accuracyScore,
     speedScore: def.speedScore,
     isInstalled: isModelInstalled(def.id),
-    isActive: def.id === activeAsr
+    isActive: def.id === activeId
   }))
 }
 
@@ -40,26 +44,36 @@ function validate<T>(schema: z.ZodType<T>, payload: unknown, channel: string): T
 }
 
 export function registerModelCatalogHandlers(): void {
-  ipcMain.handle('modelCatalog:listAsr', () => {
-    return buildCatalogEntries()
+  ipcMain.handle('modelCatalog:list', (_event, payload: unknown) => {
+    const { group } = validate(ListModelsPayloadSchema, payload, 'modelCatalog:list')
+    return buildCatalogEntries(group)
   })
+
+  // Backward-compat — kann nach UI-Migration entfernt werden
+  ipcMain.handle('modelCatalog:listAsr', () => buildCatalogEntries('asr'))
 
   ipcMain.handle('modelCatalog:download', async (_event, payload: unknown) => {
     const { id } = validate(ModelIdPayloadSchema, payload, 'modelCatalog:download')
     await downloadSingleModel(id)
-    return buildCatalogEntries()
+    const def = getModelById(id)
+    return buildCatalogEntries(def?.group ?? 'asr')
   })
 
   ipcMain.handle('modelCatalog:delete', async (_event, payload: unknown) => {
     const { id } = validate(ModelIdPayloadSchema, payload, 'modelCatalog:delete')
+    const groupBefore = getModelById(id)?.group ?? 'asr'
     await deleteModel(id)
-    return buildCatalogEntries()
+    return buildCatalogEntries(groupBefore)
   })
 
   ipcMain.handle('modelCatalog:setActive', (_event, payload: unknown) => {
-    const { id } = validate(ModelIdPayloadSchema, payload, 'modelCatalog:setActive')
-    setActiveAsrModel(id)
-    return buildCatalogEntries()
+    const { group, id } = validate(
+      SetActiveModelPayloadSchema,
+      payload,
+      'modelCatalog:setActive'
+    )
+    setActiveModel(group, id)
+    return buildCatalogEntries(group)
   })
 
   // Cancel läuft gegen dasselbe abortSignal-Singleton, das auch downloadSingleModel nutzt —

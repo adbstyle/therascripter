@@ -5,6 +5,7 @@ node_modules/
 out/
 dist/
 build/config.gypi
+build/convert-hf-whisper/
 
 # Editor / OS
 .DS_Store
