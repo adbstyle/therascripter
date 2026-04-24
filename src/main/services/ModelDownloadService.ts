@@ -157,8 +157,13 @@ export function getModelDefinitions(): ModelDefinition[] {
   return MODEL_DEFINITIONS
 }
 
+export function getModelsByGroup(group: ModelGroup): ModelDefinition[] {
+  return MODEL_DEFINITIONS.filter((m) => m.group === group)
+}
+
+/** Backward-Compat-Alias — weiterhin verwendet von First-Launch + Update-Check. */
 export function getAsrModels(): ModelDefinition[] {
-  return MODEL_DEFINITIONS.filter((m) => m.group === 'asr')
+  return getModelsByGroup('asr')
 }
 
 export function getRequiredModels(): ModelDefinition[] {
@@ -167,6 +172,15 @@ export function getRequiredModels(): ModelDefinition[] {
 
 export function getModelById(id: string): ModelDefinition | null {
   return MODEL_DEFINITIONS.find((m) => m.id === id) ?? null
+}
+
+/** Liefert die aktuell aktive Model-ID für eine Gruppe aus den Settings. */
+export function getActiveModelId(group: ModelGroup): string {
+  const active = getSettings().get('activeModels')
+  if (group === 'asr') return active.transcription
+  if (group === 'diarization') return active.diarization
+  if (group === 'ner') return active.ner
+  throw new Error(`Keine aktive Modell-Konfiguration für Gruppe "${group}"`)
 }
 
 /**
