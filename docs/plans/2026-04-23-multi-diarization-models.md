@@ -354,7 +354,7 @@ git commit -m "test: migrate pyannote-community-1 references to speaker-diarizat
   group: 'diarization',
   isRequired: false,
   description:
-    'Community-Variante mit besserer Performance auf Deutsch (DER ca. 8.3% laut HF). Experimentell, benötigt HuggingFace-Terms-Accept.',
+    'Community-Variante mit besserer Performance auf Deutsch (DER ca. 8.3 % laut HF). Experimentell.',
   languages: ['de', 'multi'],
   accuracyScore: 0.9,
   speedScore: 0.9,
