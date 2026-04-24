@@ -12,6 +12,10 @@ interface Props {
   onCancelDownload: () => void
   onDelete: () => void
   onActivate: () => void
+  /** Löschen-Button anzeigen? Default true. Für gekoppelte Pipelines auf false setzen. */
+  deletable?: boolean
+  /** Sprach- und Grössen-Chips anzeigen? Default true. */
+  showChips?: boolean
 }
 
 /** Zeigt '—' für unbekannte Grössen (Platzhalter-Modelle vor R2-Upload). */
@@ -50,7 +54,9 @@ export default function ModelCard({
   onDownload,
   onCancelDownload,
   onDelete,
-  onActivate
+  onActivate,
+  deletable = true,
+  showChips = true
 }: Props): React.JSX.Element {
   const dimmed = downloading ? 'opacity-70' : ''
   const borderClass = model.isActive ? 'border-primary' : 'border-border'
@@ -74,10 +80,12 @@ export default function ModelCard({
             )}
           </div>
 
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {model.languages?.map((lang) => <Chip key={lang}>{formatLanguage(lang)}</Chip>)}
-            <Chip>{formatModelSize(model.sizeBytes)}</Chip>
-          </div>
+          {showChips && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {model.languages?.map((lang) => <Chip key={lang}>{formatLanguage(lang)}</Chip>)}
+              <Chip>{formatModelSize(model.sizeBytes)}</Chip>
+            </div>
+          )}
 
           {model.description && (
             <p className="mt-2 text-sm leading-relaxed text-text-secondary">
@@ -125,13 +133,15 @@ export default function ModelCard({
         )}
         {!downloading && model.isInstalled && !model.isActive && (
           <>
-            <button
-              className="titlebar-no-drag rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 disabled:opacity-50"
-              onClick={onDelete}
-              disabled={anyBusy}
-            >
-              Löschen
-            </button>
+            {deletable && (
+              <button
+                className="titlebar-no-drag rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 disabled:opacity-50"
+                onClick={onDelete}
+                disabled={anyBusy}
+              >
+                Löschen
+              </button>
+            )}
             <button
               className="titlebar-no-drag rounded-md bg-primary px-3 py-1.5 text-sm text-white hover:bg-primary-hover disabled:opacity-50"
               onClick={onActivate}

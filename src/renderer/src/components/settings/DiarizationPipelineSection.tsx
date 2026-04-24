@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
-import type { DiarizationPipeline } from '../../../../shared/validation/model-catalog-schemas'
+import type {
+  DiarizationPipeline,
+  ModelCatalogEntry
+} from '../../../../shared/validation/model-catalog-schemas'
 import { useToast } from '../../hooks/useToast'
+import ModelCard from './ModelCard'
 
 interface PipelineInfo {
   id: DiarizationPipeline
@@ -23,6 +27,22 @@ const PIPELINE_INFOS: PipelineInfo[] = [
   }
 ]
 
+/** Baut einen Pseudo-ModelCatalogEntry, damit die Pipeline im ModelCard gerendert werden kann. */
+function toCatalogEntry(info: PipelineInfo, isActive: boolean): ModelCatalogEntry {
+  return {
+    id: info.id,
+    label: info.label,
+    description: info.description,
+    sizeBytes: 0,
+    group: 'diarization',
+    isRequired: true,
+    isInstalled: true,
+    isActive
+  }
+}
+
+const noop = (): void => {}
+
 export default function DiarizationPipelineSection(): React.JSX.Element {
   const toast = useToast()
   const [active, setActive] = useState<DiarizationPipeline | null>(null)
@@ -31,7 +51,7 @@ export default function DiarizationPipelineSection(): React.JSX.Element {
     window.api.pipeline.getDiarization().then(setActive)
   }, [])
 
-  const handleSelect = async (pipeline: DiarizationPipeline): Promise<void> => {
+  const handleActivate = async (pipeline: DiarizationPipeline): Promise<void> => {
     if (pipeline === active) return
     try {
       await window.api.pipeline.setDiarization(pipeline)
@@ -54,47 +74,22 @@ export default function DiarizationPipelineSection(): React.JSX.Element {
         </p>
       </div>
 
-      <div className="space-y-2">
-        {PIPELINE_INFOS.map((info) => {
-          const isActive = active === info.id
-          return (
-            <button
-              key={info.id}
-              type="button"
-              onClick={() => handleSelect(info.id)}
-              className={`titlebar-no-drag w-full rounded-lg border p-4 text-left transition-colors ${
-                isActive
-                  ? 'border-primary bg-surface-1'
-                  : 'border-border hover:bg-surface-2'
-              }`}
-              aria-pressed={isActive}
-            >
-              <div className="flex items-start gap-3">
-                <div
-                  className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                    isActive ? 'border-primary' : 'border-border'
-                  }`}
-                  aria-hidden
-                >
-                  {isActive && <div className="h-2 w-2 rounded-full bg-primary" />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-text-primary">{info.label}</span>
-                    {isActive && (
-                      <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-white">
-                        Aktiv
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1 text-sm leading-relaxed text-text-secondary">
-                    {info.description}
-                  </p>
-                </div>
-              </div>
-            </button>
-          )
-        })}
+      <div className="space-y-3">
+        {PIPELINE_INFOS.map((info) => (
+          <ModelCard
+            key={info.id}
+            model={toCatalogEntry(info, active === info.id)}
+            activeUsageLabel="Wird für Sprechererkennung verwendet"
+            downloading={false}
+            anyBusy={false}
+            deletable={false}
+            showChips={false}
+            onDownload={noop}
+            onCancelDownload={noop}
+            onDelete={noop}
+            onActivate={() => handleActivate(info.id)}
+          />
+        ))}
       </div>
     </section>
   )
