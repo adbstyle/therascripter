@@ -46,6 +46,8 @@ export const DiarizationPipelineSchema = z.enum([
   'pyannote/speaker-diarization-community-1'
 ])
 export type DiarizationPipeline = z.infer<typeof DiarizationPipelineSchema>
+export const DIARIZATION_PIPELINES = DiarizationPipelineSchema.options
+export const DEFAULT_DIARIZATION_PIPELINE: DiarizationPipeline = DIARIZATION_PIPELINES[0]
 
 /** Payload für pipeline:setDiarization. */
 export const SetDiarizationPipelinePayloadSchema = z.object({

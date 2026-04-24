@@ -6,20 +6,14 @@ import type {
   AppUpdateStatus
 } from '../../shared/types/ModelUpdate'
 import { getModelDefinitions } from './ModelDownloadService'
+import {
+  DIARIZATION_PIPELINES,
+  DEFAULT_DIARIZATION_PIPELINE,
+  type DiarizationPipeline
+} from '../../shared/validation/model-catalog-schemas'
 
-/**
- * HuggingFace-Identifier der unterstützten pyannote-Pipelines.
- * Beide Pipelines sind im gemeinsamen `pyannote-suite`-Paket enthalten.
- */
-export const DIARIZATION_PIPELINES = [
-  'pyannote/speaker-diarization-3.1',
-  'pyannote/speaker-diarization-community-1'
-] as const
-
-export type DiarizationPipeline = (typeof DIARIZATION_PIPELINES)[number]
-
-export const DEFAULT_DIARIZATION_PIPELINE: DiarizationPipeline =
-  'pyannote/speaker-diarization-3.1'
+export type { DiarizationPipeline }
+export { DIARIZATION_PIPELINES, DEFAULT_DIARIZATION_PIPELINE }
 
 export interface AppSettings {
   activeModels: {
@@ -80,18 +74,11 @@ export function initSettings(): Store<AppSettings> {
   })
 
   // Migration 2026-04-24 — Konsolidierung auf pyannote-suite.
-  // pyannote 4.x koppelt 3.1 und community-1 durch hardcoded PLDA-Loading
-  // (siehe speaker_diarization.py:206-208). Beide Pipelines leben jetzt in
-  // einem einzigen Installations-Paket ("pyannote-suite"); die Wahl zwischen
-  // ihnen ist eine Runtime-Konfiguration (activeDiarizationPipeline).
-  //
-  // Alte Werte, die diese Migration behandelt:
-  //   - 'pyannote-community-1' (Legacy vor PR #41; lud faktisch 3.1)
-  //   - 'pyannote-speaker-diarization-3.1' (PR #41 Zwischenstand)
-  //   - 'pyannote-speaker-diarization-community-1' (PR #41 Zwischenstand)
-  //   - unbekannte Werte (manipuliert, Downgrade-Rückstände)
-  //
-  // Kann nach 2-3 Releases entfernt werden.
+  // pyannote 4.x koppelt 3.1 und community-1 durch hardcoded PLDA-Loading,
+  // beide Pipelines leben daher im selben Installations-Paket; die Wahl
+  // zwischen ihnen ist eine Runtime-Konfiguration (diarizationPipeline).
+  // Migration deckt alle früheren Diarization-IDs + unbekannte/manipulierte
+  // Werte ab. Kann nach 2-3 Releases entfernt werden.
   const active = store.get('activeModels')
   const knownDiarIds = new Set(
     getModelDefinitions()
