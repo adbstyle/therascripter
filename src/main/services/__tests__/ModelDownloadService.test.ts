@@ -67,8 +67,11 @@ describe('ModelDownloadService catalog helpers', () => {
     expect(getModelById('does-not-exist')).toBeNull()
   })
 
-  it('getModelsToLoadOnFirstLaunch returns required + activeAsrId', () => {
-    const loaded = getModelsToLoadOnFirstLaunch('whisper-large-v3-turbo')
+  it('getModelsToLoadOnFirstLaunch returns required + activeAsrId + activeDiarId', () => {
+    const loaded = getModelsToLoadOnFirstLaunch(
+      'whisper-large-v3-turbo',
+      'pyannote-speaker-diarization-3.1'
+    )
     const ids = loaded.map((m) => m.id).sort()
     expect(ids).toEqual([
       'flair-ner-german-large',
@@ -77,12 +80,9 @@ describe('ModelDownloadService catalog helpers', () => {
     ])
   })
 
-  it('getModelsToLoadOnFirstLaunch falls back gracefully on unknown activeAsrId', () => {
-    const loaded = getModelsToLoadOnFirstLaunch('nonexistent')
-    expect(loaded.map((m) => m.id).sort()).toEqual([
-      'flair-ner-german-large',
-      'pyannote-speaker-diarization-3.1'
-    ])
+  it('getModelsToLoadOnFirstLaunch falls back gracefully on unknown ids', () => {
+    const loaded = getModelsToLoadOnFirstLaunch('nonexistent', 'also-nonexistent')
+    expect(loaded.map((m) => m.id).sort()).toEqual(['flair-ner-german-large'])
   })
 })
 

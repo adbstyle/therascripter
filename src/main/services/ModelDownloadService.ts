@@ -185,27 +185,51 @@ export function getActiveModelId(group: ModelGroup): string {
 
 /**
  * Modelle, die auf First-Launch heruntergeladen werden müssen:
- * alle required + das aktive ASR-Modell (falls gültig).
+ * - alle isRequired-Modelle (NER)
+ * - das aktive ASR-Modell
+ * - das aktive Diarization-Modell
  */
-export function getModelsToLoadOnFirstLaunch(activeAsrId: string): ModelDefinition[] {
-  const required = getRequiredModels()
-  const active = getModelById(activeAsrId)
-  if (active && active.group === 'asr') {
-    return [...required, active].filter(
-      (m, i, arr) => arr.findIndex((x) => x.id === m.id) === i
-    )
+export function getModelsToLoadOnFirstLaunch(
+  activeAsrId: string,
+  activeDiarId: string
+): ModelDefinition[] {
+  const seen = new Set<string>()
+  const out: ModelDefinition[] = []
+  for (const m of getRequiredModels()) {
+    if (!seen.has(m.id)) {
+      seen.add(m.id)
+      out.push(m)
+    }
   }
-  return required
+  const activeAsr = getModelById(activeAsrId)
+  if (activeAsr && activeAsr.group === 'asr' && !seen.has(activeAsr.id)) {
+    seen.add(activeAsr.id)
+    out.push(activeAsr)
+  }
+  const activeDiar = getModelById(activeDiarId)
+  if (activeDiar && activeDiar.group === 'diarization' && !seen.has(activeDiar.id)) {
+    seen.add(activeDiar.id)
+    out.push(activeDiar)
+  }
+  return out
 }
 
 /**
- * Prüft, ob die Minimal-Menge (required + aktives ASR) installiert ist.
- * Ersatz für checkModelsExist(), das alle Modelle erwartete.
+ * Prüft, ob die Minimal-Menge (required + aktives ASR + aktives Diarization) installiert ist.
  */
-export function checkRequiredAndActiveAsrExist(activeAsrId: string): boolean {
+export function checkRequiredAndActiveExist(
+  activeAsrId: string,
+  activeDiarId: string
+): boolean {
   const modelsDir = getModelsDir()
-  const toCheck = getModelsToLoadOnFirstLaunch(activeAsrId)
+  const toCheck = getModelsToLoadOnFirstLaunch(activeAsrId, activeDiarId)
   return toCheck.every((m) => existsSync(join(modelsDir, m.checkPath)))
+}
+
+/** Backward-Compat-Alias. */
+export function checkRequiredAndActiveAsrExist(activeAsrId: string): boolean {
+  const activeDiar = getSettings().get('activeModels').diarization
+  return checkRequiredAndActiveExist(activeAsrId, activeDiar)
 }
 
 /**
@@ -222,13 +246,13 @@ export function getModelsDir(): string {
 }
 
 export function checkModelsExist(): boolean {
-  const activeAsrId = getSettings().get('activeModels').transcription
-  return checkRequiredAndActiveAsrExist(activeAsrId)
+  const active = getSettings().get('activeModels')
+  return checkRequiredAndActiveExist(active.transcription, active.diarization)
 }
 
 export function getModelsToLoad(): ModelDefinition[] {
-  const activeAsrId = getSettings().get('activeModels').transcription
-  return getModelsToLoadOnFirstLaunch(activeAsrId)
+  const active = getSettings().get('activeModels')
+  return getModelsToLoadOnFirstLaunch(active.transcription, active.diarization)
 }
 
 export function getOverallModelSize(): number {
@@ -505,8 +529,8 @@ export async function downloadSingleModel(id: string): Promise<void> {
 /**
  * Löscht ein einzelnes Modell von Disk. Verboten für:
  *   - unbekannte IDs
- *   - Pflicht-Modelle (isRequired)
- *   - das aktuell aktive ASR-Modell
+ *   - Pflicht-Modelle (isRequired, z.B. flair NER)
+ *   - das aktuell aktive Modell einer group-required Gruppe (ASR, Diarization)
  */
 export async function deleteModel(id: string): Promise<void> {
   const def = getModelById(id)
@@ -518,10 +542,15 @@ export async function deleteModel(id: string): Promise<void> {
   }
 
   const settings = getSettings()
-  const activeAsr = settings.get('activeModels').transcription
-  if (activeAsr === id) {
+  const active = settings.get('activeModels')
+  if (def.group === 'asr' && active.transcription === id) {
     throw new Error(
-      `Löschen: "${def.label}" ist aktuell aktiv. Zuerst anderes Modell aktivieren.`
+      `Löschen: "${def.label}" ist aktuell als ASR-Modell aktiv. Zuerst anderes Modell aktivieren.`
+    )
+  }
+  if (def.group === 'diarization' && active.diarization === id) {
+    throw new Error(
+      `Löschen: "${def.label}" ist aktuell als Sprechererkennungs-Modell aktiv. Zuerst anderes Modell aktivieren.`
     )
   }
 
