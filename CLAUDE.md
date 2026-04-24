@@ -28,8 +28,10 @@ npm run package       # electron-rebuild + build + electron-builder → macOS DM
 scripts/release.sh                # Interactive version bump → DMG build → GitHub release (via gh CLI)
 scripts/setup-whisper.sh          # Install whisper-cli via Homebrew → resources/bin/ + resources/lib/
 scripts/setup-whisper.sh --model  # Also download ASR model (~547 MB)
-scripts/setup-pyannote.sh         # Create Python venv with pyannote.audio → python_sidecar/venv/
-scripts/setup-pyannote.sh --model # Also download diarization model
+scripts/setup-pyannote.sh                # Create Python venv with pyannote.audio → python_sidecar/venv/
+scripts/setup-pyannote.sh --model        # Also download speaker-diarization-3.1
+scripts/setup-pyannote.sh --model-community  # Also download speaker-diarization-community-1 (gated — requires HF terms-accept)
+scripts/setup-pyannote.sh --all-models   # Download both
 scripts/setup-ner.sh              # Install flair into existing Python venv
 scripts/setup-ner.sh --model      # Also download NER model (~1.1 GB)
 scripts/setup-vision-ocr.sh       # Build Swift Vision OCR CLI helper → resources/bin/
@@ -53,7 +55,7 @@ scripts/publish-manifest.sh       # Generate manifest.json from r2-upload/ + upl
 
 **ML pipeline — Audio** (strictly sequential, one model at a time):
 1. whisper.cpp subprocess — ASR via auswählbares Modell aus Katalog (Default: Whisper Large V3 Turbo Q5_0 multilingual; optional: Swiss-German-Fine-Tune). Active model stored in electron-store (`activeModels.transcription`), verwaltet via Settings → Modelle. ✓ implemented
-2. Python sidecar — pyannote.audio diarization (speaker-diarization-3.1) + alignment ✓ implemented
+2. Python sidecar — pyannote.audio diarization via auswählbares Modell aus Katalog (Default: `speaker-diarization-3.1`; optional: `speaker-diarization-community-1` für bessere Deutsch-Performance). Active model stored in electron-store (`activeModels.diarization`), verwaltet via Settings → Modelle. HF_HUB_OFFLINE=1 erzwingt lokale Cache-Nutzung. ✓ implemented
 3. Python sidecar — flair NER (flair/ner-german-large) + Regex + Blocklist → TipTap document ✓ implemented
 
 **ML pipeline — PDF** (extraction → ocr → anonymization):
