@@ -110,8 +110,8 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     // Community-1-Ordner ist Teil der Suite und wird von pyannote 4.x auch für die 3.1-Pipeline
     // als PLDA-Quelle geladen. Wenn er da ist, ist die ganze Suite funktional.
     checkPath: 'diarization/models--pyannote--speaker-diarization-community-1',
-    sizeBytes: 30_458_649,
-    sha256: 'PENDING_MONOLITH',
+    sizeBytes: 60_664_796,
+    sha256: 'ba9a241906fb9880791f448f959b12beae39d7e0ed066eaf62b7bcec805bc87e',
     archive: true,
     group: 'diarization',
     isRequired: true

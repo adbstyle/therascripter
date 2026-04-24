@@ -8,62 +8,43 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 OUTPUT_DIR="$PROJECT_ROOT/r2-upload"
 MODELS_DIR="$HOME/.therascript/models"
 
-# Liest aus einem pyannote-Pipeline-config.yaml die referenzierten Sub-Model-Slugs
-# (z.B. "pyannote/segmentation-3.0" → "models--pyannote--segmentation-3.0").
-# Ignoriert interne Referenzen wie "$model/segmentation" (community-1 bundlet die
-# Sub-Modelle direkt im eigenen Snapshot — keine externe HF-Cache-Dir nötig).
-# Gibt die HuggingFace-Cache-Dir-Namen zeilenweise auf stdout aus.
-pyannote_submodel_dirs() {
-  local CONFIG="$1"
-  [ -f "$CONFIG" ] || return 0
-  # Regex verlangt ein nicht-whitespace Value nach dem ":" — sonst matched auch
-  # "  segmentation:" unter dem params-Block (ohne Wert).
-  grep -E '^\s+(embedding|segmentation):[[:space:]]+[^[:space:]]' "$CONFIG" \
-    | awk '{print $2}' \
-    | grep -v '^\$model/' \
-    | sed 's|/|--|g' \
-    | sed 's|^|models--|'
-}
-
-# Bündelt ein pyannote-Modell + ALLE aus dessen config.yaml referenzierten Sub-Models in ein Tarball.
-# Bricht mit exit 1 ab, wenn ein referenziertes Sub-Model im Cache fehlt (CSP connect-src 'none'
-# verhindert Lazy-Download zur Runtime — ein fehlendes Sub-Model würde Diarization silent crashen).
-package_pyannote_model() {
-  local MODEL_SLUG="$1"      # z.B. "pyannote/speaker-diarization-3.1"
-  local OUTPUT_NAME="$2"     # z.B. "pyannote-speaker-diarization-3.1.tar.gz"
-
-  local CACHE_DIR_NAME
-  CACHE_DIR_NAME="models--$(echo "$MODEL_SLUG" | sed 's|/|--|g')"
-  local CACHE_DIR="$MODELS_DIR/diarization/$CACHE_DIR_NAME"
-
-  if [ ! -d "$CACHE_DIR" ]; then
-    echo "  SKIP: $MODEL_SLUG nicht im Cache: $CACHE_DIR"
-    return 0
-  fi
-
-  local CONFIG
-  CONFIG=$(find "$CACHE_DIR/snapshots" \( -name config.yaml -type f -o -name config.yaml -type l \) 2>/dev/null | head -n1)
-  if [ -z "$CONFIG" ]; then
-    echo "  FEHLER: keine config.yaml in $CACHE_DIR/snapshots/" >&2
-    return 1
-  fi
+# Pyannote-Suite Packaging.
+#
+# pyannote 4.x lädt hardcoded die PLDA-Files aus pyannote/speaker-diarization-community-1,
+# auch wenn die aktive Pipeline 3.1 ist (siehe speaker_diarization.py:206-231 in der
+# installierten pyannote.audio-Version). Deshalb müssen BEIDE Pipelines + ihre
+# Sub-Models zusammen ausgeliefert werden — ein User-Toggle zwischen 3.1 und community-1
+# ist nur eine Runtime-Konfiguration, keine separate Installation.
+#
+# Wir packen die vier benötigten HF-Cache-Ordner in ein einziges Tarball:
+#   - models--pyannote--speaker-diarization-3.1/
+#   - models--pyannote--speaker-diarization-community-1/
+#   - models--pyannote--segmentation-3.0/            (referenziert von 3.1)
+#   - models--pyannote--wespeaker-voxceleb-resnet34-LM/  (referenziert von 3.1)
+#
+# Bricht mit exit 1 ab, wenn einer der vier Ordner im Cache fehlt.
+package_pyannote_suite() {
+  local OUTPUT_NAME="pyannote-suite.tar.gz"
+  local REQUIRED=(
+    models--pyannote--speaker-diarization-3.1
+    models--pyannote--speaker-diarization-community-1
+    models--pyannote--segmentation-3.0
+    models--pyannote--wespeaker-voxceleb-resnet34-LM
+  )
 
   local TMP_DIR
   TMP_DIR=$(mktemp -d)
-  cp -R "$CACHE_DIR" "$TMP_DIR/"
 
-  # Referenzierte Sub-Models zwingend bundeln — sonst hart fehlschlagen
-  while IFS= read -r SUB_DIR; do
-    [ -z "$SUB_DIR" ] && continue
-    local SRC="$MODELS_DIR/diarization/$SUB_DIR"
+  for SUB in "${REQUIRED[@]}"; do
+    local SRC="$MODELS_DIR/diarization/$SUB"
     if [ ! -d "$SRC" ]; then
-      echo "  FEHLER: $MODEL_SLUG referenziert $SUB_DIR — aber $SRC fehlt." >&2
-      echo "          Bitte zuerst scripts/setup-pyannote.sh für die fehlenden Sub-Models ausführen." >&2
+      echo "  FEHLER: $SUB fehlt im Cache — pyannote-Suite braucht alle vier Sub-Modelle." >&2
+      echo "          Bitte zuerst scripts/setup-pyannote.sh --all-models ausführen." >&2
       rm -rf "$TMP_DIR"
       return 1
     fi
     cp -R "$SRC" "$TMP_DIR/"
-  done < <(pyannote_submodel_dirs "$CONFIG")
+  done
 
   tar -czf "$OUTPUT_DIR/$OUTPUT_NAME" -C "$TMP_DIR" .
   rm -rf "$TMP_DIR"
@@ -91,13 +72,8 @@ if [ -f "$WHISPER_SWISS" ]; then
   echo "  -> whisper-ggml-large-v3-turbo-swiss-q5_0.bin"
 fi
 
-# Pyannote Diarization 3.1 — isolierter Snapshot + shared sub-models
-package_pyannote_model "pyannote/speaker-diarization-3.1" \
-  "pyannote-speaker-diarization-3.1.tar.gz" || exit 1
-
-# Pyannote Community-1 — isolierter Snapshot + shared sub-models
-package_pyannote_model "pyannote/speaker-diarization-community-1" \
-  "pyannote-speaker-diarization-community-1.tar.gz" || exit 1
+# Pyannote-Suite — monolithisches Paket mit allen vier benötigten Sub-Modellen
+package_pyannote_suite || exit 1
 
 # flair NER model (archive contents extracted INTO ner/)
 if [ -d "$MODELS_DIR/ner" ]; then
