@@ -243,7 +243,7 @@ export function buildDiarizationData(
     speakers: segments,
     speakerCount: uniqueSpeakers.size,
     metadata: {
-      model: 'pyannote-community-1',
+      model: 'pyannote-speaker-diarization-3.1',
       duration
     }
   }

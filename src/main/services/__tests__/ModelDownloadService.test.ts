@@ -58,7 +58,7 @@ describe('ModelDownloadService catalog helpers', () => {
     const required = getRequiredModels()
     expect(required.map((m) => m.id).sort()).toEqual([
       'flair-ner-german-large',
-      'pyannote-community-1'
+      'pyannote-speaker-diarization-3.1'
     ])
   })
 
@@ -72,7 +72,7 @@ describe('ModelDownloadService catalog helpers', () => {
     const ids = loaded.map((m) => m.id).sort()
     expect(ids).toEqual([
       'flair-ner-german-large',
-      'pyannote-community-1',
+      'pyannote-speaker-diarization-3.1',
       'whisper-large-v3-turbo'
     ])
   })
@@ -81,7 +81,7 @@ describe('ModelDownloadService catalog helpers', () => {
     const loaded = getModelsToLoadOnFirstLaunch('nonexistent')
     expect(loaded.map((m) => m.id).sort()).toEqual([
       'flair-ner-german-large',
-      'pyannote-community-1'
+      'pyannote-speaker-diarization-3.1'
     ])
   })
 })
@@ -94,7 +94,7 @@ describe('downloadSingleModel', () => {
   })
 
   it('throws when model is not in group "asr"', async () => {
-    await expect(downloadSingleModel('pyannote-community-1')).rejects.toThrow(
+    await expect(downloadSingleModel('pyannote-speaker-diarization-3.1')).rejects.toThrow(
       /nur ASR-Modelle/i
     )
   })
@@ -106,7 +106,7 @@ describe('deleteModel', () => {
   })
 
   it('throws when model is required', async () => {
-    await expect(deleteModel('pyannote-community-1')).rejects.toThrow(/Pflicht-Modell/i)
+    await expect(deleteModel('pyannote-speaker-diarization-3.1')).rejects.toThrow(/Pflicht-Modell/i)
   })
 
   it('throws when attempting to delete the active asr model', async () => {
@@ -121,7 +121,7 @@ describe('setActiveAsrModel', () => {
   })
 
   it('throws when model is not asr group', () => {
-    expect(() => setActiveAsrModel('pyannote-community-1')).toThrow(/keine ASR/i)
+    expect(() => setActiveAsrModel('pyannote-speaker-diarization-3.1')).toThrow(/keine ASR/i)
   })
 
   it('throws when model is not installed', () => {

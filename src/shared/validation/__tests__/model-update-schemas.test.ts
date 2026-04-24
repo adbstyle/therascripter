@@ -68,7 +68,7 @@ describe('ManifestSchema', () => {
       ...validManifest,
       models: [
         validModel,
-        { ...validModel, id: 'pyannote-community-1', sha256: 'b'.repeat(64) },
+        { ...validModel, id: 'pyannote-speaker-diarization-3.1', sha256: 'b'.repeat(64) },
         { ...validModel, id: 'flair-ner-german-large', sha256: 'c'.repeat(64) }
       ]
     }

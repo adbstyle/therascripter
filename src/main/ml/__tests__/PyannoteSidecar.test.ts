@@ -116,7 +116,7 @@ describe('buildDiarizationData', () => {
     expect(result.speakers).toBe(segments)
     expect(result.speakerCount).toBe(2)
     expect(result.metadata).toEqual({
-      model: 'pyannote-community-1',
+      model: 'pyannote-speaker-diarization-3.1',
       duration: 15
     })
   })

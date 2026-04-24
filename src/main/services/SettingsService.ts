@@ -54,13 +54,15 @@ export function initSettings(): Store<AppSettings> {
   // Migration 2026-04-23 — Diarization-Modell-ID-Rename + defensive Repair.
   // Deckt ab: altes 'pyannote-community-1', manipulierte Werte, Downgrade-Rückstände.
   // Kann nach 2-3 Releases entfernt werden.
+  const LEGACY_DIAR_ID = 'pyannote-community-1'
+  const DEFAULT_DIAR = 'pyannote-speaker-diarization-3.1'
+
   const active = store.get('activeModels')
   const knownDiarIds = new Set(
     getModelDefinitions()
       .filter((m) => m.group === 'diarization')
       .map((m) => m.id)
   )
-  const DEFAULT_DIAR = 'pyannote-speaker-diarization-3.1'
 
   if (!knownDiarIds.has(active.diarization)) {
     console.warn(
@@ -72,9 +74,9 @@ export function initSettings(): Store<AppSettings> {
   // installedModelVersions: Altlasten-Key mit-migrieren, sonst bleibt er für immer
   // verwaist (UpdateCheckService iteriert über Manifest-IDs, nicht über installed-keys).
   const installed = { ...store.get('installedModelVersions') }
-  if (installed['pyannote-community-1']) {
-    installed[DEFAULT_DIAR] = installed[DEFAULT_DIAR] ?? installed['pyannote-community-1']
-    delete installed['pyannote-community-1']
+  if (installed[LEGACY_DIAR_ID]) {
+    installed[DEFAULT_DIAR] = installed[DEFAULT_DIAR] ?? installed[LEGACY_DIAR_ID]
+    delete installed[LEGACY_DIAR_ID]
     store.set('installedModelVersions', installed)
   }
 

@@ -142,7 +142,7 @@ export default function ModelsSettings(): React.JSX.Element {
           automatisch aktuell gehalten.
         </p>
         <ul className="space-y-1 rounded-md border border-border bg-surface-1 p-3 text-xs text-text-tertiary">
-          <li>Sprechererkennung (pyannote-community-1)</li>
+          <li>Sprechererkennung (pyannote-speaker-diarization-3.1)</li>
           <li>Anonymisierung (flair-ner-german-large)</li>
         </ul>
       </section>
