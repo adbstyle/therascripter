@@ -9,7 +9,7 @@ import { SessionService } from '../services/SessionService'
 import { getDatabase, getDataDir } from '../db/connection'
 import { writeFileAtomic } from '../utils/file-ops'
 import { resolvePythonSidecar } from './resolve-python'
-import { getActiveModelId, getModelById } from '../services/ModelDownloadService'
+import { getSettings } from '../services/SettingsService'
 
 // Progress line format: "[PROGRESS] 42"
 const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
@@ -55,20 +55,14 @@ export class PyannoteSidecar implements TaskExecutor {
     const audioDurationEstimate = Math.max(0, audioStats.size - WAV_HEADER_SIZE) / (48000 * 2) // 48kHz 16-bit mono
     const timeoutMs = Math.max(audioDurationEstimate * 4 * 1000, 120_000) // min 2 minutes
 
-    const activeDiarId = getActiveModelId('diarization')
-    const activeDef = getModelById(activeDiarId)
-    if (!activeDef || !activeDef.hfIdentifier) {
-      throw new Error(
-        `Diarization: aktives Modell "${activeDiarId}" hat keinen hfIdentifier — Konfigurationsfehler`
-      )
-    }
+    const activePipeline = getSettings().get('activeModels').diarizationPipeline
 
     // Run pyannote diarization
     const rttmOutput = await this.runPyannote(
       bin,
       prefixArgs,
       session.audioPath,
-      activeDef.hfIdentifier,
+      activePipeline,
       timeoutMs,
       onProgress,
       signal
@@ -78,7 +72,7 @@ export class PyannoteSidecar implements TaskExecutor {
     const segments = parseRTTM(rttmOutput)
 
     // Build diarization data
-    const diarization = buildDiarizationData(segments, audioDurationEstimate, activeDiarId)
+    const diarization = buildDiarizationData(segments, audioDurationEstimate, activePipeline)
 
     // Save diarization results
     const diarizationPath = sessionService.generateDiarizationPath(task.sessionId)

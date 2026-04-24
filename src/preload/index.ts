@@ -8,7 +8,10 @@ import type {
   ModelDownloadStatus
 } from '../shared/types'
 import type { PendingModelUpdate, AppUpdateStatus } from '../shared/types/ModelUpdate'
-import type { ModelGroup } from '../shared/validation/model-catalog-schemas'
+import type {
+  ModelGroup,
+  DiarizationPipeline
+} from '../shared/validation/model-catalog-schemas'
 
 const api: IpcApi = {
   sessions: {
@@ -121,6 +124,12 @@ const api: IpcApi = {
     setActive: (group: ModelGroup, id: string) =>
       ipcRenderer.invoke('modelCatalog:setActive', { group, id }),
     cancelDownload: () => ipcRenderer.invoke('modelCatalog:cancelDownload')
+  },
+  pipeline: {
+    getDiarization: () => ipcRenderer.invoke('pipeline:getDiarization'),
+    setDiarization: (pipeline: DiarizationPipeline) =>
+      ipcRenderer.invoke('pipeline:setDiarization', { pipeline }),
+    listDiarization: () => ipcRenderer.invoke('pipeline:listDiarization')
   },
   modelUpdate: {
     check: () => ipcRenderer.invoke('modelUpdate:check'),

@@ -152,6 +152,11 @@ beforeEach(() => {
       setActive: vi.fn().mockResolvedValue([]),
       cancelDownload: vi.fn().mockResolvedValue(undefined)
     },
+    pipeline: {
+      getDiarization: vi.fn().mockResolvedValue('pyannote/speaker-diarization-3.1'),
+      setDiarization: vi.fn().mockResolvedValue('pyannote/speaker-diarization-3.1'),
+      listDiarization: vi.fn().mockResolvedValue([])
+    },
     modelUpdate: mockModelUpdate,
     appUpdate: {
       getStatus: vi.fn().mockResolvedValue(null),

@@ -35,7 +35,7 @@ describe('UpdateBanner', () => {
       <UpdateBanner
         updates={[
           makeUpdate('whisper-large-v3-turbo', 50 * 1024 * 1024),
-          makeUpdate('pyannote-speaker-diarization-3.1', 30 * 1024 * 1024)
+          makeUpdate('pyannote-suite', 30 * 1024 * 1024)
         ]}
         onRestart={vi.fn()}
       />

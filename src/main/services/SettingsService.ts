@@ -7,10 +7,25 @@ import type {
 } from '../../shared/types/ModelUpdate'
 import { getModelDefinitions } from './ModelDownloadService'
 
+/**
+ * HuggingFace-Identifier der unterstützten pyannote-Pipelines.
+ * Beide Pipelines sind im gemeinsamen `pyannote-suite`-Paket enthalten.
+ */
+export const DIARIZATION_PIPELINES = [
+  'pyannote/speaker-diarization-3.1',
+  'pyannote/speaker-diarization-community-1'
+] as const
+
+export type DiarizationPipeline = (typeof DIARIZATION_PIPELINES)[number]
+
+export const DEFAULT_DIARIZATION_PIPELINE: DiarizationPipeline =
+  'pyannote/speaker-diarization-3.1'
+
 export interface AppSettings {
   activeModels: {
     transcription: string
     diarization: string
+    diarizationPipeline: DiarizationPipeline
     ner: string
     ocr: string
   }
@@ -27,7 +42,8 @@ export interface AppSettings {
 const defaults: AppSettings = {
   activeModels: {
     transcription: 'whisper-large-v3-turbo',
-    diarization: 'pyannote-speaker-diarization-3.1',
+    diarization: 'pyannote-suite',
+    diarizationPipeline: DEFAULT_DIARIZATION_PIPELINE,
     ner: 'flair-ner-german-large',
     ocr: 'apple-vision'
   },
@@ -43,6 +59,18 @@ const defaults: AppSettings = {
 
 let store: Store<AppSettings> | null = null
 
+/**
+ * Inferiert die gewünschte Diarization-Pipeline aus einer alten
+ * Model-ID. Unbekannte Werte werden auf den Default gesetzt.
+ */
+function inferPipelineFromLegacyId(legacyId: string | undefined): DiarizationPipeline {
+  if (legacyId === 'pyannote-speaker-diarization-community-1') {
+    return 'pyannote/speaker-diarization-community-1'
+  }
+  // Der alte 'pyannote-community-1' Key lud faktisch 3.1 — auf 3.1 mappen.
+  return DEFAULT_DIARIZATION_PIPELINE
+}
+
 export function initSettings(): Store<AppSettings> {
   if (store) return store
 
@@ -51,32 +79,69 @@ export function initSettings(): Store<AppSettings> {
     defaults
   })
 
-  // Migration 2026-04-23 — Diarization-Modell-ID-Rename + defensive Repair.
-  // Deckt ab: altes 'pyannote-community-1', manipulierte Werte, Downgrade-Rückstände.
+  // Migration 2026-04-24 — Konsolidierung auf pyannote-suite.
+  // pyannote 4.x koppelt 3.1 und community-1 durch hardcoded PLDA-Loading
+  // (siehe speaker_diarization.py:206-208). Beide Pipelines leben jetzt in
+  // einem einzigen Installations-Paket ("pyannote-suite"); die Wahl zwischen
+  // ihnen ist eine Runtime-Konfiguration (activeDiarizationPipeline).
+  //
+  // Alte Werte, die diese Migration behandelt:
+  //   - 'pyannote-community-1' (Legacy vor PR #41; lud faktisch 3.1)
+  //   - 'pyannote-speaker-diarization-3.1' (PR #41 Zwischenstand)
+  //   - 'pyannote-speaker-diarization-community-1' (PR #41 Zwischenstand)
+  //   - unbekannte Werte (manipuliert, Downgrade-Rückstände)
+  //
   // Kann nach 2-3 Releases entfernt werden.
-  const LEGACY_DIAR_ID = 'pyannote-community-1'
-  const DEFAULT_DIAR = 'pyannote-speaker-diarization-3.1'
-
   const active = store.get('activeModels')
   const knownDiarIds = new Set(
     getModelDefinitions()
       .filter((m) => m.group === 'diarization')
       .map((m) => m.id)
   )
+  const EXPECTED_DIAR = 'pyannote-suite'
 
-  if (!knownDiarIds.has(active.diarization)) {
+  if (!knownDiarIds.has(active.diarization) || active.diarization !== EXPECTED_DIAR) {
+    const inferredPipeline = inferPipelineFromLegacyId(active.diarization)
     console.warn(
-      `[settings-migration] activeModels.diarization="${active.diarization}" unbekannt → reset auf "${DEFAULT_DIAR}"`
+      `[settings-migration] activeModels.diarization="${active.diarization}" → reset auf "${EXPECTED_DIAR}" (Pipeline: ${inferredPipeline})`
     )
-    store.set('activeModels', { ...active, diarization: DEFAULT_DIAR })
+    store.set('activeModels', {
+      ...active,
+      diarization: EXPECTED_DIAR,
+      diarizationPipeline: inferredPipeline
+    })
   }
 
-  // installedModelVersions: Altlasten-Key mit-migrieren, sonst bleibt er für immer
-  // verwaist (UpdateCheckService iteriert über Manifest-IDs, nicht über installed-keys).
+  // Defensiv: ungültigen Pipeline-Wert auf Default zurücksetzen.
+  const currentPipeline = store.get('activeModels').diarizationPipeline
+  if (!DIARIZATION_PIPELINES.includes(currentPipeline as DiarizationPipeline)) {
+    console.warn(
+      `[settings-migration] activeModels.diarizationPipeline="${currentPipeline}" ungültig → reset auf Default`
+    )
+    store.set('activeModels', {
+      ...store.get('activeModels'),
+      diarizationPipeline: DEFAULT_DIARIZATION_PIPELINE
+    })
+  }
+
+  // installedModelVersions: Altlasten-Keys (Legacy + PR-Zwischenstände) auf den neuen
+  // Key umbenennen, sonst bleiben sie für immer verwaist (UpdateCheckService iteriert
+  // über Manifest-IDs, nicht über installed-keys).
   const installed = { ...store.get('installedModelVersions') }
-  if (installed[LEGACY_DIAR_ID]) {
-    installed[DEFAULT_DIAR] = installed[DEFAULT_DIAR] ?? installed[LEGACY_DIAR_ID]
-    delete installed[LEGACY_DIAR_ID]
+  const legacyInstalledKeys = [
+    'pyannote-community-1',
+    'pyannote-speaker-diarization-3.1',
+    'pyannote-speaker-diarization-community-1'
+  ]
+  let installedChanged = false
+  for (const legacyKey of legacyInstalledKeys) {
+    if (installed[legacyKey]) {
+      installed[EXPECTED_DIAR] = installed[EXPECTED_DIAR] ?? installed[legacyKey]
+      delete installed[legacyKey]
+      installedChanged = true
+    }
+  }
+  if (installedChanged) {
     store.set('installedModelVersions', installed)
   }
 

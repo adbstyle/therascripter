@@ -16,7 +16,8 @@ const mockSettingsStore = {
     if (key === 'activeModels') {
       return {
         transcription: 'whisper-large-v3-turbo',
-        diarization: 'pyannote-speaker-diarization-3.1',
+        diarization: 'pyannote-suite',
+        diarizationPipeline: 'pyannote/speaker-diarization-3.1',
         ner: 'flair-ner-german-large',
         ocr: 'apple-vision'
       }
@@ -59,43 +60,34 @@ describe('ModelDownloadService catalog helpers', () => {
     expect(asrs.every((m) => m.group === 'asr')).toBe(true)
   })
 
-  it('getRequiredModels returns only flair (pyannote is now group-required, not isRequired)', () => {
+  it('getRequiredModels returns pyannote-suite and flair', () => {
     const required = getRequiredModels()
-    expect(required.map((m) => m.id).sort()).toEqual(['flair-ner-german-large'])
+    expect(required.map((m) => m.id).sort()).toEqual([
+      'flair-ner-german-large',
+      'pyannote-suite'
+    ])
   })
 
   it('getModelById returns definition or null', () => {
     expect(getModelById('whisper-large-v3-turbo')?.group).toBe('asr')
+    expect(getModelById('pyannote-suite')?.group).toBe('diarization')
     expect(getModelById('does-not-exist')).toBeNull()
   })
 
-  it('getModelsToLoadOnFirstLaunch returns required + activeAsrId + activeDiarId', () => {
-    const loaded = getModelsToLoadOnFirstLaunch(
+  it('getModelsToLoadOnFirstLaunch returns ASR + required models in pipeline order', () => {
+    const loaded = getModelsToLoadOnFirstLaunch('whisper-large-v3-turbo')
+    expect(loaded.map((m) => m.id)).toEqual([
       'whisper-large-v3-turbo',
-      'pyannote-speaker-diarization-3.1'
-    )
-    const ids = loaded.map((m) => m.id).sort()
-    expect(ids).toEqual([
-      'flair-ner-german-large',
-      'pyannote-speaker-diarization-3.1',
-      'whisper-large-v3-turbo'
+      'pyannote-suite',
+      'flair-ner-german-large'
     ])
   })
 
-  it('getModelsToLoadOnFirstLaunch falls back gracefully on unknown ids', () => {
-    const loaded = getModelsToLoadOnFirstLaunch('nonexistent', 'also-nonexistent')
-    expect(loaded.map((m) => m.id).sort()).toEqual(['flair-ner-german-large'])
-  })
-
-  it('getModelsToLoadOnFirstLaunch returns models in pipeline order (asr, diarization, ner)', () => {
-    const loaded = getModelsToLoadOnFirstLaunch(
-      'whisper-large-v3-turbo',
-      'pyannote-speaker-diarization-3.1'
-    )
-    expect(loaded.map((m) => m.id)).toEqual([
-      'whisper-large-v3-turbo',
-      'pyannote-speaker-diarization-3.1',
-      'flair-ner-german-large'
+  it('getModelsToLoadOnFirstLaunch falls back gracefully on unknown ASR id', () => {
+    const loaded = getModelsToLoadOnFirstLaunch('nonexistent')
+    expect(loaded.map((m) => m.id).sort()).toEqual([
+      'flair-ner-german-large',
+      'pyannote-suite'
     ])
   })
 })
@@ -107,9 +99,15 @@ describe('downloadSingleModel', () => {
     )
   })
 
-  it('throws when model is not in a downloadable group (ner)', async () => {
+  it('throws when model is not in asr group (pyannote-suite)', async () => {
+    await expect(downloadSingleModel('pyannote-suite')).rejects.toThrow(
+      /nur ASR-Modelle/i
+    )
+  })
+
+  it('throws when model is not in asr group (flair)', async () => {
     await expect(downloadSingleModel('flair-ner-german-large')).rejects.toThrow(
-      /nur ASR- und Diarization-Modelle/i
+      /nur ASR-Modelle/i
     )
   })
 })
@@ -123,17 +121,14 @@ describe('deleteModel', () => {
     await expect(deleteModel('flair-ner-german-large')).rejects.toThrow(/Pflicht-Modell/i)
   })
 
+  it('throws when model is required (pyannote-suite)', async () => {
+    await expect(deleteModel('pyannote-suite')).rejects.toThrow(/Pflicht-Modell/i)
+  })
+
   it('throws when attempting to delete the active asr model', async () => {
     // Mock returns activeModels.transcription = 'whisper-large-v3-turbo'
     await expect(deleteModel('whisper-large-v3-turbo')).rejects.toThrow(
       /als ASR-Modell aktiv/i
-    )
-  })
-
-  it('throws when attempting to delete the active diarization model', async () => {
-    // Mock returns activeModels.diarization = 'pyannote-speaker-diarization-3.1'
-    await expect(deleteModel('pyannote-speaker-diarization-3.1')).rejects.toThrow(
-      /als Sprechererkennungs-Modell aktiv/i
     )
   })
 })
@@ -143,8 +138,8 @@ describe('setActiveAsrModel', () => {
     expect(() => setActiveAsrModel('nope')).toThrow(/unbekanntes Modell/i)
   })
 
-  it('throws when model is not in asr group', () => {
-    expect(() => setActiveAsrModel('pyannote-speaker-diarization-3.1')).toThrow(
+  it('throws when model is not in asr group (pyannote-suite)', () => {
+    expect(() => setActiveAsrModel('pyannote-suite')).toThrow(
       /ist diarization, erwartet wurde asr/i
     )
   })

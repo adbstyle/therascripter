@@ -39,3 +39,15 @@ export const SetActiveModelPayloadSchema = z.object({
   group: ModelGroupSchema,
   id: modelIdStringSchema
 })
+
+/** Erlaubte Diarization-Pipelines (HuggingFace-Identifier). */
+export const DiarizationPipelineSchema = z.enum([
+  'pyannote/speaker-diarization-3.1',
+  'pyannote/speaker-diarization-community-1'
+])
+export type DiarizationPipeline = z.infer<typeof DiarizationPipelineSchema>
+
+/** Payload für pipeline:setDiarization. */
+export const SetDiarizationPipelinePayloadSchema = z.object({
+  pipeline: DiarizationPipelineSchema
+})

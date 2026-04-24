@@ -103,40 +103,18 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     speedScore: 0.85
   },
   {
-    id: 'pyannote-speaker-diarization-3.1',
-    label: 'Sprechererkennung (Diarization 3.1)',
-    url: `${R2_CDN}/pyannote-speaker-diarization-3.1.tar.gz`,
+    id: 'pyannote-suite',
+    label: 'Sprechererkennung (pyannote)',
+    url: `${R2_CDN}/pyannote-suite.tar.gz`,
     relativePath: 'diarization',
-    checkPath: 'diarization/models--pyannote--speaker-diarization-3.1',
-    sizeBytes: 30_206_206,
-    sha256: '54f88df2409ce1180a02343b7c2dc4ed37ca1007925a55fdcd473b3cff6efb15',
-    archive: true,
-    group: 'diarization',
-    isRequired: false,
-    description:
-      'Standard-Pipeline von pyannote. Breit getestet, solide auf Hochdeutsch.',
-    languages: ['multi'],
-    accuracyScore: 0.8,
-    speedScore: 0.9,
-    hfIdentifier: 'pyannote/speaker-diarization-3.1'
-  },
-  {
-    id: 'pyannote-speaker-diarization-community-1',
-    label: 'Sprechererkennung (Diarization Community 1)',
-    url: `${R2_CDN}/pyannote-speaker-diarization-community-1.tar.gz`,
-    relativePath: 'diarization',
+    // Community-1-Ordner ist Teil der Suite und wird von pyannote 4.x auch für die 3.1-Pipeline
+    // als PLDA-Quelle geladen. Wenn er da ist, ist die ganze Suite funktional.
     checkPath: 'diarization/models--pyannote--speaker-diarization-community-1',
     sizeBytes: 30_458_649,
-    sha256: '644f1c145ae9595049b32396f921b2573f83982ce5cabcbd3f8941e74746b13f',
+    sha256: 'PENDING_MONOLITH',
     archive: true,
     group: 'diarization',
-    isRequired: false,
-    description:
-      'Community-Variante mit besserer Performance auf Deutsch (DER ca. 8.3 % laut HF). Experimentell.',
-    languages: ['de', 'multi'],
-    accuracyScore: 0.9,
-    speedScore: 0.9,
-    hfIdentifier: 'pyannote/speaker-diarization-community-1'
+    isRequired: true
   },
   {
     id: 'flair-ner-german-large',
@@ -186,15 +164,19 @@ export function getActiveModelId(group: ModelGroup): string {
 
 /**
  * Modelle, die auf First-Launch heruntergeladen werden müssen, in Pipeline-Reihenfolge:
- *   1. aktives ASR-Modell (Transkription)
- *   2. aktives Diarization-Modell (Sprechererkennung)
- *   3. alle isRequired-Modelle (NER/flair)
- * Diese Reihenfolge entspricht dem Audio-Pipeline-Flow und wird 1:1 im
- * FirstLaunchScreen als Download-Liste angezeigt.
+ *   1. aktives ASR-Modell (Transkription, User-wählbar)
+ *   2. alle isRequired-Modelle in Definition-Reihenfolge
+ *      (derzeit: pyannote-suite für Sprechererkennung, flair für Anonymisierung)
+ *
+ * Die Pipeline-Wahl innerhalb der pyannote-Suite (3.1 vs community-1) ist
+ * eine Runtime-Konfiguration und beeinflusst den Download nicht — die Suite
+ * enthält beide Pipelines.
+ *
+ * `activeDiarId` wird aus Backward-Compat-Gründen akzeptiert, aber ignoriert.
  */
 export function getModelsToLoadOnFirstLaunch(
   activeAsrId: string,
-  activeDiarId: string
+  _activeDiarId?: string
 ): ModelDefinition[] {
   const seen = new Set<string>()
   const out: ModelDefinition[] = []
@@ -203,11 +185,6 @@ export function getModelsToLoadOnFirstLaunch(
   if (activeAsr && activeAsr.group === 'asr' && !seen.has(activeAsr.id)) {
     seen.add(activeAsr.id)
     out.push(activeAsr)
-  }
-  const activeDiar = getModelById(activeDiarId)
-  if (activeDiar && activeDiar.group === 'diarization' && !seen.has(activeDiar.id)) {
-    seen.add(activeDiar.id)
-    out.push(activeDiar)
   }
   for (const m of getRequiredModels()) {
     if (!seen.has(m.id)) {
@@ -441,8 +418,8 @@ export async function downloadSingleModel(id: string): Promise<void> {
   if (!def) {
     throw new Error(`Download: unbekanntes Modell "${id}"`)
   }
-  if (def.group !== 'asr' && def.group !== 'diarization') {
-    throw new Error(`Download: nur ASR- und Diarization-Modelle sind einzeln ladbar (id=${id})`)
+  if (def.group !== 'asr') {
+    throw new Error(`Download: nur ASR-Modelle sind einzeln ladbar (id=${id})`)
   }
   if (abortSignal && !abortSignal.aborted) {
     throw new Error('Download: bereits aktiv — zuerst abbrechen')
@@ -550,11 +527,6 @@ export async function deleteModel(id: string): Promise<void> {
   if (def.group === 'asr' && active.transcription === id) {
     throw new Error(
       `Löschen: "${def.label}" ist aktuell als ASR-Modell aktiv. Zuerst anderes Modell aktivieren.`
-    )
-  }
-  if (def.group === 'diarization' && active.diarization === id) {
-    throw new Error(
-      `Löschen: "${def.label}" ist aktuell als Sprechererkennungs-Modell aktiv. Zuerst anderes Modell aktivieren.`
     )
   }
 
