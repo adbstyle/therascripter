@@ -120,6 +120,24 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     hfIdentifier: 'pyannote/speaker-diarization-3.1'
   },
   {
+    id: 'pyannote-speaker-diarization-community-1',
+    label: 'Sprechererkennung (Diarization Community 1)',
+    url: `${R2_CDN}/pyannote-speaker-diarization-community-1.tar.gz`,
+    relativePath: 'diarization',
+    checkPath: 'diarization/models--pyannote--speaker-diarization-community-1',
+    sizeBytes: 0,
+    sha256: 'PENDING_UPLOAD',
+    archive: true,
+    group: 'diarization',
+    isRequired: false,
+    description:
+      'Community-Variante mit besserer Performance auf Deutsch (DER ca. 8.3% laut HF). Experimentell, benötigt HuggingFace-Terms-Accept beim Packaging.',
+    languages: ['de', 'multi'],
+    accuracyScore: 0.9,
+    speedScore: 0.9,
+    hfIdentifier: 'pyannote/speaker-diarization-community-1'
+  },
+  {
     id: 'flair-ner-german-large',
     label: 'Anonymisierung (flair-ner-german-large)',
     url: `${R2_CDN}/flair-ner-german-large.tar.gz`,
