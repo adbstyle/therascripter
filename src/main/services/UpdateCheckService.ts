@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'fs'
 import { join } from 'path'
 import { get as httpsGet } from 'https'
 import { getSettings } from './SettingsService'
-import { getModelDefinitions, getModelsDir } from './ModelDownloadService'
+import { getModelDefinitions, getModelsDir, isModelInstalled } from './ModelDownloadService'
 import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
 import {
   ManifestSchema,
@@ -111,16 +111,22 @@ export async function checkForUpdates(): Promise<CheckResult> {
         continue
       }
 
-      const installed = installedVersions[manifestModel.id]
-      if (installed && installed.sha256 === manifestModel.sha256) {
-        continue // Already up to date
-      }
-
       // Find structural info from local MODEL_DEFINITIONS
       const definition = definitions.find((d) => d.id === manifestModel.id)
       if (!definition) {
         console.warn(`UpdateCheckService: unknown model id in manifest: ${manifestModel.id}`)
         continue
+      }
+
+      // Nur Modelle updaten, die bereits installiert sind — optionale ASR-Alternativen
+      // ohne Install werden nicht als "Update verfügbar" beworben.
+      if (!isModelInstalled(manifestModel.id)) {
+        continue
+      }
+
+      const installed = installedVersions[manifestModel.id]
+      if (installed && installed.sha256 === manifestModel.sha256) {
+        continue // Already up to date
       }
 
       // Path-traversal guard on relativePath

@@ -8,6 +8,8 @@ import type { TranscriptData } from '../../shared/types'
 import type { TaskExecutor } from '../services/task-executors'
 import { SessionService } from '../services/SessionService'
 import { getDatabase, getDataDir } from '../db/connection'
+import { getSettings } from '../services/SettingsService'
+import { getModelById } from '../services/ModelDownloadService'
 import { writeFileAtomic } from '../utils/file-ops'
 import { removeFillerWords, rebuildSegments } from './filler-removal'
 import { filterSpecialTokens, mergeSubTokens } from './token-processing'
@@ -36,7 +38,14 @@ export class WhisperService implements TaskExecutor {
   }
 
   private getModelPath(): string {
-    return join(getDataDir(), 'models', 'asr', 'ggml-large-v3-turbo-q5_0.bin')
+    const activeAsrId = getSettings().get('activeModels').transcription
+    const def = getModelById(activeAsrId)
+    if (!def) {
+      throw new Error(
+        `WhisperService: aktives ASR-Modell "${activeAsrId}" nicht im Katalog registriert.`
+      )
+    }
+    return join(getDataDir(), 'models', def.relativePath)
   }
 
   async execute(task: Task, onProgress: (progress: number) => void, signal?: AbortSignal): Promise<void> {
@@ -237,11 +246,13 @@ export class WhisperService implements TaskExecutor {
 
     const duration = cleanedWords.length > 0 ? cleanedWords[cleanedWords.length - 1].end : 0
 
+    const activeAsrId = getSettings().get('activeModels').transcription
+
     return {
       words: cleanedWords,
       segments,
       metadata: {
-        model: 'whisper-large-v3-turbo-q5_0',
+        model: activeAsrId,
         language: 'de',
         duration
       }

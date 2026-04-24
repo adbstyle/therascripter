@@ -2,6 +2,7 @@ import { useState } from 'react'
 import BlocklistManager from '../components/BlocklistManager'
 import AppearanceSettings from '../components/AppearanceSettings'
 import AboutPage from '../components/AboutPage'
+import ModelsSettings from '../components/settings/ModelsSettings'
 
 type Tab = 'sperrliste' | 'darstellung' | 'modelle' | 'ueber'
 
@@ -40,13 +41,7 @@ export default function Settings(): React.JSX.Element {
       <div className="flex-1 overflow-y-auto">
         {currentTab === 'sperrliste' && <BlocklistManager />}
         {currentTab === 'darstellung' && <AppearanceSettings />}
-        {currentTab === 'modelle' && (
-          <div className="flex flex-1 items-center justify-center p-8">
-            <p className="text-sm text-text-tertiary">
-              Modell-Verwaltung — noch nicht implementiert
-            </p>
-          </div>
-        )}
+        {currentTab === 'modelle' && <ModelsSettings />}
         {currentTab === 'ueber' && <AboutPage />}
       </div>
     </div>

@@ -52,7 +52,7 @@ scripts/publish-manifest.sh       # Generate manifest.json from r2-upload/ + upl
 **Shared** (`src/shared/`) — Types and Zod validation schemas used by both main and renderer processes.
 
 **ML pipeline — Audio** (strictly sequential, one model at a time):
-1. whisper.cpp subprocess — ASR (Whisper Large V3 Turbo Q5_0, Metal GPU) ✓ implemented
+1. whisper.cpp subprocess — ASR via auswählbares Modell aus Katalog (Default: Whisper Large V3 Turbo Q5_0 multilingual; optional: Swiss-German-Fine-Tune). Active model stored in electron-store (`activeModels.transcription`), verwaltet via Settings → Modelle. ✓ implemented
 2. Python sidecar — pyannote.audio diarization (speaker-diarization-3.1) + alignment ✓ implemented
 3. Python sidecar — flair NER (flair/ner-german-large) + Regex + Blocklist → TipTap document ✓ implemented
 

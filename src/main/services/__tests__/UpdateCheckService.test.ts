@@ -61,7 +61,11 @@ vi.mock('../ModelDownloadService', () => ({
       sizeBytes: 200,
       archive: true
     }
-  ]
+  ],
+  // Für den "update only installed"-Filter in checkForUpdates: Die bestehenden Tests
+  // simulieren eine Vollinstallation (alle im Manifest gelisteten Modelle sind auf Disk).
+  // Per Default true → bestehende Test-Assertions bleiben unverändert.
+  isModelInstalled: () => true
 }))
 
 const mockDownloadFile = vi.fn()

@@ -144,6 +144,13 @@ beforeEach(() => {
       start: vi.fn(),
       onStatus: vi.fn().mockReturnValue(() => {})
     },
+    modelCatalog: {
+      listAsr: vi.fn().mockResolvedValue([]),
+      download: vi.fn().mockResolvedValue([]),
+      delete: vi.fn().mockResolvedValue([]),
+      setActive: vi.fn().mockResolvedValue([]),
+      cancelDownload: vi.fn().mockResolvedValue(undefined)
+    },
     modelUpdate: mockModelUpdate,
     appUpdate: {
       getStatus: vi.fn().mockResolvedValue(null),
