@@ -158,10 +158,14 @@ export interface AppUpdateApi {
 }
 
 export interface ModelCatalogApi {
+  list(group: 'asr' | 'diarization' | 'ner'): Promise<ModelCatalogEntry[]>
   listAsr(): Promise<ModelCatalogEntry[]>
   download(id: string): Promise<ModelCatalogEntry[]>
   delete(id: string): Promise<ModelCatalogEntry[]>
-  setActive(id: string): Promise<ModelCatalogEntry[]>
+  setActive(
+    group: 'asr' | 'diarization' | 'ner',
+    id: string
+  ): Promise<ModelCatalogEntry[]>
   cancelDownload(): Promise<void>
 }
 

@@ -113,10 +113,13 @@ const api: IpcApi = {
     }
   },
   modelCatalog: {
+    list: (group: 'asr' | 'diarization' | 'ner') =>
+      ipcRenderer.invoke('modelCatalog:list', { group }),
     listAsr: () => ipcRenderer.invoke('modelCatalog:listAsr'),
     download: (id: string) => ipcRenderer.invoke('modelCatalog:download', { id }),
     delete: (id: string) => ipcRenderer.invoke('modelCatalog:delete', { id }),
-    setActive: (id: string) => ipcRenderer.invoke('modelCatalog:setActive', { id }),
+    setActive: (group: 'asr' | 'diarization' | 'ner', id: string) =>
+      ipcRenderer.invoke('modelCatalog:setActive', { group, id }),
     cancelDownload: () => ipcRenderer.invoke('modelCatalog:cancelDownload')
   },
   modelUpdate: {

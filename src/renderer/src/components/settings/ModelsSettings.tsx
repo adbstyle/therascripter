@@ -69,7 +69,7 @@ export default function ModelsSettings(): React.JSX.Element {
 
   const handleActivate = async (model: ModelCatalogEntry): Promise<void> => {
     try {
-      const updated = await window.api.modelCatalog.setActive(model.id)
+      const updated = await window.api.modelCatalog.setActive(model.group, model.id)
       setModels(updated)
       toast.success(
         `"${model.label}" aktiviert. Neue Transkriptionen verwenden ab jetzt dieses Modell — bereits verarbeitete Sitzungen bleiben unverändert.`
