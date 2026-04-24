@@ -19,10 +19,15 @@ VENV_DIR="$PROJECT_ROOT/python_sidecar/venv"
 MODEL_DIR="$HOME/.therascript/models/diarization"
 REQUIREMENTS="$PROJECT_ROOT/python_sidecar/requirements.txt"
 
-DOWNLOAD_MODEL=false
+MODEL_IDS=()
 for arg in "$@"; do
   case "$arg" in
-    --model) DOWNLOAD_MODEL=true ;;
+    --model) MODEL_IDS+=("pyannote/speaker-diarization-3.1") ;;
+    --model-community) MODEL_IDS+=("pyannote/speaker-diarization-community-1") ;;
+    --all-models)
+      MODEL_IDS+=("pyannote/speaker-diarization-3.1")
+      MODEL_IDS+=("pyannote/speaker-diarization-community-1")
+      ;;
     *) echo "Unknown option: $arg"; exit 1 ;;
   esac
 done
@@ -79,38 +84,31 @@ echo "Dependencies installed."
 python3 -c "import pyannote.audio; print(f'pyannote.audio {pyannote.audio.__version__}')"
 python3 -c "import torch; print(f'PyTorch {torch.__version__} (MPS: {torch.backends.mps.is_available()})')"
 
-# ── 5. Download model (optional) ─────────────────────────────────────────────
+# ── 5. Download models (optional) ─────────────────────────────────────────────
 
-if [ "$DOWNLOAD_MODEL" = true ]; then
+if [ ${#MODEL_IDS[@]} -gt 0 ]; then
   mkdir -p "$MODEL_DIR"
-  echo "Downloading pyannote diarization model..."
-  echo "(This requires a HuggingFace token for pyannote/speaker-diarization-3.1)"
-  echo "If you don't have one, visit: https://huggingface.co/pyannote/speaker-diarization-3.1"
-  echo ""
-
-  # Download model using Python (handles HuggingFace authentication)
-  python3 -c "
+  for MODEL_ID in "${MODEL_IDS[@]}"; do
+    echo ""
+    echo "Downloading $MODEL_ID ..."
+    echo "(Requires a HuggingFace token + accepted terms at https://huggingface.co/$MODEL_ID)"
+    python3 -c "
 from pyannote.audio import Pipeline
-import os
-
 model_dir = '$MODEL_DIR'
-print(f'Downloading to {model_dir}...')
+model_id = '$MODEL_ID'
+print(f'  cache_dir: {model_dir}')
 
 try:
-    pipeline = Pipeline.from_pretrained(
-        'pyannote/speaker-diarization-3.1',
-        cache_dir=model_dir,
-    )
-    print('Model downloaded successfully.')
+    pipeline = Pipeline.from_pretrained(model_id, cache_dir=model_dir)
+    print(f'  {model_id} downloaded.')
 except Exception as e:
-    print(f'Error: {e}')
-    print()
-    print('Note: pyannote/speaker-diarization-3.1 requires accepting the terms at:')
-    print('  https://huggingface.co/pyannote/speaker-diarization-3.1')
-    print('and setting your HuggingFace token via:')
-    print('  huggingface-cli login')
+    print(f'  Error: {e}')
+    print('  Note: gated model. Requires:')
+    print(f'    - https://huggingface.co/{model_id} (accept terms)')
+    print('    - huggingface-cli login (set token)')
     exit(1)
 "
+  done
 fi
 
 deactivate
@@ -121,7 +119,9 @@ echo ""
 echo "Virtual environment: $VENV_DIR"
 echo "Python: $VENV_DIR/bin/python3"
 echo ""
-if [ "$DOWNLOAD_MODEL" = false ]; then
-  echo "To download the diarization model, run:"
-  echo "  ./scripts/setup-pyannote.sh --model"
+if [ ${#MODEL_IDS[@]} -eq 0 ]; then
+  echo "To download diarization models, run one of:"
+  echo "  ./scripts/setup-pyannote.sh --model             (downloads 3.1)"
+  echo "  ./scripts/setup-pyannote.sh --model-community   (downloads community-1)"
+  echo "  ./scripts/setup-pyannote.sh --all-models        (downloads both)"
 fi
