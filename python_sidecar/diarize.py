@@ -28,6 +28,14 @@ import argparse
 import os
 import sys
 
+# CSP-Äquivalent: Alle HuggingFace-Hub-Netzwerk-Requests blockieren.
+# CSP connect-src 'none' gilt nur im Electron-Renderer, nicht im Python-Subprocess.
+# Ohne diese Flags könnte pyannote/huggingface-hub Sub-Models bei fehlendem lokalen
+# Cache stillschweigend über HTTP nachziehen. Muss gesetzt werden, BEVOR pyannote
+# importiert wird (oben im File, nicht in main()).
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
 
 def report_progress(percent: int) -> None:
     """Print progress to stderr for TaskExecutor parsing."""
@@ -50,6 +58,11 @@ def main() -> None:
         default=0.5,
         help="Post-processing collar: merge same-speaker segments separated by less than this (seconds)",
     )
+    parser.add_argument(
+        "--hf-model",
+        required=True,
+        help="HuggingFace pipeline identifier, e.g. pyannote/speaker-diarization-3.1",
+    )
     args = parser.parse_args()
 
     # Validate audio file
@@ -70,19 +83,13 @@ def main() -> None:
 
     report_progress(5)
 
-    # Load model
+    # Load model from HuggingFace-Cache-Layout unter args.model_dir.
+    # HF_HUB_OFFLINE=1 (oben gesetzt) stellt sicher, dass kein HTTP-Fallback greift.
     try:
-        # pyannote community-1 can be loaded from local cache or HuggingFace Hub
-        # We check for a local config first, then fall back to hub identifier
-        local_config = os.path.join(args.model_dir, "config.yaml")
-        if os.path.isfile(local_config):
-            pipeline = Pipeline.from_pretrained(local_config)
-        else:
-            # Fall back to HuggingFace Hub identifier (requires prior download)
-            pipeline = Pipeline.from_pretrained(
-                "pyannote/speaker-diarization-3.1",
-                cache_dir=args.model_dir,
-            )
+        pipeline = Pipeline.from_pretrained(
+            args.hf_model,
+            cache_dir=args.model_dir,
+        )
 
         # Use MPS (Metal) if available on Apple Silicon, otherwise CPU
         if torch.backends.mps.is_available():
