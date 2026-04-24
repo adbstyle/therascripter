@@ -5,6 +5,7 @@ import type {
   InstalledModelVersion,
   AppUpdateStatus
 } from '../../shared/types/ModelUpdate'
+import { getModelDefinitions } from './ModelDownloadService'
 
 export interface AppSettings {
   activeModels: {
@@ -26,7 +27,7 @@ export interface AppSettings {
 const defaults: AppSettings = {
   activeModels: {
     transcription: 'whisper-large-v3-turbo',
-    diarization: 'pyannote-community-1',
+    diarization: 'pyannote-speaker-diarization-3.1',
     ner: 'flair-ner-german-large',
     ocr: 'apple-vision'
   },
@@ -49,6 +50,33 @@ export function initSettings(): Store<AppSettings> {
     name: 'settings',
     defaults
   })
+
+  // Migration 2026-04-23 — Diarization-Modell-ID-Rename + defensive Repair.
+  // Deckt ab: altes 'pyannote-community-1', manipulierte Werte, Downgrade-Rückstände.
+  // Kann nach 2-3 Releases entfernt werden.
+  const active = store.get('activeModels')
+  const knownDiarIds = new Set(
+    getModelDefinitions()
+      .filter((m) => m.group === 'diarization')
+      .map((m) => m.id)
+  )
+  const DEFAULT_DIAR = 'pyannote-speaker-diarization-3.1'
+
+  if (!knownDiarIds.has(active.diarization)) {
+    console.warn(
+      `[settings-migration] activeModels.diarization="${active.diarization}" unbekannt → reset auf "${DEFAULT_DIAR}"`
+    )
+    store.set('activeModels', { ...active, diarization: DEFAULT_DIAR })
+  }
+
+  // installedModelVersions: Altlasten-Key mit-migrieren, sonst bleibt er für immer
+  // verwaist (UpdateCheckService iteriert über Manifest-IDs, nicht über installed-keys).
+  const installed = { ...store.get('installedModelVersions') }
+  if (installed['pyannote-community-1']) {
+    installed[DEFAULT_DIAR] = installed[DEFAULT_DIAR] ?? installed['pyannote-community-1']
+    delete installed['pyannote-community-1']
+    store.set('installedModelVersions', installed)
+  }
 
   return store
 }
