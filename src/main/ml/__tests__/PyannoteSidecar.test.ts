@@ -111,7 +111,7 @@ describe('buildDiarizationData', () => {
       { label: 'SPEAKER_00', start: 10, end: 15 }
     ]
 
-    const result = buildDiarizationData(segments, 15)
+    const result = buildDiarizationData(segments, 15, 'pyannote-speaker-diarization-3.1')
 
     expect(result.speakers).toBe(segments)
     expect(result.speakerCount).toBe(2)
@@ -129,7 +129,7 @@ describe('buildDiarizationData', () => {
       { label: 'A', start: 3, end: 4 }
     ]
 
-    const result = buildDiarizationData(segments, 4)
+    const result = buildDiarizationData(segments, 4, 'pyannote-speaker-diarization-3.1')
 
     expect(result.speakerCount).toBe(3)
   })
@@ -137,13 +137,13 @@ describe('buildDiarizationData', () => {
   it('handles single speaker', () => {
     const segments: SpeakerSegment[] = [{ label: 'SPEAKER_00', start: 0, end: 10 }]
 
-    const result = buildDiarizationData(segments, 10)
+    const result = buildDiarizationData(segments, 10, 'pyannote-speaker-diarization-3.1')
 
     expect(result.speakerCount).toBe(1)
   })
 
   it('handles empty segments', () => {
-    const result = buildDiarizationData([], 0)
+    const result = buildDiarizationData([], 0, 'pyannote-speaker-diarization-3.1')
 
     expect(result.speakers).toEqual([])
     expect(result.speakerCount).toBe(0)
