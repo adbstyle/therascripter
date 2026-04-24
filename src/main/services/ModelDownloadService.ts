@@ -102,16 +102,22 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     speedScore: 0.85
   },
   {
-    id: 'pyannote-community-1',
-    label: 'Sprechererkennung (pyannote-community-1)',
-    url: `${R2_CDN}/pyannote-models.tar.gz`,
+    id: 'pyannote-speaker-diarization-3.1',
+    label: 'Sprechererkennung (Diarization 3.1)',
+    url: `${R2_CDN}/pyannote-speaker-diarization-3.1.tar.gz`,
     relativePath: 'diarization',
     checkPath: 'diarization/models--pyannote--speaker-diarization-3.1',
     sizeBytes: 30_461_603,
-    sha256: 'b42e8aee7cf5eb330f4d5519216f9035dc1defad871097977fa9cecc11edb570',
+    sha256: 'PENDING_REPACKAGE',
     archive: true,
     group: 'diarization',
-    isRequired: true
+    isRequired: false,
+    description:
+      'Standard-Pipeline von pyannote. Breit getestet, solide auf Hochdeutsch.',
+    languages: ['multi'],
+    accuracyScore: 0.8,
+    speedScore: 0.9,
+    hfIdentifier: 'pyannote/speaker-diarization-3.1'
   },
   {
     id: 'flair-ner-german-large',
@@ -221,6 +227,16 @@ function sendProgress(status: ModelDownloadStatus): void {
   }
 }
 
+function assertFinalSha256(model: ModelDefinition): void {
+  if (model.sha256.startsWith('PENDING_')) {
+    throw new Error(
+      `Modell "${model.label}" (${model.id}) hat noch keinen finalen SHA-256 ` +
+        `(Wert: "${model.sha256}"). Das deutet auf ein nicht abgeschlossenes Packaging hin — ` +
+        `erst scripts/package-models.sh + scripts/publish-manifest.sh ausführen und die Hashes setzen.`
+    )
+  }
+}
+
 export async function startModelDownload(): Promise<void> {
   if (abortSignal && !abortSignal.aborted) return // Already downloading
 
@@ -240,6 +256,18 @@ export async function startModelDownload(): Promise<void> {
 
     if (abortSignal.aborted) {
       sendProgress({ state: 'error', error: 'Download abgebrochen', modelId: model.id })
+      return
+    }
+
+    try {
+      assertFinalSha256(model)
+    } catch (err) {
+      sendProgress({
+        state: 'error',
+        error: err instanceof Error ? err.message : String(err),
+        modelId: model.id
+      })
+      abortSignal = null
       return
     }
 
@@ -368,6 +396,13 @@ export async function downloadSingleModel(id: string): Promise<void> {
     sendProgress({ state: 'complete' })
     abortSignal = null
     return
+  }
+
+  try {
+    assertFinalSha256(def)
+  } catch (err) {
+    abortSignal = null
+    throw err
   }
 
   const targetPath = def.archive
