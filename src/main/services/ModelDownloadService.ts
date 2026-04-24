@@ -437,8 +437,8 @@ export async function downloadSingleModel(id: string): Promise<void> {
   if (!def) {
     throw new Error(`Download: unbekanntes Modell "${id}"`)
   }
-  if (def.group !== 'asr') {
-    throw new Error(`Download: nur ASR-Modelle sind einzeln ladbar (id=${id})`)
+  if (def.group !== 'asr' && def.group !== 'diarization') {
+    throw new Error(`Download: nur ASR- und Diarization-Modelle sind einzeln ladbar (id=${id})`)
   }
   if (abortSignal && !abortSignal.aborted) {
     throw new Error('Download: bereits aktiv — zuerst abbrechen')
@@ -573,24 +573,40 @@ export async function deleteModel(id: string): Promise<void> {
   settings.set('installedModelVersions', installed)
 }
 
+// Explizites Mapping Group → Settings-Key. Der TypeScript-Compiler erzwingt Vollständigkeit:
+// Wird ModelGroup um einen neuen Wert erweitert, schlägt der Build fehl,
+// solange das Mapping nicht erweitert wird. Das verhindert silent-wrong-key-writes.
+const GROUP_TO_SETTINGS_KEY: Record<ModelGroup, 'transcription' | 'diarization' | 'ner'> = {
+  asr: 'transcription',
+  diarization: 'diarization',
+  ner: 'ner'
+}
+
 /**
- * Wechselt das aktive ASR-Modell. Das Modell muss:
+ * Wechselt das aktive Modell einer Gruppe. Das Modell muss:
  *   - existieren (bekannte ID)
- *   - in der ASR-Gruppe liegen
+ *   - in der angegebenen Gruppe liegen
  *   - auf Disk installiert sein
  */
-export function setActiveAsrModel(id: string): void {
+export function setActiveModel(group: ModelGroup, id: string): void {
   const def = getModelById(id)
   if (!def) {
     throw new Error(`Aktivieren: unbekanntes Modell "${id}"`)
   }
-  if (def.group !== 'asr') {
-    throw new Error(`Aktivieren: "${def.label}" ist keine ASR-Engine`)
+  if (def.group !== group) {
+    throw new Error(
+      `Aktivieren: "${def.label}" ist ${def.group ?? 'ungruppiert'}, erwartet wurde ${group}`
+    )
   }
   if (!isModelInstalled(id)) {
     throw new Error(`Aktivieren: "${def.label}" ist nicht installiert`)
   }
   const settings = getSettings()
   const current = settings.get('activeModels')
-  settings.set('activeModels', { ...current, transcription: id })
+  settings.set('activeModels', { ...current, [GROUP_TO_SETTINGS_KEY[group]]: id })
+}
+
+/** Backward-Compat-Alias. */
+export function setActiveAsrModel(id: string): void {
+  setActiveModel('asr', id)
 }
