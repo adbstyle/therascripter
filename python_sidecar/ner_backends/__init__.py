@@ -1,7 +1,9 @@
 """NER backends — one module per backend implementation.
 
-Each backend exposes a `predict(segments, hf_id, model_dir, progress_cb) -> tuple[list[dict], str]`
-function returning (entities, model_id). Native entity-type strings are passed
-through unchanged; the TypeScript-side `entity-merger.ts` performs canonical
-mapping based on `metadata.backend` in the sidecar output.
+Each backend exposes a `predict(segments, hf_id, model_dir, progress_cb) -> list[dict]`
+function returning detected entities in native (backend-specific) format. The
+TypeScript-side `entity-merger.ts` performs canonical mapping based on the
+`metadata.backend` field that the dispatcher sets in the sidecar output.
+
+See `base.py` for the authoritative `BackendPredictFn` Protocol.
 """

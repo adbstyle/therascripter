@@ -30,9 +30,12 @@ export interface ModelDefinition {
   languages?: string[]
   accuracyScore?: number
   speedScore?: number
-  // Nur für Diarization relevant — pyannote-Pipelines laden via from_pretrained(hfIdentifier).
+  // HuggingFace-Identifier — durchgereicht an Python-Sidecars für from_pretrained()
+  // (pyannote, transformers) bzw. Classifier.load() (flair). Für Whisper-/Vision-OCR-
+  // Modelle ohne HF-Pipeline undefiniert.
   hfIdentifier?: string
-  // Nur für NER-Gruppe gesetzt — discriminator, an den Python-Dispatcher (ner_service.py --backend) durchgereicht.
+  // NER-Backend-Discriminator — wählt das Python-Modul in ner_backends/, an
+  // ner_service.py --backend durchgereicht. Nur für group: 'ner' relevant.
   nerBackend?: NerBackend
 }
 

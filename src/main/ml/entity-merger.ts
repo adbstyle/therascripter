@@ -36,9 +36,10 @@ export function mapFlairType(nativeType: string): PlaceholderType | null {
  * Backend-aware mapping from native NER entity type to canonical PlaceholderType.
  * Returns `null` for types that should be filtered out (e.g. ORG, non-PII).
  *
- * Phase 1 only supports the flair backend; gliner/ai4privacy mappers are added
- * in subsequent phases per the design spec
- * (`docs/superpowers/specs/2026-04-24-multi-anonymization-models-design.md`).
+ * `gliner` and `ai4privacy` are accepted as discriminator values but have no
+ * canonical mapper yet — entities from those backends are dropped with a
+ * `console.warn` rather than being mis-mapped through flair semantics
+ * (different label vocabularies make a fall-through unsafe).
  */
 export function mapNativeType(
   backend: NerBackend,
@@ -49,11 +50,8 @@ export function mapNativeType(
       return mapFlairType(nativeType)
     case 'gliner':
     case 'ai4privacy':
-      // Backend modules exist but TS-side mapper is not yet wired (Phase 2/3).
-      // Falling through to flair is unsafe (different label vocabulary), so the
-      // safer behavior is to drop everything until the mapper is added.
       console.warn(
-        `[entity-merger] mapNativeType called for backend "${backend}" before its mapper is wired — dropping entity "${nativeType}"`
+        `[entity-merger] mapNativeType called for backend "${backend}" but no mapper is implemented — dropping entity "${nativeType}"`
       )
       return null
   }
@@ -77,8 +75,8 @@ function overlapsWithExisting(
  * - Whole-word boundary check applied to all
  * - Overlapping entities are skipped (first-come wins by priority)
  *
- * `nerBackend` discriminates how to translate native types to canonical types.
- * Defaults to 'flair' for backward-compat with existing callers.
+ * `nerBackend` discriminates how native NER types translate to canonical types.
+ * Defaults to 'flair'.
  */
 export function mergeEntities(
   nerEntities: NerEntity[],
