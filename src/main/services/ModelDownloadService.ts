@@ -159,6 +159,25 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     languages: ['multi'],
     accuracyScore: 0.85,
     speedScore: 0.85
+  },
+  {
+    id: 'gliner-multi-v2.1',
+    label: 'Anonymisierung — GLiNER Multi v2.1',
+    url: `${R2_CDN}/gliner-multi-v2.1.tar.gz`,
+    relativePath: 'ner',
+    checkPath: 'ner/models--urchade--gliner_multi-v2.1',
+    sizeBytes: 1_200_000_000,
+    sha256: 'PENDING_GLINER_MULTI_V2_1',
+    archive: true,
+    group: 'ner',
+    isRequired: false,
+    hfIdentifier: 'urchade/gliner_multi-v2.1',
+    nerBackend: 'gliner',
+    description:
+      'GLiNER multilingual (~209M Parameter, ~1.16 GB), Apache-2.0. Zero-Shot — emittiert auch ORGANISATION und MEDIZINISCH (Versicherungen, Kliniken, Diagnosen, Medikamente). Mehr Chips als flair/ai4privacy zu Kosten von Genauigkeit auf reinem PER/LOC.',
+    languages: ['multi'],
+    accuracyScore: 0.8,
+    speedScore: 0.7
   }
 ]
 
@@ -439,19 +458,24 @@ export function abortModelDownload(): void {
 }
 
 /**
- * Lädt ein einziges ASR-Modell herunter (nicht für Pflicht-Modelle gedacht —
- * die laufen via startModelDownload auf First-Launch).
+ * Lädt ein einziges Modell herunter (nicht für First-Launch-Bulk-Downloads —
+ * die laufen via startModelDownload mit modelsDownloaded-Settings-Flag).
  *
  * Sendet denselben `modelDownload:status`-Channel wie startModelDownload,
  * damit die bestehende UI-Progress-Anzeige wiederverwendbar bleibt.
+ *
+ * Erlaubt für ASR und NER (User-wählbare Gruppen). Diarization läuft als
+ * monolithische Suite und wird nicht einzeln nachgeladen.
  */
 export async function downloadSingleModel(id: string): Promise<void> {
   const def = getModelById(id)
   if (!def) {
     throw new Error(`Download: unbekanntes Modell "${id}"`)
   }
-  if (def.group !== 'asr') {
-    throw new Error(`Download: nur ASR-Modelle sind einzeln ladbar (id=${id})`)
+  if (def.group !== 'asr' && def.group !== 'ner') {
+    throw new Error(
+      `Download: Modell-Gruppe "${def.group ?? 'unbekannt'}" wird nicht einzeln nachgeladen (id=${id})`
+    )
   }
   if (abortSignal && !abortSignal.aborted) {
     throw new Error('Download: bereits aktiv — zuerst abbrechen')
@@ -559,6 +583,11 @@ export async function deleteModel(id: string): Promise<void> {
   if (def.group === 'asr' && active.transcription === id) {
     throw new Error(
       `Löschen: "${def.label}" ist aktuell als ASR-Modell aktiv. Zuerst anderes Modell aktivieren.`
+    )
+  }
+  if (def.group === 'ner' && active.ner === id) {
+    throw new Error(
+      `Löschen: "${def.label}" ist aktuell als Anonymisierungs-Modell aktiv. Zuerst anderes Modell aktivieren.`
     )
   }
 

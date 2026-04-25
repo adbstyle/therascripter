@@ -82,13 +82,36 @@ export function mapAi4PrivacyType(nativeType: string): PlaceholderType | null {
 }
 
 /**
- * Backend-aware mapping from native NER entity type to canonical PlaceholderType.
- * Returns `null` for types that should be filtered out (e.g. ORG, non-PII).
+ * Map GLiNER native label → canonical PlaceholderType.
  *
- * `gliner` is accepted as a discriminator value but has no canonical mapper yet
- * — entities are dropped with a `console.warn` rather than mis-mapped through
- * flair/ai4privacy semantics (different label vocabularies make a fall-through
- * unsafe).
+ * GLiNER is zero-shot: the labels emitted are exactly those passed at inference
+ * time. The Python sidecar's `GLINER_LABELS_DE` constant must stay in lock-step
+ * with the cases below. Unknown labels route to SONSTIGES with a `console.warn`
+ * so a sidecar-side label-list change without a TS-side mapping update surfaces
+ * loudly rather than silently leaking PII.
+ */
+export function mapGlinerType(nativeType: string): PlaceholderType | null {
+  switch (nativeType) {
+    case 'Person':
+      return 'PERSON'
+    case 'Ort':
+      return 'ORT'
+    case 'Organisation':
+      return 'ORGANISATION'
+    case 'Krankheit':
+    case 'Medikament':
+      return 'MEDIZINISCH'
+    default:
+      console.warn(
+        `[entity-merger] mapGlinerType received unknown native label "${nativeType}" — routing to SONSTIGES (label set may have drifted from GLINER_LABELS_DE)`
+      )
+      return 'SONSTIGES'
+  }
+}
+
+/**
+ * Backend-aware mapping from native NER entity type to canonical PlaceholderType.
+ * Returns `null` for types that should be filtered out (e.g. ORG from flair, non-PII).
  */
 export function mapNativeType(
   backend: NerBackend,
@@ -100,10 +123,7 @@ export function mapNativeType(
     case 'ai4privacy':
       return mapAi4PrivacyType(nativeType)
     case 'gliner':
-      console.warn(
-        `[entity-merger] mapNativeType called for backend "gliner" but no mapper is implemented — dropping entity "${nativeType}"`
-      )
-      return null
+      return mapGlinerType(nativeType)
   }
 }
 

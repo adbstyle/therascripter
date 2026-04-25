@@ -5,6 +5,7 @@ import {
   isWholeWord,
   mapFlairType,
   mapAi4PrivacyType,
+  mapGlinerType,
   mapNativeType
 } from '../entity-merger'
 import type { TranscriptSegment } from '../../../shared/types'
@@ -335,10 +336,50 @@ describe('mapNativeType (backend dispatcher)', () => {
     expect(mapNativeType('ai4privacy', 'O')).toBeNull()
   })
 
-  it('gliner backend drops everything until mapper is wired', () => {
+  it('gliner backend delegates to mapGlinerType', () => {
+    expect(mapNativeType('gliner', 'Person')).toBe('PERSON')
+    expect(mapNativeType('gliner', 'Ort')).toBe('ORT')
+    expect(mapNativeType('gliner', 'Organisation')).toBe('ORGANISATION')
+    expect(mapNativeType('gliner', 'Krankheit')).toBe('MEDIZINISCH')
+  })
+})
+
+describe('mapGlinerType', () => {
+  it('maps Person to PERSON', () => {
+    expect(mapGlinerType('Person')).toBe('PERSON')
+  })
+
+  it('maps Ort to ORT', () => {
+    expect(mapGlinerType('Ort')).toBe('ORT')
+  })
+
+  it('maps Organisation to ORGANISATION', () => {
+    expect(mapGlinerType('Organisation')).toBe('ORGANISATION')
+  })
+
+  it.each([
+    ['Krankheit', 'MEDIZINISCH'],
+    ['Medikament', 'MEDIZINISCH']
+  ])('maps medical %s to MEDIZINISCH', (native, canonical) => {
+    expect(mapGlinerType(native)).toBe(canonical)
+  })
+
+  it('routes unknown labels to SONSTIGES with a console.warn (drift guard)', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    expect(mapNativeType('gliner', 'Person')).toBeNull()
-    expect(warn).toHaveBeenCalled()
+    expect(mapGlinerType('FUTURE_LABEL')).toBe('SONSTIGES')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('FUTURE_LABEL'))
+    warn.mockRestore()
+  })
+
+  it('covers the documented GLINER_LABELS_DE label set (lock against drift)', () => {
+    // Must match python_sidecar/ner_backends/gliner_backend.py:GLINER_LABELS_DE
+    const labels = ['Person', 'Ort', 'Organisation', 'Krankheit', 'Medikament']
+    expect(labels).toHaveLength(5)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    for (const label of labels) {
+      mapGlinerType(label)
+    }
+    expect(warn).not.toHaveBeenCalled()
     warn.mockRestore()
   })
 })
@@ -364,15 +405,43 @@ describe('mergeEntities backend dispatch', () => {
     expect(result[0].type).toBe('PERSON')
   })
 
-  it('gliner backend drops all entities until its mapper is implemented', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const segments = [seg('Peter wohnt in Bern')]
+  it('gliner backend maps zero-shot labels into the canonical pipeline', () => {
+    const text = 'Peter Müller arbeitet bei Helsana und nimmt Aspirin'
+    const segments = [seg(text)]
+    const personStart = text.indexOf('Peter Müller')
+    const orgStart = text.indexOf('Helsana')
+    const medStart = text.indexOf('Aspirin')
     const nerEntities: NerEntity[] = [
-      { text: 'Peter', type: 'Person', segmentIndex: 0, charStart: 0, charEnd: 5, confidence: 0.9 }
+      {
+        text: 'Peter Müller',
+        type: 'Person',
+        segmentIndex: 0,
+        charStart: personStart,
+        charEnd: personStart + 'Peter Müller'.length,
+        confidence: 0.9
+      },
+      {
+        text: 'Helsana',
+        type: 'Organisation',
+        segmentIndex: 0,
+        charStart: orgStart,
+        charEnd: orgStart + 'Helsana'.length,
+        confidence: 0.85
+      },
+      {
+        text: 'Aspirin',
+        type: 'Medikament',
+        segmentIndex: 0,
+        charStart: medStart,
+        charEnd: medStart + 'Aspirin'.length,
+        confidence: 0.8
+      }
     ]
     const result = mergeEntities(nerEntities, [], [], segments, 'gliner')
-    expect(result).toHaveLength(0)
-    warn.mockRestore()
+    expect(result).toHaveLength(3)
+    expect(result.find((e) => e.text === 'Peter Müller')?.type).toBe('PERSON')
+    expect(result.find((e) => e.text === 'Helsana')?.type).toBe('ORGANISATION')
+    expect(result.find((e) => e.text === 'Aspirin')?.type).toBe('MEDIZINISCH')
   })
 
   it('ai4privacy backend maps native PII types into the canonical pipeline', () => {

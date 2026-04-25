@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ModelCatalogEntry } from '../../../../shared/validation/model-catalog-schemas'
+import type { ModelCatalogEntry, ModelGroup } from '../../../../shared/validation/model-catalog-schemas'
 import type { ModelDownloadStatus } from '../../../../shared/types/IpcApi'
 import { useToast } from '../../hooks/useToast'
 import { ConfirmDialog } from '../ConfirmDialog'
@@ -7,16 +7,56 @@ import { formatBytes } from '../../utils/formatBytes'
 import ModelCard from './ModelCard'
 import DiarizationPipelineSection from './DiarizationPipelineSection'
 
+interface SectionConfig {
+  group: ModelGroup
+  title: string
+  description: string
+  activeUsageLabel: string
+  activatedToast: (label: string) => string
+}
+
+const SECTIONS: SectionConfig[] = [
+  {
+    group: 'asr',
+    title: 'Transkriptions-Modelle',
+    description:
+      'Wähle das Modell, das für die Transkription deiner Sitzungen verwendet werden soll. Ein Modellwechsel wirkt sich nur auf neue Transkriptionen aus.',
+    activeUsageLabel: 'Wird für Transkription verwendet',
+    activatedToast: (label) =>
+      `"${label}" aktiviert. Neue Transkriptionen verwenden ab jetzt dieses Modell — bereits verarbeitete Sitzungen bleiben unverändert.`
+  },
+  {
+    group: 'ner',
+    title: 'Anonymisierungs-Modelle',
+    description:
+      'Wähle das Modell für die Erkennung personenbezogener Daten (Namen, Orte, Diagnosen). Die Modelle unterscheiden sich in Größe, Geschwindigkeit und welche Entity-Typen sie erkennen. Ein Wechsel wirkt sich nur auf neue Anonymisierungen aus.',
+    activeUsageLabel: 'Wird für Anonymisierung verwendet',
+    activatedToast: (label) =>
+      `"${label}" aktiviert. Neue Anonymisierungen verwenden ab jetzt dieses Modell — bereits verarbeitete Sitzungen bleiben unverändert.`
+  }
+]
+
 export default function ModelsSettings(): React.JSX.Element {
   const toast = useToast()
-  const [asrModels, setAsrModels] = useState<ModelCatalogEntry[]>([])
+  const [modelsByGroup, setModelsByGroup] = useState<Record<ModelGroup, ModelCatalogEntry[]>>({
+    asr: [],
+    diarization: [],
+    ner: []
+  })
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [progress, setProgress] = useState<number | undefined>(undefined)
   const [deleteCandidate, setDeleteCandidate] = useState<ModelCatalogEntry | null>(null)
 
   const reload = async (): Promise<void> => {
-    const asr = await window.api.modelCatalog.list('asr')
-    setAsrModels(asr)
+    const groups: ModelGroup[] = SECTIONS.map((s) => s.group)
+    const lists = await Promise.all(groups.map((g) => window.api.modelCatalog.list(g)))
+    setModelsByGroup((prev) => {
+      const next = { ...prev }
+      groups.forEach((g, i) => {
+        next[g] = lists[i]
+      })
+      return next
+    })
   }
 
   useEffect(() => {
@@ -40,8 +80,8 @@ export default function ModelsSettings(): React.JSX.Element {
   const handleDownload = async (id: string): Promise<void> => {
     setDownloadingId(id)
     try {
-      const updated = await window.api.modelCatalog.download(id)
-      setAsrModels(updated)
+      await window.api.modelCatalog.download(id)
+      await reload()
       toast.success('Modell erfolgreich heruntergeladen.')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
@@ -58,41 +98,39 @@ export default function ModelsSettings(): React.JSX.Element {
   const handleDeleteConfirmed = async (model: ModelCatalogEntry): Promise<void> => {
     setDeleteCandidate(null)
     try {
-      const updated = await window.api.modelCatalog.delete(model.id)
-      setAsrModels(updated)
-      toast.success(
-        `"${model.label}" gelöscht — ${formatBytes(model.sizeBytes)} freigegeben.`
-      )
+      await window.api.modelCatalog.delete(model.id)
+      await reload()
+      toast.success(`"${model.label}" gelöscht — ${formatBytes(model.sizeBytes)} freigegeben.`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     }
   }
 
-  const handleActivate = async (model: ModelCatalogEntry): Promise<void> => {
+  const handleActivate = async (
+    model: ModelCatalogEntry,
+    section: SectionConfig
+  ): Promise<void> => {
     try {
-      const updated = await window.api.modelCatalog.setActive(model.group, model.id)
-      setAsrModels(updated)
-      toast.success(
-        `"${model.label}" aktiviert. Neue Transkriptionen verwenden ab jetzt dieses Modell — bereits verarbeitete Sitzungen bleiben unverändert.`
-      )
+      await window.api.modelCatalog.setActive(model.group, model.id)
+      await reload()
+      toast.success(section.activatedToast(model.label))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     }
   }
 
-  const installed = asrModels.filter((m) => m.isInstalled)
-  const available = asrModels.filter((m) => !m.isInstalled)
   const anyBusy = downloadingId !== null
 
-  return (
-    <div className="space-y-8 p-6">
-      <section className="space-y-3">
+  const renderSection = (section: SectionConfig): React.JSX.Element => {
+    const models = modelsByGroup[section.group]
+    const installed = models.filter((m) => m.isInstalled)
+    const available = models.filter((m) => !m.isInstalled)
+
+    return (
+      <section key={section.group} className="space-y-3">
         <div>
-          <h2 className="mb-1 text-lg font-semibold">Transkriptions-Modelle</h2>
-          <p className="text-sm text-text-secondary">
-            Wähle das Modell, das für die Transkription deiner Sitzungen verwendet
-            werden soll. Ein Modellwechsel wirkt sich nur auf neue Transkriptionen aus.
-          </p>
+          <h2 className="mb-1 text-lg font-semibold">{section.title}</h2>
+          <p className="text-sm text-text-secondary">{section.description}</p>
         </div>
 
         {installed.length > 0 && (
@@ -103,14 +141,15 @@ export default function ModelsSettings(): React.JSX.Element {
                 <ModelCard
                   key={m.id}
                   model={m}
-                  activeUsageLabel="Wird für Transkription verwendet"
+                  activeUsageLabel={section.activeUsageLabel}
                   downloading={downloadingId === m.id}
                   progress={downloadingId === m.id ? progress : undefined}
                   anyBusy={anyBusy}
+                  deletable={!m.isRequired}
                   onDownload={() => handleDownload(m.id)}
                   onCancelDownload={handleCancelDownload}
                   onDelete={() => setDeleteCandidate(m)}
-                  onActivate={() => handleActivate(m)}
+                  onActivate={() => handleActivate(m, section)}
                 />
               ))}
             </div>
@@ -127,34 +166,31 @@ export default function ModelsSettings(): React.JSX.Element {
                 <ModelCard
                   key={m.id}
                   model={m}
-                  activeUsageLabel="Wird für Transkription verwendet"
+                  activeUsageLabel={section.activeUsageLabel}
                   downloading={downloadingId === m.id}
                   progress={downloadingId === m.id ? progress : undefined}
                   anyBusy={anyBusy}
+                  deletable={!m.isRequired}
                   onDownload={() => handleDownload(m.id)}
                   onCancelDownload={handleCancelDownload}
                   onDelete={() => setDeleteCandidate(m)}
-                  onActivate={() => handleActivate(m)}
+                  onActivate={() => handleActivate(m, section)}
                 />
               ))}
             </div>
           </div>
         )}
       </section>
+    )
+  }
+
+  return (
+    <div className="space-y-8 p-6">
+      {renderSection(SECTIONS[0])}
 
       <DiarizationPipelineSection />
 
-      <section>
-        <h3 className="mb-2 text-sm font-medium text-text-tertiary">Pflicht-Modelle</h3>
-        <p className="mb-2 text-xs text-text-tertiary">
-          Diese Modelle sind für die Anonymisierung zwingend erforderlich und werden
-          automatisch aktuell gehalten.
-        </p>
-        <ul className="space-y-1 rounded-md border border-border bg-surface-1 p-3 text-xs text-text-tertiary">
-          <li>Sprechererkennung (pyannote-suite)</li>
-          <li>Anonymisierung (flair-ner-german-large)</li>
-        </ul>
-      </section>
+      {renderSection(SECTIONS[1])}
 
       {deleteCandidate && (
         <ConfirmDialog
