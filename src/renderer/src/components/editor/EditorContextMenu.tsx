@@ -33,6 +33,12 @@ export interface ContextMenuState {
   }
   /** If true, text is selected — show "Anonymisieren als..." */
   hasSelection: boolean
+  /**
+   * If true, the selection consists exclusively of two or more chips with no
+   * neutral text outside them — re-flagging would be ambiguous, so the
+   * "Anonymisieren als..." block is hidden (AK 12).
+   */
+  selectionSpansMultipleChipsOnly: boolean
 }
 
 interface EditorContextMenuProps {
@@ -107,8 +113,8 @@ export function EditorContextMenu({
       {/* Separator when both chip and selection options present */}
       {state.chip && state.hasSelection && <div className="my-1 border-t border-border" />}
 
-      {/* Selection context: "Anonymisieren als..." */}
-      {state.hasSelection && (
+      {/* Selection context: "Anonymisieren als..." — hidden when selection is multiple chips only */}
+      {state.hasSelection && !state.selectionSpansMultipleChipsOnly && (
         <>
           <div className="px-3 py-1.5 text-xs font-medium text-text-tertiary">
             Anonymisieren als...
@@ -146,6 +152,13 @@ export function EditorContextMenu({
             </button>
           ))}
         </>
+      )}
+
+      {/* Multi-chip selection hint (AK 12) */}
+      {state.hasSelection && state.selectionSpansMultipleChipsOnly && (
+        <div className="px-3 py-2 text-xs text-text-tertiary">
+          Bitte nur einen Chip auswählen, um neu zu kategorisieren.
+        </div>
       )}
     </div>
   )
