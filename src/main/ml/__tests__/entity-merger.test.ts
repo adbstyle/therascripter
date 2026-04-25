@@ -4,6 +4,7 @@ import {
   normalizeUmlaut,
   isWholeWord,
   mapFlairType,
+  mapAi4PrivacyType,
   mapNativeType
 } from '../entity-merger'
 import type { TranscriptSegment } from '../../../shared/types'
@@ -225,6 +226,101 @@ describe('mapFlairType', () => {
   })
 })
 
+describe('mapAi4PrivacyType', () => {
+  it.each([
+    ['GIVENNAME', 'PERSON'],
+    ['SURNAME', 'PERSON'],
+    ['TITLE', 'PERSON']
+  ])('maps person-related %s to PERSON', (native, canonical) => {
+    expect(mapAi4PrivacyType(native)).toBe(canonical)
+  })
+
+  it.each([
+    ['CITY', 'ORT'],
+    ['STREET', 'ORT'],
+    ['BUILDINGNUM', 'ORT'],
+    ['ZIPCODE', 'ORT']
+  ])('maps location-related %s to ORT', (native, canonical) => {
+    expect(mapAi4PrivacyType(native)).toBe(canonical)
+  })
+
+  it.each([
+    ['DATE', 'DATUM'],
+    ['TIME', 'DATUM']
+  ])('maps temporal %s to DATUM', (native, canonical) => {
+    expect(mapAi4PrivacyType(native)).toBe(canonical)
+  })
+
+  it.each([
+    ['EMAIL', 'KONTAKT'],
+    ['TELEPHONENUM', 'KONTAKT'],
+    ['CREDITCARDNUMBER', 'KONTAKT']
+  ])('maps contact-related %s to KONTAKT', (native, canonical) => {
+    expect(mapAi4PrivacyType(native)).toBe(canonical)
+  })
+
+  it.each([
+    'AGE',
+    'SEX',
+    'GENDER',
+    'SOCIALNUM',
+    'IDCARDNUM',
+    'PASSPORTNUM',
+    'DRIVERLICENSENUM',
+    'TAXNUM'
+  ])('maps misc PII %s to SONSTIGES', (native) => {
+    expect(mapAi4PrivacyType(native)).toBe('SONSTIGES')
+  })
+
+  it('drops the O (non-entity) class', () => {
+    expect(mapAi4PrivacyType('O')).toBeNull()
+  })
+
+  it('routes unknown labels to SONSTIGES with a console.warn (schema-drift guard)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(mapAi4PrivacyType('FUTURE_LABEL_XYZ')).toBe('SONSTIGES')
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('FUTURE_LABEL_XYZ')
+    )
+    warn.mockRestore()
+  })
+
+  it('covers the full 21-label model schema (lock against silent drift)', () => {
+    // Authoritative label set — any change here must be matched by the model card.
+    const labels = [
+      'O',
+      'GIVENNAME',
+      'SURNAME',
+      'TITLE',
+      'CITY',
+      'STREET',
+      'BUILDINGNUM',
+      'ZIPCODE',
+      'DATE',
+      'TIME',
+      'AGE',
+      'SEX',
+      'GENDER',
+      'EMAIL',
+      'TELEPHONENUM',
+      'CREDITCARDNUMBER',
+      'SOCIALNUM',
+      'IDCARDNUM',
+      'PASSPORTNUM',
+      'DRIVERLICENSENUM',
+      'TAXNUM'
+    ]
+    expect(labels).toHaveLength(21)
+    // Every documented label must map without triggering the unknown-label warn.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    for (const label of labels) {
+      mapAi4PrivacyType(label)
+    }
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+})
+
 describe('mapNativeType (backend dispatcher)', () => {
   it('flair backend delegates to mapFlairType', () => {
     expect(mapNativeType('flair', 'PER')).toBe('PERSON')
@@ -232,16 +328,16 @@ describe('mapNativeType (backend dispatcher)', () => {
     expect(mapNativeType('flair', 'ORG')).toBeNull()
   })
 
-  it('gliner backend drops everything until mapper is wired (Phase 2)', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    expect(mapNativeType('gliner', 'Person')).toBeNull()
-    expect(warn).toHaveBeenCalled()
-    warn.mockRestore()
+  it('ai4privacy backend delegates to mapAi4PrivacyType', () => {
+    expect(mapNativeType('ai4privacy', 'GIVENNAME')).toBe('PERSON')
+    expect(mapNativeType('ai4privacy', 'CITY')).toBe('ORT')
+    expect(mapNativeType('ai4privacy', 'EMAIL')).toBe('KONTAKT')
+    expect(mapNativeType('ai4privacy', 'O')).toBeNull()
   })
 
-  it('ai4privacy backend drops everything until mapper is wired (Phase 2)', () => {
+  it('gliner backend drops everything until mapper is wired', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    expect(mapNativeType('ai4privacy', 'GIVENNAME')).toBeNull()
+    expect(mapNativeType('gliner', 'Person')).toBeNull()
     expect(warn).toHaveBeenCalled()
     warn.mockRestore()
   })
@@ -268,7 +364,7 @@ describe('mergeEntities backend dispatch', () => {
     expect(result[0].type).toBe('PERSON')
   })
 
-  it('gliner backend drops all entities until Phase 2 wires its mapper', () => {
+  it('gliner backend drops all entities until its mapper is implemented', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const segments = [seg('Peter wohnt in Bern')]
     const nerEntities: NerEntity[] = [
@@ -277,5 +373,19 @@ describe('mergeEntities backend dispatch', () => {
     const result = mergeEntities(nerEntities, [], [], segments, 'gliner')
     expect(result).toHaveLength(0)
     warn.mockRestore()
+  })
+
+  it('ai4privacy backend maps native PII types into the canonical pipeline', () => {
+    const segments = [seg('Peter Müller wohnt in Bern')]
+    const nerEntities: NerEntity[] = [
+      { text: 'Peter', type: 'GIVENNAME', segmentIndex: 0, charStart: 0, charEnd: 5, confidence: 0.95 },
+      { text: 'Müller', type: 'SURNAME', segmentIndex: 0, charStart: 6, charEnd: 12, confidence: 0.94 },
+      { text: 'Bern', type: 'CITY', segmentIndex: 0, charStart: 22, charEnd: 26, confidence: 0.91 }
+    ]
+    const result = mergeEntities(nerEntities, [], [], segments, 'ai4privacy')
+    expect(result).toHaveLength(3)
+    expect(result.find((e) => e.text === 'Peter')?.type).toBe('PERSON')
+    expect(result.find((e) => e.text === 'Müller')?.type).toBe('PERSON')
+    expect(result.find((e) => e.text === 'Bern')?.type).toBe('ORT')
   })
 })

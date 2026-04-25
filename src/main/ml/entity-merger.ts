@@ -33,13 +33,62 @@ export function mapFlairType(nativeType: string): PlaceholderType | null {
 }
 
 /**
+ * Map ai4privacy native type → canonical PlaceholderType.
+ *
+ * The model emits 21 classes (verified against the HuggingFace model card for
+ * `ai4privacy/llama-ai4privacy-multilingual-categorical-anonymiser-openpii`).
+ * Native EMAIL/TELEPHONENUM/DATE/ZIPCODE flow through to canonical types and
+ * are reconciled with the regex pipeline by `mergeEntities` (NER > Regex
+ * priority — when both detect the same span, NER wins; when only one does,
+ * its detection is kept). Unknown labels are routed to SONSTIGES with a
+ * `console.warn` so model-update schema drifts surface immediately rather
+ * than silently leaking PII.
+ */
+export function mapAi4PrivacyType(nativeType: string): PlaceholderType | null {
+  switch (nativeType) {
+    case 'O':
+      return null
+    case 'GIVENNAME':
+    case 'SURNAME':
+    case 'TITLE':
+      return 'PERSON'
+    case 'CITY':
+    case 'STREET':
+    case 'BUILDINGNUM':
+    case 'ZIPCODE':
+      return 'ORT'
+    case 'DATE':
+    case 'TIME':
+      return 'DATUM'
+    case 'EMAIL':
+    case 'TELEPHONENUM':
+    case 'CREDITCARDNUMBER':
+      return 'KONTAKT'
+    case 'AGE':
+    case 'SEX':
+    case 'GENDER':
+    case 'SOCIALNUM':
+    case 'IDCARDNUM':
+    case 'PASSPORTNUM':
+    case 'DRIVERLICENSENUM':
+    case 'TAXNUM':
+      return 'SONSTIGES'
+    default:
+      console.warn(
+        `[entity-merger] mapAi4PrivacyType received unknown native type "${nativeType}" — routing to SONSTIGES (model schema may have changed)`
+      )
+      return 'SONSTIGES'
+  }
+}
+
+/**
  * Backend-aware mapping from native NER entity type to canonical PlaceholderType.
  * Returns `null` for types that should be filtered out (e.g. ORG, non-PII).
  *
- * `gliner` and `ai4privacy` are accepted as discriminator values but have no
- * canonical mapper yet — entities from those backends are dropped with a
- * `console.warn` rather than being mis-mapped through flair semantics
- * (different label vocabularies make a fall-through unsafe).
+ * `gliner` is accepted as a discriminator value but has no canonical mapper yet
+ * — entities are dropped with a `console.warn` rather than mis-mapped through
+ * flair/ai4privacy semantics (different label vocabularies make a fall-through
+ * unsafe).
  */
 export function mapNativeType(
   backend: NerBackend,
@@ -48,10 +97,11 @@ export function mapNativeType(
   switch (backend) {
     case 'flair':
       return mapFlairType(nativeType)
-    case 'gliner':
     case 'ai4privacy':
+      return mapAi4PrivacyType(nativeType)
+    case 'gliner':
       console.warn(
-        `[entity-merger] mapNativeType called for backend "${backend}" but no mapper is implemented — dropping entity "${nativeType}"`
+        `[entity-merger] mapNativeType called for backend "gliner" but no mapper is implemented — dropping entity "${nativeType}"`
       )
       return null
   }

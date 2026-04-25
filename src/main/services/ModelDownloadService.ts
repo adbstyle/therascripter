@@ -124,7 +124,7 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
   },
   {
     id: 'flair-ner-german-large',
-    label: 'Anonymisierung (flair-ner-german-large)',
+    label: 'Anonymisierung — flair-ner-german-large',
     url: `${R2_CDN}/flair-ner-german-large.tar.gz`,
     relativePath: 'ner',
     checkPath: 'ner/models/ner-german-large',
@@ -134,7 +134,31 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     group: 'ner',
     isRequired: true,
     hfIdentifier: 'flair/ner-german-large',
-    nerBackend: 'flair'
+    nerBackend: 'flair',
+    description:
+      'XLM-RoBERTa-large (~550M Parameter, ~2.2 GB). Höchste Genauigkeit für Deutsch (F1 92% auf CoNLL-03 DE). Empfohlen wenn Anonymisierungsqualität wichtiger als Geschwindigkeit ist.',
+    languages: ['de'],
+    accuracyScore: 0.92,
+    speedScore: 0.4
+  },
+  {
+    id: 'ai4privacy-openpii-modernbert',
+    label: 'Anonymisierung — ai4privacy OpenPII (ModernBERT)',
+    url: `${R2_CDN}/ai4privacy-openpii-modernbert.tar.gz`,
+    relativePath: 'ner',
+    checkPath: 'ner/models--ai4privacy--llama-ai4privacy-multilingual-categorical-anonymiser-openpii',
+    sizeBytes: 400_000_000,
+    sha256: 'PENDING_AI4PRIVACY_OPENPII_MODERNBERT',
+    archive: true,
+    group: 'ner',
+    isRequired: false,
+    hfIdentifier: 'ai4privacy/llama-ai4privacy-multilingual-categorical-anonymiser-openpii',
+    nerBackend: 'ai4privacy',
+    description:
+      'ModernBERT-base (~100M Parameter, ~400 MB). Multilingual (DE/EN/FR/IT/ES/NL/HI/TE), 21 PII-Klassen, MIT-Lizenz. Schneller und kleiner als flair, F1 91.5% global. Empfohlen für schlanke Installation.',
+    languages: ['multi'],
+    accuracyScore: 0.85,
+    speedScore: 0.85
   }
 ]
 

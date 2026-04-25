@@ -1,1 +1,6 @@
 flair>=0.13.0
+# Explicit transformers requirement — needed for ai4privacy backend
+# (AutoModelForTokenClassification + ModernBERT support requires >=4.48).
+# flair already pulls in transformers transitively, but CLAUDE.md mandates
+# that all runtime deps be listed in this file as the sole source.
+transformers>=4.48.0
