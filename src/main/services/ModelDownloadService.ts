@@ -566,8 +566,8 @@ export async function downloadSingleModel(id: string): Promise<void> {
 /**
  * Löscht ein einzelnes Modell von Disk. Verboten für:
  *   - unbekannte IDs
- *   - Pflicht-Modelle (isRequired, z.B. flair NER)
- *   - das aktuell aktive Modell einer group-required Gruppe (ASR, Diarization)
+ *   - Pflicht-Modelle (isRequired)
+ *   - das aktuell aktive Modell einer auswählbaren Gruppe (ASR, NER)
  */
 export async function deleteModel(id: string): Promise<void> {
   const def = getModelById(id)

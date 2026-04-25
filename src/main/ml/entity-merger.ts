@@ -88,9 +88,10 @@ export function mapAi4PrivacyType(nativeType: string): PlaceholderType | null {
  * time. The Python sidecar's `GLINER_LABELS_DE` constant must stay in lock-step
  * with the cases below. Unknown labels route to SONSTIGES with a `console.warn`
  * so a sidecar-side label-list change without a TS-side mapping update surfaces
- * loudly rather than silently leaking PII.
+ * loudly rather than silently leaking PII. The return type is non-null because
+ * the catch-all always emits SONSTIGES.
  */
-export function mapGlinerType(nativeType: string): PlaceholderType | null {
+export function mapGlinerType(nativeType: string): PlaceholderType {
   switch (nativeType) {
     case 'Person':
       return 'PERSON'

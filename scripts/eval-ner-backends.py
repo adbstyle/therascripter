@@ -92,8 +92,9 @@ HF_IDENTIFIERS = {
     "gliner": "urchade/gliner_multi-v2.1",
 }
 
-# Acceptance thresholds per (backend, type) — F1 minimum. Tightest threshold
-# is PERSON recall, because a missed PERSON span is a PII leak.
+# Acceptance thresholds per (backend, "<entity>_<metric>") with metric ∈
+# {precision, recall, f1}. Tightest threshold is PERSON recall, because a
+# missed PERSON span is a PII leak.
 THRESHOLDS = {
     "ai4privacy": {"PERSON_recall": 0.95},
     "gliner": {"PERSON_recall": 0.90},
@@ -102,12 +103,17 @@ THRESHOLDS = {
 
 
 def map_native(backend: str, native_type: str) -> Optional[str]:
-    """Mirror of TS-side mapNativeType. Unknown labels for ai4privacy go
-    to SONSTIGES (matches the schema-drift policy)."""
+    """Mirror of TS-side mapNativeType (entity-merger.ts).
+
+    flair drops unknown labels (its native schema is fixed). ai4privacy and
+    gliner route unknown labels to SONSTIGES (the same schema-drift fallback
+    that the TS-side mappers apply with a console.warn — production code
+    surfaces drift rather than silently leaks PII).
+    """
     mapping = CANONICAL_MAPS[backend]
     if native_type in mapping:
         return mapping[native_type]
-    if backend == "ai4privacy":
+    if backend in ("ai4privacy", "gliner"):
         return "SONSTIGES"
     return None
 
