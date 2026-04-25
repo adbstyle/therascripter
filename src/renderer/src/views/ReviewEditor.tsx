@@ -14,10 +14,11 @@ import { RenameDialog } from '../components/RenameDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
   batchRemovePlaceholder,
-  anonymizeSelection,
+  anonymizeSelectionWithPropagation,
   addToBlocklistRetroactive,
   hasChipsWithEntityId,
-  extendSelectionAndExtractText
+  extendSelectionAndExtractText,
+  rebuildEntityMapFromDoc
 } from '../utils/editorCommands'
 import { serializeDocument } from '../../../shared/utils/serializeDocument'
 import { countWords } from '../../../shared/utils/countWords'
@@ -177,6 +178,19 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
               }
             })
           }
+
+          // Always-on EntityMap rebuild: covers manual-flag overwrites whose
+          // chips reappear after undo. FIFO ordering means the blocklist
+          // reconciliation above runs first, so the rebuild observes the
+          // correct post-reconciliation state.
+          queueMicrotask(() => {
+            if (!editorRef.current) return
+            const rebuilt = rebuildEntityMapFromDoc(
+              editorRef.current.state.doc,
+              entityMapRef.current
+            )
+            if (rebuilt !== null) updateEntityMap(rebuilt)
+          })
         }
 
         return false
@@ -307,6 +321,29 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
       // Check if text is selected (non-empty selection)
       const hasSelection = !selection.empty
 
+      // Detect AK 12: selection spans multiple chips with no neutral text.
+      let selectionSpansMultipleChipsOnly = false
+      if (hasSelection) {
+        let chipCount = 0
+        let hasNonWhitespaceText = false
+        state.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
+          if (node.type.name === 'placeholderChip') {
+            const nodeEnd = pos + node.nodeSize
+            if (pos >= selection.from && nodeEnd <= selection.to) {
+              chipCount++
+            }
+          } else if (node.isText) {
+            const text = node.text ?? ''
+            const start = Math.max(pos, selection.from) - pos
+            const end = Math.min(pos + node.nodeSize, selection.to) - pos
+            if (text.slice(start, end).trim().length > 0) {
+              hasNonWhitespaceText = true
+            }
+          }
+        })
+        selectionSpansMultipleChipsOnly = chipCount >= 2 && !hasNonWhitespaceText
+      }
+
       // Only show menu if there's something to act on
       if (!chipInfo && !hasSelection) return
 
@@ -314,7 +351,8 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
         x: event.clientX,
         y: event.clientY,
         chip: chipInfo,
-        hasSelection
+        hasSelection,
+        selectionSpansMultipleChipsOnly
       })
     },
     [editor]
@@ -343,14 +381,35 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   )
   handleBatchRemoveRef.current = handleBatchRemove
 
-  /** Handle manual anonymization of the current selection */
+  /** Handle manual anonymization of the current selection with auto-propagation */
   const handleAnonymize = useCallback(
     (type: PlaceholderType) => {
       if (!editor) return
-      const updated = anonymizeSelection(editor, type, entityMapRef.current)
-      if (updated) {
-        updateEntityMap(updated)
+
+      const result = anonymizeSelectionWithPropagation(editor, type, entityMapRef.current)
+      if (!result) return
+
+      // Orphan cleanup: remove EntityMap entries whose chips were overwritten and
+      // have no remaining occurrences in the post-dispatch document.
+      const cleaned: EntityMap = { ...result.entityMap }
+      for (const oldId of result.overwrittenEntityIds) {
+        if (!hasChipsWithEntityId(editor.state.doc, oldId)) {
+          delete cleaned[oldId]
+        }
       }
+
+      // Sync blocklistUndoStackRef so SQLite stays consistent when overwriting a
+      // blocklist-originated chip. The Cmd+Z redo branch at lines 156-175 will
+      // re-add the SQLite row if the user undoes the overwrite.
+      for (const entry of blocklistUndoStackRef.current) {
+        if (result.overwrittenEntityIds.has(entry.entityId) && !entry.undone) {
+          entry.undone = true
+          window.api.blocklist.delete(entry.entryId)
+        }
+      }
+
+      updateEntityMap(cleaned)
+      editor.commands.focus()
     },
     [editor, updateEntityMap]
   )

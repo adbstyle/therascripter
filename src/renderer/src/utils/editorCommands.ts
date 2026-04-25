@@ -120,56 +120,6 @@ export function batchRemovePlaceholder(
 }
 
 /**
- * Anonymize the current text selection by replacing it with a PlaceholderChip.
- * If the selection overlaps with existing chips, it auto-extends to include them.
- *
- * Returns the updated entityMap (with the new entry added), or null if no selection.
- */
-export function anonymizeSelection(
-  editor: Editor,
-  type: PlaceholderType,
-  entityMap: EntityMap
-): EntityMap | null {
-  const { state } = editor
-  const { from, to, empty } = state.selection
-
-  if (empty) return null
-
-  const extended = extendSelectionAndExtractText(state, from, to)
-  if (!extended.originalText.trim()) return null
-
-  const { from: extendedFrom, to: extendedTo, originalText } = extended
-
-  const number = getNextNumber(entityMap, type)
-  const entityId = generateEntityId(type, number)
-
-  // Create the chip node
-  const chipNode = state.schema.nodes.placeholderChip.create({
-    entityId,
-    type,
-    number,
-    source: 'manual',
-    original: originalText
-  })
-
-  // Replace the extended selection with the chip (single transaction)
-  const { tr } = state
-  tr.replaceWith(extendedFrom, extendedTo, chipNode)
-  editor.view.dispatch(tr)
-
-  // Add to entityMap
-  const updated = { ...entityMap }
-  updated[entityId] = {
-    original: originalText,
-    placeholder: `[${type} ${number}]`,
-    type,
-    source: 'manual'
-  }
-
-  return updated
-}
-
-/**
  * Check whether the document contains any placeholderChip with the given entityId.
  */
 export function hasChipsWithEntityId(doc: PMNode, entityId: string): boolean {
@@ -183,6 +133,94 @@ export function hasChipsWithEntityId(doc: PMNode, entityId: string): boolean {
     return true
   })
   return found
+}
+
+interface CollectOptions {
+  excludeRange: { from: number; to: number }
+  overwritesChips: boolean
+}
+
+interface OccurrenceHit {
+  from: number
+  to: number
+  original: string
+  overwrittenChip?: { entityId: string; oldOriginal: string; oldSource: string }
+}
+
+/**
+ * Scan the document for occurrences of `term` (case-insensitive, umlaut-normalized,
+ * whole-word). Pass A walks text nodes; Pass B walks placeholderChip nodes (only
+ * when opts.overwritesChips is true) and reports their entityId for orphan
+ * cleanup by the caller. Hits overlapping opts.excludeRange are skipped.
+ */
+function collectIdenticalOccurrences(
+  state: EditorState,
+  term: string,
+  opts: CollectOptions
+): OccurrenceHit[] {
+  const normalizedTerm = normalizeUmlaut(term.trim().toLowerCase())
+  if (!normalizedTerm) return []
+
+  const { from: excludeFrom, to: excludeTo } = opts.excludeRange
+  const hits: OccurrenceHit[] = []
+
+  state.doc.descendants((node, pos) => {
+    // Pass A: text nodes
+    if (node.isText) {
+      const text = node.text!
+      const { normalized, toOriginal } = normalizeWithPositionMap(text.toLowerCase())
+
+      let searchStart = 0
+      while (true) {
+        const idx = normalized.indexOf(normalizedTerm, searchStart)
+        if (idx === -1) break
+
+        const origStart = toOriginal[idx]
+        const origEnd = toOriginal[idx + normalizedTerm.length]
+        const absStart = pos + origStart
+        const absEnd = pos + origEnd
+
+        if (isWholeWord(text, origStart, origEnd)) {
+          const overlapsExclude = absStart < excludeTo && absEnd > excludeFrom
+          if (!overlapsExclude) {
+            hits.push({
+              from: absStart,
+              to: absEnd,
+              original: text.substring(origStart, origEnd)
+            })
+          }
+        }
+
+        searchStart = idx + 1
+      }
+      return
+    }
+
+    // Pass B: chip nodes
+    if (opts.overwritesChips && node.type.name === 'placeholderChip') {
+      const chipOriginal = (node.attrs.original as string) ?? ''
+      if (!chipOriginal) return
+      if (normalizeUmlaut(chipOriginal.toLowerCase()) !== normalizedTerm) return
+
+      const absStart = pos
+      const absEnd = pos + node.nodeSize
+      const overlapsExclude = absStart < excludeTo && absEnd > excludeFrom
+      if (overlapsExclude) return
+
+      hits.push({
+        from: absStart,
+        to: absEnd,
+        original: chipOriginal,
+        overwrittenChip: {
+          entityId: node.attrs.entityId as string,
+          oldOriginal: chipOriginal,
+          oldSource: node.attrs.source as string
+        }
+      })
+    }
+  })
+
+  return hits
 }
 
 export interface BlocklistRetroactiveResult {
@@ -221,51 +259,18 @@ export function addToBlocklistRetroactive(
   const number = getNextNumber(entityMap, type)
   const entityId = generateEntityId(type, number)
 
-  // Collect all replacement positions
-  const replacements: Array<{ from: number; to: number; original: string }> = []
-
-  // 1. The initial selection
-  replacements.push({ from: extFrom, to: extTo, original: selectionOriginal })
-
-  // 2. Retroactive matches in text nodes
-  const normalizedTerm = normalizeUmlaut(term.trim().toLowerCase())
-
-  state.doc.descendants((node, pos) => {
-    if (!node.isText) return
-
-    const text = node.text!
-    const { normalized, toOriginal } = normalizeWithPositionMap(text.toLowerCase())
-
-    let searchStart = 0
-    while (true) {
-      const idx = normalized.indexOf(normalizedTerm, searchStart)
-      if (idx === -1) break
-
-      const origStart = toOriginal[idx]
-      const origEnd = toOriginal[idx + normalizedTerm.length]
-      const absStart = pos + origStart
-      const absEnd = pos + origEnd
-
-      if (isWholeWord(text, origStart, origEnd)) {
-        // Skip if overlapping with the initial selection
-        const overlapsSelection = absStart < extTo && absEnd > extFrom
-        if (!overlapsSelection) {
-          replacements.push({
-            from: absStart,
-            to: absEnd,
-            original: text.substring(origStart, origEnd)
-          })
-        }
-      }
-
-      searchStart = idx + 1
-    }
+  const hits = collectIdenticalOccurrences(state, term, {
+    excludeRange: { from: extFrom, to: extTo },
+    overwritesChips: false
   })
 
-  // Sort by position descending (replace from back to front)
+  const replacements: Array<{ from: number; to: number; original: string }> = [
+    { from: extFrom, to: extTo, original: selectionOriginal },
+    ...hits.map(({ from: f, to: t, original }) => ({ from: f, to: t, original }))
+  ]
+
   replacements.sort((a, b) => b.from - a.from)
 
-  // Create all chips in a single transaction
   const { tr } = state
   for (const rep of replacements) {
     const chipNode = state.schema.nodes.placeholderChip.create({
@@ -280,7 +285,6 @@ export function addToBlocklistRetroactive(
 
   editor.view.dispatch(tr)
 
-  // Update entityMap
   const updated = { ...entityMap }
   updated[entityId] = {
     original: term.trim(),
@@ -290,4 +294,142 @@ export function addToBlocklistRetroactive(
   }
 
   return { entityMap: updated, entityId }
+}
+
+export interface PropagationResult {
+  /** Updated map with the new entityId added — orphans are NOT yet removed (caller does that). */
+  entityMap: EntityMap
+  /** The new entityId assigned to all propagated chips. */
+  entityId: string
+  /** Prior entityIds of chips that Pass B replaced (for orphan cleanup). */
+  overwrittenEntityIds: Set<string>
+  /** Total chips written in the transaction, INCLUDING the initial selection. */
+  propagatedCount: number
+}
+
+/**
+ * Manually anonymize the current selection AND auto-propagate the same flag to
+ * every identical occurrence in the document (case-insensitive + Umlaut +
+ * whole-word, multi-word as exact sequence). Existing chips of any type whose
+ * `original` matches are overwritten with the new type/entityId.
+ *
+ * Returns null when:
+ *  - the selection is empty
+ *  - the extended selection is exactly one chip of the same type (silent no-op
+ *    per AK 11)
+ *  - the selection produces no extractable text
+ */
+export function anonymizeSelectionWithPropagation(
+  editor: Editor,
+  type: PlaceholderType,
+  entityMap: EntityMap
+): PropagationResult | null {
+  const { state } = editor
+  const { from, to, empty } = state.selection
+
+  if (empty) return null
+
+  const extended = extendSelectionAndExtractText(state, from, to)
+  if (!extended.originalText.trim()) return null
+
+  const { from: extFrom, to: extTo, originalText } = extended
+
+  // AK 11 no-op detection: extended range is exactly one chip of the same type.
+  const singleNode = state.doc.nodeAt(extFrom)
+  if (
+    singleNode?.type.name === 'placeholderChip' &&
+    singleNode.attrs.type === type &&
+    extTo - extFrom === singleNode.nodeSize
+  ) {
+    return null
+  }
+
+  const number = getNextNumber(entityMap, type)
+  const entityId = generateEntityId(type, number)
+
+  const hits = collectIdenticalOccurrences(state, originalText, {
+    excludeRange: { from: extFrom, to: extTo },
+    overwritesChips: true
+  })
+
+  const replacements: Array<{ from: number; to: number; original: string }> = [
+    { from: extFrom, to: extTo, original: originalText },
+    ...hits.map(({ from: f, to: t, original }) => ({ from: f, to: t, original }))
+  ]
+
+  replacements.sort((a, b) => b.from - a.from)
+
+  const { tr } = state
+  for (const rep of replacements) {
+    const chipNode = state.schema.nodes.placeholderChip.create({
+      entityId,
+      type,
+      number,
+      source: 'manual',
+      original: rep.original
+    })
+    tr.replaceWith(rep.from, rep.to, chipNode)
+  }
+
+  editor.view.dispatch(tr)
+
+  const overwrittenEntityIds = new Set<string>()
+  for (const hit of hits) {
+    if (hit.overwrittenChip) overwrittenEntityIds.add(hit.overwrittenChip.entityId)
+  }
+
+  const updated = { ...entityMap }
+  updated[entityId] = {
+    original: originalText,
+    placeholder: `[${type} ${number}]`,
+    type,
+    source: 'manual'
+  }
+
+  return {
+    entityMap: updated,
+    entityId,
+    overwrittenEntityIds,
+    propagatedCount: replacements.length
+  }
+}
+
+/**
+ * Walk `doc` once and reconstruct EntityMap entries for every placeholderChip
+ * whose entityId is missing from `currentMap`. Returns a new map if at least
+ * one entry was added; returns null if no drift exists (churn guard).
+ *
+ * Pure function — does NOT remove orphan entries (Task 4 owns synchronous
+ * orphan cleanup post-dispatch). Source field is read directly from
+ * chip.attrs.source so restored NER/blocklist chips are reconstructed with
+ * their correct provenance.
+ */
+export function rebuildEntityMapFromDoc(
+  doc: PMNode,
+  currentMap: EntityMap
+): EntityMap | null {
+  let added = 0
+  const rebuilt: EntityMap = { ...currentMap }
+
+  doc.descendants((node) => {
+    if (node.type.name !== 'placeholderChip') return
+    const entityId = node.attrs.entityId as string
+    if (!entityId) return
+    if (entityId in rebuilt) return
+
+    const chipType = node.attrs.type as PlaceholderType
+    const chipNumber = node.attrs.number as number
+    const chipSource = node.attrs.source as EntityMap[string]['source']
+    const chipOriginal = (node.attrs.original as string) ?? ''
+
+    rebuilt[entityId] = {
+      original: chipOriginal,
+      placeholder: `[${chipType} ${chipNumber}]`,
+      type: chipType,
+      source: chipSource
+    }
+    added++
+  })
+
+  return added > 0 ? rebuilt : null
 }
