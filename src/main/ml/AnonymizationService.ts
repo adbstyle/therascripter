@@ -16,6 +16,8 @@ import { buildTipTapDocument } from './tiptap-builder'
 import { countWords } from '../../shared/utils/countWords'
 import { resolvePythonSidecar } from './resolve-python'
 import { writeFileAtomic } from '../utils/file-ops'
+import { getModelById } from '../services/ModelDownloadService'
+import { getSettings } from '../services/SettingsService'
 
 // Progress line format: "[PROGRESS] 42"
 const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
@@ -57,51 +59,70 @@ export class AnonymizationService implements TaskExecutor {
 
     onProgress(0.05)
 
-    // 2. Run Python NER sidecar (0.05 → 0.50)
-    const nerEntities = await this.runNerSidecar(
+    // 2. Resolve active NER model + backend from settings
+    const activeNerId = getSettings().get('activeModels').ner
+    const nerModel = getModelById(activeNerId)
+    if (!nerModel || nerModel.group !== 'ner' || !nerModel.nerBackend || !nerModel.hfIdentifier) {
+      throw new Error(
+        `Anonymisierung: aktives NER-Modell "${activeNerId}" ist ungültig oder unvollständig konfiguriert (backend/hfIdentifier fehlt).`
+      )
+    }
+
+    // 3. Run Python NER sidecar (0.05 → 0.50)
+    const nerOutput = await this.runNerSidecar(
       transcriptSource,
+      nerModel.nerBackend,
+      nerModel.hfIdentifier,
       (nerProgress) => onProgress(0.05 + nerProgress * 0.45),
       signal
     )
+    const nerEntities = nerOutput.entities
 
     onProgress(0.5)
 
-    // 3. Run regex engine
+    // 4. Run regex engine
     const regexEntities = runRegexEngine(transcript.segments)
 
     onProgress(0.55)
 
-    // 4. Load blocklist from DB
+    // 5. Load blocklist from DB
     const blocklistRepo = new BlocklistRepository(db)
     const blocklistEntries = blocklistRepo.findAll()
 
     onProgress(0.6)
 
-    // 5. Merge entities (NER > Blocklist > Regex)
-    const merged = mergeEntities(nerEntities, regexEntities, blocklistEntries, transcript.segments)
+    // 6. Merge entities (NER > Blocklist > Regex). Backend is read from sidecar metadata so the
+    //    merger uses the correct native→canonical mapper, even if settings changed mid-run.
+    const merged = mergeEntities(
+      nerEntities,
+      regexEntities,
+      blocklistEntries,
+      transcript.segments,
+      nerOutput.metadata.backend
+    )
 
     onProgress(0.7)
 
-    // 6. Resolve coreferences (PERSON entities)
+    // 7. Resolve coreferences (PERSON entities)
     const resolved = resolveCoreferences(merged)
 
     onProgress(0.75)
 
-    // 7. Build EntityMap
+    // 8. Build EntityMap
     const entityMap = buildEntityMap(resolved)
 
     onProgress(0.8)
 
-    // 8. Determine speaker count for TipTap document
+    // 9. Determine speaker count for TipTap document
     const uniqueSpeakers = new Set(transcript.segments.map((s) => s.speaker).filter(Boolean))
     const speakerCount = uniqueSpeakers.size
 
-    // 9. Build TipTap document
+    // 10. Build TipTap document
     const tiptapDoc = buildTipTapDocument(transcript.segments, entityMap, resolved, speakerCount)
 
     onProgress(0.9)
 
-    // 10. Save results
+    // 11. Save results
     const anonymizedPath = sessionService.generateAnonymizedPath(task.sessionId)
     writeFileAtomic(anonymizedPath, JSON.stringify(tiptapDoc, null, 2))
 
@@ -118,9 +139,11 @@ export class AnonymizationService implements TaskExecutor {
 
   private runNerSidecar(
     transcriptPath: string,
+    backend: string,
+    hfModel: string,
     onProgress: (progress: number) => void,
     signal?: AbortSignal
-  ): Promise<NerServiceOutput['entities']> {
+  ): Promise<NerServiceOutput> {
     return new Promise((resolve, reject) => {
       const { bin, args: prefixArgs } = this.getCommand()
 
@@ -130,7 +153,17 @@ export class AnonymizationService implements TaskExecutor {
       }
 
       const modelDir = this.getModelDir()
-      const args = [...prefixArgs, '--transcript', transcriptPath, '--model-dir', modelDir]
+      const args = [
+        ...prefixArgs,
+        '--transcript',
+        transcriptPath,
+        '--backend',
+        backend,
+        '--hf-model',
+        hfModel,
+        '--model-dir',
+        modelDir
+      ]
 
       // QoS: nice -n 10 (NFR-23)
       const proc = spawn('nice', ['-n', '10', bin, ...args], {
@@ -230,7 +263,7 @@ export class AnonymizationService implements TaskExecutor {
         // Parse JSON output
         try {
           const result = JSON.parse(stdout) as NerServiceOutput
-          resolve(result.entities)
+          resolve(result)
         } catch (parseError) {
           reject(
             new Error(

@@ -3,7 +3,8 @@ import type {
   NerEntity,
   RegexEntity,
   MergedEntity,
-  BlocklistEntry
+  BlocklistEntry,
+  NerBackend
 } from '../../shared/types/NerTypes'
 import { mapRegexTypeToPlaceholder } from './regex-patterns'
 import {
@@ -15,9 +16,9 @@ import {
 // Re-export shared utilities for existing consumers
 export { normalizeUmlaut, isWholeWord }
 
-/** Map flair NER type to Therascript placeholder type */
-function mapNerType(nerType: string): PlaceholderType | null {
-  switch (nerType) {
+/** Map flair native type → canonical PlaceholderType. ORG ignored per Decision #5/#158. */
+export function mapFlairType(nativeType: string): PlaceholderType | null {
+  switch (nativeType) {
     case 'PER':
       return 'PERSON'
     case 'LOC':
@@ -25,9 +26,33 @@ function mapNerType(nerType: string): PlaceholderType | null {
     case 'MISC':
       return 'SONSTIGES'
     case 'ORG':
-      // ORG entities are IGNORED per Decision #5/#158
       return null
     default:
+      return null
+  }
+}
+
+/**
+ * Backend-aware mapping from native NER entity type to canonical PlaceholderType.
+ * Returns `null` for types that should be filtered out (e.g. ORG, non-PII).
+ *
+ * `gliner` and `ai4privacy` are accepted as discriminator values but have no
+ * canonical mapper yet — entities from those backends are dropped with a
+ * `console.warn` rather than being mis-mapped through flair semantics
+ * (different label vocabularies make a fall-through unsafe).
+ */
+export function mapNativeType(
+  backend: NerBackend,
+  nativeType: string
+): PlaceholderType | null {
+  switch (backend) {
+    case 'flair':
+      return mapFlairType(nativeType)
+    case 'gliner':
+    case 'ai4privacy':
+      console.warn(
+        `[entity-merger] mapNativeType called for backend "${backend}" but no mapper is implemented — dropping entity "${nativeType}"`
+      )
       return null
   }
 }
@@ -49,18 +74,22 @@ function overlapsWithExisting(
  * - ORG entities from NER are ignored (Decision #5/#158)
  * - Whole-word boundary check applied to all
  * - Overlapping entities are skipped (first-come wins by priority)
+ *
+ * `nerBackend` discriminates how native NER types translate to canonical types.
+ * Defaults to 'flair'.
  */
 export function mergeEntities(
   nerEntities: NerEntity[],
   regexEntities: RegexEntity[],
   blocklistEntries: BlocklistEntry[],
-  segments: TranscriptSegment[]
+  segments: TranscriptSegment[],
+  nerBackend: NerBackend = 'flair'
 ): MergedEntity[] {
   const merged: MergedEntity[] = []
 
   // 1. NER entities (highest priority)
   for (const entity of nerEntities) {
-    const placeholderType = mapNerType(entity.type)
+    const placeholderType = mapNativeType(nerBackend, entity.type)
     if (!placeholderType) continue // Skip ORG and unknown types
 
     const segText = segments[entity.segmentIndex]?.text

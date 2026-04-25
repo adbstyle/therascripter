@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest'
-import { mergeEntities, normalizeUmlaut, isWholeWord } from '../entity-merger'
+import { describe, it, expect, vi } from 'vitest'
+import {
+  mergeEntities,
+  normalizeUmlaut,
+  isWholeWord,
+  mapFlairType,
+  mapNativeType
+} from '../entity-merger'
 import type { TranscriptSegment } from '../../../shared/types'
 import type { NerEntity, RegexEntity, BlocklistEntry } from '../../../shared/types/NerTypes'
 
@@ -194,5 +200,82 @@ describe('mergeEntities', () => {
     expect(result[0].text).toBe('Peter')
     expect(result[1].text).toBe('Bern')
     expect(result[2].text).toBe('Anna')
+  })
+})
+
+describe('mapFlairType', () => {
+  it('maps PER to PERSON', () => {
+    expect(mapFlairType('PER')).toBe('PERSON')
+  })
+
+  it('maps LOC to ORT', () => {
+    expect(mapFlairType('LOC')).toBe('ORT')
+  })
+
+  it('maps MISC to SONSTIGES', () => {
+    expect(mapFlairType('MISC')).toBe('SONSTIGES')
+  })
+
+  it('drops ORG (Decision #5/#158)', () => {
+    expect(mapFlairType('ORG')).toBeNull()
+  })
+
+  it('drops unknown types', () => {
+    expect(mapFlairType('UNKNOWN_TYPE')).toBeNull()
+  })
+})
+
+describe('mapNativeType (backend dispatcher)', () => {
+  it('flair backend delegates to mapFlairType', () => {
+    expect(mapNativeType('flair', 'PER')).toBe('PERSON')
+    expect(mapNativeType('flair', 'LOC')).toBe('ORT')
+    expect(mapNativeType('flair', 'ORG')).toBeNull()
+  })
+
+  it('gliner backend drops everything until mapper is wired (Phase 2)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(mapNativeType('gliner', 'Person')).toBeNull()
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('ai4privacy backend drops everything until mapper is wired (Phase 2)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(mapNativeType('ai4privacy', 'GIVENNAME')).toBeNull()
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+})
+
+describe('mergeEntities backend dispatch', () => {
+  it('uses flair mapping by default when no backend is passed', () => {
+    const segments = [seg('Peter wohnt in Bern')]
+    const nerEntities: NerEntity[] = [
+      { text: 'Peter', type: 'PER', segmentIndex: 0, charStart: 0, charEnd: 5, confidence: 0.9 }
+    ]
+    const result = mergeEntities(nerEntities, [], [], segments)
+    expect(result).toHaveLength(1)
+    expect(result[0].type).toBe('PERSON')
+  })
+
+  it('explicit flair backend gives identical result to default', () => {
+    const segments = [seg('Peter wohnt in Bern')]
+    const nerEntities: NerEntity[] = [
+      { text: 'Peter', type: 'PER', segmentIndex: 0, charStart: 0, charEnd: 5, confidence: 0.9 }
+    ]
+    const result = mergeEntities(nerEntities, [], [], segments, 'flair')
+    expect(result).toHaveLength(1)
+    expect(result[0].type).toBe('PERSON')
+  })
+
+  it('gliner backend drops all entities until Phase 2 wires its mapper', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const segments = [seg('Peter wohnt in Bern')]
+    const nerEntities: NerEntity[] = [
+      { text: 'Peter', type: 'Person', segmentIndex: 0, charStart: 0, charEnd: 5, confidence: 0.9 }
+    ]
+    const result = mergeEntities(nerEntities, [], [], segments, 'gliner')
+    expect(result).toHaveLength(0)
+    warn.mockRestore()
   })
 })

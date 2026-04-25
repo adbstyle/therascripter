@@ -5,6 +5,7 @@ import { getDataDir } from '../db/connection'
 import { getSettings } from './SettingsService'
 import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
 import type { ModelGroup } from '../../shared/validation/model-catalog-schemas'
+import type { NerBackend } from '../../shared/types/NerTypes'
 
 const R2_CDN = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev'
 
@@ -29,8 +30,13 @@ export interface ModelDefinition {
   languages?: string[]
   accuracyScore?: number
   speedScore?: number
-  // Nur für Diarization relevant — pyannote-Pipelines laden via from_pretrained(hfIdentifier).
+  // HuggingFace-Identifier — durchgereicht an Python-Sidecars für from_pretrained()
+  // (pyannote, transformers) bzw. Classifier.load() (flair). Für Whisper-/Vision-OCR-
+  // Modelle ohne HF-Pipeline undefiniert.
   hfIdentifier?: string
+  // NER-Backend-Discriminator — wählt das Python-Modul in ner_backends/, an
+  // ner_service.py --backend durchgereicht. Nur für group: 'ner' relevant.
+  nerBackend?: NerBackend
 }
 
 export interface ModelDownloadProgress {
@@ -126,7 +132,9 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     sha256: 'a34f6315659a34991930dae5d7a2bc2f3ee24ff6eb70dcd4d41e3aca7a5253e6',
     archive: true,
     group: 'ner',
-    isRequired: true
+    isRequired: true,
+    hfIdentifier: 'flair/ner-german-large',
+    nerBackend: 'flair'
   }
 ]
 
