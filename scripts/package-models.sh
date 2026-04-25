@@ -99,6 +99,16 @@ else
   echo "  SKIP: ai4privacy-Modell nicht gefunden: $MODELS_DIR/ner/$AI4PRIVACY_SUBDIR"
 fi
 
+# GLiNER NER model (HF-Cache-Layout, extrahiert nach ner/models--urchade--…)
+GLINER_SUBDIR="models--urchade--gliner_multi-v2.1"
+if [ -d "$MODELS_DIR/ner/$GLINER_SUBDIR" ]; then
+  tar -czf "$OUTPUT_DIR/gliner-multi-v2.1.tar.gz" \
+    -C "$MODELS_DIR/ner" "$GLINER_SUBDIR"
+  echo "  -> gliner-multi-v2.1.tar.gz"
+else
+  echo "  SKIP: GLiNER-Modell nicht gefunden: $MODELS_DIR/ner/$GLINER_SUBDIR"
+fi
+
 echo ""
 echo "=== Sizes ==="
 ls -lh "$OUTPUT_DIR/"

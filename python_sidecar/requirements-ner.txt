@@ -4,3 +4,5 @@ flair>=0.13.0
 # flair already pulls in transformers transitively, but CLAUDE.md mandates
 # that all runtime deps be listed in this file as the sole source.
 transformers>=4.48.0
+# Zero-shot NER for the GLiNER backend.
+gliner>=0.2.0

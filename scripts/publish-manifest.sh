@@ -76,6 +76,7 @@ declare -a MODELS=(
   "pyannote-suite|pyannote-suite.tar.gz|Sprechererkennung (pyannote)|diarization|true|diarization/models--pyannote--speaker-diarization-community-1"
   "flair-ner-german-large|flair-ner-german-large.tar.gz|Anonymisierung (flair-ner-german-large)|ner|true|ner/models/ner-german-large"
   "ai4privacy-openpii-modernbert|ai4privacy-openpii-modernbert.tar.gz|Anonymisierung — ai4privacy OpenPII (ModernBERT)|ner|true|ner/models--ai4privacy--llama-ai4privacy-multilingual-categorical-anonymiser-openpii"
+  "gliner-multi-v2.1|gliner-multi-v2.1.tar.gz|Anonymisierung — GLiNER Multi v2.1|ner|true|ner/models--urchade--gliner_multi-v2.1"
 )
 
 # CDN base URL

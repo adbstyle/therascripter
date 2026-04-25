@@ -99,15 +99,9 @@ describe('downloadSingleModel', () => {
     )
   })
 
-  it('throws when model is not in asr group (pyannote-suite)', async () => {
+  it('throws when model belongs to a non-singly-loadable group (diarization)', async () => {
     await expect(downloadSingleModel('pyannote-suite')).rejects.toThrow(
-      /nur ASR-Modelle/i
-    )
-  })
-
-  it('throws when model is not in asr group (flair)', async () => {
-    await expect(downloadSingleModel('flair-ner-german-large')).rejects.toThrow(
-      /nur ASR-Modelle/i
+      /wird nicht einzeln nachgeladen/i
     )
   })
 })
