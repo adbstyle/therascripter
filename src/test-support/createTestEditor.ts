@@ -1,4 +1,5 @@
 import { Editor, Node, mergeAttributes } from '@tiptap/core'
+import type { EditorView } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import type { TipTapDocument } from '../shared/types/TipTapDocument'
 import type { EntitySource, PlaceholderType } from '../shared/types'
@@ -85,8 +86,20 @@ export interface TestEditorHandle {
   destroy: () => void
 }
 
-export function createTestEditor(initialDoc?: TipTapDocument): TestEditorHandle {
-  const editor = new Editor({
+export interface CreateTestEditorOptions {
+  initialDoc?: TipTapDocument
+  handleKeyDown?: (view: EditorView, event: KeyboardEvent) => boolean | void
+}
+
+export function createTestEditor(
+  initialDocOrOptions?: TipTapDocument | CreateTestEditorOptions
+): TestEditorHandle {
+  const opts: CreateTestEditorOptions =
+    initialDocOrOptions && 'type' in initialDocOrOptions
+      ? { initialDoc: initialDocOrOptions }
+      : (initialDocOrOptions ?? {})
+
+  const editorConfig: ConstructorParameters<typeof Editor>[0] = {
     extensions: [
       StarterKit.configure({
         codeBlock: false,
@@ -102,8 +115,12 @@ export function createTestEditor(initialDoc?: TipTapDocument): TestEditorHandle 
       SpeakerLabelForTests,
       TimestampForTests
     ],
-    content: initialDoc ?? { type: 'doc', content: [{ type: 'paragraph' }] }
-  })
+    content: opts.initialDoc ?? { type: 'doc', content: [{ type: 'paragraph' }] }
+  }
+  if (opts.handleKeyDown) {
+    editorConfig.editorProps = { handleKeyDown: opts.handleKeyDown }
+  }
+  const editor = new Editor(editorConfig)
 
   const insertText = (pos: number, text: string): void => {
     const tr = editor.state.tr.insertText(text, pos)

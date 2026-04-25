@@ -395,34 +395,49 @@ export function anonymizeSelectionWithPropagation(
 }
 
 /**
- * Walk `doc` once and reconstruct EntityMap entries for every placeholderChip
- * whose entityId is missing from `currentMap`. Returns a new map if at least
- * one entry was added; returns null if no drift exists (churn guard).
+ * Walk `doc` once and reconcile `currentMap` against the chips actually
+ * present in the document:
+ *  - ADD entries for chips whose entityId is missing from the map
+ *    (reconstruct from chip.attrs.{type, number, source, original})
+ *  - REMOVE entries whose entityId has no chip in the document (orphans
+ *    left behind by manual-flag overwrites that were later undone)
  *
- * Pure function — does NOT remove orphan entries (Task 4 owns synchronous
- * orphan cleanup post-dispatch). Source field is read directly from
- * chip.attrs.source so restored NER/blocklist chips are reconstructed with
- * their correct provenance.
+ * Returns a new EntityMap when at least one add or remove happened; returns
+ * null when no drift exists (churn guard — prevents redundant React renders
+ * on Cmd+Z presses that didn't touch chips).
+ *
+ * Note on the async blocklist-redo race: when a blocklist redo restores
+ * chips, the redo branch schedules `window.api.blocklist.add(...).then(cb)`
+ * and the `.then(cb)` runs in a LATER microtask. By the time this reconciler
+ * runs, the chip is in the doc but the entry may not yet be in `currentMap`.
+ * The reconciler will reconstruct it from `chip.attrs.original`. When `cb`
+ * later resolves, it overwrites with the canonical `stackEntry.term`. For
+ * multi-variant blocklist chips ("Müller" + "mueller" sharing entityId),
+ * the reconstructed `original` may differ from the canonical term for one
+ * render frame. Auto-save fires AFTER `cb`, so persisted state is canonical.
  */
-export function rebuildEntityMapFromDoc(
+export function reconcileEntityMapWithDoc(
   doc: PMNode,
   currentMap: EntityMap
 ): EntityMap | null {
+  const present = new Set<string>()
+  const result: EntityMap = { ...currentMap }
   let added = 0
-  const rebuilt: EntityMap = { ...currentMap }
 
   doc.descendants((node) => {
     if (node.type.name !== 'placeholderChip') return
     const entityId = node.attrs.entityId as string
     if (!entityId) return
-    if (entityId in rebuilt) return
+
+    present.add(entityId)
+    if (entityId in result) return
 
     const chipType = node.attrs.type as PlaceholderType
     const chipNumber = node.attrs.number as number
     const chipSource = node.attrs.source as EntityMap[string]['source']
     const chipOriginal = (node.attrs.original as string) ?? ''
 
-    rebuilt[entityId] = {
+    result[entityId] = {
       original: chipOriginal,
       placeholder: `[${chipType} ${chipNumber}]`,
       type: chipType,
@@ -431,5 +446,13 @@ export function rebuildEntityMapFromDoc(
     added++
   })
 
-  return added > 0 ? rebuilt : null
+  let removed = 0
+  for (const key of Object.keys(result)) {
+    if (!present.has(key)) {
+      delete result[key]
+      removed++
+    }
+  }
+
+  return added > 0 || removed > 0 ? result : null
 }

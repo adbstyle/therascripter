@@ -1,8 +1,9 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import * as editorCommandsModule from '../editorCommands'
 import {
   getNextNumber,
   anonymizeSelectionWithPropagation,
-  rebuildEntityMapFromDoc,
+  reconcileEntityMapWithDoc,
   addToBlocklistRetroactive
 } from '../editorCommands'
 import type { EntityMap } from '../../../../shared/types'
@@ -295,7 +296,7 @@ describe('anonymizeSelectionWithPropagation', () => {
   })
 })
 
-describe('rebuildEntityMapFromDoc', () => {
+describe('reconcileEntityMapWithDoc', () => {
   it('returns null when no drift exists', () => {
     handle = createTestEditor()
     handle.insertChip(1, {
@@ -308,15 +309,73 @@ describe('rebuildEntityMapFromDoc', () => {
     const map: EntityMap = {
       'person-1': { original: 'Anna', placeholder: '[PERSON 1]', type: 'PERSON', source: 'manual' }
     }
-    expect(rebuildEntityMapFromDoc(handle.editor.state.doc, map)).toBeNull()
+    expect(reconcileEntityMapWithDoc(handle.editor.state.doc, map)).toBeNull()
   })
 
-  it('returns null on an empty document', () => {
+  it('returns null on empty doc + empty map', () => {
     handle = createTestEditor()
-    expect(rebuildEntityMapFromDoc(handle.editor.state.doc, {})).toBeNull()
+    expect(reconcileEntityMapWithDoc(handle.editor.state.doc, {})).toBeNull()
   })
 
-  it('reconstructs entries from chip attributes preserving source', () => {
+  it('add direction — empty map, doc with chip reconstructs entry', () => {
+    handle = createTestEditor()
+    handle.insertChip(1, {
+      entityId: 'person-1',
+      type: 'PERSON',
+      number: 1,
+      source: 'ner',
+      original: 'Anna'
+    })
+
+    const result = reconcileEntityMapWithDoc(handle.editor.state.doc, {})
+
+    expect(result).not.toBeNull()
+    expect(result!['person-1']).toMatchObject({
+      original: 'Anna',
+      placeholder: '[PERSON 1]',
+      type: 'PERSON',
+      source: 'ner'
+    })
+  })
+
+  it('remove direction — empty doc, map with entry returns map without orphan', () => {
+    handle = createTestEditor()
+    const map: EntityMap = {
+      'person-1': { original: 'Anna', placeholder: '[PERSON 1]', type: 'PERSON', source: 'manual' }
+    }
+
+    const result = reconcileEntityMapWithDoc(handle.editor.state.doc, map)
+
+    expect(result).not.toBeNull()
+    expect(result).toEqual({})
+  })
+
+  it('mixed — adds and removes in one call', () => {
+    handle = createTestEditor()
+    handle.insertChip(1, {
+      entityId: 'person-2',
+      type: 'PERSON',
+      number: 2,
+      source: 'manual',
+      original: 'Bern'
+    })
+
+    const map: EntityMap = {
+      'person-1': { original: 'Anna', placeholder: '[PERSON 1]', type: 'PERSON', source: 'manual' }
+    }
+    const result = reconcileEntityMapWithDoc(handle.editor.state.doc, map)
+
+    expect(result).not.toBeNull()
+    expect(result!['person-1']).toBeUndefined()
+    expect(result!['person-2']).toMatchObject({
+      original: 'Bern',
+      placeholder: '[PERSON 2]',
+      type: 'PERSON',
+      source: 'manual'
+    })
+  })
+
+  it('preserves chip-level source for ner / blocklist / manual', () => {
     handle = createTestEditor()
     handle.insertChip(1, {
       entityId: 'person-1',
@@ -340,17 +399,12 @@ describe('rebuildEntityMapFromDoc', () => {
       original: '01.01.2026'
     })
 
-    const rebuilt = rebuildEntityMapFromDoc(handle.editor.state.doc, {})
+    const result = reconcileEntityMapWithDoc(handle.editor.state.doc, {})
 
-    expect(rebuilt).not.toBeNull()
-    expect(rebuilt!['person-1']).toMatchObject({
-      original: 'Anna',
-      placeholder: '[PERSON 1]',
-      type: 'PERSON',
-      source: 'ner'
-    })
-    expect(rebuilt!['ort-2'].source).toBe('blocklist')
-    expect(rebuilt!['datum-3'].source).toBe('manual')
+    expect(result).not.toBeNull()
+    expect(result!['person-1'].source).toBe('ner')
+    expect(result!['ort-2'].source).toBe('blocklist')
+    expect(result!['datum-3'].source).toBe('manual')
   })
 
   it('keeps existing entries untouched and only adds missing ones', () => {
@@ -378,11 +432,91 @@ describe('rebuildEntityMapFromDoc', () => {
         source: 'ner'
       }
     }
-    const rebuilt = rebuildEntityMapFromDoc(handle.editor.state.doc, map)
+    const result = reconcileEntityMapWithDoc(handle.editor.state.doc, map)
 
-    expect(rebuilt).not.toBeNull()
-    expect(rebuilt!['person-1'].original).toBe('Anna Müller')
-    expect(rebuilt!['ort-2']).toMatchObject({ source: 'manual', original: 'Bern' })
+    expect(result).not.toBeNull()
+    expect(result!['person-1'].original).toBe('Anna Müller')
+    expect(result!['ort-2']).toMatchObject({ source: 'manual', original: 'Bern' })
+  })
+
+  it('skips chips with empty entityId without crashing', () => {
+    handle = createTestEditor()
+    handle.insertChip(1, {
+      entityId: '',
+      type: 'PERSON',
+      number: 1,
+      source: 'manual',
+      original: 'Anna'
+    })
+
+    const result = reconcileEntityMapWithDoc(handle.editor.state.doc, {})
+
+    expect(result).toBeNull()
+  })
+
+  it('end-to-end: anonymize overwrite + undo + reconcile prunes orphan and restores entry', () => {
+    // Doc: "Bern ist " + chip("Bern", person-3, NER) + " schön".
+    // Selecting the leading text "Bern" propagates to the chip via Pass B,
+    // which overwrites person-3 with the new ORT entityId.
+    handle = createTestEditor({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Bern ist ' },
+            {
+              type: 'placeholderChip',
+              attrs: {
+                entityId: 'person-3',
+                type: 'PERSON',
+                number: 3,
+                source: 'ner',
+                original: 'Bern'
+              }
+            },
+            { type: 'text', text: ' schön' }
+          ]
+        }
+      ]
+    })
+    let entityMap: EntityMap = {
+      'person-3': { original: 'Bern', placeholder: '[PERSON 3]', type: 'PERSON', source: 'ner' }
+    }
+
+    handle.setSelection(1, 5) // select leading "Bern" text
+
+    const result = anonymizeSelectionWithPropagation(handle.editor, 'ORT', entityMap)
+    expect(result).not.toBeNull()
+    expect(result!.overwrittenEntityIds.has('person-3')).toBe(true)
+    const newId = result!.entityId
+
+    // Caller-side orphan cleanup (matches ReviewEditor.handleAnonymize)
+    entityMap = { ...result!.entityMap }
+    for (const oldId of result!.overwrittenEntityIds) {
+      let stillPresent = false
+      handle.editor.state.doc.descendants((n) => {
+        if (n.type.name === 'placeholderChip' && n.attrs.entityId === oldId) {
+          stillPresent = true
+        }
+      })
+      if (!stillPresent) delete entityMap[oldId]
+    }
+    expect(entityMap['person-3']).toBeUndefined()
+    expect(entityMap[newId]).toBeDefined()
+
+    handle.editor.commands.undo()
+
+    const reconciled = reconcileEntityMapWithDoc(handle.editor.state.doc, entityMap)
+
+    expect(reconciled).not.toBeNull()
+    expect(reconciled![newId]).toBeUndefined()
+    expect(reconciled!['person-3']).toMatchObject({
+      placeholder: '[PERSON 3]',
+      type: 'PERSON',
+      source: 'ner',
+      original: 'Bern'
+    })
   })
 })
 
@@ -404,5 +538,89 @@ describe('addToBlocklistRetroactive (regression after Task 2 refactor)', () => {
     handle.editor.commands.undo()
     expect(handle.getChips()).toHaveLength(0)
     expect(handle.editor.state.doc.textContent).toBe('Anna war Anna und Anna.')
+  })
+})
+
+describe('reconcile keystroke gate (mirrors ReviewEditor handleKeyDown)', () => {
+  // Mirrors the gate at ReviewEditor.tsx — covers Cmd+Z, Cmd+Shift+Z, Cmd+Y.
+  // Calls the imported reconcileEntityMapWithDoc through the module namespace
+  // so vi.spyOn can intercept it.
+  const buildHandleKeyDown =
+    () =>
+    (view: import('@tiptap/pm/view').EditorView, event: KeyboardEvent): boolean => {
+      const key = event.key.toLowerCase()
+      if ((event.metaKey || event.ctrlKey) && (key === 'z' || key === 'y')) {
+        queueMicrotask(() => {
+          editorCommandsModule.reconcileEntityMapWithDoc(view.state.doc, {})
+        })
+      }
+      return false
+    }
+
+  const dispatchKey = (h: TestEditorHandle, init: KeyboardEventInit): void => {
+    h.editor.view.someProp('handleKeyDown', (fn) => {
+      fn(h.editor.view, new KeyboardEvent('keydown', init))
+      return true
+    })
+  }
+
+  const drainMicrotasks = (): Promise<void> => new Promise((resolve) => queueMicrotask(resolve))
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('helper called for Cmd+Z', async () => {
+    const spy = vi.spyOn(editorCommandsModule, 'reconcileEntityMapWithDoc')
+    handle = createTestEditor({ handleKeyDown: buildHandleKeyDown() })
+
+    dispatchKey(handle, { metaKey: true, key: 'z' })
+    await drainMicrotasks()
+
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('helper called for Cmd+Shift+Z', async () => {
+    const spy = vi.spyOn(editorCommandsModule, 'reconcileEntityMapWithDoc')
+    handle = createTestEditor({ handleKeyDown: buildHandleKeyDown() })
+
+    dispatchKey(handle, { metaKey: true, shiftKey: true, key: 'Z' })
+    await drainMicrotasks()
+
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('helper called for Cmd+Y (German QWERTZ redo)', async () => {
+    const spy = vi.spyOn(editorCommandsModule, 'reconcileEntityMapWithDoc')
+    handle = createTestEditor({ handleKeyDown: buildHandleKeyDown() })
+
+    dispatchKey(handle, { metaKey: true, key: 'y' })
+    await drainMicrotasks()
+
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('helper NOT called for plain text typing', async () => {
+    const spy = vi.spyOn(editorCommandsModule, 'reconcileEntityMapWithDoc')
+    handle = createTestEditor({ handleKeyDown: buildHandleKeyDown() })
+
+    for (let i = 0; i < 10; i++) {
+      dispatchKey(handle, { key: 'x' })
+    }
+    await drainMicrotasks()
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('helper NOT called for Cmd+S (or other modifier combos)', async () => {
+    const spy = vi.spyOn(editorCommandsModule, 'reconcileEntityMapWithDoc')
+    handle = createTestEditor({ handleKeyDown: buildHandleKeyDown() })
+
+    dispatchKey(handle, { metaKey: true, key: 's' })
+    dispatchKey(handle, { metaKey: true, key: 'a' })
+    dispatchKey(handle, { ctrlKey: true, key: 'c' })
+    await drainMicrotasks()
+
+    expect(spy).not.toHaveBeenCalled()
   })
 })

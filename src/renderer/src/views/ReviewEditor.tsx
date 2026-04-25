@@ -18,7 +18,7 @@ import {
   addToBlocklistRetroactive,
   hasChipsWithEntityId,
   extendSelectionAndExtractText,
-  rebuildEntityMapFromDoc
+  reconcileEntityMapWithDoc
 } from '../utils/editorCommands'
 import { serializeDocument } from '../../../shared/utils/serializeDocument'
 import { countWords } from '../../../shared/utils/countWords'
@@ -125,8 +125,12 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           }
         }
 
-        // Track undo/redo for blocklist operations (Cmd+Z / Cmd+Shift+Z)
-        if ((event.metaKey || event.ctrlKey) && event.key === 'z') {
+        // Track undo/redo for blocklist operations (Cmd+Z / Cmd+Shift+Z / Cmd+Y).
+        // toLowerCase covers Cmd+Shift+Z (Shift makes event.key === 'Z' on macOS).
+        // 'y' covers Cmd+Y, the alternative redo binding from TipTap StarterKit's
+        // UndoRedo extension — and the natural redo on German QWERTZ keyboards.
+        const key = event.key.toLowerCase()
+        if ((event.metaKey || event.ctrlKey) && (key === 'z' || key === 'y')) {
           const stack = blocklistUndoStackRef.current
           if (stack.length > 0) {
             // Snapshot chip presence before ProseMirror processes the undo/redo
@@ -179,17 +183,19 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
             })
           }
 
-          // Always-on EntityMap rebuild: covers manual-flag overwrites whose
-          // chips reappear after undo. FIFO ordering means the blocklist
-          // reconciliation above runs first, so the rebuild observes the
+          // Always-on EntityMap reconciliation: covers manual-flag overwrites
+          // whose chips reappear after undo (rebuild direction) AND orphaned
+          // entries left behind after a manual-flag overwrite was undone
+          // (prune direction). FIFO ordering means the blocklist
+          // reconciliation above runs first, so this microtask observes the
           // correct post-reconciliation state.
           queueMicrotask(() => {
             if (!editorRef.current) return
-            const rebuilt = rebuildEntityMapFromDoc(
+            const next = reconcileEntityMapWithDoc(
               editorRef.current.state.doc,
               entityMapRef.current
             )
-            if (rebuilt !== null) updateEntityMap(rebuilt)
+            if (next !== null) updateEntityMap(next)
           })
         }
 
