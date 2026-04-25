@@ -132,8 +132,6 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     sha256: 'a34f6315659a34991930dae5d7a2bc2f3ee24ff6eb70dcd4d41e3aca7a5253e6',
     archive: true,
     group: 'ner',
-    // Bleibt First-Launch-Pflichtmodell solange kein UI-Picker für aktives NER-Modell existiert.
-    // Ein zukünftiger Default-Switch auf ai4privacy (gated durch Pre-Ship-Eval) hebt das auf.
     isRequired: true,
     hfIdentifier: 'flair/ner-german-large',
     nerBackend: 'flair',
