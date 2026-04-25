@@ -122,8 +122,8 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     url: `${R2_CDN}/flair-ner-german-large.tar.gz`,
     relativePath: 'ner',
     checkPath: 'ner/models/ner-german-large',
-    sizeBytes: 1_741_705_466,
-    sha256: 'a34f6315659a34991930dae5d7a2bc2f3ee24ff6eb70dcd4d41e3aca7a5253e6',
+    sizeBytes: 1_741_706_626,
+    sha256: '5dc0390c6d844d30648c4d950ee694eafeb01813e4d75e734cad6deede29d8a3',
     archive: true,
     group: 'ner',
     isRequired: true

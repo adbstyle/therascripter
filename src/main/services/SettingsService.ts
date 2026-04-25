@@ -111,6 +111,27 @@ export function initSettings(): Store<AppSettings> {
     })
   }
 
+  // Defensiv: unbekannte activeModels.ner-Werte (z. B. ai4privacy/gliner aus
+  // einer rückgängig gemachten Multi-Backend-Iteration) auf den einzig
+  // verfügbaren NER-Default zurücksetzen, damit AnonymizationService nicht
+  // mit "ungültiges NER-Modell" abbricht.
+  const knownNerIds = new Set(
+    getModelDefinitions()
+      .filter((m) => m.group === 'ner')
+      .map((m) => m.id)
+  )
+  const EXPECTED_NER = 'flair-ner-german-large'
+  const currentNer = store.get('activeModels').ner
+  if (!knownNerIds.has(currentNer)) {
+    console.warn(
+      `[settings-migration] activeModels.ner="${currentNer}" unbekannt → reset auf "${EXPECTED_NER}"`
+    )
+    store.set('activeModels', {
+      ...store.get('activeModels'),
+      ner: EXPECTED_NER
+    })
+  }
+
   // installedModelVersions: Altlasten-Keys (Legacy + PR-Zwischenstände) auf den neuen
   // Key umbenennen, sonst bleiben sie für immer verwaist (UpdateCheckService iteriert
   // über Manifest-IDs, nicht über installed-keys).
