@@ -75,38 +75,12 @@ fi
 # Pyannote-Suite — monolithisches Paket mit allen vier benötigten Sub-Modellen
 package_pyannote_suite || exit 1
 
-# NER-Tarballs werden mit expliziten Includes gepackt, damit beide Modelle
-# (flair, ai4privacy) friedlich unter $MODELS_DIR/ner/ koexistieren können
-# ohne dass eine Tarball-Erstellung Inhalte des jeweils anderen mitschleppt.
-
-# flair NER model (extrahiert nach ner/models/ner-german-large)
-FLAIR_SUBDIR="models/ner-german-large"
-if [ -d "$MODELS_DIR/ner/$FLAIR_SUBDIR" ]; then
-  tar -czf "$OUTPUT_DIR/flair-ner-german-large.tar.gz" \
-    -C "$MODELS_DIR/ner" "$FLAIR_SUBDIR"
+# flair NER model (archive contents extracted INTO ner/)
+if [ -d "$MODELS_DIR/ner" ]; then
+  tar -czf "$OUTPUT_DIR/flair-ner-german-large.tar.gz" -C "$MODELS_DIR/ner" .
   echo "  -> flair-ner-german-large.tar.gz"
 else
-  echo "  SKIP: flair-Modell nicht gefunden: $MODELS_DIR/ner/$FLAIR_SUBDIR"
-fi
-
-# ai4privacy NER model (HF-Cache-Layout, extrahiert nach ner/models--ai4privacy--…)
-AI4PRIVACY_SUBDIR="models--ai4privacy--llama-ai4privacy-multilingual-categorical-anonymiser-openpii"
-if [ -d "$MODELS_DIR/ner/$AI4PRIVACY_SUBDIR" ]; then
-  tar -czf "$OUTPUT_DIR/ai4privacy-openpii-modernbert.tar.gz" \
-    -C "$MODELS_DIR/ner" "$AI4PRIVACY_SUBDIR"
-  echo "  -> ai4privacy-openpii-modernbert.tar.gz"
-else
-  echo "  SKIP: ai4privacy-Modell nicht gefunden: $MODELS_DIR/ner/$AI4PRIVACY_SUBDIR"
-fi
-
-# GLiNER NER model (HF-Cache-Layout, extrahiert nach ner/models--urchade--…)
-GLINER_SUBDIR="models--urchade--gliner_multi-v2.1"
-if [ -d "$MODELS_DIR/ner/$GLINER_SUBDIR" ]; then
-  tar -czf "$OUTPUT_DIR/gliner-multi-v2.1.tar.gz" \
-    -C "$MODELS_DIR/ner" "$GLINER_SUBDIR"
-  echo "  -> gliner-multi-v2.1.tar.gz"
-else
-  echo "  SKIP: GLiNER-Modell nicht gefunden: $MODELS_DIR/ner/$GLINER_SUBDIR"
+  echo "  SKIP: flair-Modell nicht gefunden: $MODELS_DIR/ner"
 fi
 
 echo ""

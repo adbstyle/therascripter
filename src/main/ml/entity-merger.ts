@@ -3,8 +3,7 @@ import type {
   NerEntity,
   RegexEntity,
   MergedEntity,
-  BlocklistEntry,
-  NerBackend
+  BlocklistEntry
 } from '../../shared/types/NerTypes'
 import { mapRegexTypeToPlaceholder } from './regex-patterns'
 import {
@@ -16,9 +15,9 @@ import {
 // Re-export shared utilities for existing consumers
 export { normalizeUmlaut, isWholeWord }
 
-/** Map flair native type → canonical PlaceholderType. ORG ignored per Decision #5/#158. */
-export function mapFlairType(nativeType: string): PlaceholderType | null {
-  switch (nativeType) {
+/** Map flair NER type to Therascript placeholder type */
+function mapNerType(nerType: string): PlaceholderType | null {
+  switch (nerType) {
     case 'PER':
       return 'PERSON'
     case 'LOC':
@@ -26,105 +25,10 @@ export function mapFlairType(nativeType: string): PlaceholderType | null {
     case 'MISC':
       return 'SONSTIGES'
     case 'ORG':
+      // ORG entities are IGNORED per Decision #5/#158
       return null
     default:
       return null
-  }
-}
-
-/**
- * Map ai4privacy native type → canonical PlaceholderType.
- *
- * The model emits 21 classes (verified against the HuggingFace model card for
- * `ai4privacy/llama-ai4privacy-multilingual-categorical-anonymiser-openpii`).
- * Native EMAIL/TELEPHONENUM/DATE/ZIPCODE flow through to canonical types and
- * are reconciled with the regex pipeline by `mergeEntities` (NER > Regex
- * priority — when both detect the same span, NER wins; when only one does,
- * its detection is kept). Unknown labels are routed to SONSTIGES with a
- * `console.warn` so model-update schema drifts surface immediately rather
- * than silently leaking PII.
- */
-export function mapAi4PrivacyType(nativeType: string): PlaceholderType | null {
-  switch (nativeType) {
-    case 'O':
-      return null
-    case 'GIVENNAME':
-    case 'SURNAME':
-    case 'TITLE':
-      return 'PERSON'
-    case 'CITY':
-    case 'STREET':
-    case 'BUILDINGNUM':
-    case 'ZIPCODE':
-      return 'ORT'
-    case 'DATE':
-    case 'TIME':
-      return 'DATUM'
-    case 'EMAIL':
-    case 'TELEPHONENUM':
-    case 'CREDITCARDNUMBER':
-      return 'KONTAKT'
-    case 'AGE':
-    case 'SEX':
-    case 'GENDER':
-    case 'SOCIALNUM':
-    case 'IDCARDNUM':
-    case 'PASSPORTNUM':
-    case 'DRIVERLICENSENUM':
-    case 'TAXNUM':
-      return 'SONSTIGES'
-    default:
-      console.warn(
-        `[entity-merger] mapAi4PrivacyType received unknown native type "${nativeType}" — routing to SONSTIGES (model schema may have changed)`
-      )
-      return 'SONSTIGES'
-  }
-}
-
-/**
- * Map GLiNER native label → canonical PlaceholderType.
- *
- * GLiNER is zero-shot: the labels emitted are exactly those passed at inference
- * time. The Python sidecar's `GLINER_LABELS_DE` constant must stay in lock-step
- * with the cases below. Unknown labels route to SONSTIGES with a `console.warn`
- * so a sidecar-side label-list change without a TS-side mapping update surfaces
- * loudly rather than silently leaking PII. The return type is non-null because
- * the catch-all always emits SONSTIGES.
- */
-export function mapGlinerType(nativeType: string): PlaceholderType {
-  switch (nativeType) {
-    case 'Person':
-      return 'PERSON'
-    case 'Ort':
-      return 'ORT'
-    case 'Organisation':
-      return 'ORGANISATION'
-    case 'Krankheit':
-    case 'Medikament':
-      return 'MEDIZINISCH'
-    default:
-      console.warn(
-        `[entity-merger] mapGlinerType received unknown native label "${nativeType}" — routing to SONSTIGES (label set may have drifted from GLINER_LABELS_DE)`
-      )
-      return 'SONSTIGES'
-  }
-}
-
-/**
- * Backend-aware mapping from native NER entity type to canonical PlaceholderType.
- * Returns `null` for types that should be filtered out (e.g. ORG from flair, non-PII).
- */
-export function mapNativeType(
-  backend: NerBackend,
-  nativeType: string
-): PlaceholderType | null {
-  switch (backend) {
-    case 'flair':
-      return mapFlairType(nativeType)
-    case 'ai4privacy':
-      return mapAi4PrivacyType(nativeType)
-    case 'gliner':
-      return mapGlinerType(nativeType)
   }
 }
 
@@ -145,22 +49,18 @@ function overlapsWithExisting(
  * - ORG entities from NER are ignored (Decision #5/#158)
  * - Whole-word boundary check applied to all
  * - Overlapping entities are skipped (first-come wins by priority)
- *
- * `nerBackend` discriminates how native NER types translate to canonical types.
- * Defaults to 'flair'.
  */
 export function mergeEntities(
   nerEntities: NerEntity[],
   regexEntities: RegexEntity[],
   blocklistEntries: BlocklistEntry[],
-  segments: TranscriptSegment[],
-  nerBackend: NerBackend = 'flair'
+  segments: TranscriptSegment[]
 ): MergedEntity[] {
   const merged: MergedEntity[] = []
 
   // 1. NER entities (highest priority)
   for (const entity of nerEntities) {
-    const placeholderType = mapNativeType(nerBackend, entity.type)
+    const placeholderType = mapNerType(entity.type)
     if (!placeholderType) continue // Skip ORG and unknown types
 
     const segText = segments[entity.segmentIndex]?.text

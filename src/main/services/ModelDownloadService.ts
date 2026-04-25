@@ -5,7 +5,6 @@ import { getDataDir } from '../db/connection'
 import { getSettings } from './SettingsService'
 import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
 import type { ModelGroup } from '../../shared/validation/model-catalog-schemas'
-import type { NerBackend } from '../../shared/types/NerTypes'
 
 const R2_CDN = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev'
 
@@ -30,13 +29,8 @@ export interface ModelDefinition {
   languages?: string[]
   accuracyScore?: number
   speedScore?: number
-  // HuggingFace-Identifier — durchgereicht an Python-Sidecars für from_pretrained()
-  // (pyannote, transformers) bzw. Classifier.load() (flair). Für Whisper-/Vision-OCR-
-  // Modelle ohne HF-Pipeline undefiniert.
+  // Nur für Diarization relevant — pyannote-Pipelines laden via from_pretrained(hfIdentifier).
   hfIdentifier?: string
-  // NER-Backend-Discriminator — wählt das Python-Modul in ner_backends/, an
-  // ner_service.py --backend durchgereicht. Nur für group: 'ner' relevant.
-  nerBackend?: NerBackend
 }
 
 export interface ModelDownloadProgress {
@@ -124,7 +118,7 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
   },
   {
     id: 'flair-ner-german-large',
-    label: 'Anonymisierung — flair-ner-german-large',
+    label: 'Anonymisierung (flair-ner-german-large)',
     url: `${R2_CDN}/flair-ner-german-large.tar.gz`,
     relativePath: 'ner',
     checkPath: 'ner/models/ner-german-large',
@@ -132,52 +126,7 @@ const MODEL_DEFINITIONS: ModelDefinition[] = [
     sha256: '5dc0390c6d844d30648c4d950ee694eafeb01813e4d75e734cad6deede29d8a3',
     archive: true,
     group: 'ner',
-    isRequired: true,
-    hfIdentifier: 'flair/ner-german-large',
-    nerBackend: 'flair',
-    description:
-      'XLM-RoBERTa-large (~550M Parameter, ~2.2 GB). Höchste Genauigkeit für Deutsch (F1 92% auf CoNLL-03 DE). Empfohlen wenn Anonymisierungsqualität wichtiger als Geschwindigkeit ist.',
-    languages: ['de'],
-    accuracyScore: 0.92,
-    speedScore: 0.4
-  },
-  {
-    id: 'ai4privacy-openpii-modernbert',
-    label: 'Anonymisierung — ai4privacy OpenPII (ModernBERT)',
-    url: `${R2_CDN}/ai4privacy-openpii-modernbert.tar.gz`,
-    relativePath: 'ner',
-    checkPath: 'ner/models--ai4privacy--llama-ai4privacy-multilingual-categorical-anonymiser-openpii',
-    sizeBytes: 556_572_515,
-    sha256: '37a3ba4e1787e572b50530d1fea5f14e8bd4ae9aadfd0cb01e23ade2aeae6f73',
-    archive: true,
-    group: 'ner',
-    isRequired: false,
-    hfIdentifier: 'ai4privacy/llama-ai4privacy-multilingual-categorical-anonymiser-openpii',
-    nerBackend: 'ai4privacy',
-    description:
-      'ModernBERT-base (~100M Parameter, ~400 MB). Multilingual (DE/EN/FR/IT/ES/NL/HI/TE), 21 PII-Klassen, MIT-Lizenz. Schneller und kleiner als flair, F1 91.5% global. Empfohlen für schlanke Installation.',
-    languages: ['multi'],
-    accuracyScore: 0.85,
-    speedScore: 0.85
-  },
-  {
-    id: 'gliner-multi-v2.1',
-    label: 'Anonymisierung — GLiNER Multi v2.1',
-    url: `${R2_CDN}/gliner-multi-v2.1.tar.gz`,
-    relativePath: 'ner',
-    checkPath: 'ner/models--urchade--gliner_multi-v2.1',
-    sizeBytes: 918_808_553,
-    sha256: 'ea618f76353539bca72755ea97d35241475e10ceda6de0a1566a749cc8d0bba6',
-    archive: true,
-    group: 'ner',
-    isRequired: false,
-    hfIdentifier: 'urchade/gliner_multi-v2.1',
-    nerBackend: 'gliner',
-    description:
-      'GLiNER multilingual (~209M Parameter, ~1.16 GB), Apache-2.0. Zero-Shot — emittiert auch ORGANISATION und MEDIZINISCH (Versicherungen, Kliniken, Diagnosen, Medikamente). Mehr Chips als flair/ai4privacy zu Kosten von Genauigkeit auf reinem PER/LOC.',
-    languages: ['multi'],
-    accuracyScore: 0.8,
-    speedScore: 0.7
+    isRequired: true
   }
 ]
 
@@ -458,24 +407,19 @@ export function abortModelDownload(): void {
 }
 
 /**
- * Lädt ein einziges Modell herunter (nicht für First-Launch-Bulk-Downloads —
- * die laufen via startModelDownload mit modelsDownloaded-Settings-Flag).
+ * Lädt ein einziges ASR-Modell herunter (nicht für Pflicht-Modelle gedacht —
+ * die laufen via startModelDownload auf First-Launch).
  *
  * Sendet denselben `modelDownload:status`-Channel wie startModelDownload,
  * damit die bestehende UI-Progress-Anzeige wiederverwendbar bleibt.
- *
- * Erlaubt für ASR und NER (User-wählbare Gruppen). Diarization läuft als
- * monolithische Suite und wird nicht einzeln nachgeladen.
  */
 export async function downloadSingleModel(id: string): Promise<void> {
   const def = getModelById(id)
   if (!def) {
     throw new Error(`Download: unbekanntes Modell "${id}"`)
   }
-  if (def.group !== 'asr' && def.group !== 'ner') {
-    throw new Error(
-      `Download: Modell-Gruppe "${def.group ?? 'unbekannt'}" wird nicht einzeln nachgeladen (id=${id})`
-    )
+  if (def.group !== 'asr') {
+    throw new Error(`Download: nur ASR-Modelle sind einzeln ladbar (id=${id})`)
   }
   if (abortSignal && !abortSignal.aborted) {
     throw new Error('Download: bereits aktiv — zuerst abbrechen')
@@ -566,8 +510,8 @@ export async function downloadSingleModel(id: string): Promise<void> {
 /**
  * Löscht ein einzelnes Modell von Disk. Verboten für:
  *   - unbekannte IDs
- *   - Pflicht-Modelle (isRequired)
- *   - das aktuell aktive Modell einer auswählbaren Gruppe (ASR, NER)
+ *   - Pflicht-Modelle (isRequired, z.B. flair NER)
+ *   - das aktuell aktive Modell einer group-required Gruppe (ASR, Diarization)
  */
 export async function deleteModel(id: string): Promise<void> {
   const def = getModelById(id)
@@ -583,11 +527,6 @@ export async function deleteModel(id: string): Promise<void> {
   if (def.group === 'asr' && active.transcription === id) {
     throw new Error(
       `Löschen: "${def.label}" ist aktuell als ASR-Modell aktiv. Zuerst anderes Modell aktivieren.`
-    )
-  }
-  if (def.group === 'ner' && active.ner === id) {
-    throw new Error(
-      `Löschen: "${def.label}" ist aktuell als Anonymisierungs-Modell aktiv. Zuerst anderes Modell aktivieren.`
     )
   }
 

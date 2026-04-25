@@ -36,10 +36,6 @@ extraResources:
     to: ml_sidecar/diarize.py
   - from: python_sidecar/ner_service.py
     to: ml_sidecar/ner_service.py
-  - from: python_sidecar/ner_backends
-    to: ml_sidecar/ner_backends
-    filter:
-      - '**/*.py'
   - from: python_sidecar/torchcodec_shim.py
     to: ml_sidecar/torchcodec_shim.py
 npmRebuild: false

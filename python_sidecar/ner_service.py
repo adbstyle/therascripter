@@ -1,30 +1,20 @@
 #!/usr/bin/env python3
-"""Named Entity Recognition dispatcher.
+"""
+Named Entity Recognition service using flair/ner-german-large.
 
-Selects a backend (flair / gliner / ai4privacy) and forwards segment-level
-prediction to the corresponding `ner_backends/<backend>_backend.py` module.
-Native entity-type strings are passed through unchanged; canonical mapping
-to Therascript's PlaceholderType happens TypeScript-side in entity-merger.ts.
+Processes transcript segments and outputs detected entities in JSON format to stdout.
+Progress is reported to stderr for parsing by the Electron main process.
 
 Usage:
-    python3 ner_service.py \
-        --transcript <path> \
-        --backend <flair|gliner|ai4privacy> \
-        --hf-model <huggingface-identifier> \
-        [--model-dir <path>]
+    python3 ner_service.py --transcript <path> [--model-dir <path>]
 
 Output format (stdout JSON):
     {
       "entities": [
-        {"text": "Dr. Müller", "type": "PER", "segmentIndex": 0,
-         "charStart": 0, "charEnd": 10, "confidence": 0.96}
+        {"text": "Dr. Müller", "type": "PER", "segment_index": 0,
+         "char_start": 0, "char_end": 10, "confidence": 0.96}
       ],
-      "metadata": {
-        "backend": "flair",
-        "model": "flair/ner-german-large",
-        "segmentCount": N,
-        "entityCount": N
-      }
+      "metadata": {"model": "flair/ner-german-large", ...}
     }
 
 Progress format (stderr):
@@ -44,13 +34,6 @@ import json
 import os
 import sys
 
-# Force offline loading in production. Both env vars must be set BEFORE any
-# huggingface_hub / transformers / flair / gliner import; the backend modules
-# import these libraries lazily inside predict(), so setting them here is safe.
-# Mirrors the pattern in diarize.py.
-os.environ.setdefault("HF_HUB_OFFLINE", "1")
-os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-
 
 def report_progress(percent: int) -> None:
     """Print progress to stderr for TaskExecutor parsing."""
@@ -58,23 +41,12 @@ def report_progress(percent: int) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="NER dispatcher (flair/gliner/ai4privacy)")
+    parser = argparse.ArgumentParser(description="NER via flair/ner-german-large")
     parser.add_argument("--transcript", required=True, help="Path to transcript JSON file")
-    parser.add_argument(
-        "--backend",
-        required=True,
-        choices=["flair", "gliner", "ai4privacy"],
-        help="NER backend to dispatch to",
-    )
-    parser.add_argument(
-        "--hf-model",
-        required=True,
-        help="HuggingFace identifier of the model to load",
-    )
     parser.add_argument(
         "--model-dir",
         default=os.path.expanduser("~/.therascript/models/ner"),
-        help="Directory for backend model cache",
+        help="Directory for flair model cache",
     )
     args = parser.parse_args()
 
@@ -99,8 +71,7 @@ def main() -> None:
         result = {
             "entities": [],
             "metadata": {
-                "backend": args.backend,
-                "model": args.hf_model,
+                "model": "flair/ner-german-large",
                 "segmentCount": 0,
                 "entityCount": 0,
             },
@@ -111,52 +82,83 @@ def main() -> None:
 
     report_progress(5)
 
-    # Dispatch to backend
+    # Import flair (heavy import, ~3-5s)
     try:
-        if args.backend == "flair":
-            from ner_backends import flair_backend as backend
-        elif args.backend == "gliner":
-            from ner_backends import gliner_backend as backend  # type: ignore
-        elif args.backend == "ai4privacy":
-            from ner_backends import ai4privacy_backend as backend  # type: ignore
-        else:
-            print(f"Fehler: Unbekanntes Backend '{args.backend}'", file=sys.stderr)
-            sys.exit(1)
+        import logging
+
+        import flair
+        from flair.data import Sentence
+        from flair.nn import Classifier
+
+        # Redirect flair's logger from stdout to stderr so JSON output stays clean
+        flair.logger.handlers.clear()
+        flair.logger.addHandler(logging.StreamHandler(sys.stderr))
     except ImportError as e:
-        print(f"Fehler: Backend '{args.backend}' nicht verfügbar: {e}", file=sys.stderr)
+        print(f"Fehler: Benötigtes Paket nicht installiert: {e}", file=sys.stderr)
         print(
             "Führen Sie scripts/setup-ner.sh aus, um Abhängigkeiten zu installieren.",
             file=sys.stderr,
         )
         sys.exit(2)
 
-    # Load model + run prediction
+    report_progress(10)
+
+    # Load NER model
     try:
-        entities = backend.predict(
-            segments=segments,
-            hf_id=args.hf_model,
-            model_dir=args.model_dir,
-            progress_cb=report_progress,
-        )
-    except FileNotFoundError as e:
-        print(f"Fehler: Modell-Datei nicht gefunden ({args.backend}): {e}", file=sys.stderr)
+        # flair caches models in ~/.flair/ by default
+        # We set FLAIR_CACHE_ROOT to keep models in our directory
+        os.environ["FLAIR_CACHE_ROOT"] = args.model_dir
+        tagger = Classifier.load("flair/ner-german-large")
+    except Exception as e:
+        print(f"Fehler: NER-Modell konnte nicht geladen werden: {e}", file=sys.stderr)
         print(
             "Führen Sie scripts/setup-ner.sh --model aus, um das Modell herunterzuladen.",
             file=sys.stderr,
         )
         sys.exit(2)
+
+    report_progress(25)
+
+    # Process segments
+    all_entities = []
+    total = len(segments)
+
+    try:
+        for idx, segment in enumerate(segments):
+            text = segment.get("text", "")
+            if not text.strip():
+                continue
+
+            sentence = Sentence(text)
+            tagger.predict(sentence)
+
+            for entity in sentence.get_spans("ner"):
+                all_entities.append(
+                    {
+                        "text": entity.text,
+                        "type": entity.get_label("ner").value,
+                        "segmentIndex": idx,
+                        "charStart": entity.start_position,
+                        "charEnd": entity.end_position,
+                        "confidence": round(entity.get_label("ner").score, 4),
+                    }
+                )
+
+            # Report progress: 25-95% range mapped to segment processing
+            pct = 25 + int((idx + 1) / total * 70)
+            report_progress(min(pct, 95))
+
     except Exception as e:
-        print(f"Fehler: NER-Verarbeitung fehlgeschlagen ({args.backend}): {e}", file=sys.stderr)
+        print(f"Fehler: NER-Verarbeitung fehlgeschlagen: {e}", file=sys.stderr)
         sys.exit(3)
 
     # Output result
     result = {
-        "entities": entities,
+        "entities": all_entities,
         "metadata": {
-            "backend": args.backend,
-            "model": args.hf_model,
-            "segmentCount": len(segments),
-            "entityCount": len(entities),
+            "model": "flair/ner-german-large",
+            "segmentCount": total,
+            "entityCount": len(all_entities),
         },
     }
 

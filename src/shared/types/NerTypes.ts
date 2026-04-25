@@ -1,17 +1,9 @@
 import type { EntitySource, PlaceholderType } from './EntityMap'
 
-/**
- * Identifier of the active NER backend implementation. Each backend produces
- * its own native entity-type strings; the TS-side `entity-merger.ts` dispatches
- * on this discriminator to choose the right canonical mapping.
- */
-export type NerBackend = 'flair' | 'gliner' | 'ai4privacy'
-
-/** Entity detected by NER (from Python sidecar output). The native `type` string
- * is backend-specific; see `entity-merger.ts` for the per-backend mapping. */
+/** Entity detected by flair NER (from Python sidecar output) */
 export interface NerEntity {
   text: string
-  type: string
+  type: string // flair type: PER, LOC, ORG, MISC
   segmentIndex: number
   charStart: number
   charEnd: number
@@ -43,9 +35,6 @@ export interface MergedEntity {
 export interface NerServiceOutput {
   entities: NerEntity[]
   metadata: {
-    /** Backend identifier — drives canonical-type mapping in `entity-merger.ts`. */
-    backend: NerBackend
-    /** HuggingFace identifier of the loaded model (e.g. `flair/ner-german-large`). */
     model: string
     segmentCount: number
     entityCount: number
