@@ -101,6 +101,59 @@ for MODEL_ENTRY in "${MODELS[@]}"; do
   fi
 done
 
+# Verify lokale Tarballs gegen R2-Stand ─────────────────────────────────────
+# Hintergrund: package-models.sh erzeugt frische Tarballs (gzip-Header-Timestamps
+# differieren bei jedem Lauf), auch wenn der Modell-Inhalt identisch ist. Wenn
+# nur ein Teil der Tarballs auf R2 hochgeladen wird, würde dieses Skript SHAs
+# in das Manifest schreiben, die R2 nicht hat → Update-Verifikation failed mit
+# "SHA-256-Prüfung fehlgeschlagen" beim User. Pre-Flight-Check stoppt das.
+if [ "$MODE" != "--dry-run" ] \
+  && [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] \
+  && [ -n "${R2_ACCESS_KEY_ID:-}" ] \
+  && [ -n "${R2_SECRET_ACCESS_KEY:-}" ] \
+  && command -v aws &>/dev/null; then
+  echo "=== Pre-Flight: Lokale Tarballs vs. R2 ==="
+  R2_ENDPOINT="https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
+  export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+  export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+  export AWS_DEFAULT_REGION="auto"
+
+  MISMATCH=false
+  for MODEL_ENTRY in "${MODELS[@]}"; do
+    IFS='|' read -r ID FILENAME _ <<< "$MODEL_ENTRY"
+    LOCAL_SIZE=$(stat -f%z "$SOURCE_DIR/$FILENAME")
+    REMOTE_SIZE=$(aws s3api head-object \
+      --bucket "$BUCKET" \
+      --key "$FILENAME" \
+      --endpoint-url "$R2_ENDPOINT" \
+      --query ContentLength \
+      --output text 2>/dev/null || echo "MISSING")
+
+    if [ "$REMOTE_SIZE" = "MISSING" ]; then
+      echo "  ✗ $FILENAME — fehlt auf R2 (lokal $LOCAL_SIZE bytes)"
+      MISMATCH=true
+    elif [ "$LOCAL_SIZE" != "$REMOTE_SIZE" ]; then
+      echo "  ✗ $FILENAME — lokal $LOCAL_SIZE bytes, R2 $REMOTE_SIZE bytes"
+      MISMATCH=true
+    else
+      echo "  ✓ $FILENAME — $LOCAL_SIZE bytes"
+    fi
+  done
+
+  if [ "$MISMATCH" = true ]; then
+    echo ""
+    echo "FEHLER: Lokale Tarballs weichen von R2 ab. Das Manifest würde SHAs publizieren,"
+    echo "       die R2 nicht hat — User-Updates würden mit SHA-256-Prüfung-fehlgeschlagen failen."
+    echo ""
+    echo "  Lösung A: scripts/upload-r2.sh ausführen, um lokale Tarballs auf R2 zu pushen."
+    echo "  Lösung B: Veraltete lokale Tarballs aus r2-upload/ entfernen (wenn R2-Stand korrekt ist)"
+    echo "             und nur die wirklich neu zu publizierenden Files in r2-upload/ behalten."
+    echo ""
+    exit 1
+  fi
+  echo ""
+fi
+
 # Build JSON
 MODELS_JSON="["
 FIRST=true
