@@ -30,40 +30,76 @@ PDF:   extraction → ocr → anonymization → summarization
 
 Komponenten:
 
+- `summarization-schema.ts` — **Single source of truth für die Output-Form**.
+  Definiert das Zod-Schema (`SummarizationOutputSchema`) sowie die
+  korrespondierende JSON-Schema-Repräsentation (`SUMMARIZATION_JSON_SCHEMA`),
+  die an llama-cli durchgereicht wird. Beide werden via Unit-Test in Sync
+  gehalten.
 - `LlamaSummarizer` (`src/main/ml/LlamaSummarizer.ts`) — wrappt `llama-cli` als
-  Subprozess, baut den Prompt (`summarization-prompt.ts`), parst den Output in
-  `{ title, text }`. Path-traversal-Guard für die Modell-Datei.
+  Subprozess. Übergibt das JSON-Schema via `--json-schema`-Argument; die
+  llama.cpp Grammar-Engine constrained Token-Sampling, sodass das Modell nur
+  Token erzeugen kann, die zu validem Schema-Output führen. Parser
+  (`extractFirstJSONObject` + `JSON.parse` + Zod-Validierung) ist robust gegen
+  jegliches stdout-Rauschen (Loading-Spinner, Banner, Perf-Stats). Path-
+  traversal-Guard für die Modell-Datei.
 - `SummarizationExecutor` (`src/main/ml/SummarizationExecutor.ts`) —
-  TaskExecutor-Implementation. Skippt geräuschlos, wenn das Modell nicht installiert
-  ist (`isModelInstalled` false) oder der anonymisierte Text leer/fehlend ist.
+  TaskExecutor-Implementation. Wrappt `summarize()` in try/catch: ANY Fehler
+  (Subprocess-Crash, Abort, JSON-Extraction-Failure, Schema-Validation-Failure)
+  loggt + returnt clean. Session erreicht IMMER `review`, `sessions.summary`
+  bleibt im Fehlerfall NULL. Kein Error-State-Poisoning der ganzen Sitzung.
 - `summary-handlers.ts` — IPC-Channels `summary:get`, `summary:updateTitle`,
   `summary:updateText` für die User-Bearbeitung.
 
 Persistenz: Spalten `title` (existing, überschrieben), `summary`,
 `summary_model_id`, `summarized_at` auf `sessions` (Migration 007).
 
-## Prompt
+## Output-Garantien via Grammar-Constrained Sampling
 
-Strukturierter Zwei-Block-Output (TITEL + ZUSAMMENFASSUNG) auf Deutsch, mit
-expliziter Format-Specification. Der Parser toleriert Lower/Uppercase und
-multi-line ZUSAMMENFASSUNG. Input wird auf 120k Zeichen gekürzt — für typische
-Therapie-Sessions weit unter dem Limit.
+Anstatt das Modell durch Prompt-Anweisungen zur Format-Treue zu *bitten*, wird
+es durch llama.cpp's `--json-schema`-Flag zur Format-Treue *gezwungen*: Bei
+jedem Sampling-Schritt werden nur Token zugelassen, die zu einem JSON-Dokument
+führen können das zu folgendem Schema passt:
 
-Sampling: `--temp 0.3 --top-p 0.9 -n 260` — niedrige Temperatur für deterministische,
-faktentreue Ausgabe. `--chat-template gemma`.
+```json
+{
+  "type": "object",
+  "properties": {
+    "title":   { "type": "string", "minLength": 3,  "maxLength": 80   },
+    "summary": { "type": "string", "minLength": 20, "maxLength": 1000 }
+  },
+  "required": ["title", "summary"],
+  "additionalProperties": false
+}
+```
+
+Konsequenz: Es ist physisch unmöglich, dass das Modell Prosa, Markdown, freien
+Text oder ein anderes Format ausgibt. Der Prompt beschreibt nur noch die
+*Semantik* der zwei Felder, nicht ihre Struktur.
+
+Sampling: `--temp 0.3 --top-p 0.9 -n 400 -st -ngl 999` — niedrige Temperatur für
+deterministische faktentreue Ausgabe, single-turn-Mode mit Jinja-Chat-Template
+aus dem GGUF, Metal full-GPU-offload.
 
 ## Failure Modes
 
-| Situation                              | Verhalten                                       |
-| -------------------------------------- | ----------------------------------------------- |
-| Modell nicht installiert               | Task erfolgreich, Summary bleibt NULL, Log-Info |
-| Anonymisierter Text leer / kein File   | Task erfolgreich, Log-Info                      |
-| llama-cli crashed / timeout            | Task failed, Session in Error-State             |
-| Output unparsbar (TITEL/ZUSAMM. fehlt) | Task failed (siehe oben)                        |
+| Situation                                            | Verhalten                                         |
+| ---------------------------------------------------- | ------------------------------------------------- |
+| Modell nicht installiert                             | Task erfolgreich, Summary bleibt NULL, Log-Info   |
+| Anonymisierter Text leer / kein File                 | Task erfolgreich, Log-Info                        |
+| llama-cli crashed / timeout                          | Executor logs + skip → Session erreicht `review`  |
+| JSON nicht extrahierbar / Schema-Validation-Fehler   | Executor logs + skip → Session erreicht `review`  |
+| Abort-Signal während Inferenz                        | Executor logs + skip → Session erreicht `review`  |
 
-UI behandelt fehlende Summary still: Kein Banner, kein CTA, kein Hinweis. h1
-fällt auf "Sitzung ohne Titel" zurück (oder den ursprünglichen Auto-Titel),
-SummaryPanel rendert `null`.
+Alle Fehlerpfade enden nicht in `error`-State — der anonymisierte Transkript
+ist intakt und der User soll den Review-Editor öffnen können. UI behandelt
+fehlende Summary still: Kein Banner, kein CTA, kein Hinweis. h1 fällt auf
+formatiertes Datum zurück (oder den ursprünglichen Auto-Titel), SummaryPanel
+rendert `null`.
+
+Migration 008 (`008-reset-summarization-parse-errors.sql`) repariert Sessions,
+die durch eine frühere Version dieses Codes (regex-basierter TITEL/
+ZUSAMMENFASSUNG-Parser, der am llama-cli Spinner-ASCII gescheitert ist) in
+`error`-State steckengeblieben sind: targeted reset auf `review` mit `error_message=NULL` für genau die betroffenen Rows.
 
 ## RAM + Disk Cost
 

@@ -1,8 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { buildLlamaArgs, parseLlamaOutput, validateModelPath } from '../LlamaSummarizer'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import {
+  buildLlamaArgs,
+  parseLlamaOutput,
+  extractFirstJSONObject,
+  validateModelPath
+} from '../LlamaSummarizer'
+import { SUMMARIZATION_JSON_SCHEMA } from '../summarization-schema'
 
 describe('buildLlamaArgs', () => {
-  it('includes required flags with given model + prompt path', () => {
+  it('passes the JSON schema as --json-schema and uses single-turn mode', () => {
     const args = buildLlamaArgs({
       modelPath: '/models/gemma.gguf',
       promptFilePath: '/tmp/prompt.txt',
@@ -12,9 +20,10 @@ describe('buildLlamaArgs', () => {
     expect(args).toContain('/models/gemma.gguf')
     expect(args).toContain('-f')
     expect(args).toContain('/tmp/prompt.txt')
-    // Single-turn mode: applies the model's jinja chat template + exits
-    // after one response. Without this, llama-cli b8920+ either skips the
-    // chat template (raw -p mode → garbage) or hangs in interactive mode.
+    // The grammar engine sees this schema and constrains token sampling so
+    // the model can only emit valid {title, summary} JSON objects.
+    expect(args).toContain('--json-schema')
+    expect(args).toContain(SUMMARIZATION_JSON_SCHEMA)
     expect(args).toContain('-st')
     expect(args).toContain('-n')
     expect(args).toContain('200')
@@ -22,33 +31,76 @@ describe('buildLlamaArgs', () => {
   })
 })
 
+describe('extractFirstJSONObject', () => {
+  it('finds a balanced top-level object in clean input', () => {
+    expect(extractFirstJSONObject('{"a":1}')).toBe('{"a":1}')
+  })
+
+  it('finds the object surrounded by noise (banner + spinner + perf stats)', () => {
+    const noisy = `Loading model... |-\\|/- \n[ banner ]\n|-\\|/ {"title":"X","summary":"Y"} \n[ Prompt: 615 t/s ]`
+    expect(extractFirstJSONObject(noisy)).toBe('{"title":"X","summary":"Y"}')
+  })
+
+  it('respects JSON string semantics — braces inside strings do not close the object', () => {
+    const tricky = 'noise {"title":"a {nested} b","summary":"with } char"} more noise'
+    expect(extractFirstJSONObject(tricky)).toBe(
+      '{"title":"a {nested} b","summary":"with } char"}'
+    )
+  })
+
+  it('handles escaped quotes inside strings', () => {
+    const escaped = '{"title":"He said \\"hi\\"","summary":"Test \\" with } char"}'
+    expect(extractFirstJSONObject('garbage ' + escaped + ' trailing')).toBe(escaped)
+  })
+
+  it('returns null when no balanced object is present', () => {
+    expect(extractFirstJSONObject('just text')).toBe(null)
+    expect(extractFirstJSONObject('{ unbalanced')).toBe(null)
+  })
+
+  it('skips a stray closing brace and finds the real object after', () => {
+    expect(extractFirstJSONObject('}}garbage}{"a":1}')).toBe('{"a":1}')
+  })
+})
+
 describe('parseLlamaOutput', () => {
-  it('extracts TITEL and ZUSAMMENFASSUNG fields into a structured result', () => {
-    const raw =
-      'TITEL: Schlafstörungen und Arbeitsstress\nZUSAMMENFASSUNG: Der Patient berichtet von Einschlafproblemen. Vereinbart wird ein Schlaftagebuch.\n[end of text]'
+  it('parses valid {title, summary} JSON wrapped in stdout noise', () => {
+    const raw = `Loading model... |-\\|/- \n|-\\|/ {"title":"Schlafstörungen","summary":"Der Patient berichtet von Einschlafproblemen seit drei Wochen. Vereinbart wird ein Schlaftagebuch."}\n[ Prompt: 615 t/s | Generation: 83 t/s ]\nExiting...`
     expect(parseLlamaOutput(raw)).toEqual({
-      title: 'Schlafstörungen und Arbeitsstress',
-      text: 'Der Patient berichtet von Einschlafproblemen. Vereinbart wird ein Schlaftagebuch.'
+      title: 'Schlafstörungen',
+      text: 'Der Patient berichtet von Einschlafproblemen seit drei Wochen. Vereinbart wird ein Schlaftagebuch.'
     })
   })
 
-  it('strips any trailing [end of text] marker and trims whitespace', () => {
-    const raw = 'TITEL: Thema\nZUSAMMENFASSUNG: Satz eins. Satz zwei.\n\nllama_print_timings: ...'
-    expect(parseLlamaOutput(raw)).toEqual({ title: 'Thema', text: 'Satz eins. Satz zwei.' })
+  it('parses real captured llama-cli stdout from a hardware run (regression fixture)', () => {
+    const fixture = readFileSync(
+      join(__dirname, '__fixtures__', 'llama-cli-real-stdout.txt'),
+      'utf-8'
+    )
+    const result = parseLlamaOutput(fixture)
+    expect(result.title).toBe('Elektronische Verfügungszustellung')
+    expect(result.text).toMatch(/Postversand/)
+    expect(result.text.length).toBeGreaterThan(50)
   })
 
-  it('tolerates lowercase variants and leading/trailing whitespace around keys', () => {
-    const raw = '  titel: Thema  \n  zusammenfassung:  Satz eins. Satz zwei.  '
-    expect(parseLlamaOutput(raw)).toEqual({ title: 'Thema', text: 'Satz eins. Satz zwei.' })
+  it('throws a readable error when stdout has no JSON object', () => {
+    expect(() => parseLlamaOutput('just some text without json')).toThrow(
+      /enthält kein JSON-Objekt/
+    )
   })
 
-  it('captures the full summary when the LLM splits it across multiple lines', () => {
-    const raw = 'TITEL: Thema\nZUSAMMENFASSUNG: Satz eins.\nSatz zwei.'
-    expect(parseLlamaOutput(raw)).toEqual({ title: 'Thema', text: 'Satz eins. Satz zwei.' })
+  it('throws when the JSON is structurally invalid', () => {
+    expect(() => parseLlamaOutput('garbage {"title":}')).toThrow(/JSON/)
   })
 
-  it('throws a readable error when the output is missing either field', () => {
-    expect(() => parseLlamaOutput('something else entirely')).toThrow(/TITEL|ZUSAMMENFASSUNG/)
+  it('throws when the JSON does not match the schema (missing fields)', () => {
+    expect(() => parseLlamaOutput('{"title":"Only Title"}')).toThrow(/passt nicht zum Schema/)
+  })
+
+  it('throws when title is too short (defense-in-depth — grammar should prevent this)', () => {
+    expect(() =>
+      parseLlamaOutput('{"title":"AB","summary":"' + 'a'.repeat(50) + '"}')
+    ).toThrow(/passt nicht zum Schema/)
   })
 })
 
