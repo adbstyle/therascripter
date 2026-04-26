@@ -118,11 +118,11 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
     // running scripts/publish-manifest.sh per the model-hash-sync gotcha.
     id: 'gemma-summarization',
     label: 'Zusammenfassung (Gemma 3 4B Instruct)',
-    url: `${R2_CDN}/gemma-3-4b-it-Q4_K_M.gguf`,
-    relativePath: 'summarization/gemma-3-4b-it-Q4_K_M.gguf',
-    checkPath: 'summarization/gemma-3-4b-it-Q4_K_M.gguf',
-    sizeBytes: 2_490_000_000,
-    sha256: '0000000000000000000000000000000000000000000000000000000000000000',
+    url: `${R2_CDN}/google_gemma-3-4b-it-Q4_K_M.gguf`,
+    relativePath: 'summarization/google_gemma-3-4b-it-Q4_K_M.gguf',
+    checkPath: 'summarization/google_gemma-3-4b-it-Q4_K_M.gguf',
+    sizeBytes: 2_489_758_112,
+    sha256: '4996030242583a40aa151ff93f49ed787ac8c25e4120c3ae4588b2e2a7d1ae94',
     group: 'summarization',
     isRequired: false,
     description:
