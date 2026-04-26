@@ -586,7 +586,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           </button>
           <div ref={menuRef} className="titlebar-no-drag relative">
             <button
-              className="flex items-center justify-center rounded-lg border border-border-strong bg-surface-0 px-3 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-strong bg-surface-0 text-text-secondary transition-colors hover:bg-surface-1"
               onClick={() => setShowMenu((prev) => !prev)}
               aria-label="Weitere Optionen"
             >
@@ -616,7 +616,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
             )}
           </div>
           <button
-            className={`titlebar-no-drag flex shrink-0 items-center justify-center rounded-lg border border-border-strong px-3 py-2 text-sm font-semibold transition-colors hover:bg-surface-1 ${panelOpen ? 'bg-surface-2 text-text-primary' : 'bg-surface-0 text-text-secondary'}`}
+            className={`titlebar-no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong transition-colors hover:bg-surface-1 ${panelOpen ? 'bg-surface-2 text-text-primary' : 'bg-surface-0 text-text-secondary'}`}
             onClick={togglePanel}
             aria-label="Anonymisierungen anzeigen"
             aria-pressed={panelOpen}
@@ -625,7 +625,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
             <PanelRight className="h-4 w-4" strokeWidth={1.75} aria-hidden />
           </button>
           <button
-            className="titlebar-no-drag flex shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface-0 px-3 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
+            className="titlebar-no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface-0 text-text-secondary transition-colors hover:bg-surface-1"
             onClick={onBack}
             aria-label="Editor schließen"
             title="Schließen (Esc)"
