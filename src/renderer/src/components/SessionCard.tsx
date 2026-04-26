@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { FileText, Mic, MoreVertical } from 'lucide-react'
 import type { Session, SessionStatus, TaskType } from '../../../shared/types'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useTaskProgress } from '../hooks/useTaskProgress'
@@ -69,7 +70,7 @@ export function SessionCard({
   useClickOutside(menuRef, () => setMenuOpen(false))
 
   const statusConfig = STATUS_CONFIG[session.status]
-  const typeIcon = session.type === 'audio' ? '\uD83C\uDFA4' : '\uD83D\uDCC4'
+  const TypeIcon = session.type === 'audio' ? Mic : FileText
   const pipelineSteps = session.type === 'audio' ? AUDIO_PIPELINE_STEPS : PDF_PIPELINE_STEPS
 
   // Build status label with progress percentage
@@ -94,9 +95,11 @@ export function SessionCard({
           : undefined
       }
     >
-      <span className="text-lg" aria-hidden="true">
-        {typeIcon}
-      </span>
+      <TypeIcon
+        className="h-5 w-5 shrink-0 text-text-tertiary"
+        strokeWidth={1.75}
+        aria-hidden="true"
+      />
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-text-primary">
@@ -188,11 +191,7 @@ export function SessionCard({
           }}
           aria-label="Sitzungsoptionen"
         >
-          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 16 16">
-            <circle cx="8" cy="3" r="1.5" />
-            <circle cx="8" cy="8" r="1.5" />
-            <circle cx="8" cy="13" r="1.5" />
-          </svg>
+          <MoreVertical className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
         </button>
 
         {menuOpen && (

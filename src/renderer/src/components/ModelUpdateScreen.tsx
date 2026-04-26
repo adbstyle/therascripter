@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Check, Circle, Loader2 } from 'lucide-react'
 import type { ModelDownloadProgress, ModelDownloadStatus } from '../../../shared/types'
 import type { PendingModelUpdate } from '../../../shared/types/ModelUpdate'
 import { formatBytes } from '../utils/formatBytes'
@@ -80,10 +81,10 @@ export default function ModelUpdateScreen({
   const currentModelIndex = currentModelId ? updates.findIndex((u) => u.id === currentModelId) : -1
 
   return (
-    <div className="flex h-screen flex-col items-center justify-center bg-surface-0">
+    <div className="flex h-full flex-col items-center justify-center bg-surface-0">
       <div className="w-full max-w-lg px-8">
         {/* Header */}
-        <div className="titlebar-drag mb-8 text-center">
+        <div className="mb-8 text-center">
           <AppLogo size={72} className="mx-auto mb-3" />
           <h1 className="mb-2 text-2xl font-bold text-text-primary">Modelle werden aktualisiert</h1>
           <p className="text-sm text-text-secondary">
@@ -126,9 +127,15 @@ export default function ModelUpdateScreen({
                 <div key={update.id} className="mb-3 last:mb-0">
                   <div className="mb-1 flex items-center justify-between">
                     <span
-                      className={`text-sm ${isCurrent ? 'font-medium text-text-primary' : 'text-text-tertiary'}`}
+                      className={`flex items-center gap-1.5 text-sm ${isCurrent ? 'font-medium text-text-primary' : 'text-text-tertiary'}`}
                     >
-                      {isCompleted ? '\u2713 ' : isCurrent ? '' : '\u25CB '}
+                      {isCompleted ? (
+                        <Check className="h-4 w-4 text-success" strokeWidth={2.5} aria-hidden />
+                      ) : isCurrent ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" strokeWidth={2} aria-hidden />
+                      ) : (
+                        <Circle className="h-4 w-4 text-text-tertiary" strokeWidth={1.5} aria-hidden />
+                      )}
                       {update.label}
                     </span>
                     <span className="text-xs text-text-tertiary">

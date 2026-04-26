@@ -1,3 +1,5 @@
+import { Monitor, Moon, Sun } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { useTheme } from '../hooks/useTheme'
 import type { ThemePreference } from '../contexts/themeTypes'
 
@@ -5,16 +7,16 @@ const THEME_OPTIONS: Array<{
   id: ThemePreference
   label: string
   description: string
-  icon: string
+  Icon: LucideIcon
 }> = [
-  { id: 'light', label: 'Hell', description: 'Immer heller Modus', icon: '\u2600\uFE0F' },
+  { id: 'light', label: 'Hell', description: 'Immer heller Modus', Icon: Sun },
   {
     id: 'system',
     label: 'System',
     description: 'Folgt der macOS-Einstellung',
-    icon: '\uD83D\uDDA5\uFE0F'
+    Icon: Monitor
   },
-  { id: 'dark', label: 'Dunkel', description: 'Immer dunkler Modus', icon: '\uD83C\uDF19' }
+  { id: 'dark', label: 'Dunkel', description: 'Immer dunkler Modus', Icon: Moon }
 ]
 
 export default function AppearanceSettings(): React.JSX.Element {
@@ -38,7 +40,11 @@ export default function AppearanceSettings(): React.JSX.Element {
             }`}
             onClick={() => setTheme(option.id)}
           >
-            <span className="text-2xl">{option.icon}</span>
+            <option.Icon
+              className={`h-7 w-7 ${theme === option.id ? 'text-primary' : 'text-text-secondary'}`}
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
             <span className="text-sm font-medium text-text-primary">{option.label}</span>
             <span className="text-center text-xs text-text-tertiary">{option.description}</span>
           </button>

@@ -63,7 +63,7 @@ function createWindow(): void {
     minHeight: 600,
     title: 'Therascript',
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 15, y: 10 },
+    trafficLightPosition: { x: 15, y: 11 },
     backgroundColor: isDark ? '#0f1117' : '#ffffff',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

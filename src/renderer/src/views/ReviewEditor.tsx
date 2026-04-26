@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ClipboardCopy, FileText, Mic, MoreHorizontal, PanelRight, X } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { EditorState, NodeSelection } from '@tiptap/pm/state'
 import StarterKit from '@tiptap/starter-kit'
@@ -552,11 +553,21 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Header */}
-      <header className="titlebar-drag flex items-center justify-between gap-4 border-b border-border px-6 py-4">
+      <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="shrink-0 text-lg" aria-hidden="true">
-            {sessionType === 'audio' ? '\uD83C\uDFA4' : '\uD83D\uDCC4'}
-          </span>
+          {sessionType === 'audio' ? (
+            <Mic
+              className="h-5 w-5 shrink-0 text-text-tertiary"
+              strokeWidth={1.75}
+              aria-hidden
+            />
+          ) : (
+            <FileText
+              className="h-5 w-5 shrink-0 text-text-tertiary"
+              strokeWidth={1.75}
+              aria-hidden
+            />
+          )}
           <EditableSessionTitle
             sessionId={sessionId}
             title={sessionTitle}
@@ -570,15 +581,16 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
             className="titlebar-no-drag flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface-0 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
             onClick={handleExportClipboard}
           >
-            &#128203; Kopieren
+            <ClipboardCopy className="h-4 w-4" strokeWidth={2} aria-hidden />
+            Kopieren
           </button>
           <div ref={menuRef} className="titlebar-no-drag relative">
             <button
-              className="flex items-center justify-center rounded-lg border border-border-strong bg-surface-0 px-3 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-strong bg-surface-0 text-text-secondary transition-colors hover:bg-surface-1"
               onClick={() => setShowMenu((prev) => !prev)}
               aria-label="Weitere Optionen"
             >
-              ···
+              <MoreHorizontal className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
             {showMenu && (
               <div className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-lg border border-border bg-surface-1 py-1 shadow-lg">
@@ -604,21 +616,21 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
             )}
           </div>
           <button
-            className={`titlebar-no-drag flex shrink-0 items-center justify-center rounded-lg border border-border-strong px-3 py-2 text-sm font-semibold transition-colors hover:bg-surface-1 ${panelOpen ? 'bg-surface-2 text-text-primary' : 'bg-surface-0 text-text-secondary'}`}
+            className={`titlebar-no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong transition-colors hover:bg-surface-1 ${panelOpen ? 'bg-surface-2 text-text-primary' : 'bg-surface-0 text-text-secondary'}`}
             onClick={togglePanel}
             aria-label="Anonymisierungen anzeigen"
             aria-pressed={panelOpen}
             title="Anonymisierungen"
           >
-            &#9776;
+            <PanelRight className="h-4 w-4" strokeWidth={1.75} aria-hidden />
           </button>
           <button
-            className="titlebar-no-drag flex shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface-0 px-3 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
+            className="titlebar-no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface-0 text-text-secondary transition-colors hover:bg-surface-1"
             onClick={onBack}
             aria-label="Editor schließen"
             title="Schließen (Esc)"
           >
-            &#10005;
+            <X className="h-4 w-4" strokeWidth={2} aria-hidden />
           </button>
         </div>
       </header>
