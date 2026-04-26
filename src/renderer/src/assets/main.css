@@ -153,9 +153,17 @@
   background-color: rgba(107, 113, 134, 0.7);
 }
 
-/* TipTap editor prose text color */
+/* TipTap editor body styles */
 .ProseMirror {
   color: var(--color-text-primary);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.ProseMirror p {
+  font-size: 14px;
+  line-height: 1.7;
+  margin-block: 0.75rem;
 }
 
 /* Selection highlight in dark mode */

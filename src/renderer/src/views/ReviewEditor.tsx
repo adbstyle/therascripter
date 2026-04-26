@@ -103,7 +103,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     ],
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none min-h-[200px] px-6 py-4'
+        class: 'focus:outline-none min-h-[200px] px-6 py-4'
       },
       handleKeyDown: (view, event) => {
         // Intercept Delete/Backspace on a selected chip for batch removal
