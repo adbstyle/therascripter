@@ -64,13 +64,20 @@ describe('SummarizationExecutor', () => {
     )
   })
 
-  it('propagates summarizer errors as task failure', async () => {
+  it('swallows summarizer errors as a graceful skip (does NOT poison the session)', async () => {
+    // Architectural contract: summarization is an OPTIONAL pipeline tail
+    // step. Per the plan ("Model-missing is a skip, not a failure"), ANY
+    // failure (subprocess crash, abort, JSON-extraction failure, schema
+    // validation failure) must NOT propagate to the TaskQueue — that would
+    // mark the task failed, set session.status='error', and hide the
+    // already-anonymized transcript behind a Retry button.
     const deps = makeDeps({
       llamaSummarizer: { summarize: vi.fn().mockRejectedValue(new Error('spawn failed')) }
     })
     const exec = new SummarizationExecutor(deps)
-    await expect(exec.execute(task, onProgress, signal)).rejects.toThrow('spawn failed')
+    await expect(exec.execute(task, onProgress, signal)).resolves.toBeUndefined()
     expect(deps.sessionService.saveGeneratedSummary).not.toHaveBeenCalled()
+    expect(deps.logger.error).toHaveBeenCalledWith(expect.stringMatching(/spawn failed/))
   })
 
   it('skips cleanly when anonymized text is empty', async () => {

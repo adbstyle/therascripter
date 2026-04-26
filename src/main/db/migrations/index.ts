@@ -5,6 +5,7 @@ import addTaskCancelledStatus from './004-add-task-cancelled-status.sql?raw'
 import addAlignedTranscriptAndExtractedPaths from './005-add-aligned-transcript-and-extracted-paths.sql?raw'
 import addWordCount from './006-add-word-count.sql?raw'
 import addSummarization from './007-add-summarization.sql?raw'
+import resetSummarizationParseErrors from './008-reset-summarization-parse-errors.sql?raw'
 
 export interface Migration {
   version: number
@@ -18,5 +19,6 @@ export const migrations: Migration[] = [
   { version: 4, sql: addTaskCancelledStatus },
   { version: 5, sql: addAlignedTranscriptAndExtractedPaths },
   { version: 6, sql: addWordCount },
-  { version: 7, sql: addSummarization }
+  { version: 7, sql: addSummarization },
+  { version: 8, sql: resetSummarizationParseErrors }
 ]

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve as resolvePath, relative } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { buildSummarizationPrompt } from './summarization-prompt'
+import { SUMMARIZATION_JSON_SCHEMA, SummarizationOutputSchema } from './summarization-schema'
 
 export interface LlamaArgsInput {
   modelPath: string
@@ -17,11 +18,15 @@ export function buildLlamaArgs(input: LlamaArgsInput): string[] {
     input.modelPath,
     '-f',
     input.promptFilePath,
-    // -st (single-turn) wraps the prompt in the model's jinja chat template
-    // (loaded from the GGUF) and exits after one assistant response. Without
-    // this, llama-cli b8920+ either ignores --chat-template (in raw -p mode,
-    // producing garbage continuations) or stays in interactive chat mode and
-    // never exits. -st is the only mode that gives us a clean one-shot run.
+    // Constrains token sampling so the model can ONLY emit tokens that
+    // lead to a valid JSON document matching SUMMARIZATION_JSON_SCHEMA.
+    // Removes the entire format-following risk class — model cannot emit
+    // prose, headers, markdown, free-form German, or any non-JSON output.
+    '--json-schema',
+    SUMMARIZATION_JSON_SCHEMA,
+    // Single-turn mode: applies the model's jinja chat template + exits
+    // after one assistant response. Without this, llama-cli b8920+ either
+    // skips the chat template (raw -p mode) or hangs interactively.
     '-st',
     '-n',
     String(input.maxTokens),
@@ -40,36 +45,98 @@ export interface SummarizeResult {
   text: string
 }
 
+/**
+ * Extracts the first balanced top-level JSON object from `raw` and validates
+ * it against SummarizationOutputSchema. Robust against:
+ *  - llama-cli loading-spinner ASCII (e.g. `|-\|/-\|/`) prefixing the output
+ *  - chat-mode banners + `>` prompt echoes
+ *  - perf-stats `[ Prompt: ... | Generation: ... ]` and `Exiting...` suffixes
+ *  - braces inside string values (the scanner respects JSON string + escape
+ *    semantics, so a `}` inside `"foo"` doesn't close the outer object)
+ *
+ * The grammar engine on llama-cli's side guarantees the model's response
+ * is structurally valid JSON; this function's job is just to find the
+ * substring that contains it.
+ */
 export function parseLlamaOutput(raw: string): SummarizeResult {
-  const cleaned = raw
-    .replace(/\[end of text\]\s*$/i, '')
-    .replace(/llama_print_timings[\s\S]*$/i, '')
-    .trim()
-
-  const titleMatch = cleaned.match(/^\s*titel\s*:\s*(.+?)\s*$/im)
-
-  // Capture ZUSAMMENFASSUNG as everything after the label until end-of-string.
-  // No /m flag — a two-sentence summary may span multiple lines.
-  const sumLabelIdx = cleaned.search(/(^|\n)\s*zusammenfassung\s*:/i)
-  let summary = ''
-  if (sumLabelIdx >= 0) {
-    const sliced = cleaned
-      .slice(sumLabelIdx)
-      .replace(/^\s*\n?/, '')
-      .replace(/^\s*zusammenfassung\s*:\s*/i, '')
-    summary = sliced.replace(/\s*\n\s*/g, ' ').trim()
-  }
-
-  if (!titleMatch || summary.length === 0) {
+  const json = extractFirstJSONObject(raw)
+  if (json === null) {
     throw new Error(
-      `Unerwartetes LLM-Output: TITEL oder ZUSAMMENFASSUNG fehlt. Rohtext: ${cleaned.slice(0, 200)}`
+      `LLM-Output enthält kein JSON-Objekt. Rohtext: ${raw.slice(0, 200)}`
     )
   }
 
-  return {
-    title: titleMatch[1].trim(),
-    text: summary
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(json)
+  } catch (err) {
+    throw new Error(
+      `LLM-Output ist kein gültiges JSON: ${err instanceof Error ? err.message : String(err)}. ` +
+        `Extrahierter Block: ${json.slice(0, 200)}`
+    )
   }
+
+  const result = SummarizationOutputSchema.safeParse(parsed)
+  if (!result.success) {
+    throw new Error(
+      `LLM-Output passt nicht zum Schema: ${result.error.issues
+        .map((i) => `${i.path.join('.')}: ${i.message}`)
+        .join('; ')}`
+    )
+  }
+
+  return { title: result.data.title, text: result.data.summary }
+}
+
+/**
+ * Find the first balanced `{...}` block in `raw`, respecting JSON string
+ * + escape semantics. Returns `null` if no balanced object is present.
+ */
+export function extractFirstJSONObject(raw: string): string | null {
+  let depth = 0
+  let start = -1
+  let inString = false
+  let escapeNext = false
+
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]
+
+    if (escapeNext) {
+      escapeNext = false
+      continue
+    }
+
+    if (inString) {
+      if (ch === '\\') {
+        escapeNext = true
+      } else if (ch === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (ch === '"') {
+      inString = true
+      continue
+    }
+
+    if (ch === '{') {
+      if (depth === 0) start = i
+      depth++
+    } else if (ch === '}') {
+      depth--
+      if (depth === 0 && start >= 0) {
+        return raw.slice(start, i + 1)
+      }
+      if (depth < 0) {
+        // Unbalanced — reset and keep scanning for a real opener
+        depth = 0
+        start = -1
+      }
+    }
+  }
+
+  return null
 }
 
 export function validateModelPath(modelPath: string, allowedDir: string): void {
@@ -99,7 +166,7 @@ export class LlamaSummarizer {
     await writeFile(promptFile, prompt, 'utf-8')
 
     try {
-      const args = buildLlamaArgs({ modelPath, promptFilePath: promptFile, maxTokens: 260 })
+      const args = buildLlamaArgs({ modelPath, promptFilePath: promptFile, maxTokens: 400 })
       const raw = await this.spawn(args, signal)
       return parseLlamaOutput(raw)
     } finally {

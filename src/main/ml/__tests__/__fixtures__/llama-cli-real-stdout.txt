@@ -1,0 +1,31 @@
+
+Loading model... |-\|/-
+
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b8920-15fa3c493
+model      : google_gemma-3-4b-it-Q4_K_M.gguf
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+> Du bist ein professioneller Assistent für die Kurz-Beschreibung von Therapiesitzungen ...
+
+|-\|/-\|/ {"title": "Elektronische Verfügungszustellung", "summary": "Dieses Dokument beschreibt die Entwicklung einer elektronischen Zustellung von Verfügungen über die HMP, die eine automatisierte Benachrichtigung und Zustimmungsabwicklung von ZI-Benutzern beinhaltet, um den Postversand zu vermeiden. Die Lösung umfasst verschiedene Aspekte wie Signatur, Statusverfolgung und Compliance-Anforderungen, die durch den BWL manuell abgedeckt werden müssen."}
+
+[ Prompt: 615.4 t/s | Generation: 83.3 t/s ]
+
+Exiting...

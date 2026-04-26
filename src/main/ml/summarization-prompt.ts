@@ -1,16 +1,19 @@
 const MAX_INPUT_CHARS = 120_000
 
-const INSTRUCTION = `Du bist ein professioneller Assistent für die Kurz-Beschreibung von Therapiesitzungen und medizinischen Dokumenten. Analysiere den folgenden Text und erzeuge zwei Ausgaben:
+/**
+ * The output format is enforced by `--json-schema` on the llama-cli side
+ * (see SUMMARIZATION_JSON_SCHEMA in summarization-schema.ts), so the prompt
+ * doesn't need TITEL/ZUSAMMENFASSUNG headers, line-format diktats, or any
+ * "answer exactly so" instructions — the grammar engine constrains the
+ * model's tokens directly. We just describe what the two fields should
+ * contain semantically and let the schema do the structural work.
+ */
+const INSTRUCTION = `Du bist ein professioneller Assistent für die Kurz-Beschreibung von Therapiesitzungen und medizinischen Dokumenten. Lies den folgenden Text und erzeuge ein JSON-Objekt mit zwei Feldern:
 
-1. Einen prägnanten deutschen Titel (Nominalphrase, 3–8 Wörter, max. 80 Zeichen). Kein vollständiger Satz, keine Anführungszeichen, keine Einleitung.
-2. Eine Zusammenfassung in genau zwei prägnanten deutschen Sätzen. Nenne die zentralen Themen und Schlüsselpunkte.
+- title: Ein prägnanter deutscher Titel (Nominalphrase, 3–8 Wörter, max. 80 Zeichen). Kein vollständiger Satz, keine Anführungszeichen, keine Einleitung.
+- summary: Eine Zusammenfassung in genau zwei prägnanten deutschen Sätzen mit den zentralen Themen und Schlüsselpunkten.
 
-Formatiere die Antwort exakt so (zwei Zeilen, keine weiteren Inhalte):
-
-TITEL: <dein Titel>
-ZUSAMMENFASSUNG: <deine zwei Sätze>
-
-Keine Einleitung, keine Aufzählungen, keine Meta-Kommentare, keine Markdown-Formatierung.`
+Antworte ausschließlich mit dem JSON-Objekt — keine Einleitung, keine Erklärung, keine Markdown-Code-Fences.`
 
 export function buildSummarizationPrompt(text: string): string {
   const trimmed =
