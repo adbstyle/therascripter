@@ -11,15 +11,24 @@ export function SummaryPanel({ sessionId }: Props): React.JSX.Element | null {
 
   useEffect(() => {
     let cancelled = false
-    window.api.summary.get(sessionId).then((record) => {
-      if (cancelled) return
-      if (record && record.text && record.text.length > 0) {
-        setText(record.text)
-        originalRef.current = record.text
-      } else {
-        setText(null)
-      }
-    })
+    window.api.summary
+      .get(sessionId)
+      .then((record) => {
+        if (cancelled) return
+        if (record && record.text && record.text.length > 0) {
+          setText(record.text)
+          originalRef.current = record.text
+        } else {
+          setText(null)
+        }
+      })
+      .catch((err) => {
+        // IPC failure (DB closed during shutdown, schema drift, etc.) — degrade
+        // to the no-summary state instead of leaving an unhandled rejection. The
+        // panel will render nothing, identical to the "no summary exists" path.
+        console.error('summary.get failed', err)
+        if (!cancelled) setText(null)
+      })
     return (): void => {
       cancelled = true
     }

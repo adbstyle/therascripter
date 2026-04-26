@@ -6,13 +6,9 @@ import { getDataDir } from '../db/connection'
 import { removeFile } from '../utils/file-ops'
 import { tiptapToPlainText } from '../ml/tiptap-plain-text'
 import type { Session, SessionStatus, UpdateSessionInput } from '../../shared/types'
+import type { SummaryRecord } from '../../shared/types/IpcApi'
 
-export interface SummaryRecord {
-  title: string | null
-  text: string
-  modelId: string | null
-  summarizedAt: string | null
-}
+export type { SummaryRecord }
 
 const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
   recording: ['transcribing', 'error'],
