@@ -39,6 +39,18 @@ fi
 # Fallback: some older formulas ship libggml in the llama.cpp prefix.
 cp "$BREW_PREFIX/lib/"libggml*.dylib "$LIB_DIR/" 2>/dev/null || true
 
+# Sanity check: the copy commands above use `|| true` to be tolerant of layout
+# variations across Homebrew versions. Without this guard a successful run
+# could leave $LIB_DIR empty and the bug would only surface at runtime as a
+# `dyld: Library not loaded` crash.
+have_libllama=$(ls -1 "$LIB_DIR/"libllama*.dylib 2>/dev/null | wc -l | tr -d ' ')
+have_libggml=$(ls -1 "$LIB_DIR/"libggml*.dylib 2>/dev/null | wc -l | tr -d ' ')
+if [ "$have_libllama" -eq 0 ] || [ "$have_libggml" -eq 0 ]; then
+  echo "FATAL: required dylibs missing in $LIB_DIR (libllama=$have_libllama libggml=$have_libggml)" >&2
+  echo "  Check 'brew --prefix llama.cpp' and 'brew --prefix ggml' layouts." >&2
+  exit 1
+fi
+
 echo '==> Re-signing binary with ad-hoc signature'
 codesign --force --sign - "$BIN_DIR/llama-cli"
 for dylib in "$LIB_DIR/"libllama*.dylib "$LIB_DIR/"libmtmd*.dylib "$LIB_DIR/"libggml*.dylib; do

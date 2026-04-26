@@ -16,8 +16,12 @@ import { z } from 'zod'
  *     error.
  *
  * The numeric bounds protect downstream UI + DB columns from oversized
- * blobs (e.g. a runaway model emitting a 50k-char summary). They also
- * align with the IPC schemas in `summary-schemas.ts`.
+ * blobs (e.g. a runaway model emitting a 50k-char summary). These bounds
+ * are intentionally tighter than the IPC update bounds in
+ * `summary-schemas.ts` (TITLE_MAX=80 vs MAX_TITLE_CHARS=120;
+ * SUMMARY_MAX=1_000 vs MAX_SUMMARY_CHARS=2_000): the LLM should produce
+ * terse output, while a user editing in the Review Editor may legitimately
+ * expand it within the looser IPC limits.
  */
 
 const TITLE_MAX = 80
