@@ -100,11 +100,11 @@ beforeEach(() => {
 })
 
 describe('App', () => {
-  it('renders sidebar navigation', async () => {
+  it('renders bottom navigation', async () => {
     render(<App />)
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Transkriptionen' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Einstellungen' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Transkriptionen' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Einstellungen' })).toBeInTheDocument()
     })
   })
 

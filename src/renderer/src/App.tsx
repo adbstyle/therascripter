@@ -5,11 +5,11 @@ import FirstLaunchScreen from './components/FirstLaunchScreen'
 import ModelUpdateScreen from './components/ModelUpdateScreen'
 import UpdateBanner from './components/UpdateBanner'
 import TitleBar from './components/shell/TitleBar'
+import BottomNav from './components/shell/BottomNav'
 import Settings from './views/Settings'
 import ReviewEditor from './views/ReviewEditor'
 import { useRecording } from './hooks/useRecording'
 import { useModelUpdates } from './hooks/useModelUpdates'
-import { useAppUpdate } from './hooks/useAppUpdate'
 import type { PendingModelUpdate } from '../../shared/types/ModelUpdate'
 
 type View = 'sessions' | 'settings' | 'review'
@@ -17,7 +17,6 @@ type View = 'sessions' | 'settings' | 'review'
 export default function App(): React.JSX.Element {
   const { isRecording, duration, level, error, startRecording, stopRecording } = useRecording()
   const { availableUpdates, clearUpdates } = useModelUpdates()
-  const { status: appUpdateStatus, openReleasePage } = useAppUpdate()
   const [modelsReady, setModelsReady] = useState<boolean | null>(null)
   const [pendingUpdates, setPendingUpdates] = useState<PendingModelUpdate[] | null>(null)
   const [currentView, setCurrentView] = useState<View>('sessions')
@@ -25,11 +24,6 @@ export default function App(): React.JSX.Element {
   const [isImporting, setIsImporting] = useState(false)
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null)
   const scrollToSessionId = useRef<string | null>(null)
-  const [appVersion, setAppVersion] = useState<string | null>(null)
-
-  useEffect(() => {
-    window.api.system.aboutInfo().then((info) => setAppVersion(info.version))
-  }, [])
 
   const handleImportPDF = useCallback(async () => {
     if (isImporting) return
@@ -99,7 +93,7 @@ export default function App(): React.JSX.Element {
   }, [availableUpdates])
 
   const isInReview = currentView === 'review'
-  const sidebarDisabled = isRecording || isInReview
+  const navHidden = isRecording || isInReview
 
   const headerTitle = isRecording
     ? 'Aufnahme läuft'
@@ -152,48 +146,6 @@ export default function App(): React.JSX.Element {
         <UpdateBanner updates={availableUpdates} onRestart={handleRestartForUpdate} />
       )}
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <aside className="flex w-[200px] flex-col border-r border-border bg-surface-0 px-4 py-6">
-          <nav className="flex flex-1 flex-col gap-1">
-            <button
-              className={`titlebar-no-drag rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
-                currentView === 'sessions'
-                  ? 'bg-surface-2 text-text-primary'
-                  : 'text-text-secondary hover:bg-surface-1 hover:text-text-primary'
-              } ${sidebarDisabled ? 'pointer-events-none opacity-50' : ''}`}
-              onClick={() => setCurrentView('sessions')}
-              disabled={sidebarDisabled}
-            >
-              Transkriptionen
-            </button>
-            <button
-              className={`titlebar-no-drag rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
-                currentView === 'settings'
-                  ? 'bg-surface-2 text-text-primary'
-                  : 'text-text-secondary hover:bg-surface-1 hover:text-text-primary'
-              } ${sidebarDisabled ? 'pointer-events-none opacity-50' : ''}`}
-              onClick={() => setCurrentView('settings')}
-              disabled={sidebarDisabled}
-            >
-              Einstellungen
-            </button>
-          </nav>
-          {appUpdateStatus?.available ? (
-            <button
-              className="titlebar-no-drag flex items-center gap-1.5 text-xs font-medium text-primary transition-colors hover:text-primary-hover"
-              onClick={openReleasePage}
-            >
-              <span className="text-[10px]">&#9679;</span>
-              <span>Update verf&#252;gbar</span>
-            </button>
-          ) : (
-            <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
-              <span>&#128274;</span>
-              <span>v{appVersion ?? '\u2026'}</span>
-            </div>
-          )}
-        </aside>
 
         {/* Main content */}
         <main className="flex min-h-0 flex-1 flex-col">
@@ -237,8 +189,9 @@ export default function App(): React.JSX.Element {
           ) : (
             <Settings />
           )}
+
+          {!navHidden && <BottomNav current={currentView} onChange={setCurrentView} />}
         </main>
-      </div>
     </div>
   )
 }
