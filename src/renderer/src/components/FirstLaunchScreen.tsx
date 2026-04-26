@@ -67,7 +67,7 @@ export default function FirstLaunchScreen({
             Nicht genügend Speicherplatz
           </h2>
           <p className="mb-4 text-sm text-text-secondary">
-            Therascript benötigt mindestens 5 GB freien Speicherplatz für die ML-Modelle.
+            TheraScript benötigt mindestens 5 GB freien Speicherplatz für die ML-Modelle.
           </p>
           <div className="mb-4 text-sm text-text-tertiary">
             <p>Verfügbar: {formatBytes(diskSpace.availableBytes)}</p>
@@ -101,7 +101,7 @@ export default function FirstLaunchScreen({
         {/* Header */}
         <div className="mb-8 text-center">
           <AppLogo size={72} className="mx-auto mb-3" />
-          <h1 className="mb-2 text-2xl font-bold text-text-primary">Therascript</h1>
+          <h1 className="mb-2 text-2xl font-bold text-text-primary">TheraScript</h1>
           <p className="text-sm text-text-secondary">
             Alle Verarbeitung findet komplett lokal auf Ihrem Mac statt — keine Daten verlassen Ihr
             Gerät.

@@ -12,7 +12,7 @@ export function checkFileVaultOnStartup(): void {
         title: 'FileVault nicht aktiv',
         message: 'FileVault ist auf diesem Mac nicht aktiviert.',
         detail:
-          'Therascript speichert vertrauliche Therapiedaten lokal. ' +
+          'TheraScript speichert vertrauliche Therapiedaten lokal. ' +
           'Ohne FileVault-Verschlüsselung sind diese Daten bei physischem ' +
           'Zugriff auf Ihren Mac ungeschützt.\n\n' +
           'Aktivieren Sie FileVault unter:\n' +

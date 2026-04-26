@@ -26,7 +26,7 @@ export default function AppearanceSettings(): React.JSX.Element {
     <div className="p-8">
       <h3 className="mb-1 text-sm font-semibold text-text-primary">Erscheinungsbild</h3>
       <p className="mb-6 text-sm text-text-tertiary">
-        Bestimmt, ob Therascript im hellen oder dunklen Modus angezeigt wird.
+        Bestimmt, ob TheraScript im hellen oder dunklen Modus angezeigt wird.
       </p>
 
       <div className="flex gap-4">

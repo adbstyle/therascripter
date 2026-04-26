@@ -64,7 +64,7 @@ export default function AboutPage(): React.JSX.Element {
         <div>
           <AppLogo size={64} className="mb-3" />
           <h3 className="text-lg font-semibold text-text-primary">
-            Therascript v{info?.version ?? '\u2026'}
+            TheraScript v{info?.version ?? '\u2026'}
           </h3>
           <p className="text-sm text-text-tertiary">Open Source (MIT-Lizenz)</p>
         </div>
@@ -88,7 +88,7 @@ export default function AboutPage(): React.JSX.Element {
               </button>
             )}
             {appUpdateStatus && !appUpdateStatus.available && appUpdateStatus.checkedAt && (
-              <span className="text-sm text-text-tertiary">Therascript ist aktuell</span>
+              <span className="text-sm text-text-tertiary">TheraScript ist aktuell</span>
             )}
           </div>
         </div>
@@ -189,13 +189,13 @@ export default function AboutPage(): React.JSX.Element {
           className="rounded-lg border border-error-border px-4 py-2 text-sm font-medium text-error-text transition-colors hover:bg-error-bg"
           onClick={() => setShowUninstall(true)}
         >
-          Therascript vollst\u00E4ndig entfernen
+          TheraScript vollst\u00E4ndig entfernen
         </button>
       </div>
 
       {showUninstall && (
         <ConfirmDialog
-          title="Therascript vollst\u00E4ndig entfernen"
+          title="TheraScript vollst\u00E4ndig entfernen"
           message="Alle Daten werden unwiderruflich gel\u00F6scht:"
           details={[
             'ML-Modelle (~4 GB)',
