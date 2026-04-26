@@ -581,7 +581,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
             className="titlebar-no-drag flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface-0 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
             onClick={handleExportClipboard}
           >
-            <ClipboardCopy className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+            <ClipboardCopy className="h-4 w-4" strokeWidth={2} aria-hidden />
             Kopieren
           </button>
           <div ref={menuRef} className="titlebar-no-drag relative">
