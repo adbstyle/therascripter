@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, Cpu, Info, Palette, ShieldCheck } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import BlocklistManager from '../components/BlocklistManager'
+import BlocklistManager, { type BlocklistManagerHandle } from '../components/BlocklistManager'
 import AppearanceSettings from '../components/AppearanceSettings'
 import AboutPage from '../components/AboutPage'
 import ModelsSettings from '../components/settings/ModelsSettings'
@@ -22,16 +22,32 @@ const THEME_LABELS = { light: 'Hell', dark: 'Dunkel', system: 'System' } as cons
 
 export default function Settings(): React.JSX.Element {
   const [subpage, setSubpage] = useState<SubPage | null>(null)
+  const blocklistRef = useRef<BlocklistManagerHandle>(null)
+
+  const headerAction =
+    subpage === 'sperrliste' ? (
+      <button
+        type="button"
+        className="titlebar-no-drag rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
+        onClick={() => blocklistRef.current?.openAdd()}
+      >
+        + Eintrag hinzufügen
+      </button>
+    ) : null
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <SettingsHeader subpage={subpage} onBackToHome={() => setSubpage(null)} />
+      <SettingsHeader
+        subpage={subpage}
+        onBackToHome={() => setSubpage(null)}
+        action={headerAction}
+      />
 
       {subpage === null ? (
         <SettingsHome onSelect={setSubpage} />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {subpage === 'sperrliste' && <BlocklistManager />}
+          {subpage === 'sperrliste' && <BlocklistManager ref={blocklistRef} />}
           {subpage === 'darstellung' && <AppearanceSettings />}
           {subpage === 'modelle' && <ModelsSettings />}
           {subpage === 'ueber' && <AboutPage />}
@@ -44,30 +60,36 @@ export default function Settings(): React.JSX.Element {
 interface HeaderProps {
   subpage: SubPage | null
   onBackToHome: () => void
+  action?: React.ReactNode
 }
 
-function SettingsHeader({ subpage, onBackToHome }: HeaderProps): React.JSX.Element {
+function SettingsHeader({ subpage, onBackToHome, action }: HeaderProps): React.JSX.Element {
   return (
-    <header className="flex h-[72px] shrink-0 items-center gap-2 border-b border-border px-6">
-      {subpage === null ? (
-        <h2 className="text-2xl font-bold text-text-primary">Einstellungen</h2>
-      ) : (
-        <>
-          <button
-            type="button"
-            onClick={onBackToHome}
-            className="titlebar-no-drag rounded-md text-2xl font-bold text-text-tertiary transition-colors hover:text-text-secondary"
-          >
-            Einstellungen
-          </button>
-          <ChevronRight
-            className="h-5 w-5 shrink-0 text-text-tertiary"
-            strokeWidth={2}
-            aria-hidden="true"
-          />
-          <h2 className="text-2xl font-bold text-text-primary">{SUBPAGE_TITLES[subpage]}</h2>
-        </>
-      )}
+    <header className="flex h-[72px] shrink-0 items-center justify-between gap-2 border-b border-border px-6">
+      <div className="flex min-w-0 items-center gap-2">
+        {subpage === null ? (
+          <h2 className="text-2xl font-bold text-text-primary">Einstellungen</h2>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={onBackToHome}
+              className="titlebar-no-drag rounded-md text-2xl font-bold text-text-tertiary transition-colors hover:text-text-secondary"
+            >
+              Einstellungen
+            </button>
+            <ChevronRight
+              className="h-5 w-5 shrink-0 text-text-tertiary"
+              strokeWidth={2}
+              aria-hidden="true"
+            />
+            <h2 className="truncate text-2xl font-bold text-text-primary">
+              {SUBPAGE_TITLES[subpage]}
+            </h2>
+          </>
+        )}
+      </div>
+      {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
     </header>
   )
 }

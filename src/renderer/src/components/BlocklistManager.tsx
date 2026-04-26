@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react'
 import type { BlocklistEntry, PlaceholderType } from '../../../shared/types'
 import { ConfirmDialog } from './ConfirmDialog'
 import { BlocklistDialog } from './BlocklistDialog'
+
+export interface BlocklistManagerHandle {
+  openAdd: () => void
+}
 
 const PLACEHOLDER_TYPE_LABELS: Record<PlaceholderType, string> = {
   PERSON: 'Person',
@@ -23,12 +27,19 @@ function formatDate(isoString: string): string {
 
 type DialogMode = null | { type: 'add' } | { type: 'edit'; entry: BlocklistEntry }
 
-export default function BlocklistManager(): React.JSX.Element {
+const BlocklistManager = forwardRef<BlocklistManagerHandle>(function BlocklistManager(
+  _props,
+  ref
+): React.JSX.Element {
   const [entries, setEntries] = useState<BlocklistEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [dialogMode, setDialogMode] = useState<DialogMode>(null)
   const [deleteTarget, setDeleteTarget] = useState<BlocklistEntry | null>(null)
+
+  useImperativeHandle(ref, () => ({
+    openAdd: () => setDialogMode({ type: 'add' })
+  }))
 
   const refresh = useCallback(async () => {
     try {
@@ -108,17 +119,9 @@ export default function BlocklistManager(): React.JSX.Element {
   return (
     <>
       <div className="p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <p className="text-sm text-text-secondary">
-            Begriffe, die immer automatisch anonymisiert werden.
-          </p>
-          <button
-            className="titlebar-no-drag rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
-            onClick={() => setDialogMode({ type: 'add' })}
-          >
-            + Eintrag hinzufügen
-          </button>
-        </div>
+        <p className="mb-4 text-sm text-text-secondary">
+          Begriffe, die immer automatisch anonymisiert werden.
+        </p>
 
         {entries.length === 0 ? (
           <div className="rounded-lg border border-border bg-surface-1 p-8 text-center">
@@ -199,4 +202,6 @@ export default function BlocklistManager(): React.JSX.Element {
       )}
     </>
   )
-}
+})
+
+export default BlocklistManager
