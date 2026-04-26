@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { FileText, Mic } from 'lucide-react'
 import SessionDashboard from './components/SessionDashboard'
 import RecordingView from './components/RecordingView'
 import FirstLaunchScreen from './components/FirstLaunchScreen'
@@ -156,17 +157,19 @@ export default function App(): React.JSX.Element {
             {!isRecording && currentView === 'sessions' && (
               <div className="flex items-center gap-2">
                 <button
-                  className={`titlebar-no-drag rounded-lg border border-border-strong bg-surface-0 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1 ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
+                  className={`titlebar-no-drag flex items-center gap-2 rounded-lg border border-border-strong bg-surface-0 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1 ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
                   onClick={handleImportPDF}
                   disabled={isImporting}
                 >
+                  <FileText className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                   PDF importieren
                 </button>
                 <button
-                  className="titlebar-no-drag rounded-lg bg-recording px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-recording-hover"
+                  className="titlebar-no-drag flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
                   onClick={startRecording}
                 >
-                  &#9679; Aufnahme starten
+                  <Mic className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                  Aufnahme starten
                 </button>
               </div>
             )}

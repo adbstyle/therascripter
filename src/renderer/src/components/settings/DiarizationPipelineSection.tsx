@@ -70,26 +70,28 @@ export default function DiarizationPipelineSection(): React.JSX.Element {
         <h2 className="mb-1 text-lg font-semibold">Sprechererkennungs-Pipeline</h2>
         <p className="text-sm text-text-secondary">
           Das pyannote-Paket enthält zwei Pipelines. Wähle, welche für neue Transkriptionen
-          verwendet werden soll — kein Download nötig, der Wechsel ist sofort aktiv.
+          verwendet werden soll.
         </p>
       </div>
 
-      <div className="space-y-3">
-        {PIPELINE_INFOS.map((info) => (
-          <ModelCard
-            key={info.id}
-            model={toCatalogEntry(info, active === info.id)}
-            activeUsageLabel="Wird für Sprechererkennung verwendet"
-            downloading={false}
-            anyBusy={false}
-            deletable={false}
-            showChips={false}
-            onDownload={noop}
-            onCancelDownload={noop}
-            onDelete={noop}
-            onActivate={() => handleActivate(info.id)}
-          />
-        ))}
+      <div>
+        <h3 className="mb-2 text-sm font-medium text-text-tertiary">Installiert</h3>
+        <div className="space-y-3">
+          {PIPELINE_INFOS.map((info) => (
+            <ModelCard
+              key={info.id}
+              model={toCatalogEntry(info, active === info.id)}
+              downloading={false}
+              anyBusy={false}
+              deletable={false}
+              showChips={false}
+              onDownload={noop}
+              onCancelDownload={noop}
+              onDelete={noop}
+              onActivate={() => handleActivate(info.id)}
+            />
+          ))}
+        </div>
       </div>
     </section>
   )

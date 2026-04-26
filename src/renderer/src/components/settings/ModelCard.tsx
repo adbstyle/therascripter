@@ -6,8 +6,6 @@ interface Props {
   downloading: boolean
   progress?: number
   anyBusy: boolean
-  /** Anzeigetext unterhalb der Karte, wenn das Modell aktiv ist. */
-  activeUsageLabel: string
   onDownload: () => void
   onCancelDownload: () => void
   onDelete: () => void
@@ -54,7 +52,6 @@ export default function ModelCard({
   downloading,
   progress,
   anyBusy,
-  activeUsageLabel,
   onDownload,
   onCancelDownload,
   onDelete,
@@ -66,6 +63,54 @@ export default function ModelCard({
 }: Props): React.JSX.Element {
   const dimmed = downloading ? 'opacity-70' : ''
   const borderClass = model.isActive ? 'border-primary' : 'border-border'
+
+  const secondaryBtn =
+    'titlebar-no-drag rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 disabled:opacity-50'
+  const primaryBtn =
+    'titlebar-no-drag rounded-md bg-primary px-3 py-1.5 text-sm text-white hover:bg-primary-hover disabled:opacity-50'
+
+  let actions: React.ReactNode = null
+  if (downloading) {
+    actions = (
+      <button className={secondaryBtn} onClick={onCancelDownload}>
+        Download abbrechen
+      </button>
+    )
+  } else if (!model.isInstalled) {
+    actions = (
+      <button className={primaryBtn} onClick={onDownload} disabled={anyBusy}>
+        Herunterladen
+      </button>
+    )
+  } else if (!model.isActive) {
+    actions = (
+      <>
+        {deletable && (
+          <button className={secondaryBtn} onClick={onDelete} disabled={anyBusy}>
+            Löschen
+          </button>
+        )}
+        <button className={primaryBtn} onClick={onActivate} disabled={anyBusy}>
+          Aktivieren
+        </button>
+      </>
+    )
+  } else if (optional) {
+    actions = (
+      <>
+        {deletable && (
+          <button className={secondaryBtn} onClick={onDelete} disabled={anyBusy}>
+            Löschen
+          </button>
+        )}
+        {onDeactivate && (
+          <button className={secondaryBtn} onClick={onDeactivate} disabled={anyBusy}>
+            Deaktivieren
+          </button>
+        )}
+      </>
+    )
+  }
 
   return (
     <div
@@ -99,6 +144,8 @@ export default function ModelCard({
             </p>
           )}
         </div>
+
+        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
 
       {downloading && progress !== undefined && (
@@ -118,74 +165,6 @@ export default function ModelCard({
           <p className="mt-1 text-xs text-text-tertiary">Lädt herunter … {progress}%</p>
         </div>
       )}
-
-      <div className="mt-3 flex justify-end gap-2">
-        {downloading && (
-          <button
-            className="titlebar-no-drag rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2"
-            onClick={onCancelDownload}
-          >
-            Download abbrechen
-          </button>
-        )}
-        {!downloading && !model.isInstalled && (
-          <button
-            className="titlebar-no-drag rounded-md bg-primary px-3 py-1.5 text-sm text-white hover:bg-primary-hover disabled:opacity-50"
-            onClick={onDownload}
-            disabled={anyBusy}
-          >
-            Herunterladen
-          </button>
-        )}
-        {!downloading && model.isInstalled && !model.isActive && (
-          <>
-            {deletable && (
-              <button
-                className="titlebar-no-drag rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 disabled:opacity-50"
-                onClick={onDelete}
-                disabled={anyBusy}
-              >
-                Löschen
-              </button>
-            )}
-            <button
-              className="titlebar-no-drag rounded-md bg-primary px-3 py-1.5 text-sm text-white hover:bg-primary-hover disabled:opacity-50"
-              onClick={onActivate}
-              disabled={anyBusy}
-            >
-              Aktivieren
-            </button>
-          </>
-        )}
-        {!downloading && model.isInstalled && model.isActive && !optional && (
-          <span className="text-xs text-text-tertiary">{activeUsageLabel}</span>
-        )}
-        {!downloading && model.isInstalled && model.isActive && optional && (
-          <>
-            <span className="mr-auto self-center text-xs text-text-tertiary">
-              {activeUsageLabel}
-            </span>
-            {deletable && (
-              <button
-                className="titlebar-no-drag rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 disabled:opacity-50"
-                onClick={onDelete}
-                disabled={anyBusy}
-              >
-                Löschen
-              </button>
-            )}
-            {onDeactivate && (
-              <button
-                className="titlebar-no-drag rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 disabled:opacity-50"
-                onClick={onDeactivate}
-                disabled={anyBusy}
-              >
-                Deaktivieren
-              </button>
-            )}
-          </>
-        )}
-      </div>
     </div>
   )
 }

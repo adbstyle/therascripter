@@ -40,7 +40,7 @@ export const R2_CDN = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev'
 export const MODEL_DEFINITIONS: ModelDefinition[] = [
   {
     id: 'whisper-large-v3-turbo',
-    label: 'Whisper Large V3 Turbo (Multilingual)',
+    label: 'Whisper Large V3 Turbo',
     url: `${R2_CDN}/whisper-ggml-large-v3-turbo-q5_0.bin`,
     relativePath: 'asr/ggml-large-v3-turbo-q5_0.bin',
     checkPath: 'asr/ggml-large-v3-turbo-q5_0.bin',
@@ -102,7 +102,7 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
   },
   {
     id: 'flair-ner-german-large',
-    label: 'Anonymisierung (flair-ner-german-large)',
+    label: 'flair/ner-german-large',
     url: `${R2_CDN}/flair-ner-german-large.tar.gz`,
     relativePath: 'ner',
     checkPath: 'ner/models/ner-german-large',
@@ -110,14 +110,19 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
     sha256: '5dc0390c6d844d30648c4d950ee694eafeb01813e4d75e734cad6deede29d8a3',
     archive: true,
     group: 'ner',
-    isRequired: true
+    isRequired: true,
+    description:
+      'Erkennt Personen, Orte, Organisationen und weitere benannte Entitäten in deutschem Text (Basis: flair/ner-german-large auf XLM-RoBERTa Large). Hohe Präzision auf Hochdeutsch (~92% F1). Ergänzt die Sperrliste mit modellbasierter Erkennung neuer Begriffe.',
+    languages: ['de'],
+    accuracyScore: 0.92,
+    speedScore: 0.5
   },
   {
     // Optional summarization model — Gemma 3 4B Instruct Q4_K_M (Gemma 4 E4B fallback,
     // see CLAUDE.md "Gemma 4 E4B GGUF source"). Hash + size must be re-synced after
     // running scripts/publish-manifest.sh per the model-hash-sync gotcha.
     id: 'gemma-summarization',
-    label: 'Zusammenfassung (Gemma 3 4B Instruct)',
+    label: 'Gemma 3 4B Instruct',
     url: `${R2_CDN}/google_gemma-3-4b-it-Q4_K_M.gguf`,
     relativePath: 'summarization/google_gemma-3-4b-it-Q4_K_M.gguf',
     checkPath: 'summarization/google_gemma-3-4b-it-Q4_K_M.gguf',
