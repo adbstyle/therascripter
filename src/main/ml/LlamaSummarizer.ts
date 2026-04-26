@@ -17,8 +17,12 @@ export function buildLlamaArgs(input: LlamaArgsInput): string[] {
     input.modelPath,
     '-f',
     input.promptFilePath,
-    '--chat-template',
-    'gemma',
+    // -st (single-turn) wraps the prompt in the model's jinja chat template
+    // (loaded from the GGUF) and exits after one assistant response. Without
+    // this, llama-cli b8920+ either ignores --chat-template (in raw -p mode,
+    // producing garbage continuations) or stays in interactive chat mode and
+    // never exits. -st is the only mode that gives us a clean one-shot run.
+    '-st',
     '-n',
     String(input.maxTokens),
     '--temp',

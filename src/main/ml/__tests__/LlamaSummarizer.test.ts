@@ -12,8 +12,10 @@ describe('buildLlamaArgs', () => {
     expect(args).toContain('/models/gemma.gguf')
     expect(args).toContain('-f')
     expect(args).toContain('/tmp/prompt.txt')
-    expect(args).toContain('--chat-template')
-    expect(args).toContain('gemma')
+    // Single-turn mode: applies the model's jinja chat template + exits
+    // after one response. Without this, llama-cli b8920+ either skips the
+    // chat template (raw -p mode → garbage) or hangs in interactive mode.
+    expect(args).toContain('-st')
     expect(args).toContain('-n')
     expect(args).toContain('200')
     expect(args).toContain('--no-display-prompt')
