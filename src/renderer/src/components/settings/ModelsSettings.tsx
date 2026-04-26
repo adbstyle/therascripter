@@ -10,13 +10,18 @@ import DiarizationPipelineSection from './DiarizationPipelineSection'
 export default function ModelsSettings(): React.JSX.Element {
   const toast = useToast()
   const [asrModels, setAsrModels] = useState<ModelCatalogEntry[]>([])
+  const [summarizationModels, setSummarizationModels] = useState<ModelCatalogEntry[]>([])
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [progress, setProgress] = useState<number | undefined>(undefined)
   const [deleteCandidate, setDeleteCandidate] = useState<ModelCatalogEntry | null>(null)
 
   const reload = async (): Promise<void> => {
-    const asr = await window.api.modelCatalog.list('asr')
+    const [asr, summarization] = await Promise.all([
+      window.api.modelCatalog.list('asr'),
+      window.api.modelCatalog.list('summarization')
+    ])
     setAsrModels(asr)
+    setSummarizationModels(summarization)
   }
 
   useEffect(() => {
@@ -40,8 +45,11 @@ export default function ModelsSettings(): React.JSX.Element {
   const handleDownload = async (id: string): Promise<void> => {
     setDownloadingId(id)
     try {
-      const updated = await window.api.modelCatalog.download(id)
-      setAsrModels(updated)
+      await window.api.modelCatalog.download(id)
+      // download returns the catalog for the model's group only — reload both
+      // to keep ASR + summarization grids in sync regardless of which one
+      // triggered the download.
+      await reload()
       toast.success('Modell erfolgreich heruntergeladen.')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
@@ -58,8 +66,8 @@ export default function ModelsSettings(): React.JSX.Element {
   const handleDeleteConfirmed = async (model: ModelCatalogEntry): Promise<void> => {
     setDeleteCandidate(null)
     try {
-      const updated = await window.api.modelCatalog.delete(model.id)
-      setAsrModels(updated)
+      await window.api.modelCatalog.delete(model.id)
+      await reload()
       toast.success(
         `"${model.label}" gelöscht — ${formatBytes(model.sizeBytes)} freigegeben.`
       )
@@ -70,8 +78,8 @@ export default function ModelsSettings(): React.JSX.Element {
 
   const handleActivate = async (model: ModelCatalogEntry): Promise<void> => {
     try {
-      const updated = await window.api.modelCatalog.setActive(model.group, model.id)
-      setAsrModels(updated)
+      await window.api.modelCatalog.setActive(model.group, model.id)
+      await reload()
       toast.success(
         `"${model.label}" aktiviert. Neue Transkriptionen verwenden ab jetzt dieses Modell — bereits verarbeitete Sitzungen bleiben unverändert.`
       )
@@ -143,6 +151,34 @@ export default function ModelsSettings(): React.JSX.Element {
       </section>
 
       <DiarizationPipelineSection />
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="mb-1 text-lg font-semibold">Zusammenfassung (optional)</h2>
+          <p className="text-sm text-text-secondary">
+            Lokales Sprachmodell für 2-Satz-Zusammenfassungen am Ende der Verarbeitung.
+            Optional — ohne installiertes Modell wird der Schritt geräuschlos
+            übersprungen.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {summarizationModels.map((m) => (
+            <ModelCard
+              key={m.id}
+              model={m}
+              activeUsageLabel="Wird für Zusammenfassungen verwendet"
+              downloading={downloadingId === m.id}
+              progress={downloadingId === m.id ? progress : undefined}
+              anyBusy={anyBusy}
+              onDownload={() => handleDownload(m.id)}
+              onCancelDownload={handleCancelDownload}
+              onDelete={() => setDeleteCandidate(m)}
+              onActivate={() => handleActivate(m)}
+            />
+          ))}
+        </div>
+      </section>
 
       <section>
         <h3 className="mb-2 text-sm font-medium text-text-tertiary">Pflicht-Modelle</h3>
