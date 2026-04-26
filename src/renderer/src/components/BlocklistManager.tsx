@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react'
+import { Pencil, Trash2 } from 'lucide-react'
 import type { BlocklistEntry, PlaceholderType } from '../../../shared/types'
 import { ConfirmDialog } from './ConfirmDialog'
 import { BlocklistDialog } from './BlocklistDialog'
@@ -146,7 +147,7 @@ const BlocklistManager = forwardRef<BlocklistManagerHandle>(function BlocklistMa
               </thead>
               <tbody className="divide-y divide-border bg-surface-0">
                 {entries.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-surface-1">
+                  <tr key={entry.id} className="group hover:bg-surface-1">
                     <td className="px-4 py-3 text-sm text-text-primary">{entry.term}</td>
                     <td className="px-4 py-3 text-sm text-text-secondary">
                       {PLACEHOLDER_TYPE_LABELS[entry.placeholderType]}
@@ -155,18 +156,22 @@ const BlocklistManager = forwardRef<BlocklistManagerHandle>(function BlocklistMa
                       {formatDate(entry.createdAt)}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-end gap-1">
                         <button
-                          className="text-sm text-primary hover:text-primary-hover"
+                          className="rounded p-1.5 text-text-tertiary opacity-0 transition-opacity hover:bg-surface-2 hover:text-text-primary group-hover:opacity-100 focus-visible:opacity-100"
                           onClick={() => setDialogMode({ type: 'edit', entry })}
+                          aria-label={`${entry.term} bearbeiten`}
+                          title="Bearbeiten"
                         >
-                          Bearbeiten
+                          <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                         </button>
                         <button
-                          className="text-sm text-error-text hover:text-error-text-emphasis"
+                          className="rounded p-1.5 text-text-tertiary opacity-0 transition-opacity hover:bg-error-bg hover:text-error-text group-hover:opacity-100 focus-visible:opacity-100"
                           onClick={() => setDeleteTarget(entry)}
+                          aria-label={`${entry.term} löschen`}
+                          title="Löschen"
                         >
-                          Löschen
+                          <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                         </button>
                       </div>
                     </td>
