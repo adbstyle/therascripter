@@ -585,11 +585,6 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
         </div>
       </header>
 
-      {/* Optional LLM-generated summary (only renders when present) */}
-      <div className="border-b border-border bg-surface-0 px-6 py-3 [&:empty]:border-b-0 [&:empty]:p-0">
-        <SummaryPanel sessionId={sessionId} />
-      </div>
-
       {/* Editor + Panel row */}
       <div className="flex min-h-0 flex-1">
         <div
@@ -602,6 +597,10 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
             scrollTimerRef.current = setTimeout(() => el.classList.remove('is-scrolling'), 1500)
           }}
         >
+          {/* Optional LLM-generated summary scrolls with the transcript */}
+          <div className="px-6 pt-4 [&:empty]:p-0">
+            <SummaryPanel sessionId={sessionId} />
+          </div>
           <EditorContent editor={editor} />
         </div>
         <AnonymizationPanel
