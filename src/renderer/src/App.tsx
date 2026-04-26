@@ -151,7 +151,7 @@ export default function App(): React.JSX.Element {
         {/* Header — sessions + recording. Settings renders its own breadcrumb header.
             Review has its own header. */}
         {!isInReview && currentView !== 'settings' && (
-          <header className="flex items-center justify-between border-b border-border px-6 py-4">
+          <header className="flex h-[72px] shrink-0 items-center justify-between border-b border-border px-6">
             <h2 className="text-2xl font-bold text-text-primary">{headerTitle}</h2>
             {!isRecording && currentView === 'sessions' && (
               <div className="flex items-center gap-2">

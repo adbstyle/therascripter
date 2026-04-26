@@ -48,7 +48,7 @@ interface HeaderProps {
 
 function SettingsHeader({ subpage, onBackToHome }: HeaderProps): React.JSX.Element {
   return (
-    <header className="flex shrink-0 items-center gap-2 border-b border-border px-6 py-4">
+    <header className="flex h-[72px] shrink-0 items-center gap-2 border-b border-border px-6">
       {subpage === null ? (
         <h2 className="text-2xl font-bold text-text-primary">Einstellungen</h2>
       ) : (
