@@ -68,14 +68,22 @@ fi
 # ── Full mode (models + app version) ────────────────────────────────────────
 
 # Model metadata: id|filename|label|relativePath|archive|checkPath
-# Must match MODEL_DEFINITIONS in ModelDownloadService.ts
-declare -a MODELS=(
-  "whisper-large-v3-turbo|whisper-ggml-large-v3-turbo-q5_0.bin|Whisper Large V3 Turbo (Multilingual)|asr/ggml-large-v3-turbo-q5_0.bin|false|asr/ggml-large-v3-turbo-q5_0.bin"
-  "whisper-large-v3-turbo-german|whisper-ggml-large-v3-turbo-german-q5_0.bin|Whisper Large V3 Turbo (German)|asr/ggml-large-v3-turbo-german-q5_0.bin|false|asr/ggml-large-v3-turbo-german-q5_0.bin"
-  "whisper-large-v3-turbo-swiss|whisper-ggml-large-v3-turbo-swiss-q5_0.bin|Whisper Large V3 Turbo (Swiss-German)|asr/ggml-large-v3-turbo-swiss-q5_0.bin|false|asr/ggml-large-v3-turbo-swiss-q5_0.bin"
-  "pyannote-suite|pyannote-suite.tar.gz|Sprechererkennung (pyannote)|diarization|true|diarization/models--pyannote--speaker-diarization-community-1"
-  "flair-ner-german-large|flair-ner-german-large.tar.gz|Anonymisierung (flair-ner-german-large)|ner|true|ner/models/ner-german-large"
-)
+# Generated from src/shared/model-catalog.ts (single source of truth) via
+# scripts/extract-model-definitions.ts. The bash array is no longer maintained
+# by hand — adding a new model requires a single update in the TS catalog only.
+declare -a MODELS=()
+EXTRACTOR="$SCRIPT_DIR/extract-model-definitions.ts"
+if [ ! -f "$EXTRACTOR" ]; then
+  echo "Error: extract-model-definitions.ts nicht gefunden: $EXTRACTOR"
+  exit 1
+fi
+while IFS= read -r line; do
+  [ -n "$line" ] && MODELS+=("$line")
+done < <(cd "$PROJECT_ROOT" && npx tsx "$EXTRACTOR")
+if [ "${#MODELS[@]}" -eq 0 ]; then
+  echo "Error: extract-model-definitions.ts lieferte keine Einträge — TS-Source kaputt?"
+  exit 1
+fi
 
 # CDN base URL
 CDN_BASE="https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev"
