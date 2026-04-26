@@ -58,12 +58,10 @@ export function SummaryPanel({ sessionId }: Props): React.JSX.Element | null {
   }
 
   return (
-    <section className="rounded-lg border border-border bg-surface-1 px-4 py-3">
-      <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-tertiary">
-        Zusammenfassung
-      </h2>
+    <section>
       <p
-        className="rounded-sm text-sm leading-relaxed text-text-primary outline-none focus:ring-1 focus:ring-primary"
+        className="rounded-sm font-semibold text-text-primary outline-none focus:ring-1 focus:ring-primary"
+        style={{ fontSize: '14px', lineHeight: '24px' }}
         contentEditable
         suppressContentEditableWarning
         onBlur={onBlur}
@@ -71,6 +69,7 @@ export function SummaryPanel({ sessionId }: Props): React.JSX.Element | null {
       >
         {text}
       </p>
+      <hr className="mt-4 w-12 border-0 border-t border-border-strong" aria-hidden />
     </section>
   )
 }

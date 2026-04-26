@@ -36,6 +36,7 @@ function toCatalogEntry(info: PipelineInfo, isActive: boolean): ModelCatalogEntr
     sizeBytes: 0,
     group: 'diarization',
     isRequired: true,
+    hfRepo: info.id,
     isInstalled: true,
     isActive
   }
@@ -57,7 +58,7 @@ export default function DiarizationPipelineSection(): React.JSX.Element {
       await window.api.pipeline.setDiarization(pipeline)
       setActive(pipeline)
       toast.success(
-        'Pipeline aktiviert. Neue Sitzungen verwenden ab jetzt diese Pipeline — bereits verarbeitete Sitzungen bleiben unverändert.'
+        'Pipeline aktiviert. Neue Transkriptionen verwenden ab jetzt diese Pipeline — bereits verarbeitete Transkriptionen bleiben unverändert.'
       )
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
@@ -69,27 +70,29 @@ export default function DiarizationPipelineSection(): React.JSX.Element {
       <div>
         <h2 className="mb-1 text-lg font-semibold">Sprechererkennungs-Pipeline</h2>
         <p className="text-sm text-text-secondary">
-          Das pyannote-Paket enthält zwei Pipelines. Wähle, welche für neue Sitzungen
-          verwendet werden soll — kein Download nötig, der Wechsel ist sofort aktiv.
+          Das pyannote-Paket enthält zwei Pipelines. Wähle, welche für neue Transkriptionen
+          verwendet werden soll.
         </p>
       </div>
 
-      <div className="space-y-3">
-        {PIPELINE_INFOS.map((info) => (
-          <ModelCard
-            key={info.id}
-            model={toCatalogEntry(info, active === info.id)}
-            activeUsageLabel="Wird für Sprechererkennung verwendet"
-            downloading={false}
-            anyBusy={false}
-            deletable={false}
-            showChips={false}
-            onDownload={noop}
-            onCancelDownload={noop}
-            onDelete={noop}
-            onActivate={() => handleActivate(info.id)}
-          />
-        ))}
+      <div>
+        <h3 className="mb-2 text-sm font-medium text-text-tertiary">Installiert</h3>
+        <div className="space-y-3">
+          {PIPELINE_INFOS.map((info) => (
+            <ModelCard
+              key={info.id}
+              model={toCatalogEntry(info, active === info.id)}
+              downloading={false}
+              anyBusy={false}
+              deletable={false}
+              showChips={false}
+              onDownload={noop}
+              onCancelDownload={noop}
+              onDelete={noop}
+              onActivate={() => handleActivate(info.id)}
+            />
+          ))}
+        </div>
       </div>
     </section>
   )

@@ -61,7 +61,7 @@ function createWindow(): void {
     height: 700,
     minWidth: 800,
     minHeight: 600,
-    title: 'Therascript',
+    title: 'TheraScript',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 15, y: 11 },
     backgroundColor: isDark ? '#0f1117' : '#ffffff',
@@ -119,7 +119,7 @@ app.whenReady().then(() => {
     initDatabase()
   } catch (error) {
     dialog.showErrorBox(
-      'Therascript – Datenbankfehler',
+      'TheraScript – Datenbankfehler',
       `Die Datenbank konnte nicht geöffnet werden.\n\n${error instanceof Error ? error.message : String(error)}`
     )
     app.quit()

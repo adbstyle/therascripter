@@ -37,14 +37,14 @@ export function RenameDialog({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       role="dialog"
       aria-modal="true"
-      aria-label="Sitzung umbenennen"
+      aria-label="Transkription umbenennen"
       onClick={onCancel}
     >
       <div
         className="mx-4 w-full max-w-md rounded-xl bg-surface-1 p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="mb-4 text-base font-semibold text-text-primary">Sitzung umbenennen</h3>
+        <h3 className="mb-4 text-base font-semibold text-text-primary">Transkription umbenennen</h3>
 
         <form onSubmit={handleSubmit}>
           <input

@@ -1,4 +1,8 @@
-import { CHIP_STYLES, SOURCE_LABELS } from '../../constants/editorConstants'
+import {
+  CHIP_STYLES,
+  SOURCE_LABELS,
+  formatPlaceholderLabel
+} from '../../constants/editorConstants'
 import type {
   AnonymizationOverviewData,
   EntityTypeGroup,
@@ -86,18 +90,19 @@ function IdentityRow({
   onRevert: (entityId: string) => void
 }): React.JSX.Element {
   const chipStyle = CHIP_STYLES[identity.type] ?? CHIP_STYLES.SONSTIGES
+  const displayLabel = formatPlaceholderLabel(identity.type, identity.number)
 
   return (
     <div className="rounded-lg border border-border bg-surface-0 px-3 py-2">
       <div className="flex items-center justify-between">
         <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${chipStyle}`}>
-          {identity.placeholder}
+          {displayLabel}
         </span>
         <button
           className="flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary"
           onClick={() => onRevert(identity.entityId)}
-          title={`${identity.placeholder} rückgängig machen (${identity.totalCount} Vorkommen)`}
-          aria-label={`${identity.placeholder} rückgängig machen`}
+          title={`${displayLabel} rückgängig machen (${identity.totalCount} Vorkommen)`}
+          aria-label={`${displayLabel} rückgängig machen`}
         >
           &#8617;
         </button>
@@ -122,9 +127,11 @@ function VariantRow({ variant }: { variant: OriginalVariant }): React.JSX.Elemen
       {variant.count > 1 && (
         <span className="flex-shrink-0 text-text-tertiary">{variant.count}x</span>
       )}
-      <span className="flex-shrink-0" title={sourceInfo.label} aria-label={sourceInfo.label}>
-        {sourceInfo.icon}
-      </span>
+      <sourceInfo.icon
+        className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary"
+        strokeWidth={1.75}
+        aria-label={sourceInfo.label}
+      />
     </div>
   )
 }

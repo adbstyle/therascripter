@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { NodeViewWrapper } from '@tiptap/react'
 import type { NodeViewProps } from '@tiptap/react'
 import type { PlaceholderType, EntitySource } from '../../../../shared/types'
-import { CHIP_STYLES, SOURCE_LABELS } from '../../constants/editorConstants'
+import { CHIP_STYLES, SOURCE_LABELS, formatPlaceholderLabel } from '../../constants/editorConstants'
 
 type TooltipPos = {
   x: number
@@ -60,17 +60,13 @@ export function PlaceholderChipView({ node, selected }: NodeViewProps): React.JS
     <NodeViewWrapper as="span" className="inline">
       <span
         ref={chipRef}
-        className={`inline-flex cursor-default items-center gap-1 rounded px-1.5 py-0.5 text-[13px] font-medium leading-tight ${chipStyle} ${selected ? 'ring-2 ring-primary ring-offset-1' : ''}`}
+        className={`inline-flex cursor-default items-center gap-1 rounded px-1.5 py-0.5 text-sm font-normal leading-tight ${chipStyle} ${selected ? 'ring-2 ring-primary ring-offset-1' : ''}`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         contentEditable={false}
       >
-        <span>
-          {type} {number}
-        </span>
-        <span className="text-[11px]" aria-hidden="true">
-          {sourceInfo.icon}
-        </span>
+        <span>{formatPlaceholderLabel(type, number)}</span>
+        <sourceInfo.icon className="h-3 w-3" strokeWidth={1.75} aria-hidden />
       </span>
 
       {tooltipPos &&

@@ -162,12 +162,14 @@ export class SessionService {
 
   /**
    * Returns a SummaryRecord if either title or summary is non-empty.
-   * The renderer treats an empty title as "show date fallback" but still
-   * needs the record to exist when only the title is present.
+   * The renderer renders a literal placeholder when title is empty (see
+   * SessionCard / EditableSessionTitle); the actual createdAt timestamp
+   * is shown separately in the card chrome, so no date-derived title
+   * fallback is needed in this layer.
    *
    * Title-reuse semantics: `sessions.title` is the same column that backs
    * both (a) auto-generated session labels written at createSession time
-   * (e.g. 'Sitzung 14.02.2026 14:30') and (b) the LLM-generated title
+   * (e.g. 'Aufnahme 14.02.2026 14:30') and (b) the LLM-generated title
    * written by SummarizationExecutor. We deliberately reuse the column
    * instead of adding a separate `llm_title` field — pre-feature sessions
    * already have non-NULL titles, and the renderer's contract is the
@@ -204,7 +206,7 @@ export class SessionService {
     })
   }
 
-  /** User-edited title. Empty string triggers the date-based fallback in the view layer. */
+  /** User-edited title. Empty string is rendered as a placeholder in the view layer (createdAt is shown separately). */
   updateTitle(sessionId: string, title: string): Session | null {
     return this.repository.update(sessionId, { title: title.trim() })
   }
