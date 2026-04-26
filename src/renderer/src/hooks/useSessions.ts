@@ -21,7 +21,7 @@ export function useSessions(): UseSessionsResult {
       const result = await window.api.sessions.list()
       setSessions(result)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sitzungen konnten nicht geladen werden')
+      setError(err instanceof Error ? err.message : 'Transkriptionen konnten nicht geladen werden')
     } finally {
       setLoading(false)
     }

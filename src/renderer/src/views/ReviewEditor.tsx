@@ -571,7 +571,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           <EditableSessionTitle
             sessionId={sessionId}
             title={sessionTitle}
-            fallback="Sitzung ohne Titel"
+            fallback="Transkription ohne Titel"
             onSaved={setSessionTitle}
             className="min-w-0 flex-1 truncate text-lg font-semibold text-text-primary"
           />
@@ -694,7 +694,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
       {/* Delete confirm dialog */}
       {showDeleteDialog && (
         <ConfirmDialog
-          title="Sitzung löschen"
+          title="Transkription löschen"
           message={`„${sessionTitle}" und alle zugehörigen Daten unwiderruflich löschen?`}
           details={['Audiodatei', 'Originaltext', 'Anonymisierter Text', 'Platzhalter-Mapping']}
           confirmLabel="Löschen"

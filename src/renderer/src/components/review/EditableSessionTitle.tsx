@@ -78,7 +78,7 @@ export function EditableSessionTitle({
       suppressContentEditableWarning
       onBlur={onBlur}
       onKeyDown={onKeyDown}
-      aria-label="Sitzungstitel bearbeiten"
+      aria-label="Titel bearbeiten"
       data-placeholder={fallback}
     />
   )

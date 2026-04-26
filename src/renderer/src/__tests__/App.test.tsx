@@ -103,7 +103,7 @@ describe('App', () => {
   it('renders sidebar navigation', async () => {
     render(<App />)
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Sitzungen' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Transkriptionen' })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Einstellungen' })).toBeInTheDocument()
     })
   })
@@ -112,7 +112,7 @@ describe('App', () => {
     render(<App />)
 
     await waitFor(() => {
-      expect(screen.getByText('Keine Sitzungen')).toBeInTheDocument()
+      expect(screen.getByText('Keine Transkriptionen')).toBeInTheDocument()
     })
   })
 })

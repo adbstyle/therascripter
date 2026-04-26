@@ -104,7 +104,7 @@ export default function App(): React.JSX.Element {
   const headerTitle = isRecording
     ? 'Aufnahme läuft'
     : currentView === 'sessions'
-      ? 'Sitzungen'
+      ? 'Transkriptionen'
       : currentView === 'settings'
         ? 'Einstellungen'
         : ''
@@ -165,7 +165,7 @@ export default function App(): React.JSX.Element {
               onClick={() => setCurrentView('sessions')}
               disabled={sidebarDisabled}
             >
-              Sitzungen
+              Transkriptionen
             </button>
             <button
               className={`titlebar-no-drag rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${

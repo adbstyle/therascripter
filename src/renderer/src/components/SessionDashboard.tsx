@@ -4,7 +4,6 @@ import { useSessions } from '../hooks/useSessions'
 import { groupSessionsByTime, GROUP_ORDER } from '../utils/groupSessionsByTime'
 import { SessionCard } from './SessionCard'
 import { ConfirmDialog } from './ConfirmDialog'
-import { RenameDialog } from './RenameDialog'
 
 const PROCESSING_STATUSES: SessionStatus[] = [
   'transcribing',
@@ -30,10 +29,9 @@ export default function SessionDashboard({
   scrollToSessionId,
   onScrollComplete
 }: SessionDashboardProps): React.JSX.Element {
-  const { sessions, loading, error, refresh, deleteSession, renameSession } = useSessions()
+  const { sessions, loading, error, refresh, deleteSession } = useSessions()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
-  const [renameTarget, setRenameTarget] = useState<Session | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
 
   // Scroll to a specific session card after returning from review
@@ -111,12 +109,6 @@ export default function SessionDashboard({
     setDeleteTarget(null)
   }
 
-  const handleRename = async (title: string): Promise<void> => {
-    if (!renameTarget) return
-    await renameSession(renameTarget.id, title)
-    setRenameTarget(null)
-  }
-
   const handleRetry = useCallback(
     async (sessionId: string): Promise<void> => {
       try {
@@ -174,7 +166,7 @@ export default function SessionDashboard({
             </>
           ) : (
             <>
-              <p className="mb-1 text-lg font-medium text-text-secondary">Keine Sitzungen</p>
+              <p className="mb-1 text-lg font-medium text-text-secondary">Keine Transkriptionen</p>
               <p className="text-sm text-text-tertiary">
                 Starten Sie eine Aufnahme oder importieren Sie ein PDF-Dokument.
               </p>
@@ -215,7 +207,6 @@ export default function SessionDashboard({
                     key={session.id}
                     session={session}
                     data-session-id={session.id}
-                    onRename={() => setRenameTarget(session)}
                     onDelete={() => setDeleteTarget(session)}
                     onRetry={
                       session.status === 'error'
@@ -236,7 +227,7 @@ export default function SessionDashboard({
 
       {deleteTarget && (
         <ConfirmDialog
-          title="Sitzung löschen"
+          title="Transkription löschen"
           message={`\u201e${deleteTarget.title}\u201c und alle zugehörigen Daten unwiderruflich löschen?`}
           details={['Audiodatei', 'Originaltext', 'Anonymisierter Text', 'Platzhalter-Mapping']}
           confirmLabel="Löschen"
@@ -246,13 +237,6 @@ export default function SessionDashboard({
         />
       )}
 
-      {renameTarget && (
-        <RenameDialog
-          currentTitle={renameTarget.title}
-          onConfirm={handleRename}
-          onCancel={() => setRenameTarget(null)}
-        />
-      )}
     </>
   )
 }

@@ -33,7 +33,7 @@ const ACKNOWLEDGMENTS = [
   },
   {
     name: 'better-sqlite3',
-    description: 'Lokale Datenbank — speichert Sitzungen und Sperrliste auf dem Gerät'
+    description: 'Lokale Datenbank — speichert Transkriptionen und Sperrliste auf dem Gerät'
   }
 ]
 
@@ -131,7 +131,7 @@ export default function AboutPage(): React.JSX.Element {
           {info ? (
             <div className="text-sm text-text-secondary">
               <p>App + Modelle: {formatBytes(info.storageModelsBytes)}</p>
-              <p>Sitzungsdaten: {formatBytes(info.storageSessionsBytes)}</p>
+              <p>Transkriptionsdaten: {formatBytes(info.storageSessionsBytes)}</p>
             </div>
           ) : (
             <p className="text-sm text-text-tertiary">Wird berechnet\u2026</p>
@@ -164,7 +164,7 @@ export default function AboutPage(): React.JSX.Element {
         <div className="rounded-lg border border-border bg-surface-1 p-4">
           <h4 className="mb-1 text-sm font-medium text-text-secondary">Daten</h4>
           <p className="text-sm text-text-secondary">
-            Sitzungen werden automatisch 30 Tage nach Erstellung gel\u00F6scht.
+            Transkriptionen werden automatisch 30 Tage nach Erstellung gel\u00F6scht.
           </p>
           <p className="mt-1 text-sm text-text-secondary">
             Sie sind verantwortlich, den kopierten Text extern zu sichern.
@@ -199,7 +199,7 @@ export default function AboutPage(): React.JSX.Element {
           message="Alle Daten werden unwiderruflich gel\u00F6scht:"
           details={[
             'ML-Modelle (~4 GB)',
-            'Alle Sitzungen und Audiodateien',
+            'Alle Transkriptionen und Audiodateien',
             'Sperrliste',
             'Einstellungen'
           ]}

@@ -103,7 +103,7 @@ export function registerSystemHandlers(): void {
       message: 'Alle Daten werden unwiderruflich gelöscht:',
       detail:
         '• ML-Modelle (~4 GB)\n' +
-        '• Alle Sitzungen und Audiodateien\n' +
+        '• Alle Transkriptionen und Audiodateien\n' +
         '• Sperrliste\n' +
         '• Einstellungen\n\n' +
         'Die App-Datei (Therascript.app) muss anschliessend ' +

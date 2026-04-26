@@ -81,7 +81,7 @@ export default function ModelsSettings(): React.JSX.Element {
       await window.api.modelCatalog.setActive(model.group, model.id)
       await reload()
       toast.success(
-        `"${model.label}" aktiviert. Neue Transkriptionen verwenden ab jetzt dieses Modell — bereits verarbeitete Sitzungen bleiben unverändert.`
+        `"${model.label}" aktiviert. Neue Transkriptionen verwenden ab jetzt dieses Modell — bereits verarbeitete Transkriptionen bleiben unverändert.`
       )
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
@@ -93,7 +93,7 @@ export default function ModelsSettings(): React.JSX.Element {
       await window.api.modelCatalog.clearActive(model.group)
       await reload()
       toast.success(
-        `"${model.label}" deaktiviert. Zukünftige Sitzungen werden ohne diesen Schritt verarbeitet.`
+        `"${model.label}" deaktiviert. Zukünftige Transkriptionen werden ohne diesen Schritt verarbeitet.`
       )
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
@@ -110,8 +110,8 @@ export default function ModelsSettings(): React.JSX.Element {
         <div>
           <h2 className="mb-1 text-lg font-semibold">Transkriptions-Modelle</h2>
           <p className="text-sm text-text-secondary">
-            Wähle das Modell, das für die Transkription deiner Sitzungen verwendet
-            werden soll. Ein Modellwechsel wirkt sich nur auf neue Transkriptionen aus.
+            Wähle das Modell, das für die Transkription verwendet werden soll. Ein
+            Modellwechsel wirkt sich nur auf neue Transkriptionen aus.
           </p>
         </div>
 

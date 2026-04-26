@@ -49,7 +49,7 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
     group: 'asr',
     isRequired: false,
     description:
-      'Unterstützt alle Sprachen (Deutsch, Englisch, Französisch, Italienisch, …). Empfohlen als Standardmodell oder wenn Sitzungen mehrsprachig geführt werden.',
+      'Unterstützt alle Sprachen (Deutsch, Englisch, Französisch, Italienisch, …). Empfohlen als Standardmodell oder wenn Aufnahmen mehrsprachig geführt werden.',
     languages: ['multi'],
     accuracyScore: 0.8,
     speedScore: 0.9

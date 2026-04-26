@@ -167,7 +167,7 @@ export class SessionService {
    *
    * Title-reuse semantics: `sessions.title` is the same column that backs
    * both (a) auto-generated session labels written at createSession time
-   * (e.g. 'Sitzung 14.02.2026 14:30') and (b) the LLM-generated title
+   * (e.g. 'Aufnahme 14.02.2026 14:30') and (b) the LLM-generated title
    * written by SummarizationExecutor. We deliberately reuse the column
    * instead of adding a separate `llm_title` field — pre-feature sessions
    * already have non-NULL titles, and the renderer's contract is the
