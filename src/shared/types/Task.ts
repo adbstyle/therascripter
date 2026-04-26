@@ -5,6 +5,7 @@ export type TaskType =
   | 'extraction'
   | 'ocr'
   | 'anonymization'
+  | 'summarization'
 
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
 

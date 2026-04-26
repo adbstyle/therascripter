@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, rmSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { BrowserWindow } from 'electron'
 import { getDataDir } from '../db/connection'
-import { getSettings } from './SettingsService'
+import { getSettings, type AppSettings } from './SettingsService'
 import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
 import type { ModelGroup } from '../../shared/validation/model-catalog-schemas'
 import { MODEL_DEFINITIONS, type ModelDefinition } from '../../shared/model-catalog'
@@ -30,12 +30,33 @@ export type ModelDownloadStatus =
 
 let abortSignal: { aborted: boolean } | null = null
 
+// Sentinel for "hash not yet synced from R2 manifest" — keeps the catalog entry in
+// the source for IDE navigation + manifest extraction (publish-manifest.sh reads
+// MODEL_DEFINITIONS directly), but hides the model from runtime accessors so the
+// Settings UI doesn't list it and isModelInstalled returns false. Once the model
+// is uploaded and the hash is synced via scripts/publish-manifest.sh, the entry
+// becomes live automatically.
+const PLACEHOLDER_SHA256 = '0'.repeat(64)
+
+function isPublishable(m: ModelDefinition): boolean {
+  return m.sha256 !== PLACEHOLDER_SHA256
+}
+
+const _placeholderEntries = MODEL_DEFINITIONS.filter((m) => !isPublishable(m))
+if (_placeholderEntries.length > 0) {
+  console.warn(
+    `[ModelDownloadService] ${_placeholderEntries.length} catalog entries have placeholder sha256 ` +
+      `and are filtered from runtime accessors: ${_placeholderEntries.map((m) => m.id).join(', ')}. ` +
+      `Sync hashes from manifest.json after scripts/publish-manifest.sh.`
+  )
+}
+
 export function getModelDefinitions(): ModelDefinition[] {
-  return MODEL_DEFINITIONS
+  return MODEL_DEFINITIONS.filter(isPublishable)
 }
 
 export function getModelsByGroup(group: ModelGroup): ModelDefinition[] {
-  return MODEL_DEFINITIONS.filter((m) => m.group === group)
+  return MODEL_DEFINITIONS.filter((m) => m.group === group && isPublishable(m))
 }
 
 /** Backward-Compat-Alias — weiterhin verwendet von First-Launch + Update-Check. */
@@ -44,11 +65,12 @@ export function getAsrModels(): ModelDefinition[] {
 }
 
 export function getRequiredModels(): ModelDefinition[] {
-  return MODEL_DEFINITIONS.filter((m) => m.isRequired === true)
+  return MODEL_DEFINITIONS.filter((m) => m.isRequired === true && isPublishable(m))
 }
 
 export function getModelById(id: string): ModelDefinition | null {
-  return MODEL_DEFINITIONS.find((m) => m.id === id) ?? null
+  const def = MODEL_DEFINITIONS.find((m) => m.id === id)
+  return def && isPublishable(def) ? def : null
 }
 
 /** Liefert die aktuell aktive Model-ID für eine Gruppe aus den Settings. */
@@ -57,7 +79,18 @@ export function getActiveModelId(group: ModelGroup): string {
   if (group === 'asr') return active.transcription
   if (group === 'diarization') return active.diarization
   if (group === 'ner') return active.ner
+  if (group === 'summarization') return active.summarization
   throw new Error(`Keine aktive Modell-Konfiguration für Gruppe "${group}"`)
+}
+
+/** Liefert den absoluten Pfad zum aktiven Modell einer Gruppe (für Subprozess-Aufrufe). */
+export function getActiveModelPath(group: ModelGroup): string {
+  const id = getActiveModelId(group)
+  const def = getModelById(id)
+  if (!def) {
+    throw new Error(`Aktive Modell-ID "${id}" für Gruppe "${group}" nicht im Katalog gefunden`)
+  }
+  return join(getModelsDir(), def.relativePath)
 }
 
 /**
@@ -305,8 +338,9 @@ export function abortModelDownload(): void {
 }
 
 /**
- * Lädt ein einziges ASR-Modell herunter (nicht für Pflicht-Modelle gedacht —
- * die laufen via startModelDownload auf First-Launch).
+ * Lädt ein einziges optionales Modell herunter (z.B. ASR-Variante oder
+ * Summarization-Modell). Pflicht-Modelle (`isRequired`) laufen via
+ * startModelDownload auf First-Launch und werden hier abgewiesen.
  *
  * Sendet denselben `modelDownload:status`-Channel wie startModelDownload,
  * damit die bestehende UI-Progress-Anzeige wiederverwendbar bleibt.
@@ -316,8 +350,10 @@ export async function downloadSingleModel(id: string): Promise<void> {
   if (!def) {
     throw new Error(`Download: unbekanntes Modell "${id}"`)
   }
-  if (def.group !== 'asr') {
-    throw new Error(`Download: nur ASR-Modelle sind einzeln ladbar (id=${id})`)
+  if (def.isRequired) {
+    throw new Error(
+      `Download: "${def.label}" ist ein Pflicht-Modell — wird über First-Launch geladen`
+    )
   }
   if (abortSignal && !abortSignal.aborted) {
     throw new Error('Download: bereits aktiv — zuerst abbrechen')
@@ -408,8 +444,16 @@ export async function downloadSingleModel(id: string): Promise<void> {
 /**
  * Löscht ein einzelnes Modell von Disk. Verboten für:
  *   - unbekannte IDs
- *   - Pflicht-Modelle (isRequired, z.B. flair NER)
- *   - das aktuell aktive Modell einer group-required Gruppe (ASR, Diarization)
+ *   - Pflicht-Modelle (isRequired, z.B. flair NER + pyannote-Suite)
+ *   - das aktuell aktive ASR-Modell (User muss zuerst auf ein anderes
+ *     Modell wechseln, sonst hätte die Transkriptions-Pipeline keinen
+ *     gültigen Modell-Pfad mehr)
+ *
+ * Optionale Modelle (z.B. Summarization) ohne harten Active-Guard:
+ *   - Wenn das aktive Summarization-Modell gelöscht wird, schaltet der
+ *     SummarizationExecutor automatisch in den Skip-Modus
+ *     (isModelInstalled = false). Die Pipeline läuft einfach ohne
+ *     Zusammenfassung weiter, kein Fehler.
  */
 export async function deleteModel(id: string): Promise<void> {
   const def = getModelById(id)
@@ -450,10 +494,16 @@ export async function deleteModel(id: string): Promise<void> {
 // Explizites Mapping Group → Settings-Key. Der TypeScript-Compiler erzwingt Vollständigkeit:
 // Wird ModelGroup um einen neuen Wert erweitert, schlägt der Build fehl,
 // solange das Mapping nicht erweitert wird. Das verhindert silent-wrong-key-writes.
-const GROUP_TO_SETTINGS_KEY: Record<ModelGroup, 'transcription' | 'diarization' | 'ner'> = {
+//
+// Die Value-Union wird aus AppSettings['activeModels'] abgeleitet, damit die
+// Mapping-Werte automatisch synchron bleiben mit den Property-Namen in den
+// Settings — Tippfehler oder umbenannte Felder werden vom Compiler gefangen,
+// statt dass eine zweite hand-gepflegte Union nötig wäre.
+const GROUP_TO_SETTINGS_KEY: Record<ModelGroup, keyof AppSettings['activeModels']> = {
   asr: 'transcription',
   diarization: 'diarization',
-  ner: 'ner'
+  ner: 'ner',
+  summarization: 'summarization'
 }
 
 /**

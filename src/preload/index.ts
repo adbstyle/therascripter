@@ -181,6 +181,13 @@ const api: IpcApi = {
         ipcRenderer.removeListener('appUpdate:status', handler)
       }
     }
+  },
+  summary: {
+    get: (sessionId: string) => ipcRenderer.invoke('summary:get', { sessionId }),
+    updateTitle: (sessionId: string, title: string) =>
+      ipcRenderer.invoke('summary:updateTitle', { sessionId, title }),
+    updateText: (sessionId: string, text: string) =>
+      ipcRenderer.invoke('summary:updateText', { sessionId, text })
   }
 }
 

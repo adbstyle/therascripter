@@ -29,6 +29,9 @@ export interface Session {
   updatedAt: string
   reviewAt: string | null
   wordCount: number | null
+  summary: string | null
+  summaryModelId: string | null
+  summarizedAt: string | null
 }
 
 export interface CreateSessionInput {
@@ -53,4 +56,7 @@ export interface UpdateSessionInput {
   errorMessage?: string | null
   reviewAt?: string | null
   wordCount?: number | null
+  summary?: string | null
+  summaryModelId?: string | null
+  summarizedAt?: string | null
 }

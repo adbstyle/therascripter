@@ -99,15 +99,13 @@ describe('downloadSingleModel', () => {
     )
   })
 
-  it('throws when model is not in asr group (pyannote-suite)', async () => {
-    await expect(downloadSingleModel('pyannote-suite')).rejects.toThrow(
-      /nur ASR-Modelle/i
-    )
+  it('throws when model is required (pyannote-suite)', async () => {
+    await expect(downloadSingleModel('pyannote-suite')).rejects.toThrow(/Pflicht-Modell/i)
   })
 
-  it('throws when model is not in asr group (flair)', async () => {
+  it('throws when model is required (flair)', async () => {
     await expect(downloadSingleModel('flair-ner-german-large')).rejects.toThrow(
-      /nur ASR-Modelle/i
+      /Pflicht-Modell/i
     )
   })
 })

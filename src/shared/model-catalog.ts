@@ -111,5 +111,22 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
     archive: true,
     group: 'ner',
     isRequired: true
+  },
+  {
+    // Optional summarization model — Gemma 3 4B Instruct Q4_K_M (Gemma 4 E4B fallback,
+    // see CLAUDE.md "Gemma 4 E4B GGUF source"). Hash + size must be re-synced after
+    // running scripts/publish-manifest.sh per the model-hash-sync gotcha.
+    id: 'gemma-summarization',
+    label: 'Zusammenfassung (Gemma 3 4B Instruct)',
+    url: `${R2_CDN}/gemma-3-4b-it-Q4_K_M.gguf`,
+    relativePath: 'summarization/gemma-3-4b-it-Q4_K_M.gguf',
+    checkPath: 'summarization/gemma-3-4b-it-Q4_K_M.gguf',
+    sizeBytes: 2_490_000_000,
+    sha256: '0000000000000000000000000000000000000000000000000000000000000000',
+    group: 'summarization',
+    isRequired: false,
+    description:
+      'Lokales 4B-Parameter-Modell für 2-Satz-Zusammenfassungen deutscher Texte. Optional — kann später unter Einstellungen → Modelle nachgeladen werden.',
+    languages: ['de', 'en']
   }
 ]

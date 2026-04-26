@@ -357,4 +357,64 @@ describe('SessionService', () => {
       expect(path).toBe('/mock/home/.therascript/anonymized/abc-123.json')
     })
   })
+
+  describe('summary methods', () => {
+    it('saveGeneratedSummary persists title + text + modelId, getSummary round-trips', () => {
+      const session = service.createSession('Initial Title', 'audio')
+
+      service.saveGeneratedSummary(
+        session.id,
+        'Schlafstörungen und Arbeitsstress',
+        'Der Patient berichtet von Einschlafproblemen. Vereinbart wird ein Schlaftagebuch.',
+        'gemma-summarization'
+      )
+
+      const summary = service.getSummary(session.id)
+      expect(summary).not.toBeNull()
+      expect(summary?.title).toBe('Schlafstörungen und Arbeitsstress')
+      expect(summary?.text).toBe(
+        'Der Patient berichtet von Einschlafproblemen. Vereinbart wird ein Schlaftagebuch.'
+      )
+      expect(summary?.modelId).toBe('gemma-summarization')
+      expect(summary?.summarizedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+    })
+
+    it('getSummary returns the record when only title is set (text empty)', () => {
+      const session = service.createSession('Sitzung 14.02.2026', 'audio')
+
+      const summary = service.getSummary(session.id)
+      expect(summary).not.toBeNull()
+      expect(summary?.title).toBe('Sitzung 14.02.2026')
+      expect(summary?.text).toBe('')
+      expect(summary?.modelId).toBeNull()
+    })
+
+    it('updateSummaryText clears summary_model_id (user edit overrides LLM provenance)', () => {
+      const session = service.createSession('Original', 'audio')
+      service.saveGeneratedSummary(session.id, 'LLM Title', 'LLM text.', 'gemma-summarization')
+
+      service.updateSummaryText(session.id, 'User-edited summary.')
+
+      const summary = service.getSummary(session.id)
+      expect(summary?.text).toBe('User-edited summary.')
+      expect(summary?.modelId).toBeNull()
+    })
+
+    it('updateTitle persists trimmed title; empty string is stored as empty', () => {
+      const session = service.createSession('Old', 'audio')
+
+      service.updateTitle(session.id, '  Neuer Titel  ')
+      expect(service.getSummary(session.id)?.title).toBe('Neuer Titel')
+
+      service.updateTitle(session.id, '')
+      // Empty title still stored — view layer renders date fallback when empty.
+      const after = service.getSession(session.id)
+      expect(after?.title).toBe('')
+    })
+
+    it('getAnonymizedPlainText throws when session has no anonymized document', () => {
+      const session = service.createSession('Test', 'audio')
+      expect(() => service.getAnonymizedPlainText(session.id)).toThrow(/anonymisiertes Dokument/)
+    })
+  })
 })

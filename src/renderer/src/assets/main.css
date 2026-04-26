@@ -193,3 +193,12 @@
 .titlebar-no-drag {
   -webkit-app-region: no-drag;
 }
+
+/* Editable session title: when DOM text is empty, show the date fallback as a
+   pseudo-element placeholder. Real title text always lives in the DOM, so the
+   fallback never gets accidentally promoted to a real title on focus+blur. */
+.session-title:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-tertiary);
+  pointer-events: none;
+}
