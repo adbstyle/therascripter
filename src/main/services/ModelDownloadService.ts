@@ -338,8 +338,9 @@ export function abortModelDownload(): void {
 }
 
 /**
- * Lädt ein einziges ASR-Modell herunter (nicht für Pflicht-Modelle gedacht —
- * die laufen via startModelDownload auf First-Launch).
+ * Lädt ein einziges optionales Modell herunter (z.B. ASR-Variante oder
+ * Summarization-Modell). Pflicht-Modelle (`isRequired`) laufen via
+ * startModelDownload auf First-Launch und werden hier abgewiesen.
  *
  * Sendet denselben `modelDownload:status`-Channel wie startModelDownload,
  * damit die bestehende UI-Progress-Anzeige wiederverwendbar bleibt.
@@ -349,8 +350,10 @@ export async function downloadSingleModel(id: string): Promise<void> {
   if (!def) {
     throw new Error(`Download: unbekanntes Modell "${id}"`)
   }
-  if (def.group !== 'asr') {
-    throw new Error(`Download: nur ASR-Modelle sind einzeln ladbar (id=${id})`)
+  if (def.isRequired) {
+    throw new Error(
+      `Download: "${def.label}" ist ein Pflicht-Modell — wird über First-Launch geladen`
+    )
   }
   if (abortSignal && !abortSignal.aborted) {
     throw new Error('Download: bereits aktiv — zuerst abbrechen')
