@@ -27,6 +27,9 @@ interface SessionRow {
   updated_at: string
   review_at: string | null
   word_count: number | null
+  summary: string | null
+  summary_model_id: string | null
+  summarized_at: string | null
 }
 
 function parseEntityMap(json: string | null, sessionId: string): EntityMap | null {
@@ -57,7 +60,10 @@ function rowToSession(row: SessionRow): Session {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     reviewAt: row.review_at,
-    wordCount: row.word_count
+    wordCount: row.word_count,
+    summary: row.summary,
+    summaryModelId: row.summary_model_id,
+    summarizedAt: row.summarized_at
   }
 }
 
@@ -159,6 +165,18 @@ export class SessionRepository {
     if (input.wordCount !== undefined) {
       sets.push('word_count = ?')
       values.push(input.wordCount)
+    }
+    if (input.summary !== undefined) {
+      sets.push('summary = ?')
+      values.push(input.summary)
+    }
+    if (input.summaryModelId !== undefined) {
+      sets.push('summary_model_id = ?')
+      values.push(input.summaryModelId)
+    }
+    if (input.summarizedAt !== undefined) {
+      sets.push('summarized_at = ?')
+      values.push(input.summarizedAt)
     }
 
     if (sets.length === 0) return this.findById(id)

@@ -4,6 +4,7 @@ import addReviewAt from './003-add-review-at.sql?raw'
 import addTaskCancelledStatus from './004-add-task-cancelled-status.sql?raw'
 import addAlignedTranscriptAndExtractedPaths from './005-add-aligned-transcript-and-extracted-paths.sql?raw'
 import addWordCount from './006-add-word-count.sql?raw'
+import addSummarization from './007-add-summarization.sql?raw'
 
 export interface Migration {
   version: number
@@ -16,5 +17,6 @@ export const migrations: Migration[] = [
   { version: 3, sql: addReviewAt },
   { version: 4, sql: addTaskCancelledStatus },
   { version: 5, sql: addAlignedTranscriptAndExtractedPaths },
-  { version: 6, sql: addWordCount }
+  { version: 6, sql: addWordCount },
+  { version: 7, sql: addSummarization }
 ]

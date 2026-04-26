@@ -24,6 +24,9 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     updatedAt: new Date().toISOString(),
     reviewAt: null,
     wordCount: null,
+    summary: null,
+    summaryModelId: null,
+    summarizedAt: null,
     ...overrides
   }
 }

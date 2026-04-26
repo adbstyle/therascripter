@@ -29,17 +29,19 @@ const TASK_LABELS: Record<TaskType, string> = {
   alignment: 'Zuordnung',
   extraction: 'Textextraktion',
   ocr: 'OCR',
-  anonymization: 'Anonymisierung'
+  anonymization: 'Anonymisierung',
+  summarization: 'Zusammenfassung'
 }
 
 const AUDIO_PIPELINE_STEPS: TaskType[] = [
   'transcription',
   'diarization',
   'alignment',
-  'anonymization'
+  'anonymization',
+  'summarization'
 ]
 
-const PDF_PIPELINE_STEPS: TaskType[] = ['extraction', 'ocr', 'anonymization']
+const PDF_PIPELINE_STEPS: TaskType[] = ['extraction', 'ocr', 'anonymization', 'summarization']
 
 function isProcessingStatus(status: SessionStatus): boolean {
   return (
