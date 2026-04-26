@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, ChevronRight, Cpu, Info, Palette, ShieldCheck } from 'lucide-react'
+import { ChevronRight, Cpu, Info, Palette, ShieldCheck } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import BlocklistManager from '../components/BlocklistManager'
 import AppearanceSettings from '../components/AppearanceSettings'
@@ -23,46 +23,52 @@ const THEME_LABELS = { light: 'Hell', dark: 'Dunkel', system: 'System' } as cons
 export default function Settings(): React.JSX.Element {
   const [subpage, setSubpage] = useState<SubPage | null>(null)
 
-  if (subpage === null) {
-    return <SettingsHome onSelect={setSubpage} />
-  }
-
   return (
-    <SettingsSubPage title={SUBPAGE_TITLES[subpage]} onBack={() => setSubpage(null)}>
-      {subpage === 'sperrliste' && <BlocklistManager />}
-      {subpage === 'darstellung' && <AppearanceSettings />}
-      {subpage === 'modelle' && <ModelsSettings />}
-      {subpage === 'ueber' && <AboutPage />}
-    </SettingsSubPage>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <SettingsHeader subpage={subpage} onBackToHome={() => setSubpage(null)} />
+
+      {subpage === null ? (
+        <SettingsHome onSelect={setSubpage} />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {subpage === 'sperrliste' && <BlocklistManager />}
+          {subpage === 'darstellung' && <AppearanceSettings />}
+          {subpage === 'modelle' && <ModelsSettings />}
+          {subpage === 'ueber' && <AboutPage />}
+        </div>
+      )}
+    </div>
   )
 }
 
-interface SubPageProps {
-  title: string
-  onBack: () => void
-  children: React.ReactNode
+interface HeaderProps {
+  subpage: SubPage | null
+  onBackToHome: () => void
 }
 
-function SettingsSubPage({ title, onBack, children }: SubPageProps): React.JSX.Element {
+function SettingsHeader({ subpage, onBackToHome }: HeaderProps): React.JSX.Element {
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-border px-6 py-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="titlebar-no-drag inline-flex items-center gap-1.5 rounded-md px-2 py-1 -ml-2 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-1 hover:text-text-primary"
-        >
-          <ArrowLeft className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-          Einstellungen
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto">
-        <div className="px-6 pt-6">
-          <h2 className="text-2xl font-bold text-text-primary">{title}</h2>
-        </div>
-        {children}
-      </div>
-    </div>
+    <header className="flex shrink-0 items-center gap-2 border-b border-border px-6 py-4">
+      {subpage === null ? (
+        <h2 className="text-2xl font-bold text-text-primary">Einstellungen</h2>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={onBackToHome}
+            className="titlebar-no-drag rounded-md text-2xl font-bold text-text-tertiary transition-colors hover:text-text-secondary"
+          >
+            Einstellungen
+          </button>
+          <ChevronRight
+            className="h-5 w-5 shrink-0 text-text-tertiary"
+            strokeWidth={2}
+            aria-hidden="true"
+          />
+          <h2 className="text-2xl font-bold text-text-primary">{SUBPAGE_TITLES[subpage]}</h2>
+        </>
+      )}
+    </header>
   )
 }
 

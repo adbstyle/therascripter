@@ -148,8 +148,9 @@ export default function App(): React.JSX.Element {
 
       {/* Main content */}
       <main className="flex min-h-0 flex-1 flex-col">
-        {/* Header — only for non-review views (review has its own header) */}
-        {!isInReview && (
+        {/* Header — sessions + recording. Settings renders its own breadcrumb header.
+            Review has its own header. */}
+        {!isInReview && currentView !== 'settings' && (
           <header className="flex items-center justify-between border-b border-border px-6 py-4">
             <h2 className="text-2xl font-bold text-text-primary">{headerTitle}</h2>
             {!isRecording && currentView === 'sessions' && (
