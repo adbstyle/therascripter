@@ -1,18 +1,22 @@
 # Therascript
 
-Lokale Therapiesitzungs-Transkription und Anonymisierung für macOS.
+Lokale Therapiesitzungs-Transkription, Anonymisierung und Zusammenfassung für macOS.
 
-Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufnimmt, automatisch transkribiert, Sprecher erkennt und personenbezogene Daten anonymisiert. Die gesamte Verarbeitung erfolgt lokal auf dem Gerät — keine Daten verlassen den Rechner.
+Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufnimmt, automatisch transkribiert, Sprecher erkennt, personenbezogene Daten anonymisiert und optional eine Zusammenfassung erstellt. Die gesamte Verarbeitung erfolgt lokal auf dem Gerät — keine Daten verlassen den Rechner.
 
 ## Features
 
 - **Aufnahme & Transkription** — Live-Aufnahme mit automatischer Transkription (Hochdeutsch + Schweizerdeutsch)
 - **Sprechererkennung** — Automatische Unterscheidung von bis zu 4 Sprechern (Einzel- und Paartherapie)
 - **Anonymisierung** — Automatische Erkennung und Ersetzung von Personen, Orten, Kontaktdaten, medizinischen Identifikatoren und Geburtsdaten durch Platzhalter
+- **Zusammenfassung** — Optionale lokale Zusammenfassung anonymisierter Sitzungen via llama.cpp
 - **Sperrliste** — Persönliche Blocklist für wiederkehrende Begriffe mit bidirektionaler Umlaut-Normalisierung
 - **PDF-Import** — Import und Anonymisierung von PDFs inkl. gescannter Dokumente via OCR
-- **Review-Editor** — TipTap-basierter Editor zur Nachbearbeitung mit Clipboard-Export
-- **Datenschutz** — Komplett offline, CSP `connect-src 'none'`, Electron Fuses gehärtet, FileVault-Prüfung
+- **Review-Editor** — TipTap-basierter Editor zur Nachbearbeitung mit Clipboard-Export und Quick-Add zur Sperrliste
+- **Modell-Management** — Austauschbare ML-Modelle pro Pipeline-Schritt, verwaltbar im Einstellungen-Bereich
+- **Auto-Update für Modelle** — Hintergrund-Check gegen Cloudflare R2-Manifest, atomarer Tausch beim Neustart
+- **Datenschutz** — Komplett offline, CSP `connect-src 'none'` in Production, Electron Fuses gehärtet, FileVault-Prüfung
+- **System-Tray** — App läuft im Hintergrund weiter, Aufnahme über Menüleisten-Icon stoppbar
 - **Auto-Löschung** — Sitzungen werden 30 Tage nach Erstellung automatisch gelöscht
 
 ## Systemvoraussetzungen
@@ -20,7 +24,7 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 - macOS 14+ (Sonoma oder neuer)
 - Apple Silicon (M1–M4)
 - Mindestens 8 GB RAM
-- ~5 GB freier Speicherplatz (App + ML-Modelle)
+- ~5 GB freier Speicherplatz (App + ML-Modelle, plus ~2.5 GB optional für Zusammenfassung)
 
 ## Installation
 
@@ -32,7 +36,7 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
    ```
    Alternativ: Rechtsklick → Öffnen
 4. Therascript starten
-5. Therascript lädt beim ersten Start die ML-Modelle herunter (~4.1 GB)
+5. Beim ersten Start lädt Therascript die ML-Modelle herunter (~4.1 GB; Zusammenfassungs-Modell ist optional und kann später nachgeladen werden)
 
 > **Empfehlung:** FileVault-Verschlüsselung aktivieren — Therascript warnt, falls deaktiviert.
 
@@ -44,6 +48,7 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 - Python 3.11+ und [uv](https://docs.astral.sh/uv/)
 - Xcode Command Line Tools (`xcode-select --install`)
 - [Homebrew](https://brew.sh)
+- HuggingFace-Account mit `huggingface-cli login` (für Pyannote- und Gemma-Modelle)
 
 ### Setup
 
@@ -62,9 +67,12 @@ scripts/setup-ner.sh --model
 
 # Swift Vision OCR CLI-Helper bauen
 scripts/setup-vision-ocr.sh
+
+# llama.cpp + Gemma 3 4B GGUF (optional, für Zusammenfassungen)
+scripts/setup-llama.sh --model
 ```
 
-> **Hinweis:** Pyannote erfordert einen HuggingFace-Token (`huggingface-cli login`) und akzeptierte Nutzungsbedingungen für `pyannote/speaker-diarization-3.1` und `pyannote/speaker-diarization-community-1`.
+> **Hinweis:** Pyannote erfordert akzeptierte Nutzungsbedingungen für `pyannote/speaker-diarization-3.1` und `pyannote/speaker-diarization-community-1` auf HuggingFace. Das Gemma-GGUF (bartowski-Mirror von `google/gemma-3-4b-it`) ist ebenfalls gated.
 
 ### Befehle
 
@@ -78,17 +86,19 @@ npm run format          # Prettier-Formatierung
 npm run typecheck       # TypeScript-Prüfung (Node + Web)
 npm run package         # Produktions-Build → macOS DMG (arm64)
 npm run sidecar:build   # Standalone Python-Sidecar via uv bauen
+npm run sidecar:deploy  # Sidecar bauen, packen und nach R2 uploaden
+scripts/release.sh      # Versions-Bump → DMG → GitHub-Release (interaktiv)
 ```
 
 ## Architektur
 
 ### Electron-Prozesse
 
-| Prozess | Pfad | Beschreibung |
-|---------|------|-------------|
-| Main | `src/main/` | App-Lifecycle, IPC-Handler, CSP, Sicherheit |
-| Preload | `src/preload/` | Context Bridge mit Zod-validiertem IPC |
-| Renderer | `src/renderer/` | React 19 + Tailwind CSS v4 UI |
+| Prozess  | Pfad             | Beschreibung                                       |
+| -------- | ---------------- | -------------------------------------------------- |
+| Main     | `src/main/`      | App-Lifecycle, IPC-Handler, CSP, Sicherheit, Tray  |
+| Preload  | `src/preload/`   | Context Bridge mit Zod-validiertem IPC             |
+| Renderer | `src/renderer/`  | React 19 + Tailwind CSS v4 UI                      |
 
 ### ML-Pipeline (Audio)
 
@@ -97,52 +107,70 @@ Streng sequenziell — immer nur ein Modell geladen:
 1. **whisper.cpp** (Subprocess) — ASR mit Whisper Large V3 Turbo (Q5_0, Metal GPU)
 2. **Python-Sidecar** — pyannote.audio Diarization + Alignment
 3. **Python-Sidecar** — flair NER + Regex + Sperrliste → TipTap-Dokument
+4. **llama.cpp** (Subprocess) — Optionale Zusammenfassung (Gemma 3 4B Instruct, JSON-Schema-constrained)
 
 ### ML-Pipeline (PDF)
 
 1. **pdfjs-dist** — Textextraktion pro Seite
 2. **Swift CLI** — Apple Vision OCR für gescannte Seiten
 3. **Python-Sidecar** — flair NER + Regex + Sperrliste → TipTap-Dokument
+4. **llama.cpp** (Subprocess) — Optionale Zusammenfassung
+
+> Schritt 4 wird übersprungen, falls kein Summarization-Modell aktiv ist — die Sitzung erreicht trotzdem den Review-Status, `summary` bleibt leer.
+
+### Modell-Management
+
+- Pro Pipeline-Schritt (ASR, Diarization, Summarization) ist ein Modell-Slot in `electron-store` aktiv
+- Verfügbare Modelle stehen im Modell-Katalog (`src/main/services/ModelCatalog.ts`); Nutzer aktivieren / deaktivieren / löschen sie über Einstellungen → Modelle
+- Update-Check vergleicht installierte Versionen mit `manifest.json` auf Cloudflare R2; Updates werden in einen Staging-Ordner heruntergeladen und beim Neustart atomar getauscht
 
 ### Speicherung
 
 - **better-sqlite3** — Sitzungen, Sperrliste
-- **electron-store** — Einstellungen
-- **ML-Modelle** — `~/.therascript/models/` (persistieren über App-Updates)
+- **electron-store** — Einstellungen, aktive Modelle, Update-Status
+- **ML-Modelle** — `~/.therascript/models/<typ>/` (persistieren über App-Updates)
+- **PDFs** — `~/.therascript/pdf/`
 
 ## Tech-Stack
 
-- **Frontend:** React 19, Tailwind CSS v4, TipTap (ProseMirror)
+- **Frontend:** React 19, Tailwind CSS v4, TipTap 3 (ProseMirror), lucide-react
 - **Desktop:** Electron 34, electron-vite
 - **ASR:** whisper.cpp (Whisper Large V3 Turbo Q5_0)
-- **Diarization:** pyannote.audio (speaker-diarization-3.1)
-- **NER:** flair (ner-german-large, F1 ~92%)
-- **OCR:** Apple Vision Framework (Swift CLI)
+- **Diarization:** pyannote.audio (`speaker-diarization-3.1`, optional `speaker-diarization-community-1`)
+- **NER:** flair (`ner-german-large`, F1 ~92 %)
+- **Summarization:** llama.cpp (Gemma 3 4B Instruct Q4_K_M, JSON-Schema-Grammar)
+- **OCR:** Apple Vision Framework (Swift CLI) mit Tesseract-Fallback
 - **Datenbank:** better-sqlite3
+- **Validierung:** Zod-Schemas für alle IPC-Channels
 - **Testing:** Vitest, Testing Library, jsdom
-- **Build:** electron-builder → DMG (arm64)
+- **Build:** electron-builder → DMG (arm64), Electron Fuses gehärtet, ad-hoc Codesignatur
 
 ## Projektstruktur
 
 ```
 src/
-  main/           # Electron Main-Prozess
-  preload/        # Context Bridge + IPC
-  renderer/       # React UI
-  shared/         # Types + Zod-Schemas
-python_sidecar/   # Python-Sidecar (pyannote + flair)
-swift_cli/        # Swift Vision OCR Helper
-scripts/          # Setup- und Build-Skripte
-resources/        # Binaries (whisper-cli) + Libraries
-tests/            # Test-Setup
+  main/             # Electron Main-Prozess (IPC, ML-Orchestrierung, Tray, Update-Service)
+  preload/          # Context Bridge + Zod-validiertes IPC
+  renderer/         # React UI (Shell, Settings, Review-Editor)
+  shared/           # Types + Zod-Schemas
+python_sidecar/     # Python-Sidecar (pyannote + flair, dev venv + standalone build)
+swift_cli/          # Swift Vision OCR Helper
+scripts/            # Setup-, Build- und Release-Skripte
+resources/          # Binaries (whisper-cli, llama-cli, vision-ocr) + Libraries
+tests/              # Vitest-Setup
+docs/               # Produkt- und Plan-Dokumentation
 ```
 
 ## Dokumentation
 
-- [requirements.md](requirements.md) — User Stories, NFRs, Entscheidungen
-- [specification.md](specification.md) — Technische Spezifikation
-- [implementation-plan.md](implementation-plan.md) — Iterations-Roadmap
-- [wireframes.md](wireframes.md) — 24 Screens + UX-Flows
+Lebende Produktdokumentation in [`docs/product/`](docs/product/):
+
+- [`architecture/`](docs/product/architecture) — Architektur-Übersicht, IPC-API, ML-Pipeline, Storage, Security
+- [`features/`](docs/product/features) — Aufnahme, Transkription, Anonymisierung, Sperrliste, PDF-Import, Review-Editor, Zusammenfassung, Modell-Management, Einstellungen
+- [`operations/`](docs/product/operations) — Development-Setup, Modell-Pipeline, Release-Prozess
+- [`decisions/`](docs/product/decisions) — Architektur-Entscheidungen (ADRs)
+
+Historische Planungsdokumente: [`docs/archive/`](docs/archive).
 
 ## Lizenz
 
