@@ -1,9 +1,18 @@
 import type Database from 'better-sqlite3'
+import { readFileSync } from 'fs'
 import { join } from 'path'
 import { SessionRepository } from '../db/repositories/SessionRepository'
 import { getDataDir } from '../db/connection'
 import { removeFile } from '../utils/file-ops'
+import { tiptapToPlainText } from '../ml/tiptap-plain-text'
 import type { Session, SessionStatus, UpdateSessionInput } from '../../shared/types'
+
+export interface SummaryRecord {
+  title: string | null
+  text: string
+  modelId: string | null
+  summarizedAt: string | null
+}
 
 const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
   recording: ['transcribing', 'error'],
@@ -138,6 +147,73 @@ export class SessionService {
 
   generateAlignedTranscriptPath(sessionId: string): string {
     return join(getDataDir(), 'transcripts', `${sessionId}-aligned.json`)
+  }
+
+  /**
+   * Reads the persisted anonymized TipTap document for a session and flattens it
+   * to plain text suitable for LLM input (drops speaker labels + timestamps,
+   * inlines placeholder chips by label).
+   */
+  getAnonymizedPlainText(sessionId: string): string {
+    const session = this.repository.findById(sessionId)
+    if (!session?.anonymizedPath) {
+      throw new Error(`Session ${sessionId} hat kein anonymisiertes Dokument`)
+    }
+    const raw = readFileSync(session.anonymizedPath, 'utf-8')
+    const doc = JSON.parse(raw)
+    return tiptapToPlainText(doc)
+  }
+
+  /**
+   * Returns a SummaryRecord if either title or summary is non-empty.
+   * The renderer treats an empty title as "show date fallback" but still
+   * needs the record to exist when only the title is present.
+   */
+  getSummary(sessionId: string): SummaryRecord | null {
+    const session = this.repository.findById(sessionId)
+    if (!session) return null
+    const hasTitle = typeof session.title === 'string' && session.title.trim().length > 0
+    const hasSummary = typeof session.summary === 'string' && session.summary.trim().length > 0
+    if (!hasTitle && !hasSummary) return null
+    return {
+      title: hasTitle ? session.title : null,
+      text: session.summary ?? '',
+      modelId: session.summaryModelId,
+      summarizedAt: session.summarizedAt
+    }
+  }
+
+  /** Persists LLM-generated title + summary in one update. */
+  saveGeneratedSummary(
+    sessionId: string,
+    title: string,
+    text: string,
+    modelId: string
+  ): Session | null {
+    return this.repository.update(sessionId, {
+      title,
+      summary: text,
+      summaryModelId: modelId,
+      summarizedAt: new Date().toISOString()
+    })
+  }
+
+  /** User-edited title. Empty string triggers the date-based fallback in the view layer. */
+  updateTitle(sessionId: string, title: string): Session | null {
+    return this.repository.update(sessionId, { title: title.trim() })
+  }
+
+  /**
+   * User-edited summary text. Clearing the model id signals that the text is no longer
+   * LLM-authoritative — future model upgrades will not assume the user's edit can
+   * be regenerated automatically.
+   */
+  updateSummaryText(sessionId: string, text: string): Session | null {
+    const trimmed = text.trim()
+    return this.repository.update(sessionId, {
+      summary: trimmed.length > 0 ? trimmed : null,
+      summaryModelId: null
+    })
   }
 }
 
