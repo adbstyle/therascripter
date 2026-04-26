@@ -60,7 +60,7 @@ export default function FirstLaunchScreen({
   // Disk space error
   if (diskSpace && !diskSpace.sufficient) {
     return (
-      <div className="flex h-screen items-center justify-center bg-surface-0">
+      <div className="flex h-full items-center justify-center bg-surface-0">
         <div className="max-w-md text-center">
           <div className="mb-4 text-4xl">&#9888;</div>
           <h2 className="mb-2 text-lg font-semibold text-text-primary">
