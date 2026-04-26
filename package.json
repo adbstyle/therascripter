@@ -25,7 +25,8 @@
     "sidecar:build": "scripts/build-sidecar.sh",
     "sidecar:package": "scripts/package-models.sh",
     "sidecar:upload": "scripts/upload-r2.sh",
-    "sidecar:deploy": "npm run sidecar:build && npm run sidecar:package && npm run sidecar:upload"
+    "sidecar:deploy": "npm run sidecar:build && npm run sidecar:package && npm run sidecar:upload",
+    "sidecar:publish-manifest": "scripts/publish-manifest.sh"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
@@ -62,6 +63,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwindcss": "^4.1.18",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.30.0",
     "vite": "^6.0.0",
