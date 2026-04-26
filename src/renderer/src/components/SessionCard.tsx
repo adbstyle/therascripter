@@ -127,7 +127,7 @@ export function SessionCard({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-text-primary">{displayTitle}</p>
           {hasSummary && (
-            <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-text-secondary">
+            <p className="mt-0.5 line-clamp-1 text-xs leading-snug text-text-secondary">
               {summary}
             </p>
           )}
