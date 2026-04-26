@@ -45,7 +45,7 @@ interface SubPageProps {
 
 function SettingsSubPage({ title, onBack, children }: SubPageProps): React.JSX.Element {
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="border-b border-border px-6 py-3">
         <button
           type="button"
@@ -152,7 +152,7 @@ function SettingsHome({ onSelect }: HomeProps): React.JSX.Element {
   ]
 
   return (
-    <div className="overflow-y-auto p-6">
+    <div className="min-h-0 flex-1 overflow-y-auto p-6">
       <div className="mx-auto flex max-w-2xl flex-col gap-3">
         {items.map((item) => (
           <SettingsCard key={item.id} item={item} onClick={() => onSelect(item.id)} />

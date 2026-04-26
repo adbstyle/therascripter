@@ -146,52 +146,51 @@ export default function App(): React.JSX.Element {
         <UpdateBanner updates={availableUpdates} onRestart={handleRestartForUpdate} />
       )}
 
+      {/* Main content */}
+      <main className="flex min-h-0 flex-1 flex-col">
+        {/* Header — only for non-review views (review has its own header) */}
+        {!isInReview && (
+          <header className="flex items-center justify-between border-b border-border px-6 py-4">
+            <h2 className="text-2xl font-bold text-text-primary">{headerTitle}</h2>
+            {!isRecording && currentView === 'sessions' && (
+              <div className="flex items-center gap-2">
+                <button
+                  className={`titlebar-no-drag rounded-lg border border-border-strong bg-surface-0 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1 ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
+                  onClick={handleImportPDF}
+                  disabled={isImporting}
+                >
+                  PDF importieren
+                </button>
+                <button
+                  className="titlebar-no-drag rounded-lg bg-recording px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-recording-hover"
+                  onClick={startRecording}
+                >
+                  &#9679; Aufnahme starten
+                </button>
+              </div>
+            )}
+          </header>
+        )}
 
-        {/* Main content */}
-        <main className="flex min-h-0 flex-1 flex-col">
-          {/* Header — only for non-review views (review has its own header) */}
-          {!isInReview && (
-            <header className="flex items-center justify-between border-b border-border px-6 py-4">
-              <h2 className="text-2xl font-bold text-text-primary">{headerTitle}</h2>
-              {!isRecording && currentView === 'sessions' && (
-                <div className="flex items-center gap-2">
-                  <button
-                    className={`titlebar-no-drag rounded-lg border border-border-strong bg-surface-0 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1 ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
-                    onClick={handleImportPDF}
-                    disabled={isImporting}
-                  >
-                    PDF importieren
-                  </button>
-                  <button
-                    className="titlebar-no-drag rounded-lg bg-recording px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-recording-hover"
-                    onClick={startRecording}
-                  >
-                    &#9679; Aufnahme starten
-                  </button>
-                </div>
-              )}
-            </header>
-          )}
+        {isRecording ? (
+          <RecordingView duration={duration} level={level} error={error} onStop={stopRecording} />
+        ) : currentView === 'review' && reviewSessionId ? (
+          <ReviewEditor sessionId={reviewSessionId} onBack={handleCloseReview} />
+        ) : currentView === 'sessions' ? (
+          <SessionDashboard
+            refreshTrigger={refreshTrigger}
+            isImporting={isImporting}
+            onImportingChange={setIsImporting}
+            onOpenReview={handleOpenReview}
+            scrollToSessionId={scrollToSessionId.current}
+            onScrollComplete={handleScrollComplete}
+          />
+        ) : (
+          <Settings />
+        )}
 
-          {isRecording ? (
-            <RecordingView duration={duration} level={level} error={error} onStop={stopRecording} />
-          ) : currentView === 'review' && reviewSessionId ? (
-            <ReviewEditor sessionId={reviewSessionId} onBack={handleCloseReview} />
-          ) : currentView === 'sessions' ? (
-            <SessionDashboard
-              refreshTrigger={refreshTrigger}
-              isImporting={isImporting}
-              onImportingChange={setIsImporting}
-              onOpenReview={handleOpenReview}
-              scrollToSessionId={scrollToSessionId.current}
-              onScrollComplete={handleScrollComplete}
-            />
-          ) : (
-            <Settings />
-          )}
-
-          {!navHidden && <BottomNav current={currentView} onChange={setCurrentView} />}
-        </main>
+        {!navHidden && <BottomNav current={currentView} onChange={setCurrentView} />}
+      </main>
     </div>
   )
 }
