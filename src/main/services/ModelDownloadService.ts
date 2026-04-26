@@ -57,7 +57,18 @@ export function getActiveModelId(group: ModelGroup): string {
   if (group === 'asr') return active.transcription
   if (group === 'diarization') return active.diarization
   if (group === 'ner') return active.ner
+  if (group === 'summarization') return active.summarization
   throw new Error(`Keine aktive Modell-Konfiguration für Gruppe "${group}"`)
+}
+
+/** Liefert den absoluten Pfad zum aktiven Modell einer Gruppe (für Subprozess-Aufrufe). */
+export function getActiveModelPath(group: ModelGroup): string {
+  const id = getActiveModelId(group)
+  const def = getModelById(id)
+  if (!def) {
+    throw new Error(`Aktive Modell-ID "${id}" für Gruppe "${group}" nicht im Katalog gefunden`)
+  }
+  return join(getModelsDir(), def.relativePath)
 }
 
 /**
@@ -450,10 +461,14 @@ export async function deleteModel(id: string): Promise<void> {
 // Explizites Mapping Group → Settings-Key. Der TypeScript-Compiler erzwingt Vollständigkeit:
 // Wird ModelGroup um einen neuen Wert erweitert, schlägt der Build fehl,
 // solange das Mapping nicht erweitert wird. Das verhindert silent-wrong-key-writes.
-const GROUP_TO_SETTINGS_KEY: Record<ModelGroup, 'transcription' | 'diarization' | 'ner'> = {
+const GROUP_TO_SETTINGS_KEY: Record<
+  ModelGroup,
+  'transcription' | 'diarization' | 'ner' | 'summarization'
+> = {
   asr: 'transcription',
   diarization: 'diarization',
-  ner: 'ner'
+  ner: 'ner',
+  summarization: 'summarization'
 }
 
 /**
