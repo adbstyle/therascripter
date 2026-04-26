@@ -40,7 +40,7 @@ export default function BottomNav({ current, onChange }: BottomNavProps): React.
   const updateAvailable = appUpdateStatus?.available === true
 
   return (
-    <div className="flex shrink-0 items-center justify-between gap-4 border-t border-border px-4 py-2">
+    <div className="flex shrink-0 items-center justify-between gap-4 bg-surface-1 px-4 py-2">
       <nav
         ref={containerRef}
         aria-label="Hauptnavigation"
