@@ -32,6 +32,7 @@ function buildCatalogEntries(group: ModelGroup): ModelCatalogEntry[] {
     languages: def.languages,
     accuracyScore: def.accuracyScore,
     speedScore: def.speedScore,
+    hfRepo: def.hfRepo,
     isInstalled: isModelInstalled(def.id),
     isActive: def.id === activeId
   }))

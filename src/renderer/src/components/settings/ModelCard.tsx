@@ -1,4 +1,4 @@
-import { Download, Power, PowerOff, Trash2, X } from 'lucide-react'
+import { Download, ExternalLink, Power, PowerOff, Trash2, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ModelCatalogEntry } from '../../../../shared/validation/model-catalog-schemas'
 import { formatBytes } from '../../utils/formatBytes'
@@ -150,6 +150,18 @@ export default function ModelCard({
             <h3 id={`model-${model.id}-name`} className="font-semibold text-text-primary">
               {model.label}
             </h3>
+            {model.hfRepo && (
+              <a
+                href={`https://huggingface.co/${model.hfRepo}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`${model.label} auf HuggingFace ansehen`}
+                title="Auf HuggingFace ansehen"
+                className="titlebar-no-drag inline-flex h-5 w-5 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary"
+              >
+                <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+              </a>
+            )}
             {model.isActive && (
               <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-white">
                 Aktiv

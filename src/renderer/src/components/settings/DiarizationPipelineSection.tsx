@@ -36,6 +36,7 @@ function toCatalogEntry(info: PipelineInfo, isActive: boolean): ModelCatalogEntr
     sizeBytes: 0,
     group: 'diarization',
     isRequired: true,
+    hfRepo: info.id,
     isInstalled: true,
     isActive
   }

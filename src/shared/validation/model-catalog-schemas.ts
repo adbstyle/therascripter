@@ -13,6 +13,8 @@ export const ModelCatalogEntrySchema = z.object({
   languages: z.array(z.string()).optional(),
   accuracyScore: z.number().min(0).max(1).optional(),
   speedScore: z.number().min(0).max(1).optional(),
+  /** HuggingFace repo path (e.g. "flair/ner-german-large"). Renderer renders an external link. */
+  hfRepo: z.string().optional(),
   isInstalled: z.boolean(),
   isActive: z.boolean()
 })

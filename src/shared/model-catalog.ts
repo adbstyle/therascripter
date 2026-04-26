@@ -32,6 +32,8 @@ export interface ModelDefinition {
   speedScore?: number
   // Nur für Diarization relevant — pyannote-Pipelines laden via from_pretrained(hfIdentifier).
   hfIdentifier?: string
+  /** HuggingFace repo path for the "view on HuggingFace" link in the UI. */
+  hfRepo?: string
 }
 
 export const R2_CDN = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev'
@@ -52,7 +54,8 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
       'Unterstützt alle Sprachen (Deutsch, Englisch, Französisch, Italienisch, …). Empfohlen als Standardmodell oder wenn Aufnahmen mehrsprachig geführt werden.',
     languages: ['multi'],
     accuracyScore: 0.8,
-    speedScore: 0.9
+    speedScore: 0.9,
+    hfRepo: 'openai/whisper-large-v3-turbo'
   },
   {
     id: 'whisper-large-v3-turbo-german',
@@ -68,7 +71,8 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
       'Auf Hochdeutsch optimiert (Basis: primeline/whisper-large-v3-turbo-german). Präziser bei Standarddeutsch als das multilinguale Modell. Nicht geeignet für starke Schweizerdeutsch-Mundart oder andere Sprachen.',
     languages: ['de'],
     accuracyScore: 0.87,
-    speedScore: 0.9
+    speedScore: 0.9,
+    hfRepo: 'primeline/whisper-large-v3-turbo-german'
   },
   {
     id: 'whisper-large-v3-turbo-swiss',
@@ -84,7 +88,8 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
       'Spezialisiert auf starke Schweizerdeutsch-Dialekte (Basis: Flurin17/whisper-large-v3-turbo-swiss-german). Merklich präzisere Transkription bei ausgeprägter Mundart. Nicht geeignet für andere Sprachen.',
     languages: ['de-CH', 'de'],
     accuracyScore: 0.9,
-    speedScore: 0.85
+    speedScore: 0.85,
+    hfRepo: 'Flurin17/whisper-large-v3-turbo-swiss-german'
   },
   {
     id: 'pyannote-suite',
@@ -115,7 +120,8 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
       'Erkennt Personen, Orte, Organisationen und weitere benannte Entitäten in deutschem Text (Basis: flair/ner-german-large auf XLM-RoBERTa Large). Hohe Präzision auf Hochdeutsch (~92% F1). Ergänzt die Sperrliste mit modellbasierter Erkennung neuer Begriffe.',
     languages: ['de'],
     accuracyScore: 0.92,
-    speedScore: 0.5
+    speedScore: 0.5,
+    hfRepo: 'flair/ner-german-large'
   },
   {
     // Optional summarization model — Gemma 3 4B Instruct Q4_K_M (Gemma 4 E4B fallback,
@@ -132,6 +138,7 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
     isRequired: false,
     description:
       'Lokales 4B-Parameter-Modell für 2-Satz-Zusammenfassungen deutscher Texte. Optional — kann später unter Einstellungen → Modelle nachgeladen werden.',
-    languages: ['de', 'en']
+    languages: ['de', 'en'],
+    hfRepo: 'bartowski/google_gemma-3-4b-it-GGUF'
   }
 ]
