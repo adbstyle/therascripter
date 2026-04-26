@@ -161,6 +161,19 @@ export interface AppUpdateApi {
   onStatus(callback: (status: AppUpdateStatus) => void): () => void
 }
 
+export interface SummaryRecord {
+  title: string | null
+  text: string
+  modelId: string | null
+  summarizedAt: string | null
+}
+
+export interface SummaryApi {
+  get(sessionId: string): Promise<SummaryRecord | null>
+  updateTitle(sessionId: string, title: string): Promise<void>
+  updateText(sessionId: string, text: string): Promise<void>
+}
+
 export interface ModelCatalogApi {
   list(group: ModelGroup): Promise<ModelCatalogEntry[]>
   listAsr(): Promise<ModelCatalogEntry[]>
@@ -190,4 +203,5 @@ export interface IpcApi {
   modelUpdate: ModelUpdateApi
   pipeline: PipelineApi
   appUpdate: AppUpdateApi
+  summary: SummaryApi
 }

@@ -39,6 +39,16 @@ import { AlignmentService } from './ml/AlignmentService'
 import { AnonymizationService } from './ml/AnonymizationService'
 import { PDFExtractionExecutor } from './services/PDFExtractionExecutor'
 import { VisionOCRService } from './ml/VisionOCRService'
+import { LlamaSummarizer } from './ml/LlamaSummarizer'
+import { SummarizationExecutor } from './ml/SummarizationExecutor'
+import { SessionService } from './services/SessionService'
+import {
+  getActiveModelPath,
+  getActiveModelId,
+  isModelInstalled,
+  getModelsDir
+} from './services/ModelDownloadService'
+import { registerSummaryHandlers } from './ipc/summary-handlers'
 
 function createWindow(): void {
   // Set background color based on theme to prevent white flash in dark mode
@@ -148,6 +158,26 @@ app.whenReady().then(() => {
   taskQueue.registerExecutor('extraction', new PDFExtractionExecutor())
   taskQueue.registerExecutor('ocr', new VisionOCRService())
 
+  const llamaSummarizer = new LlamaSummarizer({
+    getModelPath: () => getActiveModelPath('summarization'),
+    getBinaryPath: () =>
+      app.isPackaged
+        ? join(process.resourcesPath, 'bin', 'llama-cli')
+        : join(app.getAppPath(), 'resources', 'bin', 'llama-cli'),
+    getAllowedModelsDir: () => join(getModelsDir(), 'summarization')
+  })
+  const sessionService = new SessionService(getDatabase())
+  taskQueue.registerExecutor(
+    'summarization',
+    new SummarizationExecutor({
+      llamaSummarizer,
+      sessionService,
+      isModelInstalled: () => isModelInstalled(getActiveModelId('summarization')),
+      getActiveModelId: () => getActiveModelId('summarization'),
+      logger: { info: (msg): void => console.log(msg), error: (msg): void => console.error(msg) }
+    })
+  )
+
   ensureSpotlightExclusion()
 
   registerSessionHandlers()
@@ -163,6 +193,7 @@ app.whenReady().then(() => {
   registerModelUpdateHandlers()
   registerPipelineHandlers()
   registerAppUpdateHandlers()
+  registerSummaryHandlers()
 
   setupCSP()
   createWindow()
