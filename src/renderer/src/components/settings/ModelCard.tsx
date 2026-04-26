@@ -1,3 +1,5 @@
+import { Download, Power, PowerOff, Trash2, X } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import type { ModelCatalogEntry } from '../../../../shared/validation/model-catalog-schemas'
 import { formatBytes } from '../../utils/formatBytes'
 
@@ -64,57 +66,81 @@ export default function ModelCard({
   const dimmed = downloading ? 'opacity-70' : ''
   const borderClass = model.isActive ? 'border-primary' : 'border-border'
 
-  const secondaryBtn =
-    'titlebar-no-drag rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 disabled:opacity-50'
-  const primaryBtn =
-    'titlebar-no-drag rounded-md bg-primary px-3 py-1.5 text-sm text-white hover:bg-primary-hover disabled:opacity-50'
-
-  let actions: React.ReactNode = null
-  if (downloading) {
-    actions = (
-      <button className={secondaryBtn} onClick={onCancelDownload}>
-        Download abbrechen
-      </button>
-    )
-  } else if (!model.isInstalled) {
-    actions = (
-      <button className={primaryBtn} onClick={onDownload} disabled={anyBusy}>
-        Herunterladen
-      </button>
-    )
-  } else if (!model.isActive) {
-    actions = (
-      <>
-        {deletable && (
-          <button className={secondaryBtn} onClick={onDelete} disabled={anyBusy}>
-            Löschen
-          </button>
-        )}
-        <button className={primaryBtn} onClick={onActivate} disabled={anyBusy}>
-          Aktivieren
-        </button>
-      </>
-    )
-  } else if (optional) {
-    actions = (
-      <>
-        {deletable && (
-          <button className={secondaryBtn} onClick={onDelete} disabled={anyBusy}>
-            Löschen
-          </button>
-        )}
-        {onDeactivate && (
-          <button className={secondaryBtn} onClick={onDeactivate} disabled={anyBusy}>
-            Deaktivieren
-          </button>
-        )}
-      </>
-    )
+  type IconAction = {
+    id: string
+    Icon: LucideIcon
+    label: string
+    handler: () => void
+    disabled?: boolean
+    tone?: 'danger'
   }
+
+  // Primary action — also fires on card click via stretched button.
+  let primaryAction: IconAction | null = null
+  if (!downloading && !model.isInstalled) {
+    primaryAction = {
+      id: 'download',
+      Icon: Download,
+      label: 'Herunterladen',
+      handler: onDownload,
+      disabled: anyBusy
+    }
+  } else if (!downloading && model.isInstalled && !model.isActive) {
+    primaryAction = {
+      id: 'activate',
+      Icon: Power,
+      label: 'Aktivieren',
+      handler: onActivate,
+      disabled: anyBusy
+    }
+  }
+
+  // Secondary actions — destructive / non-primary alternatives.
+  const secondaryActions: IconAction[] = []
+  if (downloading) {
+    secondaryActions.push({
+      id: 'cancel',
+      Icon: X,
+      label: 'Download abbrechen',
+      handler: onCancelDownload
+    })
+  } else if (model.isInstalled && !model.isActive && deletable) {
+    secondaryActions.push({
+      id: 'delete',
+      Icon: Trash2,
+      label: 'Löschen',
+      handler: onDelete,
+      disabled: anyBusy,
+      tone: 'danger'
+    })
+  } else if (model.isInstalled && model.isActive && optional) {
+    if (onDeactivate) {
+      secondaryActions.push({
+        id: 'deactivate',
+        Icon: PowerOff,
+        label: 'Deaktivieren',
+        handler: onDeactivate,
+        disabled: anyBusy
+      })
+    }
+    if (deletable) {
+      secondaryActions.push({
+        id: 'delete',
+        Icon: Trash2,
+        label: 'Löschen',
+        handler: onDelete,
+        disabled: anyBusy,
+        tone: 'danger'
+      })
+    }
+  }
+
+  // Icons rendered on hover, top-right. Secondary first, primary last (rightmost).
+  const iconActions: IconAction[] = [...secondaryActions, ...(primaryAction ? [primaryAction] : [])]
 
   return (
     <div
-      className={`rounded-lg border p-4 ${borderClass} ${dimmed}`}
+      className={`relative rounded-lg border p-4 ${borderClass} ${dimmed}`}
       role="group"
       aria-labelledby={`model-${model.id}-name`}
     >
@@ -145,7 +171,29 @@ export default function ModelCard({
           )}
         </div>
 
-        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+        {iconActions.length > 0 && (
+          <div className="flex shrink-0 items-center gap-1">
+            {iconActions.map((a) => {
+              const dangerClass = 'hover:bg-error-bg hover:text-error-text'
+              const neutralClass = 'hover:bg-surface-2 hover:text-text-primary'
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={a.handler}
+                  disabled={a.disabled}
+                  aria-label={a.label}
+                  title={a.label}
+                  className={`titlebar-no-drag rounded p-1.5 text-text-tertiary transition-colors disabled:opacity-50 ${
+                    a.tone === 'danger' ? dangerClass : neutralClass
+                  }`}
+                >
+                  <a.Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {downloading && progress !== undefined && (
