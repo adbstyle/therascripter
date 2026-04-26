@@ -87,6 +87,8 @@ scripts/publish-manifest.sh       # Generate manifest.json from r2-upload/ + upl
 
 **ConsentBanner:** Shown inside `RecordingView` on first recording — one-time reminder to obtain patient consent. State tracked via electron-store (`consentReminderShown`).
 
+**Icons:** `lucide-react` for all UI icons. Direct named imports (`import { Mic } from 'lucide-react'`) — tree-shakeable. Sizing via Tailwind (`h-4 w-4` inline, `h-5 w-5` standalone, `h-7 w-7` settings cards). Color via `currentColor` / Tailwind text utilities (`text-text-tertiary`, `text-primary`, etc.). `strokeWidth` 1.5 for decorative/large, 2 for inline UI, 2.5 for emphasis (success checkmarks). Always `aria-hidden` when decorative. **Never** use emojis as icons or hand-roll inline SVGs for new UI — exception: `AppLogo.tsx` (brand mark with multi-color paths, not a generic icon).
+
 **Update System (Iteration 17+18):** `UpdateCheckService` checks R2 manifest for newer model versions and app updates in a single fetch. Model updates download atomically into a staging directory and swap on restart. App updates show a non-blocking sidebar hint + About page button that opens GitHub Releases. `model-update-handlers.ts` exposes model update IPC channels; `app-update-handlers.ts` exposes `appUpdate.getStatus()`, `appUpdate.check()`, `appUpdate.openReleasePage()`. Cached app update status persisted in electron-store.
 
 **Key constraints:**

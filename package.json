@@ -36,6 +36,7 @@
     "@tiptap/starter-kit": "^3.19.0",
     "better-sqlite3": "^12.6.2",
     "electron-store": "^11.0.2",
+    "lucide-react": "^1.11.0",
     "pdfjs-dist": "^5.4.624",
     "zod": "^4.3.6"
   },

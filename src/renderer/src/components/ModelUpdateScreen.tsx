@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Check, Circle, Loader2 } from 'lucide-react'
 import type { ModelDownloadProgress, ModelDownloadStatus } from '../../../shared/types'
 import type { PendingModelUpdate } from '../../../shared/types/ModelUpdate'
 import { formatBytes } from '../utils/formatBytes'
@@ -126,9 +127,15 @@ export default function ModelUpdateScreen({
                 <div key={update.id} className="mb-3 last:mb-0">
                   <div className="mb-1 flex items-center justify-between">
                     <span
-                      className={`text-sm ${isCurrent ? 'font-medium text-text-primary' : 'text-text-tertiary'}`}
+                      className={`flex items-center gap-1.5 text-sm ${isCurrent ? 'font-medium text-text-primary' : 'text-text-tertiary'}`}
                     >
-                      {isCompleted ? '\u2713 ' : isCurrent ? '' : '\u25CB '}
+                      {isCompleted ? (
+                        <Check className="h-4 w-4 text-success" strokeWidth={2.5} aria-hidden />
+                      ) : isCurrent ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" strokeWidth={2} aria-hidden />
+                      ) : (
+                        <Circle className="h-4 w-4 text-text-tertiary" strokeWidth={1.5} aria-hidden />
+                      )}
                       {update.label}
                     </span>
                     <span className="text-xs text-text-tertiary">
