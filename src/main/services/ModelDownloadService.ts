@@ -489,6 +489,17 @@ export async function deleteModel(id: string): Promise<void> {
   const installed = { ...settings.get('installedModelVersions') }
   delete installed[id]
   settings.set('installedModelVersions', installed)
+
+  // Optionale Gruppen: war das gelöschte Modell aktiv, Active-Slot räumen,
+  // damit die UI nicht „Aktiv" auf etwas Nichtexistentem anzeigt. Erlaubt durch
+  // OPTIONAL_GROUPS-Whitelist — Pflichtgruppen sind durch isRequired+ASR-Guard
+  // bereits oben geschützt.
+  if (def.group && OPTIONAL_GROUPS.has(def.group)) {
+    const slot = GROUP_TO_SETTINGS_KEY[def.group]
+    if (active[slot] === id) {
+      settings.set('activeModels', { ...settings.get('activeModels'), [slot]: '' })
+    }
+  }
 }
 
 // Explizites Mapping Group → Settings-Key. Der TypeScript-Compiler erzwingt Vollständigkeit:
@@ -528,6 +539,23 @@ export function setActiveModel(group: ModelGroup, id: string): void {
   const settings = getSettings()
   const current = settings.get('activeModels')
   settings.set('activeModels', { ...current, [GROUP_TO_SETTINGS_KEY[group]]: id })
+}
+
+/**
+ * Leert den Active-Slot einer optionalen Gruppe — der zugehörige Pipeline-Step
+ * wird zur Laufzeit geräuschlos übersprungen (siehe SummarizationExecutor).
+ * Erlaubt nur für optionale Gruppen, damit ASR/Diarization/NER nie versehentlich
+ * deaktiviert werden können.
+ */
+const OPTIONAL_GROUPS: ReadonlySet<ModelGroup> = new Set(['summarization'])
+
+export function clearActiveModel(group: ModelGroup): void {
+  if (!OPTIONAL_GROUPS.has(group)) {
+    throw new Error(`Deaktivieren: Gruppe "${group}" ist nicht optional`)
+  }
+  const settings = getSettings()
+  const current = settings.get('activeModels')
+  settings.set('activeModels', { ...current, [GROUP_TO_SETTINGS_KEY[group]]: '' })
 }
 
 /** Backward-Compat-Alias. */

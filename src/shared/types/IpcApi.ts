@@ -180,6 +180,7 @@ export interface ModelCatalogApi {
   download(id: string): Promise<ModelCatalogEntry[]>
   delete(id: string): Promise<ModelCatalogEntry[]>
   setActive(group: ModelGroup, id: string): Promise<ModelCatalogEntry[]>
+  clearActive(group: ModelGroup): Promise<ModelCatalogEntry[]>
   cancelDownload(): Promise<void>
 }
 

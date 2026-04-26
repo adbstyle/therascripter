@@ -12,8 +12,12 @@ interface Props {
   onCancelDownload: () => void
   onDelete: () => void
   onActivate: () => void
+  /** Wird aufgerufen, wenn ein aktives optionales Modell deaktiviert werden soll. */
+  onDeactivate?: () => void
   /** Löschen-Button anzeigen? Default true. Für gekoppelte Pipelines auf false setzen. */
   deletable?: boolean
+  /** Optional-Gruppe (z. B. Zusammenfassung): Aktives Modell darf deaktiviert/gelöscht werden. */
+  optional?: boolean
   /** Sprach- und Grössen-Chips anzeigen? Default true. */
   showChips?: boolean
 }
@@ -55,7 +59,9 @@ export default function ModelCard({
   onCancelDownload,
   onDelete,
   onActivate,
+  onDeactivate,
   deletable = true,
+  optional = false,
   showChips = true
 }: Props): React.JSX.Element {
   const dimmed = downloading ? 'opacity-70' : ''
@@ -151,8 +157,33 @@ export default function ModelCard({
             </button>
           </>
         )}
-        {!downloading && model.isInstalled && model.isActive && (
+        {!downloading && model.isInstalled && model.isActive && !optional && (
           <span className="text-xs text-text-tertiary">{activeUsageLabel}</span>
+        )}
+        {!downloading && model.isInstalled && model.isActive && optional && (
+          <>
+            <span className="mr-auto self-center text-xs text-text-tertiary">
+              {activeUsageLabel}
+            </span>
+            {deletable && (
+              <button
+                className="titlebar-no-drag rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 disabled:opacity-50"
+                onClick={onDelete}
+                disabled={anyBusy}
+              >
+                Löschen
+              </button>
+            )}
+            {onDeactivate && (
+              <button
+                className="titlebar-no-drag rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 disabled:opacity-50"
+                onClick={onDeactivate}
+                disabled={anyBusy}
+              >
+                Deaktivieren
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

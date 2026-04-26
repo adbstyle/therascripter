@@ -88,6 +88,18 @@ export default function ModelsSettings(): React.JSX.Element {
     }
   }
 
+  const handleDeactivate = async (model: ModelCatalogEntry): Promise<void> => {
+    try {
+      await window.api.modelCatalog.clearActive(model.group)
+      await reload()
+      toast.success(
+        `"${model.label}" deaktiviert. Zukünftige Sitzungen werden ohne diesen Schritt verarbeitet.`
+      )
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   const installed = asrModels.filter((m) => m.isInstalled)
   const available = asrModels.filter((m) => !m.isInstalled)
   const anyBusy = downloadingId !== null
@@ -171,10 +183,12 @@ export default function ModelsSettings(): React.JSX.Element {
               downloading={downloadingId === m.id}
               progress={downloadingId === m.id ? progress : undefined}
               anyBusy={anyBusy}
+              optional
               onDownload={() => handleDownload(m.id)}
               onCancelDownload={handleCancelDownload}
               onDelete={() => setDeleteCandidate(m)}
               onActivate={() => handleActivate(m)}
+              onDeactivate={() => handleDeactivate(m)}
             />
           ))}
         </div>

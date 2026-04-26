@@ -153,6 +153,7 @@ beforeEach(() => {
       download: vi.fn().mockResolvedValue([]),
       delete: vi.fn().mockResolvedValue([]),
       setActive: vi.fn().mockResolvedValue([]),
+      clearActive: vi.fn().mockResolvedValue([]),
       cancelDownload: vi.fn().mockResolvedValue(undefined)
     },
     pipeline: {

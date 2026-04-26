@@ -40,6 +40,11 @@ export const SetActiveModelPayloadSchema = z.object({
   id: modelIdStringSchema
 })
 
+/** Payload für modelCatalog:clearActive — leert den Active-Slot einer optionalen Gruppe. */
+export const ClearActiveModelPayloadSchema = z.object({
+  group: ModelGroupSchema
+})
+
 /** Erlaubte Diarization-Pipelines (HuggingFace-Identifier). */
 export const DiarizationPipelineSchema = z.enum([
   'pyannote/speaker-diarization-3.1',

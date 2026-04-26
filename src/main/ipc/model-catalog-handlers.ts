@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { z } from 'zod'
 import {
   abortModelDownload,
+  clearActiveModel,
   deleteModel,
   downloadSingleModel,
   getActiveModelId,
@@ -11,6 +12,7 @@ import {
   setActiveModel
 } from '../services/ModelDownloadService'
 import {
+  ClearActiveModelPayloadSchema,
   ListModelsPayloadSchema,
   ModelIdPayloadSchema,
   SetActiveModelPayloadSchema,
@@ -73,6 +75,16 @@ export function registerModelCatalogHandlers(): void {
       'modelCatalog:setActive'
     )
     setActiveModel(group, id)
+    return buildCatalogEntries(group)
+  })
+
+  ipcMain.handle('modelCatalog:clearActive', (_event, payload: unknown) => {
+    const { group } = validate(
+      ClearActiveModelPayloadSchema,
+      payload,
+      'modelCatalog:clearActive'
+    )
+    clearActiveModel(group)
     return buildCatalogEntries(group)
   })
 
