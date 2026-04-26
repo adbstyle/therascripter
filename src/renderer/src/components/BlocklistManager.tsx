@@ -120,9 +120,16 @@ const BlocklistManager = forwardRef<BlocklistManagerHandle>(function BlocklistMa
   return (
     <>
       <div className="p-6">
-        <p className="mb-4 text-sm text-text-secondary">
-          Begriffe, die immer automatisch anonymisiert werden.
-        </p>
+        <div className="mb-4 flex items-baseline justify-between gap-4">
+          <p className="text-sm text-text-secondary">
+            Begriffe, die immer automatisch anonymisiert werden.
+          </p>
+          {entries.length > 0 && (
+            <span className="shrink-0 text-xs text-text-tertiary">
+              {entries.length} Einträge
+            </span>
+          )}
+        </div>
 
         {entries.length === 0 ? (
           <div className="rounded-lg border border-border bg-surface-1 p-8 text-center">
@@ -182,7 +189,6 @@ const BlocklistManager = forwardRef<BlocklistManagerHandle>(function BlocklistMa
           </div>
         )}
 
-        <p className="mt-3 text-xs text-text-tertiary">{entries.length} Einträge</p>
       </div>
 
       {dialogMode && (
