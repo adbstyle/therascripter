@@ -80,10 +80,10 @@ export default function ModelUpdateScreen({
   const currentModelIndex = currentModelId ? updates.findIndex((u) => u.id === currentModelId) : -1
 
   return (
-    <div className="flex h-screen flex-col items-center justify-center bg-surface-0">
+    <div className="flex h-full flex-col items-center justify-center bg-surface-0">
       <div className="w-full max-w-lg px-8">
         {/* Header */}
-        <div className="titlebar-drag mb-8 text-center">
+        <div className="mb-8 text-center">
           <AppLogo size={72} className="mx-auto mb-3" />
           <h1 className="mb-2 text-2xl font-bold text-text-primary">Modelle werden aktualisiert</h1>
           <p className="text-sm text-text-secondary">

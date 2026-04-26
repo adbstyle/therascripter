@@ -552,7 +552,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Header */}
-      <header className="titlebar-drag flex items-center justify-between gap-4 border-b border-border px-6 py-4">
+      <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="shrink-0 text-lg" aria-hidden="true">
             {sessionType === 'audio' ? '\uD83C\uDFA4' : '\uD83D\uDCC4'}

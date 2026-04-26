@@ -4,6 +4,7 @@ import RecordingView from './components/RecordingView'
 import FirstLaunchScreen from './components/FirstLaunchScreen'
 import ModelUpdateScreen from './components/ModelUpdateScreen'
 import UpdateBanner from './components/UpdateBanner'
+import TitleBar from './components/shell/TitleBar'
 import Settings from './views/Settings'
 import ReviewEditor from './views/ReviewEditor'
 import { useRecording } from './hooks/useRecording'
@@ -110,21 +111,42 @@ export default function App(): React.JSX.Element {
 
   // Show loading state while checking models
   if (modelsReady === null) {
-    return <div className="flex h-screen items-center justify-center bg-surface-0" />
+    return (
+      <div className="flex h-screen flex-col bg-surface-0">
+        <TitleBar />
+        <div className="flex-1" />
+      </div>
+    )
   }
 
   // First launch: show model download screen
   if (!modelsReady) {
-    return <FirstLaunchScreen onComplete={handleModelsComplete} />
+    return (
+      <div className="flex h-screen flex-col bg-surface-0">
+        <TitleBar />
+        <div className="min-h-0 flex-1">
+          <FirstLaunchScreen onComplete={handleModelsComplete} />
+        </div>
+      </div>
+    )
   }
 
   // Pending model updates (set before restart): show update download screen
   if (pendingUpdates !== null) {
-    return <ModelUpdateScreen updates={pendingUpdates} onComplete={handleUpdateComplete} />
+    return (
+      <div className="flex h-screen flex-col bg-surface-0">
+        <TitleBar />
+        <div className="min-h-0 flex-1">
+          <ModelUpdateScreen updates={pendingUpdates} onComplete={handleUpdateComplete} />
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="flex h-screen flex-col bg-surface-0">
+      <TitleBar />
+
       {/* Update banner — shown when updates are available (non-blocking) */}
       {availableUpdates && availableUpdates.length > 0 && (
         <UpdateBanner updates={availableUpdates} onRestart={handleRestartForUpdate} />
@@ -133,7 +155,6 @@ export default function App(): React.JSX.Element {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside className="flex w-[200px] flex-col border-r border-border bg-surface-0 px-4 py-6">
-          <div className="titlebar-drag mb-8" />
           <nav className="flex flex-1 flex-col gap-1">
             <button
               className={`titlebar-no-drag rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
@@ -178,7 +199,7 @@ export default function App(): React.JSX.Element {
         <main className="flex min-h-0 flex-1 flex-col">
           {/* Header — only for non-review views (review has its own header) */}
           {!isInReview && (
-            <header className="titlebar-drag flex min-h-[71px] items-center justify-between border-b border-border px-6 py-4">
+            <header className="flex items-center justify-between border-b border-border px-6 py-4">
               <h2 className="text-2xl font-bold text-text-primary">{headerTitle}</h2>
               {!isRecording && currentView === 'sessions' && (
                 <div className="flex items-center gap-2">
