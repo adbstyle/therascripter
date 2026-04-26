@@ -35,6 +35,8 @@ scripts/setup-pyannote.sh --all-models   # Download both
 scripts/setup-ner.sh              # Install flair into existing Python venv
 scripts/setup-ner.sh --model      # Also download NER model (~1.1 GB)
 scripts/setup-vision-ocr.sh       # Build Swift Vision OCR CLI helper → resources/bin/
+scripts/setup-llama.sh             # Install llama.cpp via Homebrew → resources/bin/ + resources/lib/
+scripts/setup-llama.sh --model     # Also download Gemma 3 4B Instruct Q4_K_M (~2.5 GB, gated — needs huggingface-cli login)
 npm run sidecar:build              # Build standalone Python sidecar via uv → python_sidecar/standalone/
 npm run sidecar:package            # Package models for R2 upload
 npm run sidecar:upload             # Upload model packages to Cloudflare R2
@@ -57,11 +59,13 @@ scripts/publish-manifest.sh       # Generate manifest.json from r2-upload/ + upl
 1. whisper.cpp subprocess — ASR via auswählbares Modell aus Katalog (Default: Whisper Large V3 Turbo Q5_0 multilingual; optional: Swiss-German-Fine-Tune). Active model stored in electron-store (`activeModels.transcription`), verwaltet via Settings → Modelle. ✓ implemented
 2. Python sidecar — pyannote.audio diarization via auswählbares Modell aus Katalog (Default: `speaker-diarization-3.1`; optional: `speaker-diarization-community-1` für bessere Deutsch-Performance). Active model stored in electron-store (`activeModels.diarization`), verwaltet via Settings → Modelle. HF_HUB_OFFLINE=1 erzwingt lokale Cache-Nutzung. ✓ implemented
 3. Python sidecar — flair NER (flair/ner-german-large) + Regex + Blocklist → TipTap document ✓ implemented
+4. llama.cpp subprocess — optionale Zusammenfassung über auswählbares Modell aus Katalog (Default: Gemma 3 4B Instruct Q4_K_M GGUF). Registriert als letzter Schritt beider Pipeline-Chains (Audio + PDF). Wenn Modell nicht installiert → Executor skippt den Step geräuschlos, Summary bleibt NULL. Active model in electron-store (`activeModels.summarization`), verwaltet via Settings → Modelle. ✓ implemented
 
-**ML pipeline — PDF** (extraction → ocr → anonymization):
+**ML pipeline — PDF** (extraction → ocr → anonymization → summarization):
 1. pdfjs-dist — Text extraction per page (with `standardFontDataUrl` configured) ✓ implemented
 2. Swift CLI helper — Apple Vision OCR for scanned pages (skipped if all text) ✓ implemented
 3. Python sidecar — flair NER + Regex + Blocklist → TipTap document (shared with audio) ✓ implemented
+4. llama.cpp subprocess — optional summarization (shared with audio). ✓ implemented
 
 **ML models:** Stored in `~/.therascript/models/<type>/` (e.g. `models/asr/`, `models/diarization/`, `models/ner/`). Directories created at startup by `initDatabase()`.
 
@@ -103,6 +107,8 @@ scripts/publish-manifest.sh       # Generate manifest.json from r2-upload/ + upl
 - **electron-vite externals:** `electron-store` (main) and `@electron-toolkit/preload` (preload) are excluded from `externalizeDeps` in `electron.vite.config.ts` — they must be bundled, not externalized.
 - **Model hash sync:** After `npm run sidecar:deploy` or `scripts/publish-manifest.sh`, the SHA-256 hashes in `ModelDownloadService.ts` `MODEL_DEFINITIONS` must be manually updated to match `manifest.json`. The packaging scripts print hashes to stdout but don't auto-update the source. Stale hashes cause first-launch download failures.
 - **Standalone Python sidecar:** Built via `uv` with python-build-standalone (~1 GB). All `.dylib`/`.so` files are ad-hoc codesigned during build. If the sidecar fails to run, try `scripts/build-sidecar.sh --clean` for a fresh build. The `torchcodec_shim.py` provides a soundfile-based fallback for torchcodec (required by pyannote.audio 4.0.4+), loaded automatically via `sitecustomize.py`. **Important:** `requirements.txt` + `requirements-ner.txt` are the sole dependency source — any Python package needed at runtime (including transitive deps like `soundfile`) must be listed explicitly, unlike the old PyInstaller build which had hidden imports.
+- **Gemma 4 E4B GGUF source:** No official Google GGUF for Gemma 4 E4B existed when the summarization feature shipped. Default catalog entry uses bartowski's Gemma 3 4B Instruct Q4_K_M as fallback. The repo is HuggingFace-gated — `huggingface-cli login` is required before `scripts/setup-llama.sh --model`. If/when a Gemma 4 E4B GGUF lands upstream, swap the URL/filename in `MODEL_DEFINITIONS` and re-run `scripts/publish-manifest.sh` to mirror into R2.
+- **llama-cli stall threshold:** `LlamaSummarizer.summarize()` provides no fine-grained progress callbacks (single subprocess call returning final stdout). The TaskQueue's `ProcessWatchdog` defaults to 120s for unrecognized task types — for a 4B model this is generous on M-series hardware (typical inference ~5-30s) but tight if the user's box is loaded. If summarization tasks start failing with "Verarbeitung reagiert nicht mehr", add a `summarization: 600_000` entry to `STALL_THRESHOLDS` in `ProcessWatchdog.ts`.
 
 ## Code Conventions
 
