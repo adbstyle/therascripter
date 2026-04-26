@@ -12,6 +12,8 @@ import { EditorContextMenu, type ContextMenuState } from '../components/editor/E
 import { BlocklistConfirmDialog } from '../components/editor/BlocklistConfirmDialog'
 import { RenameDialog } from '../components/RenameDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { EditableSessionTitle } from '../components/review/EditableSessionTitle'
+import { SummaryPanel } from '../components/review/SummaryPanel'
 import {
   batchRemovePlaceholder,
   anonymizeSelectionWithPropagation,
@@ -555,7 +557,13 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           <span className="shrink-0 text-lg" aria-hidden="true">
             {sessionType === 'audio' ? '\uD83C\uDFA4' : '\uD83D\uDCC4'}
           </span>
-          <h2 className="truncate text-lg font-semibold text-text-primary">{sessionTitle}</h2>
+          <EditableSessionTitle
+            sessionId={sessionId}
+            title={sessionTitle}
+            fallback="Sitzung ohne Titel"
+            onSaved={setSessionTitle}
+            className="min-w-0 flex-1 truncate text-lg font-semibold text-text-primary"
+          />
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
@@ -614,6 +622,11 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           </button>
         </div>
       </header>
+
+      {/* Optional LLM-generated summary (only renders when present) */}
+      <div className="border-b border-border bg-surface-0 px-6 py-3 [&:empty]:border-b-0 [&:empty]:p-0">
+        <SummaryPanel sessionId={sessionId} />
+      </div>
 
       {/* Editor + Panel row */}
       <div className="flex min-h-0 flex-1">

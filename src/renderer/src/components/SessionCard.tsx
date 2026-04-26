@@ -99,7 +99,17 @@ export function SessionCard({
       </span>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-text-primary">{session.title}</p>
+        <p className="truncate text-sm font-medium text-text-primary">
+          {session.title && session.title.trim().length > 0
+            ? session.title
+            : new Date(session.createdAt).toLocaleString('de-CH', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+        </p>
         <div className="flex items-center gap-2">
           <span className={`text-xs font-medium ${statusConfig.color}`}>{statusLabel}</span>
           {session.wordCount != null && session.status === 'review' && (
