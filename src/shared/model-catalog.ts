@@ -137,7 +137,7 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
     group: 'summarization',
     isRequired: false,
     description:
-      'Lokales 4B-Parameter-Modell für 2-Satz-Zusammenfassungen deutscher Texte. Optional — kann später unter Einstellungen → Modelle nachgeladen werden.',
+      'Sprachmodell von Google. Versteht und erzeugt natürliche Sprache in mehreren Sprachen — hier eingesetzt für prägnante 2-Satz-Zusammenfassungen am Ende jeder Verarbeitung. Läuft komplett lokal auf der Apple-Silicon-GPU.',
     languages: ['de', 'en'],
     hfRepo: 'bartowski/google_gemma-3-4b-it-GGUF'
   }
