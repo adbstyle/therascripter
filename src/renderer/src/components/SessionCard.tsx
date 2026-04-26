@@ -110,20 +110,19 @@ export function SessionCard({
 
   return (
     <div
-      className={`group relative rounded-lg border border-border bg-surface-0 px-4 py-3 transition-colors hover:border-border-strong ${onClick ? 'cursor-pointer hover:shadow-sm' : ''}`}
+      className={`group relative rounded-lg border border-border bg-surface-0 px-4 py-3 transition-colors hover:border-border-strong has-[button:focus-visible]:border-primary ${onClick ? 'hover:shadow-sm' : ''}`}
       data-session-id={dataSessionId}
-      onClick={onClick}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={
-        onClick
-          ? (e) => {
-              if (e.key === 'Enter') onClick()
-            }
-          : undefined
-      }
     >
-      <div className="flex items-start gap-3">
+      {onClick && (
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={`${displayTitle} öffnen`}
+          className="absolute inset-0 z-0 rounded-lg focus:outline-none"
+        />
+      )}
+
+      <div className="pointer-events-none relative z-[1] flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-text-primary">{displayTitle}</p>
           {hasSummary && (
@@ -142,11 +141,8 @@ export function SessionCard({
             {formatCardTimestamp(session.createdAt)}
           </time>
           <button
-            className="absolute -right-1.5 -top-1.5 rounded p-1.5 text-text-tertiary opacity-0 transition-opacity hover:bg-error-bg hover:text-error-text group-hover:opacity-100 focus-visible:opacity-100"
-            onClick={(e) => {
-              e.stopPropagation()
-              onDelete()
-            }}
+            className="pointer-events-auto absolute -right-1.5 -top-1.5 z-10 rounded p-1.5 text-text-tertiary opacity-0 transition-opacity hover:bg-error-bg hover:text-error-text group-hover:opacity-100 focus-visible:opacity-100"
+            onClick={onDelete}
             aria-label="Transkription löschen"
             title="Löschen"
           >
@@ -155,7 +151,7 @@ export function SessionCard({
         </div>
       </div>
 
-      <div className="mt-1.5 flex items-center justify-between gap-3">
+      <div className="pointer-events-none relative z-[1] mt-1.5 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           {session.status === 'review' ? (
             session.wordCount != null && (
@@ -177,15 +173,14 @@ export function SessionCard({
       </div>
 
       {session.status === 'error' && session.errorMessage && (
-        <p className="mt-1 line-clamp-3 text-xs text-text-tertiary">{session.errorMessage}</p>
+        <p className="pointer-events-none relative z-[1] mt-1 line-clamp-3 text-xs text-text-tertiary">
+          {session.errorMessage}
+        </p>
       )}
       {session.status === 'error' && onRetry && (
         <button
-          className="mt-1.5 text-xs font-medium text-primary hover:text-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
-          onClick={(e) => {
-            e.stopPropagation()
-            onRetry()
-          }}
+          className="pointer-events-auto relative z-10 mt-1.5 text-xs font-medium text-primary hover:text-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={onRetry}
           disabled={retryDisabled}
           title={retryDisabled ? 'Eine andere Transkription wird gerade verarbeitet' : undefined}
         >
@@ -194,7 +189,7 @@ export function SessionCard({
       )}
 
       {showProgress && (
-        <div className="mt-2">
+        <div className="pointer-events-none relative z-[1] mt-2">
           {currentProgress && (
             <div
               className="mb-1.5 h-1 w-full overflow-hidden rounded-full bg-surface-2"
