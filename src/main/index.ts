@@ -193,7 +193,7 @@ app.whenReady().then(() => {
   registerModelUpdateHandlers()
   registerPipelineHandlers()
   registerAppUpdateHandlers()
-  registerSummaryHandlers()
+  registerSummaryHandlers({ sessionService })
 
   setupCSP()
   createWindow()

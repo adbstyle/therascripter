@@ -122,6 +122,11 @@ export class TaskQueueService {
       // OCR has no separate output file — always re-run if reached
       if (taskType === 'ocr') return i
 
+      // Summarization writes to sessions.summary directly (no separate file).
+      // It's also the last step in both pipelines, so once everything before
+      // succeeded the only remaining work is to (re-)run summarization.
+      if (taskType === 'summarization') return i
+
       const filePath = outputField[taskType]
       if (!filePath) return i
 
@@ -132,7 +137,9 @@ export class TaskQueueService {
       }
     }
 
-    // All steps have valid output — restart from last step (anonymization)
+    // All steps reported valid output — restart from the last step (summarization).
+    // In practice the explicit summarization branch above will have already
+    // returned; this is the defensive fallback if the pipeline ever changes shape.
     return pipeline.length - 1
   }
 

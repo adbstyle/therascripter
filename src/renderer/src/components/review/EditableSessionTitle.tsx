@@ -20,6 +20,12 @@ export function EditableSessionTitle({
   // The fallback is shown via CSS ::before from data-placeholder, never as real text —
   // this avoids accidentally promoting the fallback string to a real title when the user
   // focuses + blurs an empty field.
+  //
+  // We deliberately render the h2 with NO React-controlled child. The `title` text is
+  // written imperatively via the useEffect below. If we used `{title}` as JSX child,
+  // the reconciler would clobber the user's draft any time the parent re-renders with
+  // a new `title` prop while the field is focused. Imperative writes give us a single
+  // gate (focus check) to decide whether to overwrite.
   const ref = useRef<HTMLHeadingElement | null>(null)
   const originalRef = useRef(title)
 
@@ -29,6 +35,16 @@ export function EditableSessionTitle({
       ref.current.textContent = title
     }
   }, [title])
+
+  // First-mount paint: ref is set after the empty render but before useEffect can
+  // run synchronously, so populate textContent here too. Without this the h2 shows
+  // the CSS placeholder briefly even when title is non-empty.
+  const setRef = (el: HTMLHeadingElement | null): void => {
+    ref.current = el
+    if (el && document.activeElement !== el && el.textContent !== title) {
+      el.textContent = title
+    }
+  }
 
   const commit = (el: HTMLElement): void => {
     const next = (el.textContent ?? '').trim()
@@ -56,7 +72,7 @@ export function EditableSessionTitle({
 
   return (
     <h2
-      ref={ref}
+      ref={setRef}
       className={`session-title outline-none focus:ring-1 focus:ring-primary rounded-sm ${className ?? ''}`}
       contentEditable
       suppressContentEditableWarning
@@ -64,8 +80,6 @@ export function EditableSessionTitle({
       onKeyDown={onKeyDown}
       aria-label="Sitzungstitel bearbeiten"
       data-placeholder={fallback}
-    >
-      {title}
-    </h2>
+    />
   )
 }

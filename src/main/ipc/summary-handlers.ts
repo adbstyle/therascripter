@@ -1,6 +1,4 @@
 import { ipcMain } from 'electron'
-import { getDatabase } from '../db/connection'
-import { SessionService } from '../services/SessionService'
 import type { SummaryRecord } from '../services/SessionService'
 import {
   SummaryGetInputSchema,
@@ -31,8 +29,7 @@ export function handleSummaryUpdateText(input: unknown, deps: SummaryHandlerDeps
   deps.sessionService.updateSummaryText(parsed.sessionId, parsed.text)
 }
 
-export function registerSummaryHandlers(): void {
-  const deps: SummaryHandlerDeps = { sessionService: new SessionService(getDatabase()) }
+export function registerSummaryHandlers(deps: SummaryHandlerDeps): void {
   ipcMain.handle('summary:get', (_evt, input: unknown) => handleSummaryGet(input, deps))
   ipcMain.handle('summary:updateTitle', (_evt, input: unknown) =>
     handleSummaryUpdateTitle(input, deps)

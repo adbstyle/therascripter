@@ -168,6 +168,16 @@ export class SessionService {
    * Returns a SummaryRecord if either title or summary is non-empty.
    * The renderer treats an empty title as "show date fallback" but still
    * needs the record to exist when only the title is present.
+   *
+   * Title-reuse semantics: `sessions.title` is the same column that backs
+   * both (a) auto-generated session labels written at createSession time
+   * (e.g. 'Sitzung 14.02.2026 14:30') and (b) the LLM-generated title
+   * written by SummarizationExecutor. We deliberately reuse the column
+   * instead of adding a separate `llm_title` field — pre-feature sessions
+   * already have non-NULL titles, and the renderer's contract is the
+   * same regardless of provenance: show the title, let the user edit it.
+   * Provenance is only knowable from `summaryModelId` (NULL after a
+   * user edit, set after an LLM run).
    */
   getSummary(sessionId: string): SummaryRecord | null {
     const session = this.repository.findById(sessionId)
