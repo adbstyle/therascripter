@@ -27,13 +27,13 @@ export function Toast({ toast, onDismiss }: ToastProps): React.JSX.Element {
     return () => clearTimeout(timer)
   }, [toast.id, onDismiss])
 
-  const bgColor = toast.type === 'success' ? 'bg-surface-3 dark:bg-surface-2' : 'bg-recording'
+  const bgColor = toast.type === 'success' ? 'bg-tooltip-bg' : 'bg-recording'
 
   return (
     <div
       role="status"
       aria-live="polite"
-      className={`${bgColor} rounded-lg px-4 py-3 text-sm text-white shadow-lg transition-all duration-200 ${
+      className={`${bgColor} rounded-lg px-4 py-3 text-sm text-white shadow-xl ring-1 ring-black/10 transition-all duration-200 ${
         visible ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
       }`}
     >

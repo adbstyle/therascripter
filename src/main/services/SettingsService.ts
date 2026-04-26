@@ -22,6 +22,7 @@ export interface AppSettings {
     diarizationPipeline: DiarizationPipeline
     ner: string
     ocr: string
+    summarization: string
   }
   firstLaunchDone: boolean
   consentReminderShown: boolean
@@ -39,7 +40,8 @@ const defaults: AppSettings = {
     diarization: 'pyannote-suite',
     diarizationPipeline: DEFAULT_DIARIZATION_PIPELINE,
     ner: 'flair-ner-german-large',
-    ocr: 'apple-vision'
+    ocr: 'apple-vision',
+    summarization: 'gemma-summarization'
   },
   firstLaunchDone: false,
   consentReminderShown: false,
@@ -129,6 +131,19 @@ export function initSettings(): Store<AppSettings> {
     store.set('activeModels', {
       ...store.get('activeModels'),
       ner: EXPECTED_NER
+    })
+  }
+
+  // Defensiv: Bestehende electron-store-Instanzen haben kein activeModels.summarization,
+  // weil das Feld erst mit dem lokalen LLM eingeführt wurde. defaults füllt nested keys
+  // nicht nach, also Wert hier explizit setzen, falls nicht vorhanden.
+  // Leerer String ist ein gültiger Wert ("Zusammenfassung deaktiviert") — nicht überschreiben.
+  const currentSummarization = (store.get('activeModels') as { summarization?: string })
+    .summarization
+  if (typeof currentSummarization !== 'string') {
+    store.set('activeModels', {
+      ...store.get('activeModels'),
+      summarization: 'gemma-summarization'
     })
   }
 

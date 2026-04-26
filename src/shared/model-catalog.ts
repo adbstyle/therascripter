@@ -32,6 +32,8 @@ export interface ModelDefinition {
   speedScore?: number
   // Nur für Diarization relevant — pyannote-Pipelines laden via from_pretrained(hfIdentifier).
   hfIdentifier?: string
+  /** HuggingFace repo path for the "view on HuggingFace" link in the UI. */
+  hfRepo?: string
 }
 
 export const R2_CDN = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev'
@@ -40,7 +42,7 @@ export const R2_CDN = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev'
 export const MODEL_DEFINITIONS: ModelDefinition[] = [
   {
     id: 'whisper-large-v3-turbo',
-    label: 'Whisper Large V3 Turbo (Multilingual)',
+    label: 'Whisper Large V3 Turbo',
     url: `${R2_CDN}/whisper-ggml-large-v3-turbo-q5_0.bin`,
     relativePath: 'asr/ggml-large-v3-turbo-q5_0.bin',
     checkPath: 'asr/ggml-large-v3-turbo-q5_0.bin',
@@ -49,10 +51,11 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
     group: 'asr',
     isRequired: false,
     description:
-      'Unterstützt alle Sprachen (Deutsch, Englisch, Französisch, Italienisch, …). Empfohlen als Standardmodell oder wenn Sitzungen mehrsprachig geführt werden.',
+      'Unterstützt alle Sprachen (Deutsch, Englisch, Französisch, Italienisch, …). Empfohlen als Standardmodell oder wenn Aufnahmen mehrsprachig geführt werden.',
     languages: ['multi'],
     accuracyScore: 0.8,
-    speedScore: 0.9
+    speedScore: 0.9,
+    hfRepo: 'openai/whisper-large-v3-turbo'
   },
   {
     id: 'whisper-large-v3-turbo-german',
@@ -68,7 +71,8 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
       'Auf Hochdeutsch optimiert (Basis: primeline/whisper-large-v3-turbo-german). Präziser bei Standarddeutsch als das multilinguale Modell. Nicht geeignet für starke Schweizerdeutsch-Mundart oder andere Sprachen.',
     languages: ['de'],
     accuracyScore: 0.87,
-    speedScore: 0.9
+    speedScore: 0.9,
+    hfRepo: 'primeline/whisper-large-v3-turbo-german'
   },
   {
     id: 'whisper-large-v3-turbo-swiss',
@@ -84,7 +88,8 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
       'Spezialisiert auf starke Schweizerdeutsch-Dialekte (Basis: Flurin17/whisper-large-v3-turbo-swiss-german). Merklich präzisere Transkription bei ausgeprägter Mundart. Nicht geeignet für andere Sprachen.',
     languages: ['de-CH', 'de'],
     accuracyScore: 0.9,
-    speedScore: 0.85
+    speedScore: 0.85,
+    hfRepo: 'Flurin17/whisper-large-v3-turbo-swiss-german'
   },
   {
     id: 'pyannote-suite',
@@ -102,7 +107,7 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
   },
   {
     id: 'flair-ner-german-large',
-    label: 'Anonymisierung (flair-ner-german-large)',
+    label: 'flair/ner-german-large',
     url: `${R2_CDN}/flair-ner-german-large.tar.gz`,
     relativePath: 'ner',
     checkPath: 'ner/models/ner-german-large',
@@ -110,6 +115,30 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
     sha256: '5dc0390c6d844d30648c4d950ee694eafeb01813e4d75e734cad6deede29d8a3',
     archive: true,
     group: 'ner',
-    isRequired: true
+    isRequired: true,
+    description:
+      'Erkennt Personen, Orte, Organisationen und weitere benannte Entitäten in deutschem Text (Basis: flair/ner-german-large auf XLM-RoBERTa Large). Hohe Präzision auf Hochdeutsch (~92% F1). Ergänzt die Sperrliste mit modellbasierter Erkennung neuer Begriffe.',
+    languages: ['de'],
+    accuracyScore: 0.92,
+    speedScore: 0.5,
+    hfRepo: 'flair/ner-german-large'
+  },
+  {
+    // Optional summarization model — Gemma 3 4B Instruct Q4_K_M (Gemma 4 E4B fallback,
+    // see CLAUDE.md "Gemma 4 E4B GGUF source"). Hash + size must be re-synced after
+    // running scripts/publish-manifest.sh per the model-hash-sync gotcha.
+    id: 'gemma-summarization',
+    label: 'Gemma 3 4B Instruct',
+    url: `${R2_CDN}/google_gemma-3-4b-it-Q4_K_M.gguf`,
+    relativePath: 'summarization/google_gemma-3-4b-it-Q4_K_M.gguf',
+    checkPath: 'summarization/google_gemma-3-4b-it-Q4_K_M.gguf',
+    sizeBytes: 2_489_758_112,
+    sha256: '4996030242583a40aa151ff93f49ed787ac8c25e4120c3ae4588b2e2a7d1ae94',
+    group: 'summarization',
+    isRequired: false,
+    description:
+      'Sprachmodell von Google. Versteht und erzeugt natürliche Sprache in mehreren Sprachen — hier eingesetzt für prägnante 2-Satz-Zusammenfassungen am Ende jeder Verarbeitung. Läuft komplett lokal auf der Apple-Silicon-GPU.',
+    languages: ['de', 'en'],
+    hfRepo: 'bartowski/google_gemma-3-4b-it-GGUF'
   }
 ]

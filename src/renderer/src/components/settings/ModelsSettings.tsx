@@ -10,13 +10,21 @@ import DiarizationPipelineSection from './DiarizationPipelineSection'
 export default function ModelsSettings(): React.JSX.Element {
   const toast = useToast()
   const [asrModels, setAsrModels] = useState<ModelCatalogEntry[]>([])
+  const [nerModels, setNerModels] = useState<ModelCatalogEntry[]>([])
+  const [summarizationModels, setSummarizationModels] = useState<ModelCatalogEntry[]>([])
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [progress, setProgress] = useState<number | undefined>(undefined)
   const [deleteCandidate, setDeleteCandidate] = useState<ModelCatalogEntry | null>(null)
 
   const reload = async (): Promise<void> => {
-    const asr = await window.api.modelCatalog.list('asr')
+    const [asr, ner, summarization] = await Promise.all([
+      window.api.modelCatalog.list('asr'),
+      window.api.modelCatalog.list('ner'),
+      window.api.modelCatalog.list('summarization')
+    ])
     setAsrModels(asr)
+    setNerModels(ner)
+    setSummarizationModels(summarization)
   }
 
   useEffect(() => {
@@ -40,8 +48,11 @@ export default function ModelsSettings(): React.JSX.Element {
   const handleDownload = async (id: string): Promise<void> => {
     setDownloadingId(id)
     try {
-      const updated = await window.api.modelCatalog.download(id)
-      setAsrModels(updated)
+      await window.api.modelCatalog.download(id)
+      // download returns the catalog for the model's group only — reload both
+      // to keep ASR + summarization grids in sync regardless of which one
+      // triggered the download.
+      await reload()
       toast.success('Modell erfolgreich heruntergeladen.')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
@@ -58,8 +69,8 @@ export default function ModelsSettings(): React.JSX.Element {
   const handleDeleteConfirmed = async (model: ModelCatalogEntry): Promise<void> => {
     setDeleteCandidate(null)
     try {
-      const updated = await window.api.modelCatalog.delete(model.id)
-      setAsrModels(updated)
+      await window.api.modelCatalog.delete(model.id)
+      await reload()
       toast.success(
         `"${model.label}" gelöscht — ${formatBytes(model.sizeBytes)} freigegeben.`
       )
@@ -70,10 +81,22 @@ export default function ModelsSettings(): React.JSX.Element {
 
   const handleActivate = async (model: ModelCatalogEntry): Promise<void> => {
     try {
-      const updated = await window.api.modelCatalog.setActive(model.group, model.id)
-      setAsrModels(updated)
+      await window.api.modelCatalog.setActive(model.group, model.id)
+      await reload()
       toast.success(
-        `"${model.label}" aktiviert. Neue Transkriptionen verwenden ab jetzt dieses Modell — bereits verarbeitete Sitzungen bleiben unverändert.`
+        `"${model.label}" aktiviert. Neue Transkriptionen verwenden ab jetzt dieses Modell — bereits verarbeitete Transkriptionen bleiben unverändert.`
+      )
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const handleDeactivate = async (model: ModelCatalogEntry): Promise<void> => {
+    try {
+      await window.api.modelCatalog.clearActive(model.group)
+      await reload()
+      toast.success(
+        `"${model.label}" deaktiviert. Zukünftige Transkriptionen werden ohne diesen Schritt verarbeitet.`
       )
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
@@ -90,8 +113,8 @@ export default function ModelsSettings(): React.JSX.Element {
         <div>
           <h2 className="mb-1 text-lg font-semibold">Transkriptions-Modelle</h2>
           <p className="text-sm text-text-secondary">
-            Wähle das Modell, das für die Transkription deiner Sitzungen verwendet
-            werden soll. Ein Modellwechsel wirkt sich nur auf neue Transkriptionen aus.
+            Wähle das Modell, das für die Transkription verwendet werden soll. Ein
+            Modellwechsel wirkt sich nur auf neue Transkriptionen aus.
           </p>
         </div>
 
@@ -103,7 +126,6 @@ export default function ModelsSettings(): React.JSX.Element {
                 <ModelCard
                   key={m.id}
                   model={m}
-                  activeUsageLabel="Wird für Transkription verwendet"
                   downloading={downloadingId === m.id}
                   progress={downloadingId === m.id ? progress : undefined}
                   anyBusy={anyBusy}
@@ -127,7 +149,6 @@ export default function ModelsSettings(): React.JSX.Element {
                 <ModelCard
                   key={m.id}
                   model={m}
-                  activeUsageLabel="Wird für Transkription verwendet"
                   downloading={downloadingId === m.id}
                   progress={downloadingId === m.id ? progress : undefined}
                   anyBusy={anyBusy}
@@ -144,16 +165,126 @@ export default function ModelsSettings(): React.JSX.Element {
 
       <DiarizationPipelineSection />
 
-      <section>
-        <h3 className="mb-2 text-sm font-medium text-text-tertiary">Pflicht-Modelle</h3>
-        <p className="mb-2 text-xs text-text-tertiary">
-          Diese Modelle sind für die Anonymisierung zwingend erforderlich und werden
-          automatisch aktuell gehalten.
-        </p>
-        <ul className="space-y-1 rounded-md border border-border bg-surface-1 p-3 text-xs text-text-tertiary">
-          <li>Sprechererkennung (pyannote-suite)</li>
-          <li>Anonymisierung (flair-ner-german-large)</li>
-        </ul>
+      <section className="space-y-3">
+        <div>
+          <h2 className="mb-1 text-lg font-semibold">Anonymisierung</h2>
+          <p className="text-sm text-text-secondary">
+            Erkennt Personen, Orte und andere sensible Entitäten.
+          </p>
+        </div>
+
+        {nerModels.filter((m) => m.isInstalled).length > 0 && (
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-text-tertiary">Installiert</h3>
+            <div className="space-y-3">
+              {nerModels
+                .filter((m) => m.isInstalled)
+                .map((m) => (
+                  <ModelCard
+                    key={m.id}
+                    model={m}
+                    downloading={downloadingId === m.id}
+                    progress={downloadingId === m.id ? progress : undefined}
+                    anyBusy={anyBusy}
+                    deletable={false}
+                    onDownload={() => handleDownload(m.id)}
+                    onCancelDownload={handleCancelDownload}
+                    onDelete={() => setDeleteCandidate(m)}
+                    onActivate={() => handleActivate(m)}
+                  />
+                ))}
+            </div>
+          </div>
+        )}
+
+        {nerModels.filter((m) => !m.isInstalled).length > 0 && (
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-text-tertiary">
+              Zum Download verfügbar
+            </h3>
+            <div className="space-y-3">
+              {nerModels
+                .filter((m) => !m.isInstalled)
+                .map((m) => (
+                  <ModelCard
+                    key={m.id}
+                    model={m}
+                    downloading={downloadingId === m.id}
+                    progress={downloadingId === m.id ? progress : undefined}
+                    anyBusy={anyBusy}
+                    deletable={false}
+                    onDownload={() => handleDownload(m.id)}
+                    onCancelDownload={handleCancelDownload}
+                    onDelete={() => setDeleteCandidate(m)}
+                    onActivate={() => handleActivate(m)}
+                  />
+                ))}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="mb-1 text-lg font-semibold">Zusammenfassung (optional)</h2>
+          <p className="text-sm text-text-secondary">
+            Lokales Sprachmodell für 2-Satz-Zusammenfassungen am Ende der Verarbeitung.
+            Optional — ohne installiertes Modell wird der Schritt geräuschlos
+            übersprungen.
+          </p>
+        </div>
+
+        {summarizationModels.filter((m) => m.isInstalled).length > 0 && (
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-text-tertiary">Installiert</h3>
+            <div className="space-y-3">
+              {summarizationModels
+                .filter((m) => m.isInstalled)
+                .map((m) => (
+                  <ModelCard
+                    key={m.id}
+                    model={m}
+                    downloading={downloadingId === m.id}
+                    progress={downloadingId === m.id ? progress : undefined}
+                    anyBusy={anyBusy}
+                    optional
+                    onDownload={() => handleDownload(m.id)}
+                    onCancelDownload={handleCancelDownload}
+                    onDelete={() => setDeleteCandidate(m)}
+                    onActivate={() => handleActivate(m)}
+                    onDeactivate={() => handleDeactivate(m)}
+                  />
+                ))}
+            </div>
+          </div>
+        )}
+
+        {summarizationModels.filter((m) => !m.isInstalled).length > 0 && (
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-text-tertiary">
+              Zum Download verfügbar
+            </h3>
+            <div className="space-y-3">
+              {summarizationModels
+                .filter((m) => !m.isInstalled)
+                .map((m) => (
+                  <ModelCard
+                    key={m.id}
+                    model={m}
+                    downloading={downloadingId === m.id}
+                    progress={downloadingId === m.id ? progress : undefined}
+                    anyBusy={anyBusy}
+                    optional
+                    onDownload={() => handleDownload(m.id)}
+                    onCancelDownload={handleCancelDownload}
+                    onDelete={() => setDeleteCandidate(m)}
+                    onActivate={() => handleActivate(m)}
+                    onDeactivate={() => handleDeactivate(m)}
+                  />
+                ))}
+            </div>
+          </div>
+        )}
       </section>
 
       {deleteCandidate && (

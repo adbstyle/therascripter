@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react'
+import { Pencil, Trash2 } from 'lucide-react'
 import type { BlocklistEntry, PlaceholderType } from '../../../shared/types'
 import { ConfirmDialog } from './ConfirmDialog'
 import { BlocklistDialog } from './BlocklistDialog'
+
+export interface BlocklistManagerHandle {
+  openAdd: () => void
+}
 
 const PLACEHOLDER_TYPE_LABELS: Record<PlaceholderType, string> = {
   PERSON: 'Person',
@@ -23,12 +28,19 @@ function formatDate(isoString: string): string {
 
 type DialogMode = null | { type: 'add' } | { type: 'edit'; entry: BlocklistEntry }
 
-export default function BlocklistManager(): React.JSX.Element {
+const BlocklistManager = forwardRef<BlocklistManagerHandle>(function BlocklistManager(
+  _props,
+  ref
+): React.JSX.Element {
   const [entries, setEntries] = useState<BlocklistEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [dialogMode, setDialogMode] = useState<DialogMode>(null)
   const [deleteTarget, setDeleteTarget] = useState<BlocklistEntry | null>(null)
+
+  useImperativeHandle(ref, () => ({
+    openAdd: () => setDialogMode({ type: 'add' })
+  }))
 
   const refresh = useCallback(async () => {
     try {
@@ -108,16 +120,15 @@ export default function BlocklistManager(): React.JSX.Element {
   return (
     <>
       <div className="p-6">
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-baseline justify-between gap-4">
           <p className="text-sm text-text-secondary">
             Begriffe, die immer automatisch anonymisiert werden.
           </p>
-          <button
-            className="titlebar-no-drag rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
-            onClick={() => setDialogMode({ type: 'add' })}
-          >
-            + Eintrag hinzufügen
-          </button>
+          {entries.length > 0 && (
+            <span className="shrink-0 text-xs text-text-tertiary">
+              {entries.length} Einträge
+            </span>
+          )}
         </div>
 
         {entries.length === 0 ? (
@@ -143,7 +154,7 @@ export default function BlocklistManager(): React.JSX.Element {
               </thead>
               <tbody className="divide-y divide-border bg-surface-0">
                 {entries.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-surface-1">
+                  <tr key={entry.id} className="group hover:bg-surface-1">
                     <td className="px-4 py-3 text-sm text-text-primary">{entry.term}</td>
                     <td className="px-4 py-3 text-sm text-text-secondary">
                       {PLACEHOLDER_TYPE_LABELS[entry.placeholderType]}
@@ -152,18 +163,22 @@ export default function BlocklistManager(): React.JSX.Element {
                       {formatDate(entry.createdAt)}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-end gap-1">
                         <button
-                          className="text-sm text-primary hover:text-primary-hover"
+                          className="rounded p-1.5 text-text-tertiary opacity-0 transition-opacity hover:bg-surface-2 hover:text-text-primary group-hover:opacity-100 focus-visible:opacity-100"
                           onClick={() => setDialogMode({ type: 'edit', entry })}
+                          aria-label={`${entry.term} bearbeiten`}
+                          title="Bearbeiten"
                         >
-                          Bearbeiten
+                          <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                         </button>
                         <button
-                          className="text-sm text-error-text hover:text-error-text-emphasis"
+                          className="rounded p-1.5 text-text-tertiary opacity-0 transition-opacity hover:bg-error-bg hover:text-error-text group-hover:opacity-100 focus-visible:opacity-100"
                           onClick={() => setDeleteTarget(entry)}
+                          aria-label={`${entry.term} löschen`}
+                          title="Löschen"
                         >
-                          Löschen
+                          <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                         </button>
                       </div>
                     </td>
@@ -174,7 +189,6 @@ export default function BlocklistManager(): React.JSX.Element {
           </div>
         )}
 
-        <p className="mt-3 text-xs text-text-tertiary">{entries.length} Einträge</p>
       </div>
 
       {dialogMode && (
@@ -199,4 +213,6 @@ export default function BlocklistManager(): React.JSX.Element {
       )}
     </>
   )
-}
+})
+
+export default BlocklistManager

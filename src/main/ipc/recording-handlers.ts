@@ -23,7 +23,7 @@ function generateTitle(): string {
   const year = now.getFullYear()
   const hours = now.getHours().toString().padStart(2, '0')
   const minutes = now.getMinutes().toString().padStart(2, '0')
-  return `Sitzung ${day}.${month}.${year} ${hours}:${minutes}`
+  return `Aufnahme ${day}.${month}.${year} ${hours}:${minutes}`
 }
 
 function startPowerBlocker(): void {

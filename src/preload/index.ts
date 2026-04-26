@@ -123,6 +123,8 @@ const api: IpcApi = {
     delete: (id: string) => ipcRenderer.invoke('modelCatalog:delete', { id }),
     setActive: (group: ModelGroup, id: string) =>
       ipcRenderer.invoke('modelCatalog:setActive', { group, id }),
+    clearActive: (group: ModelGroup) =>
+      ipcRenderer.invoke('modelCatalog:clearActive', { group }),
     cancelDownload: () => ipcRenderer.invoke('modelCatalog:cancelDownload')
   },
   pipeline: {
@@ -181,6 +183,13 @@ const api: IpcApi = {
         ipcRenderer.removeListener('appUpdate:status', handler)
       }
     }
+  },
+  summary: {
+    get: (sessionId: string) => ipcRenderer.invoke('summary:get', { sessionId }),
+    updateTitle: (sessionId: string, title: string) =>
+      ipcRenderer.invoke('summary:updateTitle', { sessionId, title }),
+    updateText: (sessionId: string, text: string) =>
+      ipcRenderer.invoke('summary:updateText', { sessionId, text })
   }
 }
 

@@ -1,3 +1,5 @@
+import { Download, ExternalLink, Power, PowerOff, Trash2, X } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import type { ModelCatalogEntry } from '../../../../shared/validation/model-catalog-schemas'
 import { formatBytes } from '../../utils/formatBytes'
 
@@ -6,14 +8,16 @@ interface Props {
   downloading: boolean
   progress?: number
   anyBusy: boolean
-  /** Anzeigetext unterhalb der Karte, wenn das Modell aktiv ist. */
-  activeUsageLabel: string
   onDownload: () => void
   onCancelDownload: () => void
   onDelete: () => void
   onActivate: () => void
+  /** Wird aufgerufen, wenn ein aktives optionales Modell deaktiviert werden soll. */
+  onDeactivate?: () => void
   /** Löschen-Button anzeigen? Default true. Für gekoppelte Pipelines auf false setzen. */
   deletable?: boolean
+  /** Optional-Gruppe (z. B. Zusammenfassung): Aktives Modell darf deaktiviert/gelöscht werden. */
+  optional?: boolean
   /** Sprach- und Grössen-Chips anzeigen? Default true. */
   showChips?: boolean
 }
@@ -50,20 +54,93 @@ export default function ModelCard({
   downloading,
   progress,
   anyBusy,
-  activeUsageLabel,
   onDownload,
   onCancelDownload,
   onDelete,
   onActivate,
+  onDeactivate,
   deletable = true,
+  optional = false,
   showChips = true
 }: Props): React.JSX.Element {
   const dimmed = downloading ? 'opacity-70' : ''
   const borderClass = model.isActive ? 'border-primary' : 'border-border'
 
+  type IconAction = {
+    id: string
+    Icon: LucideIcon
+    label: string
+    handler: () => void
+    disabled?: boolean
+    tone?: 'danger'
+  }
+
+  // Primary action — also fires on card click via stretched button.
+  let primaryAction: IconAction | null = null
+  if (!downloading && !model.isInstalled) {
+    primaryAction = {
+      id: 'download',
+      Icon: Download,
+      label: 'Herunterladen',
+      handler: onDownload,
+      disabled: anyBusy
+    }
+  } else if (!downloading && model.isInstalled && !model.isActive) {
+    primaryAction = {
+      id: 'activate',
+      Icon: Power,
+      label: 'Aktivieren',
+      handler: onActivate,
+      disabled: anyBusy
+    }
+  }
+
+  // Secondary actions — destructive / non-primary alternatives.
+  const secondaryActions: IconAction[] = []
+  if (downloading) {
+    secondaryActions.push({
+      id: 'cancel',
+      Icon: X,
+      label: 'Download abbrechen',
+      handler: onCancelDownload
+    })
+  } else if (model.isInstalled && !model.isActive && deletable) {
+    secondaryActions.push({
+      id: 'delete',
+      Icon: Trash2,
+      label: 'Löschen',
+      handler: onDelete,
+      disabled: anyBusy,
+      tone: 'danger'
+    })
+  } else if (model.isInstalled && model.isActive && optional) {
+    if (onDeactivate) {
+      secondaryActions.push({
+        id: 'deactivate',
+        Icon: PowerOff,
+        label: 'Deaktivieren',
+        handler: onDeactivate,
+        disabled: anyBusy
+      })
+    }
+    if (deletable) {
+      secondaryActions.push({
+        id: 'delete',
+        Icon: Trash2,
+        label: 'Löschen',
+        handler: onDelete,
+        disabled: anyBusy,
+        tone: 'danger'
+      })
+    }
+  }
+
+  // Icons rendered on hover, top-right. Secondary first, primary last (rightmost).
+  const iconActions: IconAction[] = [...secondaryActions, ...(primaryAction ? [primaryAction] : [])]
+
   return (
     <div
-      className={`rounded-lg border p-4 ${borderClass} ${dimmed}`}
+      className={`relative rounded-lg border p-4 ${borderClass} ${dimmed}`}
       role="group"
       aria-labelledby={`model-${model.id}-name`}
     >
@@ -73,6 +150,18 @@ export default function ModelCard({
             <h3 id={`model-${model.id}-name`} className="font-semibold text-text-primary">
               {model.label}
             </h3>
+            {model.hfRepo && (
+              <a
+                href={`https://huggingface.co/${model.hfRepo}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`${model.label} auf HuggingFace ansehen`}
+                title="Auf HuggingFace ansehen"
+                className="titlebar-no-drag inline-flex h-5 w-5 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary"
+              >
+                <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+              </a>
+            )}
             {model.isActive && (
               <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-white">
                 Aktiv
@@ -93,6 +182,30 @@ export default function ModelCard({
             </p>
           )}
         </div>
+
+        {iconActions.length > 0 && (
+          <div className="flex shrink-0 items-center gap-1">
+            {iconActions.map((a) => {
+              const dangerClass = 'hover:bg-error-bg hover:text-error-text'
+              const neutralClass = 'hover:bg-surface-2 hover:text-text-primary'
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={a.handler}
+                  disabled={a.disabled}
+                  aria-label={a.label}
+                  title={a.label}
+                  className={`titlebar-no-drag rounded p-1.5 text-text-tertiary transition-colors disabled:opacity-50 ${
+                    a.tone === 'danger' ? dangerClass : neutralClass
+                  }`}
+                >
+                  <a.Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {downloading && progress !== undefined && (
@@ -112,49 +225,6 @@ export default function ModelCard({
           <p className="mt-1 text-xs text-text-tertiary">Lädt herunter … {progress}%</p>
         </div>
       )}
-
-      <div className="mt-3 flex justify-end gap-2">
-        {downloading && (
-          <button
-            className="titlebar-no-drag rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2"
-            onClick={onCancelDownload}
-          >
-            Download abbrechen
-          </button>
-        )}
-        {!downloading && !model.isInstalled && (
-          <button
-            className="titlebar-no-drag rounded-md bg-primary px-3 py-1.5 text-sm text-white hover:bg-primary-hover disabled:opacity-50"
-            onClick={onDownload}
-            disabled={anyBusy}
-          >
-            Herunterladen
-          </button>
-        )}
-        {!downloading && model.isInstalled && !model.isActive && (
-          <>
-            {deletable && (
-              <button
-                className="titlebar-no-drag rounded-md border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 disabled:opacity-50"
-                onClick={onDelete}
-                disabled={anyBusy}
-              >
-                Löschen
-              </button>
-            )}
-            <button
-              className="titlebar-no-drag rounded-md bg-primary px-3 py-1.5 text-sm text-white hover:bg-primary-hover disabled:opacity-50"
-              onClick={onActivate}
-              disabled={anyBusy}
-            >
-              Aktivieren
-            </button>
-          </>
-        )}
-        {!downloading && model.isInstalled && model.isActive && (
-          <span className="text-xs text-text-tertiary">{activeUsageLabel}</span>
-        )}
-      </div>
     </div>
   )
 }

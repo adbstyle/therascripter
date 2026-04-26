@@ -5,12 +5,12 @@ export function SpeakerLabelView({ node }: NodeViewProps): React.JSX.Element {
   const { label } = node.attrs as { label: string }
 
   return (
-    <NodeViewWrapper as="span" className="inline">
+    <NodeViewWrapper as="span" className="-ml-[0.27em] inline">
       <span
-        className="inline cursor-default text-sm font-semibold text-text-secondary"
+        className="inline cursor-default text-sm text-text-tertiary"
         contentEditable={false}
       >
-        [{label}]:
+        {label}
       </span>
     </NodeViewWrapper>
   )

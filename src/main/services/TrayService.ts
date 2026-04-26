@@ -20,7 +20,7 @@ export class TrayService {
     this.idleIcon = generateIdleIcon()
     this.recordingIcon = generateRecordingIcon()
     this.tray = new Tray(this.idleIcon)
-    this.tray.setToolTip('Therascript')
+    this.tray.setToolTip('TheraScript')
     this.rebuildMenu()
   }
 
@@ -37,11 +37,11 @@ export class TrayService {
       this.tray.setImage(this.recordingIcon!)
       const durationStr = duration !== undefined ? formatDuration(duration) : '00:00:00'
       this.tray.setTitle(durationStr)
-      this.tray.setToolTip(`Therascript – Aufnahme läuft ${durationStr}`)
+      this.tray.setToolTip(`TheraScript – Aufnahme läuft ${durationStr}`)
     } else {
       this.tray.setImage(this.idleIcon!)
       this.tray.setTitle('')
-      this.tray.setToolTip('Therascript')
+      this.tray.setToolTip('TheraScript')
     }
 
     this.rebuildMenu()
@@ -51,7 +51,7 @@ export class TrayService {
     if (!this.tray || !this.isRecording) return
     const durationStr = formatDuration(seconds)
     this.tray.setTitle(durationStr)
-    this.tray.setToolTip(`Therascript – Aufnahme läuft ${durationStr}`)
+    this.tray.setToolTip(`TheraScript – Aufnahme läuft ${durationStr}`)
   }
 
   showWindow(): void {

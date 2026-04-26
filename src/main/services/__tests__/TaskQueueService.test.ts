@@ -47,11 +47,12 @@ describe('TaskQueueService', () => {
     it('enqueues audio pipeline tasks in correct order', () => {
       const tasks = queue.enqueuePipeline(sessionId, 'audio')
 
-      expect(tasks).toHaveLength(4)
+      expect(tasks).toHaveLength(5)
       expect(tasks[0].type).toBe('transcription')
       expect(tasks[1].type).toBe('diarization')
       expect(tasks[2].type).toBe('alignment')
       expect(tasks[3].type).toBe('anonymization')
+      expect(tasks[4].type).toBe('summarization')
 
       for (const task of tasks) {
         expect(task.sessionId).toBe(sessionId)
@@ -68,10 +69,11 @@ describe('TaskQueueService', () => {
 
       const tasks = queue.enqueuePipeline(pdfSession.id, 'pdf')
 
-      expect(tasks).toHaveLength(3)
+      expect(tasks).toHaveLength(4)
       expect(tasks[0].type).toBe('extraction')
       expect(tasks[1].type).toBe('ocr')
       expect(tasks[2].type).toBe('anonymization')
+      expect(tasks[3].type).toBe('summarization')
     })
   })
 
@@ -80,7 +82,7 @@ describe('TaskQueueService', () => {
       queue.enqueuePipeline(sessionId, 'audio')
       const tasks = queue.getSessionTasks(sessionId)
 
-      expect(tasks).toHaveLength(4)
+      expect(tasks).toHaveLength(5)
     })
 
     it('returns empty array for session with no tasks', () => {
@@ -119,13 +121,20 @@ describe('TaskQueueService', () => {
       queue.registerExecutor('diarization', trackingExecutor)
       queue.registerExecutor('alignment', trackingExecutor)
       queue.registerExecutor('anonymization', trackingExecutor)
+      queue.registerExecutor('summarization', trackingExecutor)
 
       queue.enqueuePipeline(sessionId, 'audio')
 
       // Wait for all tasks to process
       await new Promise((resolve) => setTimeout(resolve, 200))
 
-      expect(executionOrder).toEqual(['transcription', 'diarization', 'alignment', 'anonymization'])
+      expect(executionOrder).toEqual([
+        'transcription',
+        'diarization',
+        'alignment',
+        'anonymization',
+        'summarization'
+      ])
     })
 
     it('marks tasks as completed after execution', async () => {
@@ -139,6 +148,7 @@ describe('TaskQueueService', () => {
       queue.registerExecutor('diarization', instantExecutor)
       queue.registerExecutor('alignment', instantExecutor)
       queue.registerExecutor('anonymization', instantExecutor)
+      queue.registerExecutor('summarization', instantExecutor)
 
       queue.enqueuePipeline(sessionId, 'audio')
 
@@ -163,6 +173,7 @@ describe('TaskQueueService', () => {
       queue.registerExecutor('diarization', instantExecutor)
       queue.registerExecutor('alignment', instantExecutor)
       queue.registerExecutor('anonymization', instantExecutor)
+      queue.registerExecutor('summarization', instantExecutor)
 
       queue.enqueuePipeline(sessionId, 'audio')
 
@@ -209,6 +220,7 @@ describe('TaskQueueService', () => {
       queue.registerExecutor('diarization', progressExecutor)
       queue.registerExecutor('alignment', progressExecutor)
       queue.registerExecutor('anonymization', progressExecutor)
+      queue.registerExecutor('summarization', progressExecutor)
 
       queue.enqueuePipeline(sessionId, 'audio')
 
@@ -220,7 +232,7 @@ describe('TaskQueueService', () => {
       const completedCalls = calls.filter((c) => c[0] === 'task:completed')
 
       expect(progressCalls.length).toBeGreaterThan(0)
-      expect(completedCalls).toHaveLength(4)
+      expect(completedCalls).toHaveLength(5)
     })
   })
 
@@ -244,7 +256,7 @@ describe('TaskQueueService', () => {
 
       expect(failed).toHaveLength(1)
       expect(failed[0].type).toBe('transcription')
-      expect(cancelled).toHaveLength(3) // diarization, alignment, anonymization
+      expect(cancelled).toHaveLength(4) // diarization, alignment, anonymization, summarization
     })
 
     it('does not execute cancelled tasks', async () => {
@@ -267,6 +279,7 @@ describe('TaskQueueService', () => {
       queue.registerExecutor('diarization', trackingExecutor)
       queue.registerExecutor('alignment', trackingExecutor)
       queue.registerExecutor('anonymization', trackingExecutor)
+      queue.registerExecutor('summarization', trackingExecutor)
 
       queue.enqueuePipeline(sessionId, 'audio')
 
@@ -298,6 +311,7 @@ describe('TaskQueueService', () => {
       queue.registerExecutor('diarization', trackingExecutor)
       queue.registerExecutor('alignment', trackingExecutor)
       queue.registerExecutor('anonymization', trackingExecutor)
+      queue.registerExecutor('summarization', trackingExecutor)
 
       queue.enqueuePipeline(sessionId, 'audio')
       queue.enqueuePipeline(session2.id, 'audio')
@@ -310,8 +324,8 @@ describe('TaskQueueService', () => {
       expect(s1?.status).toBe('review')
       expect(s2?.status).toBe('review')
 
-      // All 8 tasks should have executed
-      expect(executionOrder).toHaveLength(8)
+      // All 10 tasks (5 per session × 2 sessions) should have executed
+      expect(executionOrder).toHaveLength(10)
     })
 
     it('second session still processes when first fails', async () => {
@@ -334,6 +348,7 @@ describe('TaskQueueService', () => {
       queue.registerExecutor('diarization', failOnFirst)
       queue.registerExecutor('alignment', failOnFirst)
       queue.registerExecutor('anonymization', failOnFirst)
+      queue.registerExecutor('summarization', failOnFirst)
 
       queue.enqueuePipeline(sessionId, 'audio')
       queue.enqueuePipeline(session2.id, 'audio')
@@ -363,6 +378,7 @@ describe('TaskQueueService', () => {
       queue.registerExecutor('diarization', slowExecutor)
       queue.registerExecutor('alignment', slowExecutor)
       queue.registerExecutor('anonymization', slowExecutor)
+      queue.registerExecutor('summarization', slowExecutor)
 
       queue.enqueuePipeline(sessionId, 'audio')
 
@@ -372,8 +388,8 @@ describe('TaskQueueService', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 200))
 
-      // Should not have processed all 4 tasks
-      expect(executionOrder.length).toBeLessThan(4)
+      // Should not have processed all 5 tasks
+      expect(executionOrder.length).toBeLessThan(5)
     })
   })
 })

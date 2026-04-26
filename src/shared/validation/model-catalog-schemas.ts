@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const ModelGroupSchema = z.enum(['asr', 'diarization', 'ner'])
+export const ModelGroupSchema = z.enum(['asr', 'diarization', 'ner', 'summarization'])
 export type ModelGroup = z.infer<typeof ModelGroupSchema>
 
 export const ModelCatalogEntrySchema = z.object({
@@ -13,6 +13,8 @@ export const ModelCatalogEntrySchema = z.object({
   languages: z.array(z.string()).optional(),
   accuracyScore: z.number().min(0).max(1).optional(),
   speedScore: z.number().min(0).max(1).optional(),
+  /** HuggingFace repo path (e.g. "flair/ner-german-large"). Renderer renders an external link. */
+  hfRepo: z.string().optional(),
   isInstalled: z.boolean(),
   isActive: z.boolean()
 })
@@ -38,6 +40,11 @@ export const ListModelsPayloadSchema = z.object({
 export const SetActiveModelPayloadSchema = z.object({
   group: ModelGroupSchema,
   id: modelIdStringSchema
+})
+
+/** Payload für modelCatalog:clearActive — leert den Active-Slot einer optionalen Gruppe. */
+export const ClearActiveModelPayloadSchema = z.object({
+  group: ModelGroupSchema
 })
 
 /** Erlaubte Diarization-Pipelines (HuggingFace-Identifier). */

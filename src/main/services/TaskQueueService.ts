@@ -9,8 +9,14 @@ import { sendToRenderer } from '../utils/ipc-helpers'
 import { validateIntermediateFile } from '../utils/file-ops'
 import type { Task, TaskType, Session, SessionStatus, SessionType } from '../../shared/types'
 
-const AUDIO_PIPELINE: TaskType[] = ['transcription', 'diarization', 'alignment', 'anonymization']
-const PDF_PIPELINE: TaskType[] = ['extraction', 'ocr', 'anonymization']
+const AUDIO_PIPELINE: TaskType[] = [
+  'transcription',
+  'diarization',
+  'alignment',
+  'anonymization',
+  'summarization'
+]
+const PDF_PIPELINE: TaskType[] = ['extraction', 'ocr', 'anonymization', 'summarization']
 
 // Maps a completed task type to the next session status
 const TASK_TO_SESSION_STATUS: Partial<Record<TaskType, SessionStatus>> = {
@@ -19,7 +25,10 @@ const TASK_TO_SESSION_STATUS: Partial<Record<TaskType, SessionStatus>> = {
   alignment: 'anonymizing',
   extraction: 'anonymizing',
   ocr: 'anonymizing',
-  anonymization: 'review'
+  // anonymization no longer transitions immediately — summarization (the new tail step)
+  // can still be pending. handleTaskCompletion handles the all-done case explicitly.
+  anonymization: 'anonymizing',
+  summarization: 'review'
 }
 
 const RECOVERY_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
@@ -113,6 +122,11 @@ export class TaskQueueService {
       // OCR has no separate output file — always re-run if reached
       if (taskType === 'ocr') return i
 
+      // Summarization writes to sessions.summary directly (no separate file).
+      // It's also the last step in both pipelines, so once everything before
+      // succeeded the only remaining work is to (re-)run summarization.
+      if (taskType === 'summarization') return i
+
       const filePath = outputField[taskType]
       if (!filePath) return i
 
@@ -123,7 +137,9 @@ export class TaskQueueService {
       }
     }
 
-    // All steps have valid output — restart from last step (anonymization)
+    // All steps reported valid output — restart from the last step (summarization).
+    // In practice the explicit summarization branch above will have already
+    // returned; this is the defensive fallback if the pipeline ever changes shape.
     return pipeline.length - 1
   }
 
@@ -351,7 +367,10 @@ export class TaskQueueService {
       alignment: 'diarizing', // alignment is part of diarization phase
       extraction: 'extracting',
       ocr: 'extracting',
-      anonymization: 'anonymizing'
+      anonymization: 'anonymizing',
+      // Summarization runs as the pipeline tail — keep the session in 'anonymizing'
+      // so the existing UX (no dedicated 'summarizing' status) covers the LLM step.
+      summarization: 'anonymizing'
     }
     return mapping[taskType] ?? null
   }

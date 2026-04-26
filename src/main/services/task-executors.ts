@@ -31,5 +31,6 @@ export function createStubExecutors(): Map<TaskType, TaskExecutor> {
   executors.set('extraction', stub)
   executors.set('ocr', stub)
   executors.set('anonymization', stub)
+  executors.set('summarization', stub)
   return executors
 }

@@ -13,5 +13,5 @@ interface Props {
 }
 
 export default function AsrModelCard(props: Props): React.JSX.Element {
-  return <ModelCard {...props} activeUsageLabel="Wird für Transkription verwendet" />
+  return <ModelCard {...props} />
 }

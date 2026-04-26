@@ -76,6 +76,7 @@ beforeEach(() => {
       download: vi.fn().mockResolvedValue([]),
       delete: vi.fn().mockResolvedValue([]),
       setActive: vi.fn().mockResolvedValue([]),
+      clearActive: vi.fn().mockResolvedValue([]),
       cancelDownload: vi.fn().mockResolvedValue(undefined)
     },
     pipeline: {
@@ -89,16 +90,21 @@ beforeEach(() => {
       check: vi.fn().mockResolvedValue({ modelUpdates: [], appUpdate: { available: false, latestVersion: null, checkedAt: null } }),
       openReleasePage: vi.fn(),
       onStatus: vi.fn().mockReturnValue(() => {})
+    },
+    summary: {
+      get: vi.fn().mockResolvedValue(null),
+      updateTitle: vi.fn().mockResolvedValue(undefined),
+      updateText: vi.fn().mockResolvedValue(undefined)
     }
   } as typeof window.api
 })
 
 describe('App', () => {
-  it('renders sidebar navigation', async () => {
+  it('renders bottom navigation', async () => {
     render(<App />)
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Sitzungen' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Einstellungen' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Transkriptionen' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Einstellungen' })).toBeInTheDocument()
     })
   })
 
@@ -106,7 +112,7 @@ describe('App', () => {
     render(<App />)
 
     await waitFor(() => {
-      expect(screen.getByText('Keine Sitzungen')).toBeInTheDocument()
+      expect(screen.getByText('Keine Transkriptionen')).toBeInTheDocument()
     })
   })
 })

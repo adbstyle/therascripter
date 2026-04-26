@@ -13,4 +13,6 @@ export function applyTestSchema(db: Database.Database): void {
     readFileSync(join(migrationsDir, '005-add-aligned-transcript-and-extracted-paths.sql'), 'utf-8')
   )
   db.exec(readFileSync(join(migrationsDir, '006-add-word-count.sql'), 'utf-8'))
+  db.exec(readFileSync(join(migrationsDir, '007-add-summarization.sql'), 'utf-8'))
+  db.exec(readFileSync(join(migrationsDir, '008-reset-summarization-parse-errors.sql'), 'utf-8'))
 }

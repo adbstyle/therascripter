@@ -24,6 +24,9 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     updatedAt: new Date().toISOString(),
     reviewAt: null,
     wordCount: null,
+    summary: null,
+    summaryModelId: null,
+    summarizedAt: null,
     ...overrides
   }
 }
@@ -150,6 +153,7 @@ beforeEach(() => {
       download: vi.fn().mockResolvedValue([]),
       delete: vi.fn().mockResolvedValue([]),
       setActive: vi.fn().mockResolvedValue([]),
+      clearActive: vi.fn().mockResolvedValue([]),
       cancelDownload: vi.fn().mockResolvedValue(undefined)
     },
     pipeline: {
@@ -163,6 +167,11 @@ beforeEach(() => {
       check: vi.fn().mockResolvedValue({ modelUpdates: [], appUpdate: { available: false, latestVersion: null, checkedAt: null } }),
       openReleasePage: vi.fn(),
       onStatus: vi.fn().mockReturnValue(() => {})
+    },
+    summary: {
+      get: vi.fn().mockResolvedValue(null),
+      updateTitle: vi.fn().mockResolvedValue(undefined),
+      updateText: vi.fn().mockResolvedValue(undefined)
     }
   } as typeof window.api
   vi.clearAllMocks()
@@ -180,7 +189,7 @@ describe('SessionDashboard', () => {
     render(<SessionDashboard />)
 
     await waitFor(() => {
-      expect(screen.getByText('Keine Sitzungen')).toBeInTheDocument()
+      expect(screen.getByText('Keine Transkriptionen')).toBeInTheDocument()
     })
   })
 
@@ -216,25 +225,8 @@ describe('SessionDashboard', () => {
       expect(screen.getByText('My Session')).toBeInTheDocument()
     })
 
-    await user.click(screen.getByLabelText('Sitzungsoptionen'))
-    await user.click(screen.getByText('L\u00f6schen'))
+    await user.click(screen.getByLabelText('Transkription l\u00f6schen'))
 
-    expect(screen.getByText('Sitzung l\u00f6schen')).toBeInTheDocument()
-  })
-
-  it('shows rename dialog', async () => {
-    const user = userEvent.setup()
-    const sessions = [makeSession({ id: '1', title: 'My Session' })]
-    mockSessions.list.mockResolvedValue(sessions)
-    render(<SessionDashboard />)
-
-    await waitFor(() => {
-      expect(screen.getByText('My Session')).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByLabelText('Sitzungsoptionen'))
-    await user.click(screen.getByText('Umbenennen'))
-
-    expect(screen.getByText('Sitzung umbenennen')).toBeInTheDocument()
+    expect(screen.getByText('Transkription l\u00f6schen')).toBeInTheDocument()
   })
 })

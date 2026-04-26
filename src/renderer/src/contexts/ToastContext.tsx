@@ -26,7 +26,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
       {children}
       {/* Toast container — fixed bottom-right */}
       {toasts.length > 0 && (
-        <div className="fixed right-4 bottom-4 z-50 flex flex-col gap-2">
+        <div className="pointer-events-none fixed right-4 bottom-16 z-50 flex flex-col items-end gap-2 [&>*]:pointer-events-auto">
           {toasts.map((toast) => (
             <Toast key={toast.id} toast={toast} onDismiss={dismiss} />
           ))}

@@ -6,7 +6,13 @@ const POLL_INTERVAL_MS = 15_000
 const STALL_THRESHOLDS: Partial<Record<TaskType, number>> = {
   diarization: 120_000,
   anonymization: 120_000,
-  ocr: 60_000
+  ocr: 60_000,
+  // LlamaSummarizer reports no fine-grained progress — onProgress is never called
+  // during inference, so the watchdog only sees the initial heartbeat. Cold-start
+  // of a 4B Q4_K_M GGUF on a loaded box can take ~30–60s; long anonymized inputs
+  // push that further. Generous 10-min cap protects against runaway processes
+  // without aborting healthy long-running inference.
+  summarization: 600_000
 }
 
 // In-process executors — watchdog is a no-op for these

@@ -99,14 +99,14 @@ export function registerSystemHandlers(): void {
   ipcMain.handle('system:uninstall', async () => {
     const { response } = await dialog.showMessageBox({
       type: 'warning',
-      title: 'Therascript vollständig entfernen',
+      title: 'TheraScript vollständig entfernen',
       message: 'Alle Daten werden unwiderruflich gelöscht:',
       detail:
         '• ML-Modelle (~4 GB)\n' +
-        '• Alle Sitzungen und Audiodateien\n' +
+        '• Alle Transkriptionen und Audiodateien\n' +
         '• Sperrliste\n' +
         '• Einstellungen\n\n' +
-        'Die App-Datei (Therascript.app) muss anschliessend ' +
+        'Die App-Datei (TheraScript.app) muss anschliessend ' +
         'manuell aus dem Applications-Ordner gelöscht werden.',
       buttons: ['Abbrechen', 'Entfernen'],
       defaultId: 0,
