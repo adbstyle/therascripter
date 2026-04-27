@@ -1,15 +1,31 @@
 import { readFileSync, writeFileSync } from 'fs'
 import type Database from 'better-sqlite3'
 import { SessionService } from './SessionService'
-import type { EntityMap, SessionType } from '../../shared/types'
+import { TRANSCRIPTION_PIPELINE_VERSION } from '../ml/whisper-quality'
+import type { EntityMap, TranscriptData } from '../../shared/types'
+import type { ReviewData } from '../../shared/types/IpcApi'
 import type { TipTapDocument } from '../../shared/types/TipTapDocument'
 import { countWords } from '../../shared/utils/countWords'
 
-export interface ReviewData {
-  document: TipTapDocument
-  entityMap: EntityMap
-  sessionType: SessionType
-  sessionTitle: string
+export type { ReviewData }
+
+/**
+ * Build a minimal TipTap document from raw whisper transcript segments.
+ * Used for transcription_quality_failed sessions that never produced an
+ * anonymized document — we still want the editor to show the broken
+ * output so the user can verify the loop diagnosis themselves.
+ */
+function transcriptToFallbackDoc(transcript: TranscriptData): TipTapDocument {
+  if (transcript.segments.length === 0) {
+    return { type: 'doc', content: [{ type: 'paragraph', content: [] }] }
+  }
+  return {
+    type: 'doc',
+    content: transcript.segments.map((seg) => ({
+      type: 'paragraph',
+      content: seg.text.trim().length > 0 ? [{ type: 'text', text: seg.text }] : []
+    }))
+  }
 }
 
 export class ReviewService {
@@ -22,23 +38,55 @@ export class ReviewService {
   load(sessionId: string): ReviewData {
     const session = this.sessionService.getSession(sessionId)
     if (!session) throw new Error(`Session ${sessionId} not found`)
-    if (session.status !== 'review') {
+    if (session.status !== 'review' && session.status !== 'transcription_quality_failed') {
       throw new Error(`Session ${sessionId} is not in review status (current: ${session.status})`)
     }
-    if (!session.anonymizedPath) {
-      throw new Error(`Session ${sessionId} has no anonymized document`)
+
+    let document: TipTapDocument
+    if (session.status === 'transcription_quality_failed') {
+      // No anonymized document exists — render the raw transcript so the user
+      // can see the loop and decide whether to re-transcribe. Missing or
+      // corrupted transcript file falls back to an empty doc rather than
+      // throwing, so the retry button on the banner stays reachable.
+      document = { type: 'doc', content: [{ type: 'paragraph', content: [] }] }
+      if (session.transcriptPath) {
+        try {
+          const rawTranscript = JSON.parse(
+            readFileSync(session.transcriptPath, 'utf-8')
+          ) as TranscriptData
+          document = transcriptToFallbackDoc(rawTranscript)
+        } catch (err) {
+          console.warn(
+            `[ReviewService] Could not load transcript for ${sessionId} (showing empty doc):`,
+            err instanceof Error ? err.message : err
+          )
+        }
+      }
+    } else {
+      if (!session.anonymizedPath) {
+        throw new Error(`Session ${sessionId} has no anonymized document`)
+      }
+      const docJson = readFileSync(session.anonymizedPath, 'utf-8')
+      document = JSON.parse(docJson) as TipTapDocument
     }
 
-    const docJson = readFileSync(session.anonymizedPath, 'utf-8')
-    const document = JSON.parse(docJson) as TipTapDocument
-
     const entityMap = session.entityMap ?? {}
+
+    // Manual re-transcription only useful when the pipeline config has changed
+    // since the failed run — otherwise it would deterministically produce the
+    // same output. Renderer hides the retry button when this is false.
+    const canRetryTranscription =
+      session.status === 'transcription_quality_failed' &&
+      (session.transcriptionPipelineVersion ?? 0) < TRANSCRIPTION_PIPELINE_VERSION
 
     return {
       document,
       entityMap,
       sessionType: session.type,
-      sessionTitle: session.title
+      sessionTitle: session.title,
+      sessionStatus: session.status,
+      qualityFlag: session.qualityFlag,
+      canRetryTranscription
     }
   }
 

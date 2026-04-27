@@ -1,4 +1,4 @@
-import type { Session, SessionType } from './Session'
+import type { Session, SessionStatus, SessionType, QualityFlag } from './Session'
 import type { Task, TaskType } from './Task'
 import type { BlocklistEntry } from './NerTypes'
 import type { EntityMap, PlaceholderType } from './EntityMap'
@@ -74,6 +74,9 @@ export interface ReviewData {
   entityMap: EntityMap
   sessionType: SessionType
   sessionTitle: string
+  sessionStatus: SessionStatus
+  qualityFlag: QualityFlag | null
+  canRetryTranscription: boolean
 }
 
 export interface ReviewApi {

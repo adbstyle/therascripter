@@ -215,7 +215,10 @@ export default function SessionDashboard({
                     }
                     retryDisabled={isAnyProcessing}
                     onClick={
-                      session.status === 'review' ? () => onOpenReview?.(session.id) : undefined
+                      session.status === 'review' ||
+                      session.status === 'transcription_quality_failed'
+                        ? () => onOpenReview?.(session.id)
+                        : undefined
                     }
                   />
                 ))}
