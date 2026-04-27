@@ -45,14 +45,22 @@ export class ReviewService {
     let document: TipTapDocument
     if (session.status === 'transcription_quality_failed') {
       // No anonymized document exists — render the raw transcript so the user
-      // can see the loop and decide whether to re-transcribe.
-      if (!session.transcriptPath) {
-        document = { type: 'doc', content: [{ type: 'paragraph', content: [] }] }
-      } else {
-        const rawTranscript = JSON.parse(
-          readFileSync(session.transcriptPath, 'utf-8')
-        ) as TranscriptData
-        document = transcriptToFallbackDoc(rawTranscript)
+      // can see the loop and decide whether to re-transcribe. Missing or
+      // corrupted transcript file falls back to an empty doc rather than
+      // throwing, so the retry button on the banner stays reachable.
+      document = { type: 'doc', content: [{ type: 'paragraph', content: [] }] }
+      if (session.transcriptPath) {
+        try {
+          const rawTranscript = JSON.parse(
+            readFileSync(session.transcriptPath, 'utf-8')
+          ) as TranscriptData
+          document = transcriptToFallbackDoc(rawTranscript)
+        } catch (err) {
+          console.warn(
+            `[ReviewService] Could not load transcript for ${sessionId} (showing empty doc):`,
+            err instanceof Error ? err.message : err
+          )
+        }
       }
     } else {
       if (!session.anonymizedPath) {

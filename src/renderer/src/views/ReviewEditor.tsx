@@ -287,8 +287,14 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     await window.api.review.save(sessionId, doc, entityMapRef.current)
   }, [editor, sessionId])
 
+  // Auto-save is only meaningful for sessions that produced an anonymized
+  // document. transcription_quality_failed sessions render a fallback view
+  // built from the raw (broken) transcript — there is no anonymized doc to
+  // persist edits into, and ReviewService.save() would throw.
   const { saving, lastSavedAt } = useAutoSave(
-    editor && !loading ? handleSave : null,
+    editor && !loading && sessionStatus !== 'transcription_quality_failed'
+      ? handleSave
+      : null,
     [updateCounter],
     2000
   )

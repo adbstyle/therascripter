@@ -37,7 +37,7 @@ export function QualityWarningBanner({
 
   return (
     <div role="alert" className={`flex items-start gap-3 border-b ${containerClass} px-6 py-3`}>
-      <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${textClass}`} strokeWidth={2} aria-hidden />
+      <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${textClass}`} strokeWidth={1.75} aria-hidden />
       <div className={`min-w-0 flex-1 text-sm ${textClass}`}>
         <p className="font-semibold">{heading}</p>
         <p className="mt-0.5 text-xs opacity-90">{body}</p>

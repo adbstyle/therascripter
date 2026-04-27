@@ -98,11 +98,14 @@ export class TaskQueueService {
       this.repository.create({ sessionId, type })
     }
 
-    // Transition session: error → first pending task's processing status
+    // Transition session: error → first pending task's processing status.
+    // Also clears errorMessage and qualityFlag so the renderer doesn't surface
+    // stale state from the failed run while the retry is in flight.
     const firstStatus = this.getSessionStatusForTask(remainingSteps[0])
     this.sessionService.updateSession(sessionId, {
       status: firstStatus ?? 'transcribing',
-      errorMessage: null
+      errorMessage: null,
+      qualityFlag: null
     })
 
     console.log(
@@ -114,6 +117,12 @@ export class TaskQueueService {
   }
 
   private findResumeIndex(session: Session, pipeline: TaskType[]): number {
+    // Quality-rejected sessions wrote a transcript JSON to disk (so the editor
+    // can show the broken output) but the content is unusable. Always re-run
+    // from the beginning of the pipeline — otherwise validateIntermediateFile()
+    // would happily accept the looping JSON and skip past transcription.
+    if (session.status === 'transcription_quality_failed') return 0
+
     // Maps each task type to the session field that proves it completed successfully
     const outputField: Partial<Record<TaskType, string | null>> = {
       transcription: session.transcriptPath,

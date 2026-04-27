@@ -108,14 +108,9 @@ export class WhisperService implements TaskExecutor {
     const ratio = computeRepetitionRatio(transcript.segments)
     const classification = classifyQuality(ratio)
     console.log(
-      JSON.stringify({
-        event: 'whisper_quality_check',
-        sessionId: task.sessionId,
-        repetitionRatio: Number(ratio.toFixed(4)),
-        segmentCount: transcript.segments.length,
-        classification: classification ?? 'ok',
-        pipelineVersion: TRANSCRIPTION_PIPELINE_VERSION
-      })
+      `[WhisperService] quality_check sessionId=${task.sessionId} ` +
+        `ratio=${ratio.toFixed(4)} segments=${transcript.segments.length} ` +
+        `classification=${classification ?? 'ok'} pipelineVersion=${TRANSCRIPTION_PIPELINE_VERSION}`
     )
 
     // Persist transcript path, version stamp, and (if any) the warning flag
