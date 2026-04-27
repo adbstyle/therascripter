@@ -113,19 +113,25 @@ export class WhisperService implements TaskExecutor {
         `classification=${classification ?? 'ok'} pipelineVersion=${TRANSCRIPTION_PIPELINE_VERSION}`
     )
 
-    // Persist transcript path, version stamp, and (if any) the warning flag
-    // in one update. The 'rejected' classification is handled by throwing
-    // below; TaskQueueService catches QualityRejectionError and routes the
-    // session to the terminal transcription_quality_failed state.
+    // Persist transcript path and (for warnings) the quality flag.
+    // transcriptionPipelineVersion is intentionally only stamped when the
+    // result is acceptable — i.e. NOT 'rejected'. The version field's
+    // meaning is "version that produced an acceptable transcript", which is
+    // what gates the manual 'Erneut transkribieren' button: a rejected
+    // session must surface the retry button immediately, even on the same
+    // pipeline version, otherwise the user is locked out of recovery.
+    if (classification === 'rejected') {
+      // Persist transcript path so the editor can show the broken output,
+      // but leave the version null so canRetryTranscription evaluates true.
+      sessionService.updateSession(task.sessionId, { transcriptPath })
+      throw new QualityRejectionError(ratio)
+    }
+
     sessionService.updateSession(task.sessionId, {
       transcriptPath,
       transcriptionPipelineVersion: TRANSCRIPTION_PIPELINE_VERSION,
       qualityFlag: classification === 'repetition_warning' ? 'repetition_warning' : null
     })
-
-    if (classification === 'rejected') {
-      throw new QualityRejectionError(ratio)
-    }
   }
 
   private runWhisper(
