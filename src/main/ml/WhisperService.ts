@@ -14,6 +14,12 @@ import { writeFileAtomic } from '../utils/file-ops'
 import { removeFillerWords, rebuildSegments } from './filler-removal'
 import { filterSpecialTokens, mergeSubTokens } from './token-processing'
 import type { WhisperToken } from './token-processing'
+import {
+  computeRepetitionRatio,
+  classifyQuality,
+  QualityRejectionError,
+  TRANSCRIPTION_PIPELINE_VERSION
+} from './whisper-quality'
 
 interface WhisperSegment {
   timestamps: { from: string; to: string }
@@ -98,7 +104,33 @@ export class WhisperService implements TaskExecutor {
     const transcriptPath = sessionService.generateTranscriptPath(task.sessionId)
     writeFileAtomic(transcriptPath, JSON.stringify(transcript, null, 2))
 
-    sessionService.updateSession(task.sessionId, { transcriptPath })
+    // Quality check — detects whisper hallucination loops (ADR-006).
+    const ratio = computeRepetitionRatio(transcript.segments)
+    const classification = classifyQuality(ratio)
+    console.log(
+      JSON.stringify({
+        event: 'whisper_quality_check',
+        sessionId: task.sessionId,
+        repetitionRatio: Number(ratio.toFixed(4)),
+        segmentCount: transcript.segments.length,
+        classification: classification ?? 'ok',
+        pipelineVersion: TRANSCRIPTION_PIPELINE_VERSION
+      })
+    )
+
+    // Persist transcript path, version stamp, and (if any) the warning flag
+    // in one update. The 'rejected' classification is handled by throwing
+    // below; TaskQueueService catches QualityRejectionError and routes the
+    // session to the terminal transcription_quality_failed state.
+    sessionService.updateSession(task.sessionId, {
+      transcriptPath,
+      transcriptionPipelineVersion: TRANSCRIPTION_PIPELINE_VERSION,
+      qualityFlag: classification === 'repetition_warning' ? 'repetition_warning' : null
+    })
+
+    if (classification === 'rejected') {
+      throw new QualityRejectionError(ratio)
+    }
   }
 
   private runWhisper(
@@ -119,6 +151,11 @@ export class WhisperService implements TaskExecutor {
         audioPath,
         '-l',
         'de',
+        // ADR-006: disables prompt conditioning between 30s windows. Without
+        // this, hallucinations in one window get fed back as prompt context
+        // and self-reinforce until end of audio (the "last sentence repeated
+        // 100 times" failure mode reported in #65).
+        '-nc',
         '-pp', // --print-progress
         '-ojf', // --output-json-full (includes word-level timestamps)
         '-t',
