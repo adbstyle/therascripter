@@ -24,6 +24,10 @@ export default function App(): React.JSX.Element {
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [isImporting, setIsImporting] = useState(false)
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null)
+  // Bumped on every tray/app-menu "Einstellungen…" trigger to force <Settings/>
+  // to remount with fresh subpage state — guarantees we land on the overview
+  // even when the user is already deep in a sub-page.
+  const [settingsResetKey, setSettingsResetKey] = useState(0)
   const scrollToSessionId = useRef<string | null>(null)
 
   const handleImportPDF = useCallback(async () => {
@@ -46,6 +50,14 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     window.api.modelDownload.status().then((info) => setModelsReady(info.modelsReady))
+  }, [])
+
+  useEffect(() => {
+    return window.api.nav.onOpenSettings(() => {
+      setReviewSessionId(null)
+      setCurrentView('settings')
+      setSettingsResetKey((k) => k + 1)
+    })
   }, [])
 
   // Check for pending model updates on startup (set before restart)
@@ -190,7 +202,7 @@ export default function App(): React.JSX.Element {
             onScrollComplete={handleScrollComplete}
           />
         ) : (
-          <Settings />
+          <Settings key={settingsResetKey} />
         )}
 
         {!navHidden && <BottomNav current={currentView} onChange={setCurrentView} />}

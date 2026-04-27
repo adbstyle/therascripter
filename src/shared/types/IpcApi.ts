@@ -174,6 +174,10 @@ export interface SummaryApi {
   updateText(sessionId: string, text: string): Promise<void>
 }
 
+export interface NavApi {
+  onOpenSettings(callback: () => void): () => void
+}
+
 export interface ModelCatalogApi {
   list(group: ModelGroup): Promise<ModelCatalogEntry[]>
   listAsr(): Promise<ModelCatalogEntry[]>
@@ -205,4 +209,5 @@ export interface IpcApi {
   pipeline: PipelineApi
   appUpdate: AppUpdateApi
   summary: SummaryApi
+  nav: NavApi
 }

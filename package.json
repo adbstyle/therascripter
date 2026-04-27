@@ -26,7 +26,8 @@
     "sidecar:package": "scripts/package-models.sh",
     "sidecar:upload": "scripts/upload-r2.sh",
     "sidecar:deploy": "npm run sidecar:build && npm run sidecar:package && npm run sidecar:upload",
-    "sidecar:publish-manifest": "scripts/publish-manifest.sh"
+    "sidecar:publish-manifest": "scripts/publish-manifest.sh",
+    "icons:tray": "node scripts/build-tray-icons.mjs"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
@@ -45,6 +46,7 @@
     "@electron/fuses": "^2.0.0",
     "@electron/rebuild": "^4.0.3",
     "@eslint/js": "^9.39.0",
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.1.18",
     "@testing-library/jest-dom": "^6.9.0",
     "@testing-library/react": "^16.3.0",
