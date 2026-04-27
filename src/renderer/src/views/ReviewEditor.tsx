@@ -13,6 +13,7 @@ import { BlocklistConfirmDialog } from '../components/editor/BlocklistConfirmDia
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EditableSessionTitle } from '../components/review/EditableSessionTitle'
 import { SummaryPanel } from '../components/review/SummaryPanel'
+import { QualityWarningBanner } from '../components/review/QualityWarningBanner'
 import {
   batchRemovePlaceholder,
   anonymizeSelectionWithPropagation,
@@ -25,7 +26,14 @@ import { serializeDocument } from '../../../shared/utils/serializeDocument'
 import { countWords } from '../../../shared/utils/countWords'
 import { useAnonymizationOverview } from '../hooks/useAnonymizationOverview'
 import { AnonymizationPanel } from '../components/editor/AnonymizationPanel'
-import type { EntityMap, PlaceholderType, ReviewData, SessionType } from '../../../shared/types'
+import type {
+  EntityMap,
+  PlaceholderType,
+  QualityFlag,
+  ReviewData,
+  SessionStatus,
+  SessionType
+} from '../../../shared/types'
 import type { TipTapDocument } from '../../../shared/types/TipTapDocument'
 import type { Editor } from '@tiptap/core'
 
@@ -48,6 +56,10 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const [loadError, setLoadError] = useState<string | null>(null)
   const [sessionTitle, setSessionTitle] = useState('')
   const [sessionType, setSessionType] = useState<SessionType>('audio')
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus>('review')
+  const [qualityFlag, setQualityFlag] = useState<QualityFlag | null>(null)
+  const [canRetryTranscription, setCanRetryTranscription] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const [_entityMap, setEntityMap] = useState<EntityMap>({})
   const [updateCounter, setUpdateCounter] = useState(0)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -236,6 +248,9 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
 
         setSessionTitle(data.sessionTitle)
         setSessionType(data.sessionType)
+        setSessionStatus(data.sessionStatus)
+        setQualityFlag(data.qualityFlag)
+        setCanRetryTranscription(data.canRetryTranscription)
         setEntityMap(data.entityMap)
         entityMapRef.current = data.entityMap
 
@@ -470,6 +485,23 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     }
   }, [sessionId, onBack, toast])
 
+  /** Manual re-transcription for transcription_quality_failed sessions.
+   * Only reachable when canRetryTranscription is true (i.e. the pipeline
+   * version stored on the session is older than the current binary). */
+  const handleRetryTranscription = useCallback(async () => {
+    if (!canRetryTranscription || retrying) return
+    setRetrying(true)
+    try {
+      await window.api.tasks.retry(sessionId)
+      onBack()
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : 'Erneute Transkription konnte nicht gestartet werden'
+      )
+      setRetrying(false)
+    }
+  }, [canRetryTranscription, retrying, sessionId, onBack, toast])
+
   /** Export current editor content to clipboard (US-7) */
   const handleExportClipboard = useCallback(async () => {
     if (!editor) return
@@ -584,6 +616,17 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           </button>
         </div>
       </header>
+
+      {/* Quality-warning banner (ADR-006) */}
+      {sessionStatus === 'transcription_quality_failed' ? (
+        <QualityWarningBanner
+          severity="critical"
+          onRetry={canRetryTranscription ? handleRetryTranscription : undefined}
+          retryDisabled={retrying}
+        />
+      ) : qualityFlag === 'repetition_warning' ? (
+        <QualityWarningBanner severity="warning" />
+      ) : null}
 
       {/* Editor + Panel row */}
       <div className="flex min-h-0 flex-1">
