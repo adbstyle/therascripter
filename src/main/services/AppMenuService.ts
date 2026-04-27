@@ -5,6 +5,9 @@ interface InitOptions {
   onOpenSettings: () => void
 }
 
+let currentOptions: InitOptions | null = null
+let recording = false
+
 // Builds the macOS Application Menu with standard sub-menus plus
 // "Einstellungen…" (⌘,) routed to the Settings overview and the standard
 // "beenden" quit role. Application-menu accelerators only fire when the
@@ -12,10 +15,26 @@ interface InitOptions {
 //
 // On non-darwin we leave Electron's default menu in place so HTML inputs
 // retain Cut/Copy/Paste/Undo via the platform's standard Edit menu.
-export function initAppMenu({ onOpenSettings }: InitOptions): void {
+export function initAppMenu(options: InitOptions): void {
   if (process.platform !== 'darwin') return
+  currentOptions = options
+  rebuild()
+}
+
+// Rebuild when recording starts/stops so the Einstellungen item (and ⌘,)
+// can be disabled while the renderer is locked to RecordingView.
+export function setAppMenuRecording(isRecording: boolean): void {
+  if (process.platform !== 'darwin') return
+  if (recording === isRecording) return
+  recording = isRecording
+  rebuild()
+}
+
+function rebuild(): void {
+  if (!currentOptions) return
 
   const appName = app.getName()
+  const onOpenSettings = currentOptions.onOpenSettings
 
   const template: MenuItemConstructorOptions[] = [
     {
@@ -26,6 +45,7 @@ export function initAppMenu({ onOpenSettings }: InitOptions): void {
         {
           label: 'Einstellungen…',
           accelerator: 'CommandOrControl+,',
+          enabled: !recording,
           click: () => onOpenSettings()
         },
         { type: 'separator' },

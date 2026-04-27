@@ -115,17 +115,21 @@ export class TrayService {
       menuItems.push({ type: 'separator' })
     }
 
-    menuItems.push({
-      label: 'Einstellungen…',
-      // Application Menu owns the real ⌘, accelerator so it only fires when
-      // Therascript is focused. Here we just show the shortcut hint.
-      accelerator: 'CommandOrControl+,',
-      registerAccelerator: false,
-      click: () => {
-        this.showWindow()
-        this.onOpenSettingsCallback?.()
-      }
-    })
+    // Hidden during recording: opening Settings would not navigate while
+    // RecordingView holds the renderer, and the user can't act on it anyway.
+    if (!this.isRecording) {
+      menuItems.push({
+        label: 'Einstellungen…',
+        // Application Menu owns the real ⌘, accelerator so it only fires when
+        // Therascript is focused. Here we just show the shortcut hint.
+        accelerator: 'CommandOrControl+,',
+        registerAccelerator: false,
+        click: () => {
+          this.showWindow()
+          this.onOpenSettingsCallback?.()
+        }
+      })
+    }
 
     menuItems.push({
       label: 'Fenster anzeigen',

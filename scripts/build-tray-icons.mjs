@@ -18,9 +18,10 @@ const TARGETS = [
   { svg: 'tray-recording.svg', basename: 'TrayIconRecordingTemplate' }
 ]
 
+// Apple's HIG calls for ~22pt template images in the macOS menu bar.
 const SIZES = [
-  { suffix: '', width: 16 },
-  { suffix: '@2x', width: 32 }
+  { suffix: '', width: 22 },
+  { suffix: '@2x', width: 44 }
 ]
 
 mkdirSync(OUT_DIR, { recursive: true })
