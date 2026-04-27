@@ -26,7 +26,7 @@ export default function App(): React.JSX.Element {
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null)
   // Bumped on every tray/app-menu "Einstellungen…" trigger to force <Settings/>
   // to remount with fresh subpage state — guarantees we land on the overview
-  // even when the user is already deep in a sub-page (AC #7).
+  // even when the user is already deep in a sub-page.
   const [settingsResetKey, setSettingsResetKey] = useState(0)
   const scrollToSessionId = useRef<string | null>(null)
 

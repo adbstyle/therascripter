@@ -117,8 +117,8 @@ export class TrayService {
 
     menuItems.push({
       label: 'Einstellungen…',
-      // Application Menu owns the actual ⌘, accelerator (per AC #10).
-      // Here we only display the shortcut next to the menu item.
+      // Application Menu owns the real ⌘, accelerator so it only fires when
+      // Therascript is focused. Here we just show the shortcut hint.
       accelerator: 'CommandOrControl+,',
       registerAccelerator: false,
       click: () => {
@@ -136,7 +136,7 @@ export class TrayService {
 
     menuItems.push({
       label: 'Therascript beenden',
-      // Application Menu owns ⌘Q via role: 'quit'.
+      // Application Menu owns the real ⌘Q via role: 'quit'.
       accelerator: 'CommandOrControl+Q',
       registerAccelerator: false,
       click: () => app.quit()

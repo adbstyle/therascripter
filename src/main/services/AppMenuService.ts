@@ -6,16 +6,14 @@ interface InitOptions {
 }
 
 // Builds the macOS Application Menu with standard sub-menus plus
-// "Einstellungen…" (⌘,) routed to the Settings overview and
-// "Therascript beenden" (⌘Q) using the standard quit role.
+// "Einstellungen…" (⌘,) routed to the Settings overview and the standard
+// "beenden" quit role. Application-menu accelerators only fire when the
+// app is focused, so they don't act as global shortcuts.
 //
-// Application-menu accelerators only fire when Therascript is the focused
-// app — this is exactly what AC #10 requires.
+// On non-darwin we leave Electron's default menu in place so HTML inputs
+// retain Cut/Copy/Paste/Undo via the platform's standard Edit menu.
 export function initAppMenu({ onOpenSettings }: InitOptions): void {
-  if (process.platform !== 'darwin') {
-    Menu.setApplicationMenu(null)
-    return
-  }
+  if (process.platform !== 'darwin') return
 
   const appName = app.getName()
 
@@ -37,11 +35,8 @@ export function initAppMenu({ onOpenSettings }: InitOptions): void {
         { role: 'hideOthers', label: 'Andere ausblenden' },
         { role: 'unhide', label: 'Alle einblenden' },
         { type: 'separator' },
-        {
-          label: `${appName} beenden`,
-          accelerator: 'CommandOrControl+Q',
-          role: 'quit'
-        }
+        // role: 'quit' provides the ⌘Q accelerator natively.
+        { role: 'quit', label: `${appName} beenden` }
       ]
     },
     {

@@ -240,8 +240,8 @@ app.whenReady().then(() => {
   tray.onStop(() => stopRecordingFromTray())
   tray.onOpenSettings(() => sendToRenderer('nav:openSettings'))
 
-  // Application Menu owns ⌘, (Einstellungen) and ⌘Q (Beenden) — fires only
-  // while Therascript is the focused app, per AC #10.
+  // Application Menu owns ⌘, (Einstellungen) and ⌘Q (Beenden) so the
+  // shortcuts only fire while Therascript is the focused app.
   initAppMenu({
     onOpenSettings: () => {
       tray.showWindow()
@@ -274,8 +274,19 @@ app.whenReady().then(() => {
   )
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    const windows = BrowserWindow.getAllWindows()
+    if (windows.length === 0) {
       createWindow()
+      return
+    }
+    // Window exists but may be hidden (red traffic-light routes through the
+    // close handler that calls hide()). Re-surface it via the tray helper so
+    // Dock-click behaves the same as the tray "Fenster anzeigen" entry.
+    try {
+      getTray().showWindow()
+    } catch {
+      windows[0].show()
+      windows[0].focus()
     }
   })
 })
