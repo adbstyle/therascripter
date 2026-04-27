@@ -9,7 +9,10 @@ export type SessionStatus =
   | 'extracting'
   | 'anonymizing'
   | 'review'
+  | 'transcription_quality_failed'
   | 'error'
+
+export type QualityFlag = 'repetition_warning'
 
 export interface Session {
   id: string
@@ -32,6 +35,8 @@ export interface Session {
   summary: string | null
   summaryModelId: string | null
   summarizedAt: string | null
+  qualityFlag: QualityFlag | null
+  transcriptionPipelineVersion: number | null
 }
 
 export interface CreateSessionInput {
@@ -59,4 +64,6 @@ export interface UpdateSessionInput {
   summary?: string | null
   summaryModelId?: string | null
   summarizedAt?: string | null
+  qualityFlag?: QualityFlag | null
+  transcriptionPipelineVersion?: number | null
 }
