@@ -7,6 +7,7 @@ import type { TaskExecutor } from './task-executors'
 import { createStubExecutors } from './task-executors'
 import { sendToRenderer } from '../utils/ipc-helpers'
 import { validateIntermediateFile } from '../utils/file-ops'
+import { QualityRejectionError } from '../ml/whisper-quality'
 import type { Task, TaskType, Session, SessionStatus, SessionType } from '../../shared/types'
 
 const AUDIO_PIPELINE: TaskType[] = [
@@ -74,7 +75,13 @@ export class TaskQueueService {
   retrySession(sessionId: string): void {
     const session = this.sessionService.getSession(sessionId)
     if (!session) throw new Error(`Session ${sessionId} nicht gefunden`)
-    if (session.status !== 'error') throw new Error(`Session ${sessionId} ist nicht im Fehlerstatus`)
+    // Manual retry is allowed from 'error' (generic failure) and from
+    // 'transcription_quality_failed' (whisper loop detected). The renderer
+    // additionally gates the latter on pipeline-version drift, so reaching
+    // this point means a re-run might actually try something different.
+    if (session.status !== 'error' && session.status !== 'transcription_quality_failed') {
+      throw new Error(`Session ${sessionId} ist nicht im Fehlerstatus`)
+    }
 
     const pipeline = session.type === 'audio' ? AUDIO_PIPELINE : PDF_PIPELINE
     const resumeIndex = this.findResumeIndex(session, pipeline)
@@ -284,6 +291,7 @@ export class TaskQueueService {
         taskType: task.type
       })
     } catch (error) {
+      const isQualityRejection = error instanceof QualityRejectionError
       const errorMessage = controller.signal.aborted
         ? 'Verarbeitung reagiert nicht mehr'
         : error instanceof Error
@@ -300,7 +308,11 @@ export class TaskQueueService {
         completedAt: new Date().toISOString()
       })
 
-      this.handleTaskFailure(task, errorMessage)
+      if (isQualityRejection) {
+        this.handleQualityRejection(task, errorMessage)
+      } else {
+        this.handleTaskFailure(task, errorMessage)
+      }
     } finally {
       watchdog.stop()
       this.processing = false
@@ -373,6 +385,42 @@ export class TaskQueueService {
       summarization: 'anonymizing'
     }
     return mapping[taskType] ?? null
+  }
+
+  /**
+   * Quality-rejection path: WhisperService threw QualityRejectionError because
+   * the transcript's repetition ratio exceeded the reject threshold (ADR-006).
+   * The transcript JSON has already been written to disk (forensics + so the
+   * editor can show the broken output with a warning). We cancel the rest of
+   * the pipeline and route the session to the terminal
+   * 'transcription_quality_failed' state — NOT 'error', so the renderer can
+   * distinguish the case and decide whether to offer a manual re-transcribe.
+   */
+  private handleQualityRejection(task: Task, errorMessage: string): void {
+    const cancelled = this.repository.cancelPendingForSession(task.sessionId)
+    if (cancelled > 0) {
+      console.log(
+        `[TaskQueue] Cancelled ${cancelled} pending tasks for session ${task.sessionId} (quality rejection)`
+      )
+    }
+
+    try {
+      this.sessionService.updateSession(task.sessionId, {
+        status: 'transcription_quality_failed',
+        errorMessage
+      })
+    } catch (err) {
+      console.error(
+        `[TaskQueue] Failed to set session ${task.sessionId} to transcription_quality_failed state:`,
+        err
+      )
+    }
+
+    sendToRenderer('task:error', {
+      sessionId: task.sessionId,
+      taskType: task.type,
+      error: errorMessage
+    })
   }
 
   private handleTaskFailure(task: Task, errorMessage: string): void {
