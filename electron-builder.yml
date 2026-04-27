@@ -28,6 +28,10 @@ extraResources:
     to: lib
     filter:
       - '**/*'
+  - from: resources/icons
+    to: icons
+    filter:
+      - '**/*.png'
   - from: python_sidecar/standalone
     to: ml_sidecar/standalone
     filter:

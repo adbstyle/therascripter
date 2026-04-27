@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, nativeTheme, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, nativeTheme, Notification, session, shell } from 'electron'
 import { join } from 'path'
 import { initDatabase, getDatabase, closeDatabase } from './db/connection'
 import { initSettings, getSettings } from './services/SettingsService'
@@ -20,6 +20,8 @@ import { registerModelCatalogHandlers } from './ipc/model-catalog-handlers'
 import { registerModelUpdateHandlers } from './ipc/model-update-handlers'
 import { registerPipelineHandlers } from './ipc/pipeline-handlers'
 import { initTray, getTray } from './services/TrayService'
+import { initAppMenu } from './services/AppMenuService'
+import { sendToRenderer } from './utils/ipc-helpers'
 import {
   startAutoDeletion,
   stopAutoDeletion,
@@ -50,6 +52,24 @@ import {
 } from './services/ModelDownloadService'
 import { registerSummaryHandlers } from './ipc/summary-handlers'
 
+// Set in before-quit so the close-handler can distinguish "user closed window"
+// (hide) from "app is shutting down" (allow destroy).
+let isQuitting = false
+
+function showBackgroundReminderOnce(): void {
+  const settings = getSettings()
+  if (settings.get('backgroundReminderShown')) return
+  if (!Notification.isSupported()) return
+
+  new Notification({
+    title: 'TheraScript läuft im Hintergrund',
+    body: 'Über das Symbol in der Menüleiste kannst du das Fenster wieder anzeigen oder die App beenden.',
+    silent: true
+  }).show()
+
+  settings.set('backgroundReminderShown', true)
+}
+
 function createWindow(): void {
   // Set background color based on theme to prevent white flash in dark mode
   const isDark =
@@ -71,6 +91,19 @@ function createWindow(): void {
       nodeIntegration: false,
       sandbox: true
     }
+  })
+
+  // macOS tray-app behavior: red traffic-light hides the window instead of
+  // destroying it, so the tray "Fenster anzeigen" handler can bring it back
+  // and the renderer state (review editor, scroll position) survives.
+  // On first hide, post a one-shot system notification so the user knows
+  // the app keeps running.
+  mainWindow.on('close', (event) => {
+    if (isQuitting) return
+    if (process.platform !== 'darwin') return
+    event.preventDefault()
+    mainWindow.hide()
+    showBackgroundReminderOnce()
   })
 
   // Block navigation away from the app (prevents file:// and external URL attacks)
@@ -205,6 +238,16 @@ app.whenReady().then(() => {
   // Initialize tray after window is created
   const tray = initTray()
   tray.onStop(() => stopRecordingFromTray())
+  tray.onOpenSettings(() => sendToRenderer('nav:openSettings'))
+
+  // Application Menu owns ⌘, (Einstellungen) and ⌘Q (Beenden) — fires only
+  // while Therascript is the focused app, per AC #10.
+  initAppMenu({
+    onOpenSettings: () => {
+      tray.showWindow()
+      sendToRenderer('nav:openSettings')
+    }
+  })
 
   // Start task queue processing
   taskQueue.start()
@@ -246,6 +289,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  isQuitting = true
   cleanupRecordingOnQuit()
   stopAutoDeletion()
   try {
