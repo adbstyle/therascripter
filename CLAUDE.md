@@ -42,6 +42,7 @@ npm run sidecar:package            # Package models for R2 upload
 npm run sidecar:upload             # Upload model packages to Cloudflare R2
 npm run sidecar:deploy             # Build + package + upload (full pipeline)
 scripts/publish-manifest.sh       # Generate manifest.json from r2-upload/ + upload to R2 (run after sidecar:package)
+scripts/sim-clean-install.sh       # Simulate fresh / upgrade / models-only install (interactive); --status, --restore
 ```
 
 ## Architecture
