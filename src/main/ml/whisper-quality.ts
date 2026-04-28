@@ -1,9 +1,10 @@
 import type { TranscriptSegment, QualityFlag } from '../../shared/types'
 
 /**
- * Minimal contract for the SessionService surface used to persist the
- * quality-check result. Defined here (instead of importing the full class)
- * so the helper stays trivially testable with a stub.
+ * Minimal contract for persisting both the transcript path and the
+ * quality-check classification onto the session. Defined here (instead of
+ * importing SessionService directly) so the helper stays trivially testable
+ * with a stub.
  */
 export interface QualityPersistTarget {
   updateSession(
@@ -85,6 +86,14 @@ export function persistQualityResult(
 ): { ratio: number; classification: QualityClassification } {
   const ratio = computeRepetitionRatio(segments)
   const classification = classifyQuality(ratio)
+  // Log before the DB write so the ratio survives a failing updateSession
+  // (rare — SQLite-Constraint, disk full — but the operator needs the
+  // value to correlate with the surfaced exception).
+  console.log(
+    `[WhisperService] quality_check sessionId=${sessionId} ` +
+      `ratio=${ratio.toFixed(4)} segments=${segments.length} ` +
+      `classification=${classification ?? 'ok'}`
+  )
   target.updateSession(sessionId, { transcriptPath, qualityFlag: classification })
   return { ratio, classification }
 }
