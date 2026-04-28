@@ -57,7 +57,7 @@ VAD (`--vad`) wird **nicht** in dieser Iteration aktiviert. VAD trimmt Stille; i
 - **Geringfügig schwächere Token-Coherence über Window-Grenzen.** Praktisch nicht messbar in Therapie-Transkripten.
 - **Repetition-Detection kann False-Positives erzeugen** bei legitimen Wiederholungen (Mantra-artige Phrasen in CBT, "Ja, ja, ja"-Reflektionen). Schwellwerte müssen empirisch getunt werden — Initial-Wert konservativ (0.3 / 0.7), Follow-up-Tuning anhand realer Sessions.
 - **Migration-Pfad nötig.** Bestehende Sessions auf Repetition-Ratio scannen; Userinnen müssen über betroffene Sessions informiert und ein Re-Run-Pfad angeboten werden (eigenes Issue, nicht Scope dieses ADR).
-- **Regression-Test-Asset.** Ein scriptbares langes WAV mit Trailing-Silence wird zu `tests/fixtures/` hinzugefügt, sonst ist der Fix nicht falsifizierbar.
+- **Regression-Test-Asset offen.** Ein scriptbares langes WAV mit Trailing-Silence in `tests/fixtures/` wäre wünschenswert, um End-to-End zu verifizieren, dass `qualityFlag` korrekt persistiert wird. Da die Pipeline in der revidierten Variante nie hart abbricht, ist die Coverage-Lücke nicht mehr Pipeline-blockierend — bleibt offen für ADR-007 oder einen gezielten Folge-PR.
 - **Plugin-Architektur (NFR-9/10) bleibt unberührt.** `-nc` ist ein generischer whisper.cpp-Flag; die Output-Detection ist modell-agnostisch und gilt auch für zukünftige ASR-Plugins (mlx-whisper etc.).
 - **Telemetry-Datenpunkt.** Logging der Repetition-Ratio pro Session schafft eine Baseline für zukünftige ASR-Modell-Vergleiche (NFR-9).
 - **Kein eigener Retry-Mechanismus für quality-flagged Sessions.** Wir hatten in der ersten Implementierung einen separaten `transcription_quality_failed`-Status mit gated Retry-Button vorgesehen. Verworfen, weil:
