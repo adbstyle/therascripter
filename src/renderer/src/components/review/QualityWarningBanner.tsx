@@ -54,7 +54,7 @@ export function QualityWarningBanner({
               : undefined
           }
         >
-          <RotateCw className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
+          <RotateCw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
           Erneut transkribieren
         </button>
       )}

@@ -56,7 +56,9 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const [loadError, setLoadError] = useState<string | null>(null)
   const [sessionTitle, setSessionTitle] = useState('')
   const [sessionType, setSessionType] = useState<SessionType>('audio')
-  const [sessionStatus, setSessionStatus] = useState<SessionStatus>('review')
+  // null until load() resolves, so the auto-save guard cannot misfire on a
+  // quality-failed session before its real status is known.
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
   const [qualityFlag, setQualityFlag] = useState<QualityFlag | null>(null)
   const [canRetryTranscription, setCanRetryTranscription] = useState(false)
   const [retrying, setRetrying] = useState(false)
@@ -290,11 +292,15 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   // Auto-save is only meaningful for sessions that produced an anonymized
   // document. transcription_quality_failed sessions render a fallback view
   // built from the raw (broken) transcript — there is no anonymized doc to
-  // persist edits into, and ReviewService.save() would throw.
+  // persist edits into, and ReviewService.save() would throw. The explicit
+  // null check guards against a debounce misfire before load() resolves.
+  const autoSaveEnabled =
+    !!editor &&
+    !loading &&
+    sessionStatus !== null &&
+    sessionStatus !== 'transcription_quality_failed'
   const { saving, lastSavedAt } = useAutoSave(
-    editor && !loading && sessionStatus !== 'transcription_quality_failed'
-      ? handleSave
-      : null,
+    autoSaveEnabled ? handleSave : null,
     [updateCounter],
     2000
   )
