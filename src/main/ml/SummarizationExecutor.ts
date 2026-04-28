@@ -51,14 +51,12 @@ export class SummarizationExecutor implements TaskExecutor {
         signal ?? new AbortController().signal
       )
     } catch (err) {
-      // Per the plan's design intent ("Model-missing is a skip, not a
-      // failure" — Plan §35; "generation failed → render nothing extra"
-      // — Plan §16), summarization is an OPTIONAL pipeline tail step.
-      // Any failure (subprocess crash, abort, JSON-extraction failure,
-      // schema validation failure, transient model error) must NOT
-      // poison the whole session into 'error' state — the anonymized
-      // transcript upstream is intact and the user should still reach
-      // the Review Editor. Log + return cleanly; the task succeeds with
+      // Summarization is an OPTIONAL pipeline tail step. Any failure
+      // (subprocess crash, abort, JSON-extraction failure, schema
+      // validation failure, transient model error) must NOT poison the
+      // whole session into 'error' state — the anonymized transcript
+      // upstream is intact and the user should still reach the Review
+      // Editor. Log + return cleanly; the task succeeds with
       // sessions.summary staying NULL.
       this.deps.logger.error(
         `Summarization failed for session ${task.sessionId}: ${err instanceof Error ? err.message : String(err)}`

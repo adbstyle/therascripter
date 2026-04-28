@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { TranscriptSegment } from '../../../shared/types'
 import {
   computeRepetitionRatio,
   classifyQuality,
+  persistQualityResult,
   REPETITION_WARN_THRESHOLD,
   REPETITION_CRITICAL_THRESHOLD
 } from '../whisper-quality'
@@ -84,5 +85,71 @@ describe('classifyQuality', () => {
     expect(classifyQuality(0.71)).toBe('repetition_critical')
     expect(classifyQuality(0.95)).toBe('repetition_critical')
     expect(classifyQuality(1)).toBe('repetition_critical')
+  })
+})
+
+describe('persistQualityResult', () => {
+  // Verifies the wiring used by WhisperService.execute(): compute ratio,
+  // classify, persist transcriptPath + qualityFlag in a single update.
+
+  function makeTarget(): { updateSession: ReturnType<typeof vi.fn> } {
+    return { updateSession: vi.fn() }
+  }
+
+  it('persists qualityFlag=null for clean transcripts', () => {
+    const target = makeTarget()
+    const segments: TranscriptSegment[] = [
+      seg('Hallo, wie geht es Ihnen heute?'),
+      seg('Mir geht es gut, danke der Nachfrage.'),
+      seg('Das freut mich zu hören.')
+    ]
+
+    const result = persistQualityResult(target, 'sess-1', '/tmp/t.json', segments)
+
+    expect(result.classification).toBeNull()
+    expect(result.ratio).toBe(0)
+    expect(target.updateSession).toHaveBeenCalledOnce()
+    expect(target.updateSession).toHaveBeenCalledWith('sess-1', {
+      transcriptPath: '/tmp/t.json',
+      qualityFlag: null
+    })
+  })
+
+  it("persists qualityFlag='repetition_warning' for ratio in (0.3, 0.7]", () => {
+    const target = makeTarget()
+    // 5 segments → 4 pairs. 2 duplicate pairs = ratio 0.5 → warning.
+    const segments: TranscriptSegment[] = [seg('A'), seg('A'), seg('B'), seg('B'), seg('C')]
+
+    const result = persistQualityResult(target, 'sess-2', '/tmp/t.json', segments)
+
+    expect(result.classification).toBe('repetition_warning')
+    expect(result.ratio).toBeCloseTo(0.5)
+    expect(target.updateSession).toHaveBeenCalledWith('sess-2', {
+      transcriptPath: '/tmp/t.json',
+      qualityFlag: 'repetition_warning'
+    })
+  })
+
+  it("persists qualityFlag='repetition_critical' for ratio > 0.7", () => {
+    const target = makeTarget()
+    // 20 identical segments → 19/19 = ratio 1.0 → critical.
+    const segments: TranscriptSegment[] = Array.from({ length: 20 }, () =>
+      seg('Vielen Dank für das Gespräch.')
+    )
+
+    const result = persistQualityResult(target, 'sess-3', '/tmp/t.json', segments)
+
+    expect(result.classification).toBe('repetition_critical')
+    expect(result.ratio).toBe(1)
+    expect(target.updateSession).toHaveBeenCalledWith('sess-3', {
+      transcriptPath: '/tmp/t.json',
+      qualityFlag: 'repetition_critical'
+    })
+  })
+
+  it('updates the session exactly once even when classification is null', () => {
+    const target = makeTarget()
+    persistQualityResult(target, 'sess-4', '/tmp/t.json', [seg('only one segment')])
+    expect(target.updateSession).toHaveBeenCalledOnce()
   })
 })
