@@ -151,10 +151,10 @@ export default function ModelUpdateScreen({
                     </div>
                   )}
                   {isCurrent && isExtracting && (
-                    <p className="text-xs text-text-tertiary">Wird entpackt\u2026</p>
+                    <p className="text-xs text-text-tertiary">Wird entpackt…</p>
                   )}
                   {isCurrent && isVerifying && (
-                    <p className="text-xs text-text-tertiary">Wird \u00FCberpr\u00FCft\u2026</p>
+                    <p className="text-xs text-text-tertiary">Wird überprüft…</p>
                   )}
                 </div>
               )
@@ -189,7 +189,7 @@ export default function ModelUpdateScreen({
             </p>
             <p className="mb-3 text-sm text-error-text">{status.error}</p>
             <p className="mb-3 text-xs text-text-tertiary">
-              Bestehende Modelle sind unver\u00E4ndert. Das Update wird beim n\u00E4chsten Start
+              Bestehende Modelle sind unverändert. Das Update wird beim nächsten Start
               erneut versucht.
             </p>
             <button
@@ -203,7 +203,7 @@ export default function ModelUpdateScreen({
 
         {started && !isError && (
           <p className="mt-4 text-center text-xs text-text-tertiary">
-            Hinweis: Bei Abbruch wird das Update beim n\u00E4chsten Start automatisch fortgesetzt.
+            Hinweis: Bei Abbruch wird das Update beim nächsten Start automatisch fortgesetzt.
           </p>
         )}
       </div>

@@ -204,7 +204,7 @@ const BlocklistManager = forwardRef<BlocklistManagerHandle>(function BlocklistMa
       {deleteTarget && (
         <ConfirmDialog
           title="Eintrag löschen"
-          message={`\u201e${deleteTarget.term}\u201c aus der Sperrliste entfernen?`}
+          message={`„${deleteTarget.term}“ aus der Sperrliste entfernen?`}
           confirmLabel="Löschen"
           destructive
           onConfirm={handleDelete}

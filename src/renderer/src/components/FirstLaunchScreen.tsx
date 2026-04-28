@@ -171,10 +171,10 @@ export default function FirstLaunchScreen({
                     </div>
                   )}
                   {isCurrent && isExtracting && (
-                    <p className="text-xs text-text-tertiary">Wird entpackt\u2026</p>
+                    <p className="text-xs text-text-tertiary">Wird entpackt…</p>
                   )}
                   {isCurrent && isVerifying && (
-                    <p className="text-xs text-text-tertiary">Wird \u00FCberpr\u00FCft\u2026</p>
+                    <p className="text-xs text-text-tertiary">Wird überprüft…</p>
                   )}
                 </div>
               )
@@ -220,7 +220,7 @@ export default function FirstLaunchScreen({
         {/* Resume hint */}
         {started && !isError && (
           <p className="mt-4 text-center text-xs text-text-tertiary">
-            Hinweis: Bei Abbruch wird der Download beim n\u00E4chsten Start automatisch fortgesetzt.
+            Hinweis: Bei Abbruch wird der Download beim nächsten Start automatisch fortgesetzt.
           </p>
         )}
       </div>
