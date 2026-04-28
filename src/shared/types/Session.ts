@@ -11,6 +11,11 @@ export type SessionStatus =
   | 'review'
   | 'error'
 
+// Two severity levels for whisper repetition-loop detection. The pipeline
+// always runs to completion regardless — these flags drive a non-blocking
+// banner so the user can spot bad output and report it as a bug.
+export type QualityFlag = 'repetition_warning' | 'repetition_critical'
+
 export interface Session {
   id: string
   title: string
@@ -32,6 +37,7 @@ export interface Session {
   summary: string | null
   summaryModelId: string | null
   summarizedAt: string | null
+  qualityFlag: QualityFlag | null
 }
 
 export interface CreateSessionInput {
@@ -59,4 +65,5 @@ export interface UpdateSessionInput {
   summary?: string | null
   summaryModelId?: string | null
   summarizedAt?: string | null
+  qualityFlag?: QualityFlag | null
 }

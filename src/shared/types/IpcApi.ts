@@ -1,4 +1,4 @@
-import type { Session, SessionType } from './Session'
+import type { Session, SessionType, QualityFlag } from './Session'
 import type { Task, TaskType } from './Task'
 import type { BlocklistEntry } from './NerTypes'
 import type { EntityMap, PlaceholderType } from './EntityMap'
@@ -74,6 +74,7 @@ export interface ReviewData {
   entityMap: EntityMap
   sessionType: SessionType
   sessionTitle: string
+  qualityFlag: QualityFlag | null
 }
 
 export interface ReviewApi {
@@ -174,6 +175,10 @@ export interface SummaryApi {
   updateText(sessionId: string, text: string): Promise<void>
 }
 
+export interface NavApi {
+  onOpenSettings(callback: () => void): () => void
+}
+
 export interface ModelCatalogApi {
   list(group: ModelGroup): Promise<ModelCatalogEntry[]>
   listAsr(): Promise<ModelCatalogEntry[]>
@@ -205,4 +210,5 @@ export interface IpcApi {
   pipeline: PipelineApi
   appUpdate: AppUpdateApi
   summary: SummaryApi
+  nav: NavApi
 }

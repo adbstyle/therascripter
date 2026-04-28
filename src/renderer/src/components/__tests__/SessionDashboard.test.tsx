@@ -27,6 +27,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     summary: null,
     summaryModelId: null,
     summarizedAt: null,
+    qualityFlag: null,
     ...overrides
   }
 }
@@ -172,6 +173,9 @@ beforeEach(() => {
       get: vi.fn().mockResolvedValue(null),
       updateTitle: vi.fn().mockResolvedValue(undefined),
       updateText: vi.fn().mockResolvedValue(undefined)
+    },
+    nav: {
+      onOpenSettings: vi.fn().mockReturnValue(() => {})
     }
   } as typeof window.api
   vi.clearAllMocks()
@@ -225,8 +229,8 @@ describe('SessionDashboard', () => {
       expect(screen.getByText('My Session')).toBeInTheDocument()
     })
 
-    await user.click(screen.getByLabelText('Transkription l\u00f6schen'))
+    await user.click(screen.getByLabelText('Transkription löschen'))
 
-    expect(screen.getByText('Transkription l\u00f6schen')).toBeInTheDocument()
+    expect(screen.getByText('Transkription löschen')).toBeInTheDocument()
   })
 })

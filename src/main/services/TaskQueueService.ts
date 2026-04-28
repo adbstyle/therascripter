@@ -74,7 +74,9 @@ export class TaskQueueService {
   retrySession(sessionId: string): void {
     const session = this.sessionService.getSession(sessionId)
     if (!session) throw new Error(`Session ${sessionId} nicht gefunden`)
-    if (session.status !== 'error') throw new Error(`Session ${sessionId} ist nicht im Fehlerstatus`)
+    if (session.status !== 'error') {
+      throw new Error(`Session ${sessionId} ist nicht im Fehlerstatus`)
+    }
 
     const pipeline = session.type === 'audio' ? AUDIO_PIPELINE : PDF_PIPELINE
     const resumeIndex = this.findResumeIndex(session, pipeline)
@@ -91,11 +93,14 @@ export class TaskQueueService {
       this.repository.create({ sessionId, type })
     }
 
-    // Transition session: error → first pending task's processing status
+    // Transition session: error → first pending task's processing status.
+    // Also clears errorMessage and qualityFlag so the renderer doesn't surface
+    // stale state from the failed run while the retry is in flight.
     const firstStatus = this.getSessionStatusForTask(remainingSteps[0])
     this.sessionService.updateSession(sessionId, {
       status: firstStatus ?? 'transcribing',
-      errorMessage: null
+      errorMessage: null,
+      qualityFlag: null
     })
 
     console.log(

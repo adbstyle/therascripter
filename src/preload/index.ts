@@ -190,6 +190,15 @@ const api: IpcApi = {
       ipcRenderer.invoke('summary:updateTitle', { sessionId, title }),
     updateText: (sessionId: string, text: string) =>
       ipcRenderer.invoke('summary:updateText', { sessionId, text })
+  },
+  nav: {
+    onOpenSettings: (callback) => {
+      const handler = (): void => callback()
+      ipcRenderer.on('nav:openSettings', handler)
+      return () => {
+        ipcRenderer.removeListener('nav:openSettings', handler)
+      }
+    }
   }
 }
 

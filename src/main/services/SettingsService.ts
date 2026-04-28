@@ -26,6 +26,7 @@ export interface AppSettings {
   }
   firstLaunchDone: boolean
   consentReminderShown: boolean
+  backgroundReminderShown: boolean
   modelsDownloaded: boolean
   theme: ThemePreference
   reviewPanelOpen: boolean
@@ -45,6 +46,7 @@ const defaults: AppSettings = {
   },
   firstLaunchDone: false,
   consentReminderShown: false,
+  backgroundReminderShown: false,
   modelsDownloaded: false,
   theme: 'system',
   reviewPanelOpen: false,

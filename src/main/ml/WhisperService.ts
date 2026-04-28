@@ -14,6 +14,7 @@ import { writeFileAtomic } from '../utils/file-ops'
 import { removeFillerWords, rebuildSegments } from './filler-removal'
 import { filterSpecialTokens, mergeSubTokens } from './token-processing'
 import type { WhisperToken } from './token-processing'
+import { persistQualityResult } from './whisper-quality'
 
 interface WhisperSegment {
   timestamps: { from: string; to: string }
@@ -98,7 +99,11 @@ export class WhisperService implements TaskExecutor {
     const transcriptPath = sessionService.generateTranscriptPath(task.sessionId)
     writeFileAtomic(transcriptPath, JSON.stringify(transcript, null, 2))
 
-    sessionService.updateSession(task.sessionId, { transcriptPath })
+    // Quality check — detects whisper hallucination loops (ADR-006).
+    // Non-blocking: classification is persisted as a flag but the pipeline
+    // continues either way so the user sees the full result and can spot
+    // the bad output / file a bug report.
+    persistQualityResult(sessionService, task.sessionId, transcriptPath, transcript.segments)
   }
 
   private runWhisper(
@@ -119,6 +124,11 @@ export class WhisperService implements TaskExecutor {
         audioPath,
         '-l',
         'de',
+        // ADR-006: disables prompt conditioning between 30s windows. Without
+        // this, hallucinations in one window get fed back as prompt context
+        // and self-reinforce until end of audio (the "last sentence repeated
+        // 100 times" failure mode reported in #65).
+        '-nc',
         '-pp', // --print-progress
         '-ojf', // --output-json-full (includes word-level timestamps)
         '-t',

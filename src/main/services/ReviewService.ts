@@ -1,16 +1,12 @@
 import { readFileSync, writeFileSync } from 'fs'
 import type Database from 'better-sqlite3'
 import { SessionService } from './SessionService'
-import type { EntityMap, SessionType } from '../../shared/types'
+import type { EntityMap } from '../../shared/types'
+import type { ReviewData } from '../../shared/types/IpcApi'
 import type { TipTapDocument } from '../../shared/types/TipTapDocument'
 import { countWords } from '../../shared/utils/countWords'
 
-export interface ReviewData {
-  document: TipTapDocument
-  entityMap: EntityMap
-  sessionType: SessionType
-  sessionTitle: string
-}
+export type { ReviewData }
 
 export class ReviewService {
   private sessionService: SessionService
@@ -31,14 +27,14 @@ export class ReviewService {
 
     const docJson = readFileSync(session.anonymizedPath, 'utf-8')
     const document = JSON.parse(docJson) as TipTapDocument
-
     const entityMap = session.entityMap ?? {}
 
     return {
       document,
       entityMap,
       sessionType: session.type,
-      sessionTitle: session.title
+      sessionTitle: session.title,
+      qualityFlag: session.qualityFlag
     }
   }
 

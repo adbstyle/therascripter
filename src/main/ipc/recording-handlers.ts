@@ -3,6 +3,7 @@ import { getDatabase } from '../db/connection'
 import { SessionService } from '../services/SessionService'
 import { AudioFileService } from '../services/AudioFileService'
 import { getTray } from '../services/TrayService'
+import { setAppMenuRecording } from '../services/AppMenuService'
 import { getTaskQueue } from '../services/TaskQueueService'
 import { RecordingStopSchema, RecordingDataSchema } from '../../shared/validation/recording-schemas'
 import { sendToRenderer } from '../utils/ipc-helpers'
@@ -85,6 +86,7 @@ function stopRecordingInternal(sessionId: string): { durationSeconds: number } {
   } catch {
     // Tray may not be initialized in tests
   }
+  setAppMenuRecording(false)
 
   return { durationSeconds }
 }
@@ -161,6 +163,7 @@ export function registerRecordingHandlers(): void {
     } catch {
       // Tray may not be initialized in tests
     }
+    setAppMenuRecording(true)
 
     return { sessionId: session.id }
   })

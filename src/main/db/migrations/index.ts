@@ -6,6 +6,8 @@ import addAlignedTranscriptAndExtractedPaths from './005-add-aligned-transcript-
 import addWordCount from './006-add-word-count.sql?raw'
 import addSummarization from './007-add-summarization.sql?raw'
 import resetSummarizationParseErrors from './008-reset-summarization-parse-errors.sql?raw'
+import addQualityFlag from './009-add-quality-flag.sql?raw'
+import dropPipelineVersion from './010-drop-pipeline-version.sql?raw'
 
 export interface Migration {
   version: number
@@ -20,5 +22,7 @@ export const migrations: Migration[] = [
   { version: 5, sql: addAlignedTranscriptAndExtractedPaths },
   { version: 6, sql: addWordCount },
   { version: 7, sql: addSummarization },
-  { version: 8, sql: resetSummarizationParseErrors }
+  { version: 8, sql: resetSummarizationParseErrors },
+  { version: 9, sql: addQualityFlag },
+  { version: 10, sql: dropPipelineVersion }
 ]

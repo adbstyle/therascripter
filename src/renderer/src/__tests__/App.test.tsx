@@ -95,6 +95,9 @@ beforeEach(() => {
       get: vi.fn().mockResolvedValue(null),
       updateTitle: vi.fn().mockResolvedValue(undefined),
       updateText: vi.fn().mockResolvedValue(undefined)
+    },
+    nav: {
+      onOpenSettings: vi.fn().mockReturnValue(() => {})
     }
   } as typeof window.api
 })
