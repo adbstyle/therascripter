@@ -30,6 +30,46 @@ interface WhisperJsonOutput {
 // Progress line format: "whisper_print_progress_callback: progress =  42%"
 const PROGRESS_REGEX = /progress\s*=\s*(\d+)%/
 
+// Exported for testing. Builds the whisper-cli argument list (sans the leading
+// nice-wrapper). Centralised so unit tests can assert on the flag set and an
+// integration test can verify the local whisper-cli still recognises every
+// flag we pass.
+export function buildWhisperArgs(
+  modelPath: string,
+  audioPath: string,
+  threadCount: number
+): string[] {
+  return [
+    '-m',
+    modelPath,
+    '-f',
+    audioPath,
+    '-l',
+    'de',
+    // ADR-006: prevents inter-window prompt-conditioning loops. Equivalent to
+    // the (long-removed) --no-context / -nc flag but uses the supported
+    // --max-context API. `0` means "carry no text context across 30 s
+    // windows", i.e. each window starts fresh — exactly what we want.
+    '-mc',
+    '0',
+    '-pp', // --print-progress
+    '-ojf', // --output-json-full (includes word-level timestamps)
+    '-t',
+    String(threadCount)
+  ]
+}
+
+// Pull `error: …` lines out of whisper-cli's stderr regardless of exit code.
+// whisper-cli surfaces fatal argument errors (e.g. unknown flag) on stderr
+// AND exits 0, which means the standard `code !== 0` branch can't be relied
+// on alone — we need an independent stderr sniff to avoid silent failures.
+function extractWhisperErrorLines(stderr: string): string[] {
+  return stderr
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => /^error:/i.test(line) || /\bunknown argument\b/i.test(line))
+}
+
 export class WhisperService implements TaskExecutor {
   private getBinaryPath(): string {
     if (app.isPackaged) {
@@ -117,23 +157,7 @@ export class WhisperService implements TaskExecutor {
     return new Promise((resolve, reject) => {
       // whisper.cpp writes JSON to {audioPath}.json when using -ojf
       const threadCount = Math.min(8, Math.max(1, cpus().length))
-      const args = [
-        '-m',
-        modelPath,
-        '-f',
-        audioPath,
-        '-l',
-        'de',
-        // ADR-006: disables prompt conditioning between 30s windows. Without
-        // this, hallucinations in one window get fed back as prompt context
-        // and self-reinforce until end of audio (the "last sentence repeated
-        // 100 times" failure mode reported in #65).
-        '-nc',
-        '-pp', // --print-progress
-        '-ojf', // --output-json-full (includes word-level timestamps)
-        '-t',
-        String(threadCount)
-      ]
+      const args = buildWhisperArgs(modelPath, audioPath, threadCount)
 
       // QoS: nice -n 10 (NFR-23) — spawn via nice
       // stdout is ignored — whisper.cpp writes JSON to file (-ojf), not stdout.
@@ -199,22 +223,38 @@ export class WhisperService implements TaskExecutor {
 
         if (settled) return
 
+        const stderrErrors = extractWhisperErrorLines(stderr)
+        const stderrSummary =
+          stderrErrors.length > 0 ? stderrErrors.join('; ') : stderr.slice(-500).trim()
+
         if (code !== 0) {
-          // Extract useful error from stderr
-          const errorLines = stderr
-            .split('\n')
-            .filter(
-              (line) => line.includes('error') || line.includes('Error') || line.includes('failed')
+          reject(
+            new Error(
+              `whisper-cli Fehler (Exit Code ${code}): ${stderrSummary || '(keine stderr-Ausgabe)'}`
             )
-          const errorDetail = errorLines.length > 0 ? errorLines.join('; ') : stderr.slice(-500)
-          reject(new Error(`whisper-cli Fehler (Exit Code ${code}): ${errorDetail}`))
+          )
+          return
+        }
+
+        // whisper-cli exits 0 even when fatal argument errors are printed to
+        // stderr (e.g. unknown flag → prints help → exits 0). Surface those
+        // explicitly instead of letting the generic "no JSON output" path
+        // mask the real cause.
+        if (stderrErrors.length > 0) {
+          reject(
+            new Error(`whisper-cli meldete einen Fehler trotz Exit-Code 0: ${stderrErrors.join('; ')}`)
+          )
           return
         }
 
         // whisper.cpp writes output to {audioPath}.json
         const jsonPath = audioPath + '.json'
         if (!existsSync(jsonPath)) {
-          reject(new Error('whisper-cli hat keine JSON-Ausgabe erzeugt'))
+          reject(
+            new Error(
+              `whisper-cli hat keine JSON-Ausgabe erzeugt${stderrSummary ? ` — stderr: ${stderrSummary}` : ''}`
+            )
+          )
           return
         }
 

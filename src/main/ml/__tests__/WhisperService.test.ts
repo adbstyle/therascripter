@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { parseTimestamp } from '../WhisperService'
+import { spawnSync } from 'child_process'
+import { existsSync } from 'fs'
+import { join } from 'path'
+import { parseTimestamp, buildWhisperArgs } from '../WhisperService'
 
 describe('parseTimestamp', () => {
   it('parses HH:MM:SS,mmm format', () => {
@@ -97,5 +100,72 @@ describe('whisper.cpp JSON output parsing', () => {
     expect(words).toHaveLength(6)
     expect(words[0]).toEqual({ text: 'Guten', start: 0, end: 0.5 })
     expect(words[5]).toEqual({ text: 'Ihnen?', start: 2.3, end: 3 })
+  })
+})
+
+describe('buildWhisperArgs', () => {
+  // The exact CLI flag set is load-bearing — whisper-cli silently exits 0 on
+  // unknown args and writes nothing to stdout/stderr that our caller checks
+  // by default, so a typo here would surface as "no JSON produced" with no
+  // hint to the operator. Lock the wire format down.
+  const args = buildWhisperArgs('/m.bin', '/a.wav', 4)
+
+  it('passes the model and audio paths', () => {
+    expect(args).toContain('-m')
+    expect(args[args.indexOf('-m') + 1]).toBe('/m.bin')
+    expect(args).toContain('-f')
+    expect(args[args.indexOf('-f') + 1]).toBe('/a.wav')
+  })
+
+  it('forces German language', () => {
+    expect(args).toContain('-l')
+    expect(args[args.indexOf('-l') + 1]).toBe('de')
+  })
+
+  it("uses '-mc 0' for the anti-loop fix (NOT the long-removed -nc / --no-context)", () => {
+    // ADR-006: whisper.cpp dropped --no-context / -nc years ago. Setting
+    // --max-context to 0 produces the same behaviour and IS supported by
+    // current whisper-cli.
+    expect(args).toContain('-mc')
+    expect(args[args.indexOf('-mc') + 1]).toBe('0')
+    expect(args).not.toContain('-nc')
+    expect(args).not.toContain('--no-context')
+  })
+
+  it('requests JSON-full output and progress prints', () => {
+    expect(args).toContain('-ojf')
+    expect(args).toContain('-pp')
+  })
+
+  it('passes the thread count as a string', () => {
+    expect(args).toContain('-t')
+    expect(args[args.indexOf('-t') + 1]).toBe('4')
+  })
+})
+
+// Integration: spawn the real whisper-cli and assert it doesn't print
+// "unknown argument" for any flag in our list. Skipped automatically when
+// the binary isn't present (CI). Catches the "whisper-cli upstream renamed
+// a flag we depend on" class of bug at unit-test speed (~1s, no audio
+// processing — whisper-cli rejects on the missing model/audio first).
+describe('whisper-cli flag compatibility', () => {
+  const repoRoot = join(__dirname, '..', '..', '..', '..')
+  const BINARY = join(repoRoot, 'resources', 'bin', 'whisper-cli')
+
+  it.skipIf(!existsSync(BINARY))('does not produce "unknown argument" errors with our arg list', () => {
+    // Use deliberately bogus paths — whisper-cli will exit early because the
+    // model or audio file is missing, but it must do so AFTER successfully
+    // parsing every flag.
+    const result = spawnSync(BINARY, buildWhisperArgs('/nonexistent.bin', '/nonexistent.wav', 1), {
+      encoding: 'utf-8',
+      timeout: 10_000
+    })
+    const combined = (result.stderr ?? '') + (result.stdout ?? '')
+    const unknownArg = combined.match(/unknown argument:\s*(\S+)/i)
+    if (unknownArg) {
+      throw new Error(
+        `whisper-cli rejected flag "${unknownArg[1]}". Update buildWhisperArgs() to use a supported flag.`
+      )
+    }
   })
 })
