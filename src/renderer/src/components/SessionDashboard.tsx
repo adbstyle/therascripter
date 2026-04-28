@@ -215,10 +215,7 @@ export default function SessionDashboard({
                     }
                     retryDisabled={isAnyProcessing}
                     onClick={
-                      session.status === 'review' ||
-                      session.status === 'transcription_quality_failed'
-                        ? () => onOpenReview?.(session.id)
-                        : undefined
+                      session.status === 'review' ? () => onOpenReview?.(session.id) : undefined
                     }
                   />
                 ))}
@@ -231,7 +228,7 @@ export default function SessionDashboard({
       {deleteTarget && (
         <ConfirmDialog
           title="Transkription löschen"
-          message={`\u201e${deleteTarget.title}\u201c und alle zugehörigen Daten unwiderruflich löschen?`}
+          message={`„${deleteTarget.title}“ und alle zugehörigen Daten unwiderruflich löschen?`}
           details={['Audiodatei', 'Originaltext', 'Anonymisierter Text', 'Platzhalter-Mapping']}
           confirmLabel="Löschen"
           destructive

@@ -14,12 +14,7 @@ import { writeFileAtomic } from '../utils/file-ops'
 import { removeFillerWords, rebuildSegments } from './filler-removal'
 import { filterSpecialTokens, mergeSubTokens } from './token-processing'
 import type { WhisperToken } from './token-processing'
-import {
-  computeRepetitionRatio,
-  classifyQuality,
-  QualityRejectionError,
-  TRANSCRIPTION_PIPELINE_VERSION
-} from './whisper-quality'
+import { computeRepetitionRatio, classifyQuality } from './whisper-quality'
 
 interface WhisperSegment {
   timestamps: { from: string; to: string }
@@ -105,32 +100,20 @@ export class WhisperService implements TaskExecutor {
     writeFileAtomic(transcriptPath, JSON.stringify(transcript, null, 2))
 
     // Quality check — detects whisper hallucination loops (ADR-006).
+    // Non-blocking: classification is persisted as a flag but the pipeline
+    // continues either way so the user sees the full result and can spot
+    // the bad output / file a bug report.
     const ratio = computeRepetitionRatio(transcript.segments)
     const classification = classifyQuality(ratio)
     console.log(
       `[WhisperService] quality_check sessionId=${task.sessionId} ` +
         `ratio=${ratio.toFixed(4)} segments=${transcript.segments.length} ` +
-        `classification=${classification ?? 'ok'} pipelineVersion=${TRANSCRIPTION_PIPELINE_VERSION}`
+        `classification=${classification ?? 'ok'}`
     )
-
-    // Persist transcript path and (for warnings) the quality flag.
-    // transcriptionPipelineVersion is intentionally only stamped when the
-    // result is acceptable — i.e. NOT 'rejected'. The version field's
-    // meaning is "version that produced an acceptable transcript", which is
-    // what gates the manual 'Erneut transkribieren' button: a rejected
-    // session must surface the retry button immediately, even on the same
-    // pipeline version, otherwise the user is locked out of recovery.
-    if (classification === 'rejected') {
-      // Persist transcript path so the editor can show the broken output,
-      // but leave the version null so canRetryTranscription evaluates true.
-      sessionService.updateSession(task.sessionId, { transcriptPath })
-      throw new QualityRejectionError(ratio)
-    }
 
     sessionService.updateSession(task.sessionId, {
       transcriptPath,
-      transcriptionPipelineVersion: TRANSCRIPTION_PIPELINE_VERSION,
-      qualityFlag: classification === 'repetition_warning' ? 'repetition_warning' : null
+      qualityFlag: classification
     })
   }
 

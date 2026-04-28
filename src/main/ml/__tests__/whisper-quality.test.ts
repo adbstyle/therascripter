@@ -3,10 +3,8 @@ import type { TranscriptSegment } from '../../../shared/types'
 import {
   computeRepetitionRatio,
   classifyQuality,
-  QualityRejectionError,
   REPETITION_WARN_THRESHOLD,
-  REPETITION_REJECT_THRESHOLD,
-  TRANSCRIPTION_PIPELINE_VERSION
+  REPETITION_CRITICAL_THRESHOLD
 } from '../whisper-quality'
 
 function seg(text: string, start = 0, end = 1): TranscriptSegment {
@@ -46,7 +44,6 @@ describe('computeRepetitionRatio', () => {
   })
 
   it('non-adjacent repetitions do not count (ABAB pattern)', () => {
-    // Same text repeated but never directly adjacent.
     const segments = [seg('A'), seg('B'), seg('A'), seg('B')]
     expect(computeRepetitionRatio(segments)).toBe(0)
   })
@@ -57,7 +54,6 @@ describe('computeRepetitionRatio', () => {
   })
 
   it('whitespace-only segments do not count as duplicates of each other', () => {
-    // After normalization both become '' → length-0 guard skips them.
     const segments = [seg('   '), seg('   '), seg('   '), seg('echter Text')]
     expect(computeRepetitionRatio(segments)).toBe(0)
   })
@@ -81,37 +77,12 @@ describe('classifyQuality', () => {
   it('returns repetition_warning above warn threshold', () => {
     expect(classifyQuality(0.31)).toBe('repetition_warning')
     expect(classifyQuality(0.5)).toBe('repetition_warning')
-    expect(classifyQuality(REPETITION_REJECT_THRESHOLD)).toBe('repetition_warning') // boundary: > strict
+    expect(classifyQuality(REPETITION_CRITICAL_THRESHOLD)).toBe('repetition_warning') // boundary: > strict
   })
 
-  it('returns rejected above reject threshold', () => {
-    expect(classifyQuality(0.71)).toBe('rejected')
-    expect(classifyQuality(0.95)).toBe('rejected')
-    expect(classifyQuality(1)).toBe('rejected')
-  })
-})
-
-describe('QualityRejectionError', () => {
-  it('is an Error subclass with the ratio attached', () => {
-    const err = new QualityRejectionError(0.85)
-    expect(err).toBeInstanceOf(Error)
-    expect(err.name).toBe('QualityRejectionError')
-    expect(err.ratio).toBe(0.85)
-    expect(err.message).toContain('85')
-  })
-
-  it('survives instanceof checks across throw/catch', () => {
-    try {
-      throw new QualityRejectionError(0.9)
-    } catch (e) {
-      expect(e instanceof QualityRejectionError).toBe(true)
-    }
-  })
-})
-
-describe('TRANSCRIPTION_PIPELINE_VERSION', () => {
-  it('is a positive integer', () => {
-    expect(TRANSCRIPTION_PIPELINE_VERSION).toBeGreaterThan(0)
-    expect(Number.isInteger(TRANSCRIPTION_PIPELINE_VERSION)).toBe(true)
+  it('returns repetition_critical above critical threshold', () => {
+    expect(classifyQuality(0.71)).toBe('repetition_critical')
+    expect(classifyQuality(0.95)).toBe('repetition_critical')
+    expect(classifyQuality(1)).toBe('repetition_critical')
   })
 })

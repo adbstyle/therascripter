@@ -28,7 +28,6 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     summaryModelId: null,
     summarizedAt: null,
     qualityFlag: null,
-    transcriptionPipelineVersion: null,
     ...overrides
   }
 }
@@ -230,8 +229,8 @@ describe('SessionDashboard', () => {
       expect(screen.getByText('My Session')).toBeInTheDocument()
     })
 
-    await user.click(screen.getByLabelText('Transkription l\u00f6schen'))
+    await user.click(screen.getByLabelText('Transkription löschen'))
 
-    expect(screen.getByText('Transkription l\u00f6schen')).toBeInTheDocument()
+    expect(screen.getByText('Transkription löschen')).toBeInTheDocument()
   })
 })
