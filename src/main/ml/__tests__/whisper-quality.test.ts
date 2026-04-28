@@ -61,6 +61,14 @@ describe('computeRepetitionRatio', () => {
     const segments = [seg('   '), seg('   '), seg('   '), seg('echter Text')]
     expect(computeRepetitionRatio(segments)).toBe(0)
   })
+
+  it('pairs containing an empty segment are excluded from the denominator', () => {
+    // Real loop interleaved with silence segments: only (A,A) pairs are
+    // counted, the (A,'')/('',A) pairs are skipped on both sides of the
+    // ratio so the loop signal isn't diluted.
+    const segments = [seg('A'), seg('A'), seg('   '), seg('A'), seg('A')]
+    expect(computeRepetitionRatio(segments)).toBe(1)
+  })
 })
 
 describe('classifyQuality', () => {
