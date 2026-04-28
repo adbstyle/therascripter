@@ -18,7 +18,6 @@ const STATUS_CONFIG: Record<SessionStatus, { label: string; color: string }> = {
   extracting: { label: 'Textextraktion', color: 'text-primary' },
   anonymizing: { label: 'Anonymisierung', color: 'text-primary' },
   review: { label: 'Review', color: 'text-success' },
-  transcription_quality_failed: { label: 'Transkription fehlerhaft', color: 'text-error-text' },
   error: { label: 'Fehler', color: 'text-error-text' }
 }
 
@@ -173,8 +172,7 @@ export function SessionCard({
         />
       </div>
 
-      {(session.status === 'error' || session.status === 'transcription_quality_failed') &&
-        session.errorMessage && (
+      {session.status === 'error' && session.errorMessage && (
           <p className="pointer-events-none relative z-[1] mt-1 line-clamp-3 text-xs text-text-tertiary">
             {session.errorMessage}
           </p>

@@ -1,30 +1,12 @@
 import type { TranscriptSegment, QualityFlag } from '../../shared/types'
 
-// Bumped whenever the whisper invocation or post-processing changes in a way
-// that could give a different result for the same audio. The renderer offers a
-// 'retry transcription' button only when a session's stored version is below
-// this constant — otherwise the retry would be deterministic and useless.
-//
-// History:
-// - v1: introduces -nc (--no-context) flag + repetition-ratio quality check (ADR-006)
-export const TRANSCRIPTION_PIPELINE_VERSION = 1
-
-// ADR-006 thresholds. Strict greater-than (matches issue #65 wording).
+// ADR-006 thresholds. Strict greater-than comparisons.
+// Both severities are non-blocking: the pipeline runs to completion either
+// way, the only effect is a banner the user sees in the review editor.
 export const REPETITION_WARN_THRESHOLD = 0.3
-export const REPETITION_REJECT_THRESHOLD = 0.7
+export const REPETITION_CRITICAL_THRESHOLD = 0.7
 
-export type QualityClassification = QualityFlag | 'rejected' | null
-
-export class QualityRejectionError extends Error {
-  readonly ratio: number
-  constructor(ratio: number) {
-    super(
-      `Transkription wahrscheinlich fehlerhaft: ${(ratio * 100).toFixed(1)}% der Segmente sind direkte Wiederholungen.`
-    )
-    this.name = 'QualityRejectionError'
-    this.ratio = ratio
-  }
-}
+export type QualityClassification = QualityFlag | null
 
 function normalize(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, ' ')
@@ -61,12 +43,16 @@ export function computeRepetitionRatio(segments: TranscriptSegment[]): number {
 
 /**
  * Classifies a repetition ratio per ADR-006 thresholds.
- * - ratio > 0.7 → 'rejected' (transcript should be marked transcription_quality_failed)
- * - ratio > 0.3 → 'repetition_warning' (transcript still flows through pipeline, banner shown)
- * - else → null (no issue detected)
+ * - ratio > 0.7 → 'repetition_critical' (strong banner, likely unusable)
+ * - ratio > 0.3 → 'repetition_warning' (soft banner, prüfen)
+ * - else → null (no issue)
+ *
+ * Both severities are non-blocking; the pipeline always continues so the
+ * user can inspect the result and decide whether to record again or report
+ * a bug with the actual broken transcript attached.
  */
 export function classifyQuality(ratio: number): QualityClassification {
-  if (ratio > REPETITION_REJECT_THRESHOLD) return 'rejected'
+  if (ratio > REPETITION_CRITICAL_THRESHOLD) return 'repetition_critical'
   if (ratio > REPETITION_WARN_THRESHOLD) return 'repetition_warning'
   return null
 }

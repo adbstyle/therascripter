@@ -31,7 +31,6 @@ import type {
   PlaceholderType,
   QualityFlag,
   ReviewData,
-  SessionStatus,
   SessionType
 } from '../../../shared/types'
 import type { TipTapDocument } from '../../../shared/types/TipTapDocument'
@@ -56,12 +55,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const [loadError, setLoadError] = useState<string | null>(null)
   const [sessionTitle, setSessionTitle] = useState('')
   const [sessionType, setSessionType] = useState<SessionType>('audio')
-  // null until load() resolves, so the auto-save guard cannot misfire on a
-  // quality-failed session before its real status is known.
-  const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
   const [qualityFlag, setQualityFlag] = useState<QualityFlag | null>(null)
-  const [canRetryTranscription, setCanRetryTranscription] = useState(false)
-  const [retrying, setRetrying] = useState(false)
   const [_entityMap, setEntityMap] = useState<EntityMap>({})
   const [updateCounter, setUpdateCounter] = useState(0)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -250,9 +244,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
 
         setSessionTitle(data.sessionTitle)
         setSessionType(data.sessionType)
-        setSessionStatus(data.sessionStatus)
         setQualityFlag(data.qualityFlag)
-        setCanRetryTranscription(data.canRetryTranscription)
         setEntityMap(data.entityMap)
         entityMapRef.current = data.entityMap
 
@@ -289,18 +281,8 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     await window.api.review.save(sessionId, doc, entityMapRef.current)
   }, [editor, sessionId])
 
-  // Auto-save is only meaningful for sessions that produced an anonymized
-  // document. transcription_quality_failed sessions render a fallback view
-  // built from the raw (broken) transcript — there is no anonymized doc to
-  // persist edits into, and ReviewService.save() would throw. The explicit
-  // null check guards against a debounce misfire before load() resolves.
-  const autoSaveEnabled =
-    !!editor &&
-    !loading &&
-    sessionStatus !== null &&
-    sessionStatus !== 'transcription_quality_failed'
   const { saving, lastSavedAt } = useAutoSave(
-    autoSaveEnabled ? handleSave : null,
+    editor && !loading ? handleSave : null,
     [updateCounter],
     2000
   )
@@ -497,23 +479,6 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     }
   }, [sessionId, onBack, toast])
 
-  /** Manual re-transcription for transcription_quality_failed sessions.
-   * Only reachable when canRetryTranscription is true (i.e. the pipeline
-   * version stored on the session is older than the current binary). */
-  const handleRetryTranscription = useCallback(async () => {
-    if (!canRetryTranscription || retrying) return
-    setRetrying(true)
-    try {
-      await window.api.tasks.retry(sessionId)
-      onBack()
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : 'Erneute Transkription konnte nicht gestartet werden'
-      )
-      setRetrying(false)
-    }
-  }, [canRetryTranscription, retrying, sessionId, onBack, toast])
-
   /** Export current editor content to clipboard (US-7) */
   const handleExportClipboard = useCallback(async () => {
     if (!editor) return
@@ -629,13 +594,11 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
         </div>
       </header>
 
-      {/* Quality-warning banner (ADR-006) */}
-      {sessionStatus === 'transcription_quality_failed' ? (
-        <QualityWarningBanner
-          severity="critical"
-          onRetry={canRetryTranscription ? handleRetryTranscription : undefined}
-          retryDisabled={retrying}
-        />
+      {/* Quality-warning banner (ADR-006) — non-blocking; pipeline always
+          produces a usable result, the banner just surfaces low-quality runs
+          so the user can spot them and report a bug. */}
+      {qualityFlag === 'repetition_critical' ? (
+        <QualityWarningBanner severity="critical" />
       ) : qualityFlag === 'repetition_warning' ? (
         <QualityWarningBanner severity="warning" />
       ) : null}

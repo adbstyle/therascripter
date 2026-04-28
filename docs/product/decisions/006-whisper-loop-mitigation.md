@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Datum:** 2026-04-27
 **Implementiert:** 2026-04-27 (#65, branch `fix/65-whisper-loop-mitigation`)
+**Revidiert:** 2026-04-28 — Hard-Reject + manueller Retry verworfen, Pipeline läuft jetzt immer durch und zeigt nur eine nicht-blockierende Quality-Warning (Folge-PR `fix/68-quality-warning-no-rejection`).
 
 ## Kontext
 
@@ -29,13 +30,12 @@ Defense-in-Depth-Mitigation auf zwei Ebenen, in einem PR ausgeliefert:
 
 **Ebene 1 — CLI-Flag:** `whisper-cli` wird mit `-nc` (`--no-context`) aufgerufen. Damit wird die Konditionierung auf vorherigen Window-Output deaktiviert. Self-Reinforcing-Loops können nicht mehr über 30-Sekunden-Fenster-Grenzen hinweg eskalieren.
 
-**Ebene 2 — Output-Validierung:** [`processOutput()`](src/main/ml/WhisperService.ts#L234-L260) berechnet zusätzlich eine Repetition-Ratio über die generierten Segmente. Ab definierten Schwellwerten wird die Session als qualitäts-auffällig markiert und im Review-Editor sichtbar gewarnt; jenseits eines harten Schwellwerts wird das Transkript als fehlerhaft abgelehnt.
+**Ebene 2 — Output-Validierung (nicht-blockierend):** [`WhisperService`](src/main/ml/WhisperService.ts) berechnet eine Repetition-Ratio über die generierten Segmente. Ab definierten Schwellwerten wird ein `quality_flag` auf der Session persistiert und im Review-Editor als Warnungs-Banner angezeigt. Die Pipeline läuft in jedem Fall **vollständig durch** (Diarization → Anonymization → Summarization), damit der User das Resultat sehen, prüfen und ggf. als Bug melden kann. Ein deterministischer „Retry auf gleichem Modell" hätte keinen Mehrwert und wurde explizit nicht implementiert.
 
 | Flag / Mechanismus | Wert | Wirkung |
 |--------------------|------|---------|
 | `-nc` / `--no-context` | gesetzt | Deaktiviert Prompt-Konditionierung zwischen 30-s-Fenstern |
-| Repetition-Ratio (Output-Detection) | `> 0.3` → Warnung, `> 0.7` → Reject | Detektiert Loops post-hoc, schützt vor zukünftigen Regressionen, ermöglicht Heilung historischer Sessions |
-| `transcription_pipeline_version` (Session-Spalte) | int, gesetzt bei jeder Transkription | Renderer zeigt den manuellen "Erneut transkribieren"-Button nur, wenn die gespeicherte Version niedriger ist als die aktuelle Konstante — sonst wäre der Retry deterministisch und nutzlos |
+| Repetition-Ratio (Output-Detection) | `> 0.3` → `repetition_warning` (gelber Banner), `> 0.7` → `repetition_critical` (roter Banner) | Detektiert Loops post-hoc; nicht-blockierend, Pipeline läuft komplett durch |
 
 Explizites Setzen der whisper.cpp-Defaults (`--temperature`, `--entropy-thold`, etc.) wird **nicht** vorgenommen — das würde uns an heutige Defaults binden und zukünftige Upstream-Verbesserungen blockieren.
 
@@ -57,10 +57,14 @@ VAD (`--vad`) wird **nicht** in dieser Iteration aktiviert. VAD trimmt Stille; i
 - **Geringfügig schwächere Token-Coherence über Window-Grenzen.** Praktisch nicht messbar in Therapie-Transkripten.
 - **Repetition-Detection kann False-Positives erzeugen** bei legitimen Wiederholungen (Mantra-artige Phrasen in CBT, "Ja, ja, ja"-Reflektionen). Schwellwerte müssen empirisch getunt werden — Initial-Wert konservativ (0.3 / 0.7), Follow-up-Tuning anhand realer Sessions.
 - **Migration-Pfad nötig.** Bestehende Sessions auf Repetition-Ratio scannen; Userinnen müssen über betroffene Sessions informiert und ein Re-Run-Pfad angeboten werden (eigenes Issue, nicht Scope dieses ADR).
-- **Regression-Test-Asset.** Ein scriptbares langes WAV mit Trailing-Silence wird zu `tests/fixtures/` hinzugefügt, sonst ist der Fix nicht falsifizierbar.
+- **Regression-Test-Asset offen.** Ein scriptbares langes WAV mit Trailing-Silence in `tests/fixtures/` wäre wünschenswert, um End-to-End zu verifizieren, dass `qualityFlag` korrekt persistiert wird. Da die Pipeline in der revidierten Variante nie hart abbricht, ist die Coverage-Lücke nicht mehr Pipeline-blockierend — bleibt offen für ADR-007 oder einen gezielten Folge-PR.
 - **Plugin-Architektur (NFR-9/10) bleibt unberührt.** `-nc` ist ein generischer whisper.cpp-Flag; die Output-Detection ist modell-agnostisch und gilt auch für zukünftige ASR-Plugins (mlx-whisper etc.).
 - **Telemetry-Datenpunkt.** Logging der Repetition-Ratio pro Session schafft eine Baseline für zukünftige ASR-Modell-Vergleiche (NFR-9).
-- **Manuelle Recovery für Reject-Sessions.** `transcription_quality_failed` ist Terminal, der `VALID_TRANSITIONS`-Eintrag erlaubt aber genau einen Ausgang nach `'transcribing'` über den `retrySession`-Pfad. Der Renderer gated den Retry-Button auf `session.transcriptionPipelineVersion < TRANSCRIPTION_PIPELINE_VERSION` — wenn eine zukünftige Iteration (z. B. VAD, Modell-Wechsel) die Konstante hochzählt, werden alle alten Reject-Sessions automatisch wieder retry-eligible. So gehen User-Aufnahmen nicht verloren.
+- **Kein eigener Retry-Mechanismus für quality-flagged Sessions.** Wir hatten in der ersten Implementierung einen separaten `transcription_quality_failed`-Status mit gated Retry-Button vorgesehen. Verworfen, weil:
+  1. Auf gleicher Pipeline-Version ist der Retry deterministisch — gleiche Eingabe, gleicher Loop, gleiches Resultat. Zero Mehrwert.
+  2. Wenn wir die Pipeline später verbessern (z.B. Model-Swap), reicht die existierende `error`-Retry-Logik aus, weil der User die Session bei Bedarf manuell neu aufnehmen kann.
+  3. Die nicht-blockierende Variante ist einfacher zu erklären und zu warten — ein Banner statt eines Sub-State-Machine-Astes.
+  Migration `010-drop-pipeline-version` entfernt die deprecated Spalte und migriert vorhandene `transcription_quality_failed`-Sessions in den `error`-Status.
 
 ## Referenzen
 

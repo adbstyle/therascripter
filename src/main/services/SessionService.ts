@@ -12,15 +12,11 @@ export type { SummaryRecord }
 
 const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
   recording: ['transcribing', 'error'],
-  transcribing: ['diarizing', 'transcription_quality_failed', 'error'],
+  transcribing: ['diarizing', 'error'],
   diarizing: ['anonymizing', 'error'],
   extracting: ['anonymizing', 'error'],
   anonymizing: ['review', 'error'],
   review: ['error'],
-  // Terminal — only manual user-triggered re-transcription can leave this state,
-  // and only when the pipeline version has changed (otherwise the retry button
-  // is hidden in the renderer). No automatic recovery, no error fallback.
-  transcription_quality_failed: ['transcribing'],
   error: ['recording', 'transcribing', 'diarizing', 'extracting', 'anonymizing']
 }
 
