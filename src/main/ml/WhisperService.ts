@@ -103,17 +103,7 @@ export class WhisperService implements TaskExecutor {
     // Non-blocking: classification is persisted as a flag but the pipeline
     // continues either way so the user sees the full result and can spot
     // the bad output / file a bug report.
-    const { ratio, classification } = persistQualityResult(
-      sessionService,
-      task.sessionId,
-      transcriptPath,
-      transcript.segments
-    )
-    console.log(
-      `[WhisperService] quality_check sessionId=${task.sessionId} ` +
-        `ratio=${ratio.toFixed(4)} segments=${transcript.segments.length} ` +
-        `classification=${classification ?? 'ok'}`
-    )
+    persistQualityResult(sessionService, task.sessionId, transcriptPath, transcript.segments)
   }
 
   private runWhisper(
