@@ -64,7 +64,7 @@ export default function AboutPage(): React.JSX.Element {
         <div>
           <AppLogo size={64} className="mb-3" />
           <h3 className="text-lg font-semibold text-text-primary">
-            TheraScript v{info?.version ?? '\u2026'}
+            TheraScript v{info?.version ?? '…'}
           </h3>
           <p className="text-sm text-text-tertiary">Open Source (MIT-Lizenz)</p>
         </div>
@@ -77,14 +77,14 @@ export default function AboutPage(): React.JSX.Element {
               onClick={checkNow}
               disabled={checking}
             >
-              {checking ? 'Pr\u00FCfe\u2026' : 'Nach Updates suchen'}
+              {checking ? 'Prüfe…' : 'Nach Updates suchen'}
             </button>
             {appUpdateStatus?.available && (
               <button
                 className="text-sm font-medium text-primary transition-colors hover:text-primary-hover"
                 onClick={openReleasePage}
               >
-                Neue Version verf\u00FCgbar &mdash; herunterladen
+                Neue Version verfügbar &mdash; herunterladen
               </button>
             )}
             {appUpdateStatus && !appUpdateStatus.available && appUpdateStatus.checkedAt && (
@@ -113,7 +113,7 @@ export default function AboutPage(): React.JSX.Element {
           <h4 className="mb-1 text-sm font-medium text-text-secondary">App-Datenverzeichnis</h4>
           <div className="flex items-center gap-3">
             <p className="min-w-0 flex-1 truncate text-sm text-text-secondary">
-              {info?.dataDir ?? '\u2026'}
+              {info?.dataDir ?? '…'}
             </p>
             <button
               className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-2 disabled:opacity-50"
@@ -134,7 +134,7 @@ export default function AboutPage(): React.JSX.Element {
               <p>Transkriptionsdaten: {formatBytes(info.storageSessionsBytes)}</p>
             </div>
           ) : (
-            <p className="text-sm text-text-tertiary">Wird berechnet\u2026</p>
+            <p className="text-sm text-text-tertiary">Wird berechnet…</p>
           )}
         </div>
 
@@ -151,12 +151,12 @@ export default function AboutPage(): React.JSX.Element {
                 {info.fileVaultActive === null
                   ? 'Unbekannt'
                   : info.fileVaultActive
-                    ? '\u2713 Aktiv'
-                    : '\u2717 Nicht aktiv'}
+                    ? '✓ Aktiv'
+                    : '✗ Nicht aktiv'}
               </p>
             </div>
           ) : (
-            <p className="text-sm text-text-tertiary">Wird geladen\u2026</p>
+            <p className="text-sm text-text-tertiary">Wird geladen…</p>
           )}
         </div>
 
@@ -164,7 +164,7 @@ export default function AboutPage(): React.JSX.Element {
         <div className="rounded-lg border border-border bg-surface-1 p-4">
           <h4 className="mb-1 text-sm font-medium text-text-secondary">Daten</h4>
           <p className="text-sm text-text-secondary">
-            Transkriptionen werden automatisch 30 Tage nach Erstellung gel\u00F6scht.
+            Transkriptionen werden automatisch 30 Tage nach Erstellung gelöscht.
           </p>
           <p className="mt-1 text-sm text-text-secondary">
             Sie sind verantwortlich, den kopierten Text extern zu sichern.
@@ -189,14 +189,14 @@ export default function AboutPage(): React.JSX.Element {
           className="rounded-lg border border-error-border px-4 py-2 text-sm font-medium text-error-text transition-colors hover:bg-error-bg"
           onClick={() => setShowUninstall(true)}
         >
-          TheraScript vollst\u00E4ndig entfernen
+          TheraScript vollständig entfernen
         </button>
       </div>
 
       {showUninstall && (
         <ConfirmDialog
-          title="TheraScript vollst\u00E4ndig entfernen"
-          message="Alle Daten werden unwiderruflich gel\u00F6scht:"
+          title="TheraScript vollständig entfernen"
+          message="Alle Daten werden unwiderruflich gelöscht:"
           details={[
             'ML-Modelle (~4 GB)',
             'Alle Transkriptionen und Audiodateien',
