@@ -1,5 +1,17 @@
 import type { TranscriptSegment, QualityFlag } from '../../shared/types'
 
+/**
+ * Minimal contract for the SessionService surface used to persist the
+ * quality-check result. Defined here (instead of importing the full class)
+ * so the helper stays trivially testable with a stub.
+ */
+export interface QualityPersistTarget {
+  updateSession(
+    sessionId: string,
+    input: { transcriptPath: string; qualityFlag: QualityFlag | null }
+  ): unknown
+}
+
 // ADR-006 thresholds. Strict greater-than comparisons.
 // Both severities are non-blocking: the pipeline runs to completion either
 // way, the only effect is a banner the user sees in the review editor.
@@ -55,4 +67,24 @@ export function classifyQuality(ratio: number): QualityClassification {
   if (ratio > REPETITION_CRITICAL_THRESHOLD) return 'repetition_critical'
   if (ratio > REPETITION_WARN_THRESHOLD) return 'repetition_warning'
   return null
+}
+
+/**
+ * Compute the repetition ratio for a transcript and persist the resulting
+ * quality flag onto the session together with the transcript path. Returns
+ * the computed ratio + classification so the caller can log them.
+ *
+ * Extracted from WhisperService.execute() so the wiring (compute → classify
+ * → updateSession) can be unit-tested without spawning whisper-cli.
+ */
+export function persistQualityResult(
+  target: QualityPersistTarget,
+  sessionId: string,
+  transcriptPath: string,
+  segments: TranscriptSegment[]
+): { ratio: number; classification: QualityClassification } {
+  const ratio = computeRepetitionRatio(segments)
+  const classification = classifyQuality(ratio)
+  target.updateSession(sessionId, { transcriptPath, qualityFlag: classification })
+  return { ratio, classification }
 }

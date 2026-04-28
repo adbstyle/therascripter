@@ -14,7 +14,7 @@ import { writeFileAtomic } from '../utils/file-ops'
 import { removeFillerWords, rebuildSegments } from './filler-removal'
 import { filterSpecialTokens, mergeSubTokens } from './token-processing'
 import type { WhisperToken } from './token-processing'
-import { computeRepetitionRatio, classifyQuality } from './whisper-quality'
+import { persistQualityResult } from './whisper-quality'
 
 interface WhisperSegment {
   timestamps: { from: string; to: string }
@@ -103,18 +103,17 @@ export class WhisperService implements TaskExecutor {
     // Non-blocking: classification is persisted as a flag but the pipeline
     // continues either way so the user sees the full result and can spot
     // the bad output / file a bug report.
-    const ratio = computeRepetitionRatio(transcript.segments)
-    const classification = classifyQuality(ratio)
+    const { ratio, classification } = persistQualityResult(
+      sessionService,
+      task.sessionId,
+      transcriptPath,
+      transcript.segments
+    )
     console.log(
       `[WhisperService] quality_check sessionId=${task.sessionId} ` +
         `ratio=${ratio.toFixed(4)} segments=${transcript.segments.length} ` +
         `classification=${classification ?? 'ok'}`
     )
-
-    sessionService.updateSession(task.sessionId, {
-      transcriptPath,
-      qualityFlag: classification
-    })
   }
 
   private runWhisper(
