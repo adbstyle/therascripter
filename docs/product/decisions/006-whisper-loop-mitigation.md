@@ -4,6 +4,7 @@
 **Datum:** 2026-04-27
 **Implementiert:** 2026-04-27 (#65, branch `fix/65-whisper-loop-mitigation`)
 **Revidiert:** 2026-04-28 — Hard-Reject + manueller Retry verworfen, Pipeline läuft jetzt immer durch und zeigt nur eine nicht-blockierende Quality-Warning (Folge-PR `fix/68-quality-warning-no-rejection`).
+**Revidiert:** 2026-04-28 — CLI-Flag von `-nc` auf `-mc 0` korrigiert. Das ursprünglich dokumentierte `--no-context` / `-nc` wurde von whisper.cpp upstream entfernt; aktuelle Versionen erkennen es nicht mehr und exit'en mit `error: unknown argument: -nc` (aber Exit Code 0 — siehe Folge-PR).
 
 ## Kontext
 
@@ -28,13 +29,13 @@ Die Halluzination ist die gefährlichste Klasse von Bug für ein medizinisches T
 
 Defense-in-Depth-Mitigation auf zwei Ebenen, in einem PR ausgeliefert:
 
-**Ebene 1 — CLI-Flag:** `whisper-cli` wird mit `-nc` (`--no-context`) aufgerufen. Damit wird die Konditionierung auf vorherigen Window-Output deaktiviert. Self-Reinforcing-Loops können nicht mehr über 30-Sekunden-Fenster-Grenzen hinweg eskalieren.
+**Ebene 1 — CLI-Flag:** `whisper-cli` wird mit `-mc 0` (`--max-context 0`) aufgerufen. Damit wird die Anzahl der Kontext-Token zwischen 30-Sekunden-Fenstern auf null gesetzt — semantisch identisch zum (in modernen whisper.cpp-Versionen entfernten) `--no-context`-Flag. Self-Reinforcing-Loops können sich nicht mehr über Fenster-Grenzen hinweg fortpflanzen.
 
 **Ebene 2 — Output-Validierung (nicht-blockierend):** [`WhisperService`](src/main/ml/WhisperService.ts) berechnet eine Repetition-Ratio über die generierten Segmente. Ab definierten Schwellwerten wird ein `quality_flag` auf der Session persistiert und im Review-Editor als Warnungs-Banner angezeigt. Die Pipeline läuft in jedem Fall **vollständig durch** (Diarization → Anonymization → Summarization), damit der User das Resultat sehen, prüfen und ggf. als Bug melden kann. Ein deterministischer „Retry auf gleichem Modell" hätte keinen Mehrwert und wurde explizit nicht implementiert.
 
 | Flag / Mechanismus | Wert | Wirkung |
 |--------------------|------|---------|
-| `-nc` / `--no-context` | gesetzt | Deaktiviert Prompt-Konditionierung zwischen 30-s-Fenstern |
+| `-mc 0` / `--max-context 0` | gesetzt | Setzt die Anzahl Kontext-Token zwischen 30-s-Fenstern auf null |
 | Repetition-Ratio (Output-Detection) | `> 0.3` → `repetition_warning` (gelber Banner), `> 0.7` → `repetition_critical` (roter Banner) | Detektiert Loops post-hoc; nicht-blockierend, Pipeline läuft komplett durch |
 
 Explizites Setzen der whisper.cpp-Defaults (`--temperature`, `--entropy-thold`, etc.) wird **nicht** vorgenommen — das würde uns an heutige Defaults binden und zukünftige Upstream-Verbesserungen blockieren.
@@ -43,8 +44,8 @@ VAD (`--vad`) wird **nicht** in dieser Iteration aktiviert. VAD trimmt Stille; i
 
 ## Begründung
 
-- **`-nc` ist der Community-Standard.** Dokumentiert in mehreren whisper.cpp-Issues als primäre Mitigation für Long-Audio-Loops. Stabil seit ~v1.5, kein Versions-Risk.
-- **Trade-off von `-nc` ist akzeptabel.** Whisper kann Wörter, die exakt auf einer 30-s-Window-Grenze abgeschnitten sind, ohne Kontext schlechter rekonstruieren. Bei Therapie-Transkripten ist diese minimale Coherence-Einbusse irrelevant — die nachgelagerte Diarization, NER und manuelle Review fangen den Unterschied auf.
+- **Max-Context-Null ist der Community-Standard.** Dokumentiert in mehreren whisper.cpp-Issues als primäre Mitigation für Long-Audio-Loops. Funktional identisch zum alten `--no-context`-Flag, aber stabil im aktuellen API.
+- **Trade-off ist akzeptabel.** Whisper kann Wörter, die exakt auf einer 30-s-Window-Grenze abgeschnitten sind, ohne Kontext schlechter rekonstruieren. Bei Therapie-Transkripten ist diese minimale Coherence-Einbusse irrelevant — die nachgelagerte Diarization, NER und manuelle Review fangen den Unterschied auf.
 - **Output-Detection statt nur CLI-Fix.** Eine ML-Pipeline, deren Loop-Schutz an einem einzigen CLI-Flag hängt, ist eine Single-Point-of-Failure-Architektur. Ein zukünftiges whisper.cpp-Upgrade, ein Modell-Swap (NFR-9) oder ein Custom-User-Modell könnte das Verhalten ändern. Output-Validierung kostet ~50 LOC, ist modell-agnostisch und schützt zusätzlich vor anderen Failure-Modes (z.B. extreme NER-Fehler im Anonymisierungs-Step).
 - **Recovery für historische Sessions.** Stufe 2 ermöglicht ein Backfill-Script, das bestehende `~/.therascript/data/transcripts/`-Dateien scannt und vergiftete Sessions flaggt — wichtig, da der Bug seit Pipeline-Einführung undetected in Produktion lief.
 - **Observability.** Repetition-Ratio wird geloggt. Das ist die billigste Form von Production-Telemetry für ein bisher untelemetrisches ML-Feature.
@@ -58,7 +59,7 @@ VAD (`--vad`) wird **nicht** in dieser Iteration aktiviert. VAD trimmt Stille; i
 - **Repetition-Detection kann False-Positives erzeugen** bei legitimen Wiederholungen (Mantra-artige Phrasen in CBT, "Ja, ja, ja"-Reflektionen). Schwellwerte müssen empirisch getunt werden — Initial-Wert konservativ (0.3 / 0.7), Follow-up-Tuning anhand realer Sessions.
 - **Migration-Pfad nötig.** Bestehende Sessions auf Repetition-Ratio scannen; Userinnen müssen über betroffene Sessions informiert und ein Re-Run-Pfad angeboten werden (eigenes Issue, nicht Scope dieses ADR).
 - **Regression-Test-Asset offen.** Ein scriptbares langes WAV mit Trailing-Silence in `tests/fixtures/` wäre wünschenswert, um End-to-End zu verifizieren, dass `qualityFlag` korrekt persistiert wird. Da die Pipeline in der revidierten Variante nie hart abbricht, ist die Coverage-Lücke nicht mehr Pipeline-blockierend — bleibt offen für ADR-007 oder einen gezielten Folge-PR.
-- **Plugin-Architektur (NFR-9/10) bleibt unberührt.** `-nc` ist ein generischer whisper.cpp-Flag; die Output-Detection ist modell-agnostisch und gilt auch für zukünftige ASR-Plugins (mlx-whisper etc.).
+- **Plugin-Architektur (NFR-9/10) bleibt unberührt.** `-mc 0` ist ein generischer whisper.cpp-Flag; die Output-Detection ist modell-agnostisch und gilt auch für zukünftige ASR-Plugins (mlx-whisper etc.).
 - **Telemetry-Datenpunkt.** Logging der Repetition-Ratio pro Session schafft eine Baseline für zukünftige ASR-Modell-Vergleiche (NFR-9).
 - **Kein eigener Retry-Mechanismus für quality-flagged Sessions.** Wir hatten in der ersten Implementierung einen separaten `transcription_quality_failed`-Status mit gated Retry-Button vorgesehen. Verworfen, weil:
   1. Auf gleicher Pipeline-Version ist der Retry deterministisch — gleiche Eingabe, gleicher Loop, gleiches Resultat. Zero Mehrwert.
