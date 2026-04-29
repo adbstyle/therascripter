@@ -35,6 +35,7 @@ scripts/setup-pyannote.sh --all-models   # Download both
 scripts/setup-ner.sh              # Install flair into existing Python venv
 scripts/setup-ner.sh --model      # Also download NER model (~1.1 GB)
 scripts/setup-vision-ocr.sh       # Build Swift Vision OCR CLI helper → resources/bin/
+scripts/setup-ffmpeg.sh            # Install static ARM64 ffmpeg → resources/bin/ (required for pipeline inversion / ADR-007)
 scripts/setup-llama.sh             # Install llama.cpp via Homebrew → resources/bin/ + resources/lib/
 scripts/setup-llama.sh --model     # Also download Gemma 3 4B Instruct Q4_K_M (~2.5 GB, gated — needs huggingface-cli login)
 npm run sidecar:build              # Build standalone Python sidecar via uv → python_sidecar/standalone/
