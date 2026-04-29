@@ -17,10 +17,8 @@ interface SessionCardProps {
 
 const STATUS_CONFIG: Record<SessionStatus, { label: string; color: string }> = {
   recording: { label: 'Aufnahme läuft', color: 'text-recording' },
-  transcribing: { label: 'Transkription', color: 'text-primary' },
-  diarizing: { label: 'Sprechererkennung', color: 'text-primary' },
-  extracting: { label: 'Textextraktion', color: 'text-primary' },
-  anonymizing: { label: 'Anonymisierung', color: 'text-primary' },
+  queued: { label: 'Wartet', color: 'text-text-secondary' },
+  processing: { label: 'Verarbeitung', color: 'text-primary' },
   review: { label: 'Review', color: 'text-success' },
   error: { label: 'Fehler', color: 'text-error-text' }
 }
@@ -36,12 +34,7 @@ const TASK_LABELS: Record<TaskType, string> = {
 }
 
 function isProcessingStatus(status: SessionStatus): boolean {
-  return (
-    status === 'transcribing' ||
-    status === 'diarizing' ||
-    status === 'extracting' ||
-    status === 'anonymizing'
-  )
+  return status === 'processing'
 }
 
 function formatCardTimestamp(iso: string): string {

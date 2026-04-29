@@ -11,13 +11,13 @@ import type { SummaryRecord } from '../../shared/types/IpcApi'
 export type { SummaryRecord }
 
 const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
-  recording: ['transcribing', 'error'],
-  transcribing: ['diarizing', 'error'],
-  diarizing: ['anonymizing', 'error'],
-  extracting: ['anonymizing', 'error'],
-  anonymizing: ['review', 'error'],
+  recording: ['queued', 'error'],
+  queued: ['processing', 'error'],
+  // processing → processing is legitimate (advancing through tasks while keeping the same status)
+  processing: ['processing', 'review', 'error'],
   review: ['error'],
-  error: ['recording', 'transcribing', 'diarizing', 'extracting', 'anonymizing']
+  // From error, retry pushes back to queued (re-enters the queue) or recording for re-record
+  error: ['recording', 'queued']
 }
 
 export class SessionService {
@@ -31,7 +31,7 @@ export class SessionService {
     return this.repository.create({
       title,
       type,
-      status: type === 'audio' ? 'recording' : 'extracting',
+      status: type === 'audio' ? 'recording' : 'queued',
       pdfPath
     })
   }
@@ -225,15 +225,9 @@ export class SessionService {
   }
 }
 
-// Processing statuses where multiple task types map to the same session status
-// (e.g., both diarization and alignment → 'diarizing'), making self-transitions legitimate.
-const IDEMPOTENT_STATUSES: SessionStatus[] = [
-  'transcribing',
-  'diarizing',
-  'extracting',
-  'anonymizing',
-  'review' // re-anonymization triggers review → review
-]
+// Status values where self-transitions are legitimate.
+// 'processing' stays through every task; 'review' re-anonymises in place.
+const IDEMPOTENT_STATUSES: SessionStatus[] = ['processing', 'review']
 
 function isValidTransition(current: SessionStatus, next: SessionStatus): boolean {
   if (current === next && IDEMPOTENT_STATUSES.includes(current)) return true

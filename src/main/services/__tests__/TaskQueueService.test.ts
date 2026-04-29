@@ -31,7 +31,7 @@ describe('TaskQueueService', () => {
     const session = sessionRepo.create({
       title: 'Test Session',
       type: 'audio',
-      status: 'transcribing'
+      status: 'processing'
     })
     sessionId = session.id
   })
@@ -299,7 +299,7 @@ describe('TaskQueueService', () => {
       const session2 = sessionRepo.create({
         title: 'Session 2',
         type: 'audio',
-        status: 'transcribing'
+        status: 'processing'
       })
 
       const executionOrder: string[] = []
@@ -336,7 +336,7 @@ describe('TaskQueueService', () => {
       const session2 = sessionRepo.create({
         title: 'Session 2',
         type: 'audio',
-        status: 'transcribing'
+        status: 'processing'
       })
 
       const failOnFirst: TaskExecutor = {

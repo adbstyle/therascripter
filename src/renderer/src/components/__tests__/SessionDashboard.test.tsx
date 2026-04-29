@@ -27,6 +27,8 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     summary: null,
     summaryModelId: null,
     summarizedAt: null,
+    plannedSteps: null,
+    retryCount: 0,
     ...overrides
   }
 }

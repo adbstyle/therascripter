@@ -10,19 +10,9 @@ import { validateIntermediateFile } from '../utils/file-ops'
 import type { Task, TaskType, Session, SessionStatus, SessionType } from '../../shared/types'
 import { AUDIO_PIPELINE, PDF_PIPELINE } from '../../shared/constants/pipeline'
 
-// Maps a completed task type to the next session status.
-// Pipeline order (audio): diarization → transcription → alignment → anonymization → summarization
-const TASK_TO_SESSION_STATUS: Partial<Record<TaskType, SessionStatus>> = {
-  diarization: 'transcribing',
-  transcription: 'anonymizing',
-  alignment: 'anonymizing',
-  extraction: 'anonymizing',
-  ocr: 'anonymizing',
-  // anonymization no longer transitions immediately — summarization (the new tail step)
-  // can still be pending. handleTaskCompletion handles the all-done case explicitly.
-  anonymization: 'anonymizing',
-  summarization: 'review'
-}
+// Issue #80 / DR-5: tasks[] is the source of truth for "current step".
+// SessionStatus only carries lifecycle phase (queued / processing / review / error / recording).
+// The previous TASK_TO_SESSION_STATUS map and getSessionStatusForTask helper were removed.
 
 const RECOVERY_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
@@ -86,12 +76,12 @@ export class TaskQueueService {
       this.repository.create({ sessionId, type })
     }
 
-    // Transition session: error → first pending task's processing status.
-    // Also clears errorMessage so the renderer doesn't surface stale state
-    // from the failed run while the retry is in flight.
-    const firstStatus = this.getSessionStatusForTask(remainingSteps[0])
+    // Transition session: error → queued. The first task's start will then push
+    // queued → processing automatically (see executeTask). errorMessage is cleared
+    // so the renderer doesn't surface stale state from the failed run while the
+    // retry is in flight.
     this.sessionService.updateSession(sessionId, {
-      status: firstStatus ?? 'diarizing',
+      status: 'queued',
       errorMessage: null
     })
 
@@ -146,12 +136,7 @@ export class TaskQueueService {
 
   /** Find sessions stuck in a processing state with no pending/running tasks and mark as error */
   recoverOrphanedSessions(): number {
-    const processingStatuses: SessionStatus[] = [
-      'extracting',
-      'transcribing',
-      'diarizing',
-      'anonymizing'
-    ]
+    const processingStatuses: SessionStatus[] = ['queued', 'processing']
     let recovered = 0
 
     const allSessions = this.sessionService.getAllSessions()
@@ -231,6 +216,17 @@ export class TaskQueueService {
       this.processing = false
       this.scheduleNext()
       return
+    }
+
+    // Issue #80 DR-5: transition session queued → processing on first task start.
+    // While further tasks remain, the status stays 'processing' (self-transition allowed).
+    const session = this.sessionService.getSession(task.sessionId)
+    if (session && session.status === 'queued') {
+      try {
+        this.sessionService.updateSession(task.sessionId, { status: 'processing' })
+      } catch (err) {
+        console.error(`[TaskQueue] Failed to transition session to processing:`, err)
+      }
     }
 
     // Mark as running
@@ -332,53 +328,25 @@ export class TaskQueueService {
   }
 
   private handleTaskCompletion(task: Task): void {
-    const nextStatus = TASK_TO_SESSION_STATUS[task.type]
-    if (!nextStatus) return
-
-    // Only transition if this is the last task of its kind for the session
-    // (e.g., don't transition to 'anonymizing' after 'diarization' if 'alignment' is still pending)
     const remainingTasks = this.repository.findBySession(task.sessionId)
     const pendingOrRunning = remainingTasks.filter(
       (t) => t.status === 'pending' || t.status === 'running'
     )
 
     if (pendingOrRunning.length === 0) {
-      // All tasks done — set final status
+      // All tasks done — set final status. Reset retryCount on successful review
+      // (DR-7: counter resets when the session reaches review).
       try {
-        this.sessionService.updateSession(task.sessionId, { status: 'review' })
+        this.sessionService.updateSession(task.sessionId, {
+          status: 'review',
+          retryCount: 0
+        })
       } catch (err) {
         console.error(`[TaskQueue] Failed to transition session ${task.sessionId} to review:`, err)
       }
-    } else {
-      // Determine next status from the next pending task type
-      const nextTask = pendingOrRunning[0]
-      const statusForNextTask = this.getSessionStatusForTask(nextTask.type)
-      if (statusForNextTask) {
-        try {
-          this.sessionService.updateSession(task.sessionId, { status: statusForNextTask })
-        } catch (err) {
-          console.error(
-            `[TaskQueue] Failed to transition session ${task.sessionId} to ${statusForNextTask}:`,
-            err
-          )
-        }
-      }
     }
-  }
-
-  private getSessionStatusForTask(taskType: TaskType): SessionStatus | null {
-    const mapping: Partial<Record<TaskType, SessionStatus>> = {
-      transcription: 'transcribing',
-      diarization: 'diarizing',
-      alignment: 'diarizing', // alignment is part of diarization phase
-      extraction: 'extracting',
-      ocr: 'extracting',
-      anonymization: 'anonymizing',
-      // Summarization runs as the pipeline tail — keep the session in 'anonymizing'
-      // so the existing UX (no dedicated 'summarizing' status) covers the LLM step.
-      summarization: 'anonymizing'
-    }
-    return mapping[taskType] ?? null
+    // While tasks remain pending, the session stays in 'processing'.
+    // The actual current step is conveyed via task:started IPC events (Phase D).
   }
 
   private handleTaskFailure(task: Task, errorMessage: string): void {

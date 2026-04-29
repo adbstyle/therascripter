@@ -1,13 +1,12 @@
 import type { EntityMap } from './EntityMap'
+import type { TaskType } from './Task'
 
 export type SessionType = 'audio' | 'pdf'
 
 export type SessionStatus =
   | 'recording'
-  | 'transcribing'
-  | 'diarizing'
-  | 'extracting'
-  | 'anonymizing'
+  | 'queued'
+  | 'processing'
   | 'review'
   | 'error'
 
@@ -32,6 +31,8 @@ export interface Session {
   summary: string | null
   summaryModelId: string | null
   summarizedAt: string | null
+  plannedSteps: TaskType[] | null
+  retryCount: number
 }
 
 export interface CreateSessionInput {
@@ -59,4 +60,6 @@ export interface UpdateSessionInput {
   summary?: string | null
   summaryModelId?: string | null
   summarizedAt?: string | null
+  plannedSteps?: TaskType[] | null
+  retryCount?: number
 }

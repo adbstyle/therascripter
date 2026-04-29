@@ -70,8 +70,9 @@ function stopRecordingInternal(sessionId: string): { durationSeconds: number } {
   const { durationSeconds } = audioFileService.finalizeWavFile(sessionId)
 
   const service = new SessionService(getDatabase())
-  // Pipeline-Inversion (ADR-007): diarization is now the first pipeline step.
-  service.updateSession(sessionId, { status: 'diarizing' })
+  // Issue #80 DR-5: post-stop status is 'queued'. The first task's start will
+  // transition the session to 'processing' (see TaskQueueService.executeTask).
+  service.updateSession(sessionId, { status: 'queued' })
 
   // Enqueue ML pipeline tasks for sequential processing
   try {

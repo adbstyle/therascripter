@@ -6,7 +6,8 @@ import type {
   SessionType,
   CreateSessionInput,
   UpdateSessionInput,
-  EntityMap
+  EntityMap,
+  TaskType
 } from '../../../shared/types'
 
 interface SessionRow {
@@ -30,6 +31,8 @@ interface SessionRow {
   summary: string | null
   summary_model_id: string | null
   summarized_at: string | null
+  planned_steps: string | null
+  retry_count: number
 }
 
 function parseEntityMap(json: string | null, sessionId: string): EntityMap | null {
@@ -63,7 +66,9 @@ function rowToSession(row: SessionRow): Session {
     wordCount: row.word_count,
     summary: row.summary,
     summaryModelId: row.summary_model_id,
-    summarizedAt: row.summarized_at
+    summarizedAt: row.summarized_at,
+    plannedSteps: row.planned_steps ? (JSON.parse(row.planned_steps) as TaskType[]) : null,
+    retryCount: row.retry_count
   }
 }
 
@@ -73,7 +78,7 @@ export class SessionRepository {
   create(input: CreateSessionInput): Session {
     const id = randomUUID()
     const now = new Date().toISOString()
-    const status = input.status ?? (input.type === 'audio' ? 'recording' : 'extracting')
+    const status = input.status ?? (input.type === 'audio' ? 'recording' : 'queued')
 
     this.db
       .prepare(
@@ -177,6 +182,14 @@ export class SessionRepository {
     if (input.summarizedAt !== undefined) {
       sets.push('summarized_at = ?')
       values.push(input.summarizedAt)
+    }
+    if (input.plannedSteps !== undefined) {
+      sets.push('planned_steps = ?')
+      values.push(input.plannedSteps ? JSON.stringify(input.plannedSteps) : null)
+    }
+    if (input.retryCount !== undefined) {
+      sets.push('retry_count = ?')
+      values.push(input.retryCount)
     }
 
     if (sets.length === 0) return this.findById(id)
