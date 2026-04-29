@@ -48,8 +48,8 @@ describe('TaskQueueService', () => {
       const tasks = queue.enqueuePipeline(sessionId, 'audio')
 
       expect(tasks).toHaveLength(5)
-      expect(tasks[0].type).toBe('transcription')
-      expect(tasks[1].type).toBe('diarization')
+      expect(tasks[0].type).toBe('diarization')
+      expect(tasks[1].type).toBe('transcription')
       expect(tasks[2].type).toBe('alignment')
       expect(tasks[3].type).toBe('anonymization')
       expect(tasks[4].type).toBe('summarization')
@@ -129,8 +129,8 @@ describe('TaskQueueService', () => {
       await new Promise((resolve) => setTimeout(resolve, 200))
 
       expect(executionOrder).toEqual([
-        'transcription',
         'diarization',
+        'transcription',
         'alignment',
         'anonymization',
         'summarization'
@@ -190,7 +190,8 @@ describe('TaskQueueService', () => {
         }
       }
 
-      queue.registerExecutor('transcription', failingExecutor)
+      // Diarization is the first pipeline step (post-ADR-007)
+      queue.registerExecutor('diarization', failingExecutor)
 
       queue.enqueuePipeline(sessionId, 'audio')
 
@@ -201,7 +202,7 @@ describe('TaskQueueService', () => {
       expect(session?.errorMessage).toBe('ML model failed')
 
       const tasks = queue.getSessionTasks(sessionId)
-      const failedTask = tasks.find((t) => t.type === 'transcription')
+      const failedTask = tasks.find((t) => t.type === 'diarization')
       expect(failedTask?.status).toBe('failed')
       expect(failedTask?.error).toBe('ML model failed')
     })
@@ -240,11 +241,12 @@ describe('TaskQueueService', () => {
     it('cancels remaining pending tasks when a task fails', async () => {
       const failingExecutor: TaskExecutor = {
         async execute() {
-          throw new Error('Transcription failed')
+          throw new Error('Diarization failed')
         }
       }
 
-      queue.registerExecutor('transcription', failingExecutor)
+      // Diarization is the first pipeline step (post-ADR-007)
+      queue.registerExecutor('diarization', failingExecutor)
 
       queue.enqueuePipeline(sessionId, 'audio')
 
@@ -255,16 +257,18 @@ describe('TaskQueueService', () => {
       const cancelled = tasks.filter((t) => t.status === 'cancelled')
 
       expect(failed).toHaveLength(1)
-      expect(failed[0].type).toBe('transcription')
-      expect(cancelled).toHaveLength(4) // diarization, alignment, anonymization, summarization
+      expect(failed[0].type).toBe('diarization')
+      expect(cancelled).toHaveLength(4) // transcription, alignment, anonymization, summarization
     })
 
     it('does not execute cancelled tasks', async () => {
       const executionOrder: string[] = []
 
-      const failingTranscription: TaskExecutor = {
+      // Diarization is the first pipeline step (post-ADR-007); fail it to
+      // verify subsequent steps are cancelled rather than executed.
+      const failingDiarization: TaskExecutor = {
         async execute() {
-          executionOrder.push('transcription')
+          executionOrder.push('diarization')
           throw new Error('fail')
         }
       }
@@ -275,8 +279,8 @@ describe('TaskQueueService', () => {
         }
       }
 
-      queue.registerExecutor('transcription', failingTranscription)
-      queue.registerExecutor('diarization', trackingExecutor)
+      queue.registerExecutor('diarization', failingDiarization)
+      queue.registerExecutor('transcription', trackingExecutor)
       queue.registerExecutor('alignment', trackingExecutor)
       queue.registerExecutor('anonymization', trackingExecutor)
       queue.registerExecutor('summarization', trackingExecutor)
@@ -285,8 +289,8 @@ describe('TaskQueueService', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 200))
 
-      // Only transcription should have executed — the rest were cancelled
-      expect(executionOrder).toEqual(['transcription'])
+      // Only diarization should have executed — the rest were cancelled
+      expect(executionOrder).toEqual(['diarization'])
     })
   })
 
