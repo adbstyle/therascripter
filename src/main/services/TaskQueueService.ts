@@ -94,13 +94,12 @@ export class TaskQueueService {
     }
 
     // Transition session: error → first pending task's processing status.
-    // Also clears errorMessage and qualityFlag so the renderer doesn't surface
-    // stale state from the failed run while the retry is in flight.
+    // Also clears errorMessage so the renderer doesn't surface stale state
+    // from the failed run while the retry is in flight.
     const firstStatus = this.getSessionStatusForTask(remainingSteps[0])
     this.sessionService.updateSession(sessionId, {
       status: firstStatus ?? 'transcribing',
-      errorMessage: null,
-      qualityFlag: null
+      errorMessage: null
     })
 
     console.log(
