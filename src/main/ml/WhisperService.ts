@@ -4,7 +4,13 @@ import { join } from 'path'
 import { cpus } from 'os'
 import { app } from 'electron'
 import type { Task } from '../../shared/types'
-import type { TranscriptData } from '../../shared/types'
+import type {
+  DiarizationData,
+  StitchMap,
+  TranscriptData,
+  TranscriptWord,
+  TranscriptSegment
+} from '../../shared/types'
 import type { TaskExecutor } from '../services/task-executors'
 import { SessionService } from '../services/SessionService'
 import { getDatabase, getDataDir } from '../db/connection'
@@ -14,6 +20,9 @@ import { writeFileAtomic } from '../utils/file-ops'
 import { removeFillerWords, rebuildSegments } from './filler-removal'
 import { filterSpecialTokens, mergeSubTokens } from './token-processing'
 import type { WhisperToken } from './token-processing'
+import { stitchSpeechSegments } from '../services/AudioStitchService'
+import type { StitchedAudio } from '../services/AudioStitchService'
+import { remapStitchedTimestamp } from './timestamp-remap'
 
 interface WhisperSegment {
   timestamps: { from: string; to: string }
@@ -111,33 +120,101 @@ export class WhisperService implements TaskExecutor {
     if (!session?.audioPath) {
       throw new Error(`Session ${task.sessionId} hat keinen Audio-Pfad`)
     }
-
     if (!existsSync(session.audioPath)) {
       throw new Error(`Audiodatei nicht gefunden: ${session.audioPath}`)
     }
+    if (!session.diarizationPath) {
+      throw new Error(
+        `Session ${task.sessionId} hat keinen Diarization-Pfad — Pipeline-Reihenfolge falsch?`
+      )
+    }
+    if (!existsSync(session.diarizationPath)) {
+      throw new Error(`Diarization-Datei nicht gefunden: ${session.diarizationPath}`)
+    }
 
-    // Calculate timeout: 4x audio duration as safety margin
+    // Load diarization output (ADR-007: Pyannote runs first, Whisper consumes its output)
+    const diarization = JSON.parse(
+      readFileSync(session.diarizationPath, 'utf-8')
+    ) as DiarizationData
+
+    // Estimate original audio duration from WAV header (same heuristic as PyannoteSidecar)
     const audioStats = statSync(session.audioPath)
     const WAV_HEADER_SIZE = 44
-    const audioDurationEstimate = Math.max(0, audioStats.size - WAV_HEADER_SIZE) / (48000 * 2) // 48kHz 16-bit mono
-    const timeoutMs = Math.max(audioDurationEstimate * 4 * 1000, 60_000) // min 60s
+    const audioDurationEstimate =
+      Math.max(0, audioStats.size - WAV_HEADER_SIZE) / (48000 * 2) // 48kHz 16-bit mono
 
-    // Run whisper.cpp
-    const whisperOutput = await this.runWhisper(
-      binaryPath,
-      modelPath,
-      session.audioPath,
-      timeoutMs,
-      onProgress,
-      signal
-    )
+    // Important: declare stitched BEFORE the try so the finally block can clean
+    // up even if stitchSpeechSegments throws after partial-write of the stitched
+    // WAV (e.g. ffmpeg crash mid-encode). Initialize as undefined; assign inside
+    // the try.
+    let stitched: StitchedAudio | undefined
 
-    // Parse output, apply filler removal, save transcript
-    const transcript = this.processOutput(whisperOutput)
+    try {
+      stitched = await stitchSpeechSegments(
+        session.audioPath,
+        diarization.speakers,
+        audioDurationEstimate,
+        signal
+      )
 
-    const transcriptPath = sessionService.generateTranscriptPath(task.sessionId)
-    writeFileAtomic(transcriptPath, JSON.stringify(transcript, null, 2))
-    sessionService.updateSession(task.sessionId, { transcriptPath })
+      // Empty-speech short-circuit: if Pyannote found no speech, write an empty
+      // transcript and return. AlignmentService and AnonymizationService both
+      // handle empty input gracefully so the pipeline reaches 'review' status.
+      if (stitched.stitchMap.segments.length === 0) {
+        const emptyTranscript: TranscriptData = {
+          words: [],
+          segments: [],
+          metadata: {
+            model: 'whisper-cli',
+            language: 'de',
+            duration: audioDurationEstimate,
+            stitchMap: stitched.stitchMap
+          }
+        }
+        const transcriptPath = sessionService.generateTranscriptPath(task.sessionId)
+        writeFileAtomic(transcriptPath, JSON.stringify(emptyTranscript, null, 2))
+        sessionService.updateSession(task.sessionId, { transcriptPath })
+        onProgress(1)
+        return
+      }
+
+      // Calculate timeout based on the STITCHED duration (whisper input).
+      // 4x as safety margin, min 60s.
+      const stitchedDurationSec = stitched.stitchMap.stitchedDurationSec
+      const timeoutMs = Math.max(stitchedDurationSec * 4 * 1000, 60_000)
+
+      // Run whisper.cpp on the stitched WAV
+      const whisperOutput = await this.runWhisper(
+        binaryPath,
+        modelPath,
+        stitched.wavPath,
+        timeoutMs,
+        onProgress,
+        signal
+      )
+
+      // Parse output, apply filler removal — operates in stitched timeline
+      const stitchedTranscript = this.processOutput(whisperOutput)
+
+      // Remap all timestamps back to original audio's wall-clock timeline
+      const transcript = remapTranscript(
+        stitchedTranscript,
+        stitched.stitchMap,
+        audioDurationEstimate
+      )
+
+      const transcriptPath = sessionService.generateTranscriptPath(task.sessionId)
+      writeFileAtomic(transcriptPath, JSON.stringify(transcript, null, 2))
+      sessionService.updateSession(task.sessionId, { transcriptPath })
+    } finally {
+      // Clean up stitched WAV (best-effort). `stitched` may still be undefined
+      // if stitchSpeechSegments threw before assigning.
+      try {
+        if (stitched && existsSync(stitched.wavPath)) unlinkSync(stitched.wavPath)
+      } catch {
+        // intentionally swallowed — temp file cleanup
+      }
+    }
   }
 
   private runWhisper(
@@ -318,3 +395,38 @@ function parseTimestamp(ts: string): number {
 }
 
 export { parseTimestamp }
+
+/**
+ * Remap a transcript whose word/segment timestamps live in the stitched-WAV's
+ * timeline to the original audio's wall-clock timeline. The downstream
+ * AlignmentService aligns words against pyannote's diarization which uses
+ * original-audio timestamps, so this remap is required after the inversion
+ * (ADR-007 / Issue #78).
+ */
+function remapTranscript(
+  transcript: TranscriptData,
+  map: StitchMap,
+  originalDurationSec: number
+): TranscriptData {
+  const remappedWords: TranscriptWord[] = (transcript.words ?? []).map((w) => ({
+    ...w,
+    start: remapStitchedTimestamp(w.start, map),
+    end: remapStitchedTimestamp(w.end, map)
+  }))
+
+  const remappedSegments: TranscriptSegment[] = (transcript.segments ?? []).map((s) => ({
+    ...s,
+    start: remapStitchedTimestamp(s.start, map),
+    end: remapStitchedTimestamp(s.end, map)
+  }))
+
+  return {
+    words: remappedWords,
+    segments: remappedSegments,
+    metadata: {
+      ...transcript.metadata,
+      duration: originalDurationSec, // wall-clock duration, not stitched
+      stitchMap: map
+    }
+  }
+}
