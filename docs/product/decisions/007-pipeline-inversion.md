@@ -74,7 +74,7 @@ Ein `TranscriptData` mit Word- und Segment-Timestamps **in Original-Audio-Timeli
 
 **Negativ / Risiken:**
 - Backchannel-Recall auf realem Therapie-Audio empirisch nicht belegt — Verifikation gegen 3–5 echte Aufnahmen war Story-3-Merge-Bedingung (siehe Issue #78)
-- ffmpeg-Binary muss gebundled werden (~80 MB statisches ARM64-Binary von evermeet.cx)
+- ffmpeg-Binary muss gebundled werden (statisches ARM64-Binary von osxexperts.net; evermeet.cx bietet primär x86_64 — auf Apple Silicon nur via Rosetta 2, was den Performance-Gewinn der Inversion zunichtemacht)
 - Stitching-Naht-Robustheit auf Audio mit häufigen Speaker-Turns ist empirisch nur auf News-Audio belegt; Therapie-Audio mit kürzeren Turn-Längen war Verifikations-Voraussetzung
 
 **Operativ:**

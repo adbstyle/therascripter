@@ -120,6 +120,16 @@ export function buildFfmpegArgs(
 
 function runFfmpeg(bin: string, args: string[], signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
+    // Pre-aborted-signal guard: addEventListener('abort', …) does NOT fire if
+    // the signal is already aborted at registration time (per Web spec). If a
+    // caller hands us an already-aborted controller (e.g. cancel-recovery on
+    // app restart), we'd otherwise leak a long-running ffmpeg subprocess that
+    // nothing kills. Live-verified during QA — see PR #79 Bug #2.
+    if (signal?.aborted) {
+      reject(new Error('ffmpeg aborted before start'))
+      return
+    }
+
     const proc = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] })
     let stderr = ''
     proc.stderr.on('data', (chunk) => {
