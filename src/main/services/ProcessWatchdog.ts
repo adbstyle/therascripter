@@ -2,9 +2,10 @@ import type { TaskType } from '../../shared/types'
 
 const POLL_INTERVAL_MS = 15_000
 
-// Per-service stall thresholds (conservative, M1-based)
+// Per-service stall thresholds (conservative, M1-based).
+// Note: diarization and transcription use dynamic thresholds based on audio
+// duration (computed in computeThreshold). See ADR-007 / Issue #78.
 const STALL_THRESHOLDS: Partial<Record<TaskType, number>> = {
-  diarization: 120_000,
   anonymization: 120_000,
   ocr: 60_000,
   // LlamaSummarizer reports no fine-grained progress — onProgress is never called
@@ -79,6 +80,14 @@ export class ProcessWatchdog {
       // Dynamic threshold: audioDuration / 40 gives the expected gap between
       // whisper.cpp 5%-step progress events. Minimum 120s.
       const dynamicSec = (audioDurationSec ?? 0) / 40
+      return Math.max(dynamicSec, 120) * 1000
+    }
+
+    if (taskType === 'diarization') {
+      // ADR-007 / Issue #78: pyannote runs first now and can take minutes per
+      // stage with no progress event. Spike A datapoint: ~4 min on 62 min audio.
+      // N=15 → 240s for 1h audio as safe reserve. Minimum 120s.
+      const dynamicSec = (audioDurationSec ?? 0) / 15
       return Math.max(dynamicSec, 120) * 1000
     }
 

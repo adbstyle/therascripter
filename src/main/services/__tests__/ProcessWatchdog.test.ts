@@ -179,4 +179,51 @@ describe('ProcessWatchdog', () => {
 
     watchdog.stop()
   })
+
+  // Pipeline-Inversion (ADR-007): pyannote runs first now and on long
+  // recordings can take minutes per stage with no progress event. The
+  // dynamic threshold gives generous slack on long audio.
+  it('uses dynamic threshold for diarization based on audio duration', () => {
+    const onStall = vi.fn()
+    // 60 min audio → threshold = max(3600/15, 120) = 240s
+    const watchdog = new ProcessWatchdog({
+      taskType: 'diarization',
+      audioDurationSec: 3600,
+      onStall
+    })
+
+    watchdog.start()
+
+    // At 200s — should NOT have fired
+    vi.advanceTimersByTime(200_000)
+    expect(onStall).not.toHaveBeenCalled()
+
+    // At 260s — should have fired (past 240s threshold)
+    vi.advanceTimersByTime(60_000)
+    expect(onStall).toHaveBeenCalledOnce()
+
+    watchdog.stop()
+  })
+
+  it('uses minimum 120s threshold for short audio diarization', () => {
+    const onStall = vi.fn()
+    // 1 min audio → threshold = max(60/15, 120) = max(4, 120) = 120s
+    const watchdog = new ProcessWatchdog({
+      taskType: 'diarization',
+      audioDurationSec: 60,
+      onStall
+    })
+
+    watchdog.start()
+
+    // At 100s — should NOT have fired
+    vi.advanceTimersByTime(100_000)
+    expect(onStall).not.toHaveBeenCalled()
+
+    // At 135s — should have fired
+    vi.advanceTimersByTime(35_000)
+    expect(onStall).toHaveBeenCalledOnce()
+
+    watchdog.stop()
+  })
 })

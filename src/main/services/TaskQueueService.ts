@@ -310,7 +310,10 @@ export class TaskQueueService {
   }
 
   private getAudioDurationSec(task: Task): number | undefined {
-    if (task.type !== 'transcription') return undefined
+    // Both transcription and diarization use audioDuration-based dynamic stall
+    // thresholds (whisper: duration/40 for 5%-progress gap, pyannote: duration/15
+    // from Spike A datapoint).
+    if (task.type !== 'transcription' && task.type !== 'diarization') return undefined
     try {
       const session = this.sessionService.getSession(task.sessionId)
       if (!session?.audioPath) return undefined
