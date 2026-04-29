@@ -8,20 +8,13 @@ import { createStubExecutors } from './task-executors'
 import { sendToRenderer } from '../utils/ipc-helpers'
 import { validateIntermediateFile } from '../utils/file-ops'
 import type { Task, TaskType, Session, SessionStatus, SessionType } from '../../shared/types'
+import { AUDIO_PIPELINE, PDF_PIPELINE } from '../../shared/constants/pipeline'
 
-const AUDIO_PIPELINE: TaskType[] = [
-  'transcription',
-  'diarization',
-  'alignment',
-  'anonymization',
-  'summarization'
-]
-const PDF_PIPELINE: TaskType[] = ['extraction', 'ocr', 'anonymization', 'summarization']
-
-// Maps a completed task type to the next session status
+// Maps a completed task type to the next session status.
+// Pipeline order (audio): diarization → transcription → alignment → anonymization → summarization
 const TASK_TO_SESSION_STATUS: Partial<Record<TaskType, SessionStatus>> = {
-  transcription: 'diarizing',
-  diarization: 'anonymizing',
+  diarization: 'transcribing',
+  transcription: 'anonymizing',
   alignment: 'anonymizing',
   extraction: 'anonymizing',
   ocr: 'anonymizing',
@@ -98,7 +91,7 @@ export class TaskQueueService {
     // from the failed run while the retry is in flight.
     const firstStatus = this.getSessionStatusForTask(remainingSteps[0])
     this.sessionService.updateSession(sessionId, {
-      status: firstStatus ?? 'transcribing',
+      status: firstStatus ?? 'diarizing',
       errorMessage: null
     })
 
@@ -110,7 +103,7 @@ export class TaskQueueService {
     this.scheduleNext()
   }
 
-  private findResumeIndex(session: Session, pipeline: TaskType[]): number {
+  private findResumeIndex(session: Session, pipeline: readonly TaskType[]): number {
     // Maps each task type to the session field that proves it completed successfully
     const outputField: Partial<Record<TaskType, string | null>> = {
       transcription: session.transcriptPath,
