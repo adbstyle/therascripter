@@ -117,8 +117,10 @@ beforeEach(() => {
       isProcessing: vi.fn().mockResolvedValue(false),
       retry: vi.fn().mockResolvedValue(undefined),
       onProgress: vi.fn().mockReturnValue(() => {}),
+      onStarted: vi.fn().mockReturnValue(() => {}),
       onCompleted: vi.fn().mockReturnValue(() => {}),
-      onError: vi.fn().mockReturnValue(() => {})
+      onError: vi.fn().mockReturnValue(() => {}),
+      onQueuePositions: vi.fn().mockReturnValue(() => {})
     },
     blocklist: {
       list: vi.fn().mockResolvedValue([]),

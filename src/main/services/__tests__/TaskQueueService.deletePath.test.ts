@@ -51,7 +51,7 @@ describe('TaskQueueService.abortRunningForSession — DR-6 verification', () => 
       async execute(_task, _onProgress, signal) {
         receivedSignal = signal
         // Block until aborted
-        await new Promise<void>((resolve, reject) => {
+        await new Promise<void>((_resolve, reject) => {
           if (signal?.aborted) return reject(new DOMException('Aborted', 'AbortError'))
           signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
         })
@@ -73,7 +73,7 @@ describe('TaskQueueService.abortRunningForSession — DR-6 verification', () => 
   it('cancels all pending tasks for the session', async () => {
     const slowExecutor: TaskExecutor = {
       async execute(_task, _onProgress, signal) {
-        await new Promise<void>((resolve, reject) => {
+        await new Promise<void>((_resolve, reject) => {
           signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
         })
       }
@@ -105,7 +105,7 @@ describe('TaskQueueService.abortRunningForSession — DR-6 verification', () => 
   it('idempotent — calling twice does not double-cancel or throw', async () => {
     const slowExecutor: TaskExecutor = {
       async execute(_task, _onProgress, signal) {
-        await new Promise<void>((resolve, reject) => {
+        await new Promise<void>((_resolve, reject) => {
           signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
         })
       }

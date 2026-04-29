@@ -48,6 +48,9 @@ export class TaskQueueService {
 
     console.log(`[TaskQueue] Enqueued ${pipeline.length} tasks for session ${sessionId} (${sessionType})`)
 
+    // Phase D.4 — emit queue positions so waiting cards can render "Wartet — Position N"
+    this.broadcastQueuePositions()
+
     // Kick off processing if not already running
     this.scheduleNext()
 
@@ -76,6 +79,27 @@ export class TaskQueueService {
         `[TaskQueue] Cancelled ${cancelled} pending tasks for deleted session ${sessionId}`
       )
     }
+    this.broadcastQueuePositions()
+  }
+
+  /**
+   * Issue #80 / Phase D.4 — broadcasts the current queue positions to all
+   * renderers so waiting cards can show "Wartet — Position N". Emitted on
+   * every queue mutation (enqueue, completion, abort).
+   *
+   * Position is 1-based and ordered by createdAt ascending. Sessions in
+   * 'recording' or already 'processing' are excluded from the queue map.
+   */
+  private broadcastQueuePositions(): void {
+    const queued = this.sessionService
+      .getAllSessions()
+      .filter((s) => s.status === 'queued')
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    const positions: Record<string, number> = {}
+    queued.forEach((s, idx) => {
+      positions[s.id] = idx + 1
+    })
+    sendToRenderer('queue:positions', { positions })
   }
 
   retrySession(sessionId: string): void {
@@ -269,14 +293,40 @@ export class TaskQueueService {
       onStall: () => controller.abort()
     })
 
+    // Issue #80 / Phase D — emit task:started so the renderer knows which step
+    // is active without having to predict from local AUDIO_PIPELINE constants.
+    // plannedDurationSec is null until Phase I wires up the estimator.
+    const sessionForPlan = this.sessionService.getSession(task.sessionId)
+    const plannedSteps = sessionForPlan?.plannedSteps ?? []
+    const stepIndex = plannedSteps.indexOf(task.type) + 1 // 1-based; 0 if missing
+    const totalSteps = plannedSteps.length
+    sendToRenderer('task:started', {
+      sessionId: task.sessionId,
+      taskType: task.type,
+      stepIndex,
+      totalSteps,
+      plannedDurationSec: null // wired up in Phase I.4
+    })
+
+    // Issue #80 / Phase E.3 — backend-side throttle to ≤4 Hz so renderer can't
+    // be overwhelmed by chatty executors (whisper-cli emits ~20 Hz from stderr).
+    // Boundary values 0 and 1 always pass through.
+    let lastProgressEmit = 0
+    const PROGRESS_THROTTLE_MS = 250
+
     const onProgress = (progress: number): void => {
       watchdog.heartbeat()
       this.repository.update(task.id, { progress })
-      sendToRenderer('task:progress', {
-        sessionId: task.sessionId,
-        taskType: task.type,
-        progress
-      })
+      const now = Date.now()
+      if (progress === 0 || progress >= 1 || now - lastProgressEmit >= PROGRESS_THROTTLE_MS) {
+        lastProgressEmit = now
+        sendToRenderer('task:progress', {
+          sessionId: task.sessionId,
+          taskType: task.type,
+          progress,
+          etaSecondsTotal: null // wired up in Phase I.4
+        })
+      }
     }
 
     const runtime = {
@@ -329,6 +379,9 @@ export class TaskQueueService {
       watchdog.stop()
       this.runningController = null
       this.processing = false
+
+      // Phase D.4 — task ended (success or fail), queue positions may have shifted
+      this.broadcastQueuePositions()
 
       // Process next task (use setTimeout to avoid stack overflow on long chains)
       if (!this.shouldStop) {
