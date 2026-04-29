@@ -6,8 +6,7 @@ import type {
   SessionType,
   CreateSessionInput,
   UpdateSessionInput,
-  EntityMap,
-  QualityFlag
+  EntityMap
 } from '../../../shared/types'
 
 interface SessionRow {
@@ -31,7 +30,6 @@ interface SessionRow {
   summary: string | null
   summary_model_id: string | null
   summarized_at: string | null
-  quality_flag: string | null
 }
 
 function parseEntityMap(json: string | null, sessionId: string): EntityMap | null {
@@ -65,8 +63,7 @@ function rowToSession(row: SessionRow): Session {
     wordCount: row.word_count,
     summary: row.summary,
     summaryModelId: row.summary_model_id,
-    summarizedAt: row.summarized_at,
-    qualityFlag: row.quality_flag as QualityFlag | null
+    summarizedAt: row.summarized_at
   }
 }
 
@@ -180,10 +177,6 @@ export class SessionRepository {
     if (input.summarizedAt !== undefined) {
       sets.push('summarized_at = ?')
       values.push(input.summarizedAt)
-    }
-    if (input.qualityFlag !== undefined) {
-      sets.push('quality_flag = ?')
-      values.push(input.qualityFlag)
     }
 
     if (sets.length === 0) return this.findById(id)
