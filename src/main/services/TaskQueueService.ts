@@ -258,10 +258,16 @@ export class TaskQueueService {
       })
     }
 
+    const runtime = {
+      setAudioDurationSec: (sec: number): void => {
+        watchdog.setAudioDurationSec(sec)
+      }
+    }
+
     watchdog.start()
 
     try {
-      await executor.execute(task, onProgress, controller.signal)
+      await executor.execute(task, onProgress, controller.signal, runtime)
 
       // Mark completed
       this.repository.update(task.id, {

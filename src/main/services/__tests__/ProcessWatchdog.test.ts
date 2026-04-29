@@ -226,4 +226,48 @@ describe('ProcessWatchdog', () => {
 
     watchdog.stop()
   })
+
+  // ADR-007: WhisperService re-tunes the threshold after stitching, since
+  // whisper actually runs on the (much shorter) stitched WAV.
+  it('setAudioDurationSec retunes the stall threshold mid-flight', () => {
+    const onStall = vi.fn()
+    // Start with 1h original audio → threshold = max(3600/40, 120) = 120s
+    const watchdog = new ProcessWatchdog({
+      taskType: 'transcription',
+      audioDurationSec: 3600,
+      onStall
+    })
+
+    watchdog.start()
+
+    // After stitching reveals only 5 min of speech → threshold drops to
+    // max(300/40, 120) = max(7.5, 120) = 120s (still floored at min)
+    // Use a longer original to demonstrate shrinkage past the floor:
+    watchdog.setAudioDurationSec(10_000) // 10000/40 = 250s
+
+    vi.advanceTimersByTime(200_000)
+    expect(onStall).not.toHaveBeenCalled()
+
+    // At 270s — should fire (past 250s)
+    vi.advanceTimersByTime(70_000)
+    expect(onStall).toHaveBeenCalledOnce()
+
+    watchdog.stop()
+  })
+
+  it('setAudioDurationSec is a no-op for in-process tasks', () => {
+    const onStall = vi.fn()
+    const watchdog = new ProcessWatchdog({
+      taskType: 'alignment',
+      onStall
+    })
+
+    watchdog.start()
+    watchdog.setAudioDurationSec(10_000)
+
+    vi.advanceTimersByTime(600_000)
+    expect(onStall).not.toHaveBeenCalled()
+
+    watchdog.stop()
+  })
 })

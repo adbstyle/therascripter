@@ -11,7 +11,7 @@ import type {
   TranscriptWord,
   TranscriptSegment
 } from '../../shared/types'
-import type { TaskExecutor } from '../services/task-executors'
+import type { TaskExecutor, ExecutorRuntime } from '../services/task-executors'
 import { SessionService } from '../services/SessionService'
 import { getDatabase, getDataDir } from '../db/connection'
 import { getSettings } from '../services/SettingsService'
@@ -97,7 +97,12 @@ export class WhisperService implements TaskExecutor {
     return join(getDataDir(), 'models', def.relativePath)
   }
 
-  async execute(task: Task, onProgress: (progress: number) => void, signal?: AbortSignal): Promise<void> {
+  async execute(
+    task: Task,
+    onProgress: (progress: number) => void,
+    signal?: AbortSignal,
+    runtime?: ExecutorRuntime
+  ): Promise<void> {
     const binaryPath = this.getBinaryPath()
     const modelPath = this.getModelPath()
 
@@ -186,6 +191,13 @@ export class WhisperService implements TaskExecutor {
       // 4x as safety margin, min 60s.
       const stitchedDurationSec = stitched.stitchMap.stitchedDurationSec
       const timeoutMs = Math.max(stitchedDurationSec * 4 * 1000, 60_000)
+
+      // Retune the watchdog to the stitched duration. The orchestrator
+      // initially configured the threshold from the original audio length,
+      // which is overly generous on sparse-speech inputs (e.g. 1h recording
+      // → 5min speech). After stitching, the actual whisper input is the
+      // 5min stream and 5%-progress events are spaced ~3s apart.
+      runtime?.setAudioDurationSec(stitchedDurationSec)
 
       // Run whisper.cpp on the stitched WAV
       const whisperOutput = await this.runWhisper(

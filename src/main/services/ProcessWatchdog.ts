@@ -29,11 +29,13 @@ export class ProcessWatchdog {
   private lastHeartbeatAt = Date.now()
   private timer: ReturnType<typeof setInterval> | null = null
   private fired = false
-  private readonly stallThresholdMs: number
+  private stallThresholdMs: number
+  private readonly taskType: TaskType
   private readonly onStall: () => void
   private readonly skip: boolean
 
   constructor(config: WatchdogConfig) {
+    this.taskType = config.taskType
     this.onStall = config.onStall
     this.skip = IN_PROCESS_TASKS.includes(config.taskType)
     this.stallThresholdMs = this.computeThreshold(config.taskType, config.audioDurationSec)
@@ -52,6 +54,20 @@ export class ProcessWatchdog {
 
   heartbeat(): void {
     this.lastHeartbeatAt = Date.now()
+  }
+
+  /**
+   * Recompute the stall threshold from a new audio duration. Used by
+   * WhisperService after stitching: the original audio duration is the
+   * upper bound, but ASR runs on the (possibly much shorter) stitched WAV
+   * — readjusting prevents 120s+ slack on tiny stitched payloads, where a
+   * true stall would otherwise take longer to detect than necessary.
+   */
+  setAudioDurationSec(audioDurationSec: number): void {
+    if (this.skip) return
+    // Shrink or grow the threshold; both are safe because heartbeat resets
+    // the elapsed-time counter on every progress event.
+    this.stallThresholdMs = this.computeThreshold(this.taskType, audioDurationSec)
   }
 
   stop(): void {
