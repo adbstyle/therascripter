@@ -85,7 +85,7 @@ Ein `TranscriptData` mit Word- und Segment-Timestamps **in Original-Audio-Timeli
 ## Bekannte Limits / Follow-up
 
 1. **`runFfmpeg` AbortSignal:** Implementierung respektiert `AbortSignal` (kill SIGTERM bei Abort). Praxis-Risiko bei Stitching-Stalls auf PCM-WAV: minimal.
-2. **ARG_MAX bei vielen Speech-Segmenten:** Pro merged Segment ein `-ss/-to/-i`-Triplet. Bei sehr fragmentierten Aufnahmen (>500 Segmente) könnte das System-Limit erreicht werden. Fix-Pfad: Concat-Demuxer-Listen-Datei (`ffmpeg -f concat -i list.txt`).
+2. **ARG_MAX bei vielen Speech-Segmenten:** Pro merged Segment ein `-ss/-to/-i`-Triplet (≈ 60–80 Bytes). macOS-`ARG_MAX` liegt bei ~1 MB → praktisches Limit ist **~12 000 Segmente**. Realistisches Therapie-Audio (1 h) produziert nach Pyannote-Merge typischerweise 200–500 Segmente, also ~30 KB Argv — weit unter dem Limit. Falls in Zukunft hochgradig fragmentiertes Audio (z. B. mehrstündige Multi-Speaker-Workshops) das Limit doch erreicht: Fix-Pfad ist eine Concat-Demuxer-Listen-Datei (`ffmpeg -f concat -i list.txt`).
 
 ## Referenzen
 
