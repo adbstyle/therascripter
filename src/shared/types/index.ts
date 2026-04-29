@@ -7,8 +7,7 @@ export type {
   SessionStatus,
   Session,
   CreateSessionInput,
-  UpdateSessionInput,
-  QualityFlag
+  UpdateSessionInput
 } from './Session'
 
 export type { TaskType, TaskStatus, Task, CreateTaskInput, UpdateTaskInput } from './Task'
