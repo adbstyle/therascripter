@@ -13,7 +13,6 @@ import { BlocklistConfirmDialog } from '../components/editor/BlocklistConfirmDia
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EditableSessionTitle } from '../components/review/EditableSessionTitle'
 import { SummaryPanel } from '../components/review/SummaryPanel'
-import { QualityWarningBanner } from '../components/review/QualityWarningBanner'
 import {
   batchRemovePlaceholder,
   anonymizeSelectionWithPropagation,
@@ -29,7 +28,6 @@ import { AnonymizationPanel } from '../components/editor/AnonymizationPanel'
 import type {
   EntityMap,
   PlaceholderType,
-  QualityFlag,
   ReviewData,
   SessionType
 } from '../../../shared/types'
@@ -55,7 +53,6 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const [loadError, setLoadError] = useState<string | null>(null)
   const [sessionTitle, setSessionTitle] = useState('')
   const [sessionType, setSessionType] = useState<SessionType>('audio')
-  const [qualityFlag, setQualityFlag] = useState<QualityFlag | null>(null)
   const [_entityMap, setEntityMap] = useState<EntityMap>({})
   const [updateCounter, setUpdateCounter] = useState(0)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -244,7 +241,6 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
 
         setSessionTitle(data.sessionTitle)
         setSessionType(data.sessionType)
-        setQualityFlag(data.qualityFlag)
         setEntityMap(data.entityMap)
         entityMapRef.current = data.entityMap
 
@@ -593,15 +589,6 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           </button>
         </div>
       </header>
-
-      {/* Quality-warning banner (ADR-006) — non-blocking; pipeline always
-          produces a usable result, the banner just surfaces low-quality runs
-          so the user can spot them and report a bug. */}
-      {qualityFlag === 'repetition_critical' ? (
-        <QualityWarningBanner severity="critical" />
-      ) : qualityFlag === 'repetition_warning' ? (
-        <QualityWarningBanner severity="warning" />
-      ) : null}
 
       {/* Editor + Panel row */}
       <div className="flex min-h-0 flex-1">
