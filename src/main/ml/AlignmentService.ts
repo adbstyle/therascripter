@@ -44,7 +44,23 @@ export class AlignmentService implements TaskExecutor {
     onProgress(0.2)
 
     if (!transcript.words || transcript.words.length === 0) {
-      throw new Error('Transkript enthält keine Wörter für die Sprecherzuordnung')
+      // Pipeline-Inversion (ADR-007 / Issue #78): if Pyannote found no speech,
+      // Whisper wrote an empty transcript. Produce an empty aligned transcript
+      // instead of aborting the pipeline — Erfolgskriterium #2 requires that
+      // recordings without speech reach 'review' status with an empty editor.
+      const emptyAligned: TranscriptData = {
+        words: [],
+        segments: [],
+        metadata: {
+          ...transcript.metadata,
+          diarization: diarization.metadata.model
+        }
+      }
+      const alignedTranscriptPath = sessionService.generateAlignedTranscriptPath(task.sessionId)
+      writeFileAtomic(alignedTranscriptPath, JSON.stringify(emptyAligned, null, 2))
+      sessionService.updateSession(task.sessionId, { alignedTranscriptPath })
+      onProgress(1)
+      return
     }
 
     // Build consistent speaker label mapping (raw label → "Person A", "Person B", ...)

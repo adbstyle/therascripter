@@ -52,7 +52,19 @@ export class AnonymizationService implements TaskExecutor {
     const transcript = JSON.parse(readFileSync(transcriptSource, 'utf-8')) as TranscriptData
 
     if (!transcript.segments || transcript.segments.length === 0) {
-      throw new Error('Transkript enthält keine Segmente für die Anonymisierung')
+      // Pipeline-Inversion (ADR-007 / Issue #78): empty transcripts (no speech
+      // detected by Pyannote) reach 'review' status with an empty editor.
+      // Write a minimal empty TipTap document and return without running NER.
+      const emptyDoc = { type: 'doc', content: [{ type: 'paragraph' }] }
+      const anonymizedPath = sessionService.generateAnonymizedPath(task.sessionId)
+      writeFileAtomic(anonymizedPath, JSON.stringify(emptyDoc, null, 2))
+      sessionService.updateSession(task.sessionId, {
+        anonymizedPath,
+        entityMap: {},
+        wordCount: 0
+      })
+      onProgress(1)
+      return
     }
 
     onProgress(0.05)
