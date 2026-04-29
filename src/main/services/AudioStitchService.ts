@@ -1,5 +1,5 @@
 import { spawn } from 'child_process'
-import { existsSync, mkdirSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { app } from 'electron'
@@ -146,36 +146,13 @@ function runFfmpeg(bin: string, args: string[], signal?: AbortSignal): Promise<v
 }
 
 /**
- * Minimal 48kHz mono 16-bit PCM WAV header with 0 samples. Used as a stand-in
- * when the diarization output contains zero speech segments — whisper would
- * crash on a truly empty file, so callers short-circuit before reaching this
- * path. Kept here for completeness.
- */
-function writeEmptyWav(path: string): void {
-  const header = Buffer.alloc(44)
-  header.write('RIFF', 0)
-  header.writeUInt32LE(36, 4)
-  header.write('WAVE', 8)
-  header.write('fmt ', 12)
-  header.writeUInt32LE(16, 16)
-  header.writeUInt16LE(1, 20)
-  header.writeUInt16LE(1, 22)
-  header.writeUInt32LE(48000, 24)
-  header.writeUInt32LE(96000, 28)
-  header.writeUInt16LE(2, 32)
-  header.writeUInt16LE(16, 34)
-  header.write('data', 36)
-  header.writeUInt32LE(0, 40)
-  writeFileSync(path, header)
-}
-
-/**
  * Stitch speech segments of `audioPath` into a single WAV using ffmpeg's
  * concat filter. Returns the stitched WAV path + stitch map for timestamp
  * remapping. Caller owns the file (must clean up).
  *
- * If `speech` is empty, writes a minimal empty WAV (caller should short-circuit
- * before calling whisper, but we don't crash here).
+ * Precondition: `speech` must contain at least one segment. Callers MUST
+ * short-circuit on empty speech before invoking this — whisper-cli crashes
+ * on a 0-sample WAV and ffmpeg refuses to emit one.
  */
 export async function stitchSpeechSegments(
   audioPath: string,
@@ -184,17 +161,18 @@ export async function stitchSpeechSegments(
   signal?: AbortSignal,
   outputDir?: string
 ): Promise<StitchedAudio> {
+  if (speech.length === 0) {
+    throw new Error(
+      'stitchSpeechSegments called with empty speech array — caller must short-circuit'
+    )
+  }
+
   const stitchMap = computeStitchMap(speech, DEFAULT_PADDING_SEC, originalDurationSec)
 
   const dir = outputDir ?? join(tmpdir(), 'therascript-stitch')
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
 
   const wavPath = join(dir, `stitched-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`)
-
-  if (stitchMap.segments.length === 0) {
-    writeEmptyWav(wavPath)
-    return { wavPath, stitchMap }
-  }
 
   const ffmpegArgs = buildFfmpegArgs(audioPath, stitchMap, wavPath)
   await runFfmpeg(getFfmpegPath(), ffmpegArgs, signal)

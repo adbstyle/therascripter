@@ -143,6 +143,31 @@ export class WhisperService implements TaskExecutor {
     const audioDurationEstimate =
       Math.max(0, audioStats.size - WAV_HEADER_SIZE) / (48000 * 2) // 48kHz 16-bit mono
 
+    // Empty-speech short-circuit: if Pyannote found no speech, skip the whole
+    // stitch+whisper round-trip and write an empty transcript. AlignmentService
+    // and AnonymizationService handle empty input gracefully so the pipeline
+    // reaches 'review' status (Erfolgskriterium #2).
+    if (diarization.speakers.length === 0) {
+      console.log(
+        `[WhisperService] Pyannote reported no speech for session ${task.sessionId} — ` +
+          `skipping stitch+whisper, writing empty transcript`
+      )
+      const emptyTranscript: TranscriptData = {
+        words: [],
+        segments: [],
+        metadata: {
+          model: 'whisper-cli',
+          language: 'de',
+          duration: audioDurationEstimate
+        }
+      }
+      const transcriptPath = sessionService.generateTranscriptPath(task.sessionId)
+      writeFileAtomic(transcriptPath, JSON.stringify(emptyTranscript, null, 2))
+      sessionService.updateSession(task.sessionId, { transcriptPath })
+      onProgress(1)
+      return
+    }
+
     // Important: declare stitched BEFORE the try so the finally block can clean
     // up even if stitchSpeechSegments throws after partial-write of the stitched
     // WAV (e.g. ffmpeg crash mid-encode). Initialize as undefined; assign inside
@@ -156,27 +181,6 @@ export class WhisperService implements TaskExecutor {
         audioDurationEstimate,
         signal
       )
-
-      // Empty-speech short-circuit: if Pyannote found no speech, write an empty
-      // transcript and return. AlignmentService and AnonymizationService both
-      // handle empty input gracefully so the pipeline reaches 'review' status.
-      if (stitched.stitchMap.segments.length === 0) {
-        const emptyTranscript: TranscriptData = {
-          words: [],
-          segments: [],
-          metadata: {
-            model: 'whisper-cli',
-            language: 'de',
-            duration: audioDurationEstimate,
-            stitchMap: stitched.stitchMap
-          }
-        }
-        const transcriptPath = sessionService.generateTranscriptPath(task.sessionId)
-        writeFileAtomic(transcriptPath, JSON.stringify(emptyTranscript, null, 2))
-        sessionService.updateSession(task.sessionId, { transcriptPath })
-        onProgress(1)
-        return
-      }
 
       // Calculate timeout based on the STITCHED duration (whisper input).
       // 4x as safety margin, min 60s.
