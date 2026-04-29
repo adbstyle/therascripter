@@ -105,6 +105,7 @@ scripts/sim-clean-install.sh       # Simulate fresh / upgrade / models-only inst
 ## Gotchas
 
 - **better-sqlite3 native rebuild:** `postinstall` and `predev` run `electron-rebuild` (for Electron ABI), while `pretest`/`pretest:watch` run `npm rebuild` (for system Node.js ABI). The `package` script runs `electron-rebuild` explicitly before building; `npmRebuild: false` in `electron-builder.yml` prevents electron-builder's own unreliable rebuild. If native module errors occur, run `npm run postinstall` manually.
+- **`npm test` requires Xcode Command-Line Tools:** the `pretest`/`pretest:watch` hook calls `npm rebuild better-sqlite3` against the system Node ABI. On a fresh Mac without Xcode CLT, this fails with `gyp: No Xcode or CLT version detected!`. Fix: install once with `xcode-select --install`. Workaround if you can't install CLT but want to run tests: `npx vitest run <path>` skips the pretest hook entirely — fine for tests that don't touch SQLite (e.g. pure modules like `timestamp-remap`, `AudioStitchService.computeStitchMap`, `ProcessWatchdog`). Tests using `getDatabase()` need the rebuilt native binding to load.
 - **`env -u ELECTRON_RUN_AS_NODE`:** The `dev` script unsets this env var because Electron Fuses disable RunAsNode — without this workaround, `electron-vite dev` fails.
 - **`.env` file:** Contains Cloudflare R2 credentials for model uploads. Gitignored — never commit.
 - **Vitest setup:** Requires `tests/setup.ts` (jsdom environment). Referenced in `vitest.config.ts`.
