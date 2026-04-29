@@ -47,6 +47,8 @@ export type {
 
 export type { SpeakerSegment, DiarizationMetadata, DiarizationData } from './Diarization'
 
+export type { StitchSegment, StitchMap } from './StitchMap'
+
 export type {
   NerEntity,
   RegexEntity,
