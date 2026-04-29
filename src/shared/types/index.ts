@@ -7,8 +7,7 @@ export type {
   SessionStatus,
   Session,
   CreateSessionInput,
-  UpdateSessionInput,
-  QualityFlag
+  UpdateSessionInput
 } from './Session'
 
 export type { TaskType, TaskStatus, Task, CreateTaskInput, UpdateTaskInput } from './Task'
@@ -47,6 +46,8 @@ export type {
 } from './Transcript'
 
 export type { SpeakerSegment, DiarizationMetadata, DiarizationData } from './Diarization'
+
+export type { StitchSegment, StitchMap } from './StitchMap'
 
 export type {
   NerEntity,

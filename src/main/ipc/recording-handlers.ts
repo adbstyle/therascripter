@@ -70,7 +70,8 @@ function stopRecordingInternal(sessionId: string): { durationSeconds: number } {
   const { durationSeconds } = audioFileService.finalizeWavFile(sessionId)
 
   const service = new SessionService(getDatabase())
-  service.updateSession(sessionId, { status: 'transcribing' })
+  // Pipeline-Inversion (ADR-007): diarization is now the first pipeline step.
+  service.updateSession(sessionId, { status: 'diarizing' })
 
   // Enqueue ML pipeline tasks for sequential processing
   try {

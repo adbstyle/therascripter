@@ -1,10 +1,16 @@
 # ADR-006: Whisper-Loop-Mitigation durch `--no-context` und Output-Detection
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-007](./007-pipeline-inversion.md)
 **Datum:** 2026-04-27
 **Implementiert:** 2026-04-27 (#65, branch `fix/65-whisper-loop-mitigation`)
 **Revidiert:** 2026-04-28 — Hard-Reject + manueller Retry verworfen, Pipeline läuft jetzt immer durch und zeigt nur eine nicht-blockierende Quality-Warning (Folge-PR `fix/68-quality-warning-no-rejection`).
 **Revidiert:** 2026-04-28 — CLI-Flag von `-nc` auf `-mc 0` korrigiert. Das ursprünglich dokumentierte `--no-context` / `-nc` wurde von whisper.cpp upstream entfernt; aktuelle Versionen erkennen es nicht mehr und exit'en mit `error: unknown argument: -nc` (aber Exit Code 0 — siehe Folge-PR).
+**Superseded:** 2026-04-29 — Pipeline-Inversion (ADR-007 / Issue #78) löst das Problem strukturell: Whisper sieht nach der Inversion gar keine Stille mehr (nur Pyannote-Speech-Segmente) und kann darauf keine Halluzinationen mehr produzieren. Layered-Detector (`whisper-quality.ts`, `QualityWarningBanner`, `quality_flag`-Spalte) entfernt; `-mc 0` bleibt als Defense-in-Depth.
+
+> **2026-04-29 — Hinweis:** Diese Entscheidung wurde durch ADR-007 (Pipeline-Inversion) abgelöst.
+> `-mc 0` bleibt als Defense-in-Depth aktiv, der Output-Detector (`computeRepetitionRatio`,
+> `quality_flag`-Spalte, `QualityWarningBanner`) wurde entfernt — die strukturelle
+> Lösung der Inversion macht ihn überflüssig.
 
 ## Kontext
 

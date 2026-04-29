@@ -8,20 +8,13 @@ import { createStubExecutors } from './task-executors'
 import { sendToRenderer } from '../utils/ipc-helpers'
 import { validateIntermediateFile } from '../utils/file-ops'
 import type { Task, TaskType, Session, SessionStatus, SessionType } from '../../shared/types'
+import { AUDIO_PIPELINE, PDF_PIPELINE } from '../../shared/constants/pipeline'
 
-const AUDIO_PIPELINE: TaskType[] = [
-  'transcription',
-  'diarization',
-  'alignment',
-  'anonymization',
-  'summarization'
-]
-const PDF_PIPELINE: TaskType[] = ['extraction', 'ocr', 'anonymization', 'summarization']
-
-// Maps a completed task type to the next session status
+// Maps a completed task type to the next session status.
+// Pipeline order (audio): diarization → transcription → alignment → anonymization → summarization
 const TASK_TO_SESSION_STATUS: Partial<Record<TaskType, SessionStatus>> = {
-  transcription: 'diarizing',
-  diarization: 'anonymizing',
+  diarization: 'transcribing',
+  transcription: 'anonymizing',
   alignment: 'anonymizing',
   extraction: 'anonymizing',
   ocr: 'anonymizing',
@@ -94,13 +87,12 @@ export class TaskQueueService {
     }
 
     // Transition session: error → first pending task's processing status.
-    // Also clears errorMessage and qualityFlag so the renderer doesn't surface
-    // stale state from the failed run while the retry is in flight.
+    // Also clears errorMessage so the renderer doesn't surface stale state
+    // from the failed run while the retry is in flight.
     const firstStatus = this.getSessionStatusForTask(remainingSteps[0])
     this.sessionService.updateSession(sessionId, {
-      status: firstStatus ?? 'transcribing',
-      errorMessage: null,
-      qualityFlag: null
+      status: firstStatus ?? 'diarizing',
+      errorMessage: null
     })
 
     console.log(
@@ -111,7 +103,7 @@ export class TaskQueueService {
     this.scheduleNext()
   }
 
-  private findResumeIndex(session: Session, pipeline: TaskType[]): number {
+  private findResumeIndex(session: Session, pipeline: readonly TaskType[]): number {
     // Maps each task type to the session field that proves it completed successfully
     const outputField: Partial<Record<TaskType, string | null>> = {
       transcription: session.transcriptPath,
@@ -266,10 +258,16 @@ export class TaskQueueService {
       })
     }
 
+    const runtime = {
+      setAudioDurationSec: (sec: number): void => {
+        watchdog.setAudioDurationSec(sec)
+      }
+    }
+
     watchdog.start()
 
     try {
-      await executor.execute(task, onProgress, controller.signal)
+      await executor.execute(task, onProgress, controller.signal, runtime)
 
       // Mark completed
       this.repository.update(task.id, {
@@ -318,7 +316,10 @@ export class TaskQueueService {
   }
 
   private getAudioDurationSec(task: Task): number | undefined {
-    if (task.type !== 'transcription') return undefined
+    // Both transcription and diarization use audioDuration-based dynamic stall
+    // thresholds (whisper: duration/40 for 5%-progress gap, pyannote: duration/15
+    // from Spike A datapoint).
+    if (task.type !== 'transcription' && task.type !== 'diarization') return undefined
     try {
       const session = this.sessionService.getSession(task.sessionId)
       if (!session?.audioPath) return undefined

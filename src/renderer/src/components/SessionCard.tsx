@@ -1,5 +1,9 @@
 import { FileText, Mic, Trash2 } from 'lucide-react'
 import type { Session, SessionStatus, TaskType } from '../../../shared/types'
+import {
+  AUDIO_PIPELINE as AUDIO_PIPELINE_STEPS,
+  PDF_PIPELINE as PDF_PIPELINE_STEPS
+} from '../../../shared/constants/pipeline'
 import { useTaskProgress } from '../hooks/useTaskProgress'
 
 interface SessionCardProps {
@@ -30,16 +34,6 @@ const TASK_LABELS: Record<TaskType, string> = {
   anonymization: 'Anonymisierung',
   summarization: 'Zusammenfassung'
 }
-
-const AUDIO_PIPELINE_STEPS: TaskType[] = [
-  'transcription',
-  'diarization',
-  'alignment',
-  'anonymization',
-  'summarization'
-]
-
-const PDF_PIPELINE_STEPS: TaskType[] = ['extraction', 'ocr', 'anonymization', 'summarization']
 
 function isProcessingStatus(status: SessionStatus): boolean {
   return (
