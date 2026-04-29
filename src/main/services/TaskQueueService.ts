@@ -23,6 +23,10 @@ export class TaskQueueService {
   private processing = false
   private shouldStop = false
   private recoveryTimer: ReturnType<typeof setInterval> | null = null
+  // Tracks the AbortController for the currently running task so that
+  // abortRunningForSession() (called from SessionService.deleteSession) can
+  // signal the executor to stop cleanly. See DR-6 in plans/2026-04-29-pipeline-progress-ui-issue-80.md.
+  private runningController: { sessionId: string; controller: AbortController } | null = null
 
   constructor(db: Database.Database) {
     this.repository = new TaskRepository(db)
@@ -52,6 +56,26 @@ export class TaskQueueService {
 
   getSessionTasks(sessionId: string): Task[] {
     return this.repository.findBySession(sessionId)
+  }
+
+  /**
+   * Aborts the running task (if any) for the given session and cancels all
+   * pending tasks. Called from SessionService.deleteSession to ensure no
+   * zombie executor remains after the session is removed.
+   *
+   * Idempotent: calling multiple times for the same session is safe.
+   * If no task is running for the session, only pending cancellation runs.
+   */
+  abortRunningForSession(sessionId: string): void {
+    if (this.runningController?.sessionId === sessionId) {
+      this.runningController.controller.abort()
+    }
+    const cancelled = this.repository.cancelPendingForSession(sessionId)
+    if (cancelled > 0) {
+      console.log(
+        `[TaskQueue] Cancelled ${cancelled} pending tasks for deleted session ${sessionId}`
+      )
+    }
   }
 
   retrySession(sessionId: string): void {
@@ -237,6 +261,7 @@ export class TaskQueueService {
 
     // Set up watchdog with AbortController
     const controller = new AbortController()
+    this.runningController = { sessionId: task.sessionId, controller }
     const audioDurationSec = this.getAudioDurationSec(task)
     const watchdog = new ProcessWatchdog({
       taskType: task.type,
@@ -302,6 +327,7 @@ export class TaskQueueService {
       this.handleTaskFailure(task, errorMessage)
     } finally {
       watchdog.stop()
+      this.runningController = null
       this.processing = false
 
       // Process next task (use setTimeout to avoid stack overflow on long chains)

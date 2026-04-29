@@ -7,6 +7,10 @@ import { removeFile } from '../utils/file-ops'
 import { tiptapToPlainText } from '../ml/tiptap-plain-text'
 import type { Session, SessionStatus, UpdateSessionInput } from '../../shared/types'
 import type { SummaryRecord } from '../../shared/types/IpcApi'
+// Cyclic import: TaskQueueService imports SessionService too. The cycle is broken
+// at call-time — getTaskQueue() is only invoked inside deleteSession() at runtime,
+// not during module initialisation. Bundlers and ts-node handle this correctly.
+import { getTaskQueue } from './TaskQueueService'
 
 export type { SummaryRecord }
 
@@ -68,6 +72,15 @@ export class SessionService {
   deleteSession(id: string): boolean {
     const session = this.repository.findById(id)
     if (!session) return false
+
+    // Issue #80 DR-6: abort any running pipeline + cancel pending tasks BEFORE
+    // file cleanup, so the executor's writes don't race the unlink calls.
+    // getTaskQueue() returns the singleton or throws if not initialised — guard.
+    try {
+      getTaskQueue().abortRunningForSession(id)
+    } catch {
+      // TaskQueue not initialised (e.g. during isolated SessionService tests) — skip
+    }
 
     this.cleanupSessionFiles(session)
     return this.repository.delete(id)
