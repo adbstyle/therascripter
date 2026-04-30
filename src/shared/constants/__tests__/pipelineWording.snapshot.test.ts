@@ -23,8 +23,6 @@ describe('pipelineWording snapshot — Issue #80 Story 9 / AC#2 final lock', () 
 
   it('PIPELINE_UI_STRINGS literal strings are locked', () => {
     expect(PIPELINE_UI_STRINGS.preparingNext).toBe('Nächster Schritt wird vorbereitet…')
-    expect(PIPELINE_UI_STRINGS.etaOneMinute).toBe('noch ca. 1 Min.')
-    expect(PIPELINE_UI_STRINGS.etaAlmostDone).toBe('Fast fertig')
     expect(PIPELINE_UI_STRINGS.emptySpeechHeadline).toBe('Keine Sprache erkannt')
     expect(PIPELINE_UI_STRINGS.emptySpeechBody).toBe(
       'Sitzung wurde abgeschlossen, ohne dass Sprache erkannt wurde.'
@@ -47,7 +45,6 @@ describe('pipelineWording snapshot — Issue #80 Story 9 / AC#2 final lock', () 
     expect(PIPELINE_UI_STRINGS.waiting(1)).toBe('Wartet — Position 1')
     expect(PIPELINE_UI_STRINGS.waiting(99)).toBe('Wartet — Position 99')
     expect(PIPELINE_UI_STRINGS.step(1, 5, 'X')).toBe('Schritt 1/5 · X')
-    expect(PIPELINE_UI_STRINGS.etaMinutes(3)).toBe('noch ca. 3 Min.')
   })
 
   it('contains zero ML-jargon anywhere', () => {

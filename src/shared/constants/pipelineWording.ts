@@ -24,14 +24,16 @@ export const STEP_LABELS_DE: Record<TaskType, string> = {
  * UI-State-Strings.
  * Funktionen werden für formatierte Werte exportiert; reine Strings für
  * fixe Texte. Bei jeder Änderung das Snapshot-Test in Phase N anpassen.
+ *
+ * ETA-Strings wurden zurückgebaut: hardware-abhängige baked-in Schätzwerte
+ * sind irreführend, eine Calibration mit ≥3 Sessions ist in der Praxis
+ * meist nicht erreichbar. Sichtbares Feedback bleibt: Schritt-Counter +
+ * schritt-eigene Bar.
  */
 export const PIPELINE_UI_STRINGS = {
   waiting: (position: number): string => `Wartet — Position ${position}`,
   step: (i: number, n: number, label: string): string => `Schritt ${i}/${n} · ${label}`,
   preparingNext: 'Nächster Schritt wird vorbereitet…',
-  etaMinutes: (n: number): string => `noch ca. ${n} Min.`,
-  etaOneMinute: 'noch ca. 1 Min.',
-  etaAlmostDone: 'Fast fertig',
   emptySpeechHeadline: 'Keine Sprache erkannt',
   emptySpeechBody: 'Sitzung wurde abgeschlossen, ohne dass Sprache erkannt wurde.',
   watchdogHeadline: 'Verarbeitung unterbrochen',
@@ -41,20 +43,3 @@ export const PIPELINE_UI_STRINGS = {
   retryAfterSecondFailure: 'Mehrfach-Fehler — bitte App neu starten oder Logs prüfen.',
   retryExhausted: 'Verarbeitung schlägt wiederholt fehl. Wenden Sie sich an den Support.'
 } as const
-
-/**
- * Format absolute total ETA (in seconds) into the user-facing string.
- * Returns null when no ETA is available so callers can hide the line.
- *
- * Schwellen (Plan §F):
- *   <30s  → "Fast fertig"
- *   30-60s → "noch ca. 1 Min."
- *   >60s  → "noch ca. N Min." (gerundet)
- */
-export function formatEta(secondsTotal: number | null): string | null {
-  if (secondsTotal == null) return null
-  if (secondsTotal < 30) return PIPELINE_UI_STRINGS.etaAlmostDone
-  if (secondsTotal < 60) return PIPELINE_UI_STRINGS.etaOneMinute
-  const minutes = Math.round(secondsTotal / 60)
-  return PIPELINE_UI_STRINGS.etaMinutes(minutes)
-}

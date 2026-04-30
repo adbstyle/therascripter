@@ -1,10 +1,6 @@
 import { FileText, Info, Mic, Trash2 } from 'lucide-react'
 import type { Session, SessionStatus } from '../../../shared/types'
-import {
-  STEP_LABELS_DE,
-  PIPELINE_UI_STRINGS,
-  formatEta
-} from '../../../shared/constants/pipelineWording'
+import { STEP_LABELS_DE, PIPELINE_UI_STRINGS } from '../../../shared/constants/pipelineWording'
 import { useTaskProgress } from '../hooks/useTaskProgress'
 
 interface SessionCardProps {
@@ -139,26 +135,15 @@ export function SessionCard({
   }
 
   // ---- Progress-Zeile ---------------------------------------------------
-  // Phase J: when the estimator is calibrated (etaSecondsTotal != null and
-  // totalSteps > 0), render a single Gesamt-Bar covering all steps. Otherwise
-  // fall back to the step-eigene Bar from Phase F.
-  // Both render in the same horizontal row alongside the % + ETA text.
+  // ETA + Gesamt-Bar wurden zurückgebaut: baked-in Schätzwerte sind
+  // hardware-abhängig und führen zu irreführenden Anzeigen, eine Calibration
+  // mit ≥3 echten Sessions ist für viele User in der Praxis nie erreicht.
+  // Sichtbares Feedback ist der Schritt-Counter (Status-Zeile) + die
+  // schritt-eigene Bar.
   const showTransitionBar = isProcessing && current != null && current.isTransitioning
-  const isCalibrated =
-    isProcessing && current != null && !current.isTransitioning &&
-    current.etaSecondsTotal != null && current.totalSteps > 0
-  const showTotalBar = isCalibrated
-  const showStepBar = isProcessing && current != null && !current.isTransitioning && !isCalibrated
-
-  // Linear gesamt-Fortschritt: (Schritt-Index - 1 + aktueller Step-Fortschritt) / total
-  // Bewusste Vereinfachung — die echte ETA-Funktion nutzt bereits gewichtete
-  // Schritt-Dauern (PipelineEstimator), die Bar gibt nur visuelles Feedback.
-  const totalProgressPct = current
-    ? Math.round((((current.stepIndex - 1) + current.progress) / Math.max(current.totalSteps, 1)) * 100)
-    : 0
+  const showStepBar = isProcessing && current != null && !current.isTransitioning
   const stepProgressPct = current ? Math.round(current.progress * 100) : 0
   const stepLabel = current ? STEP_LABELS_DE[current.taskType] : ''
-  const etaText = current ? formatEta(current.etaSecondsTotal) : null
 
   return (
     <div
@@ -256,35 +241,6 @@ export function SessionCard({
         >
           {PIPELINE_UI_STRINGS.retryExhausted}
         </p>
-      )}
-
-      {showTotalBar && current && (
-        <div className="pointer-events-none relative z-[1] mt-2 flex items-center gap-2">
-          <div
-            className="h-1 flex-1 overflow-hidden rounded-full bg-surface-2"
-            role="progressbar"
-            aria-valuenow={totalProgressPct}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label={`Gesamtfortschritt ${totalProgressPct} Prozent${etaText ? `, ${etaText}` : ''}`}
-          >
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-300"
-              style={{ width: `${totalProgressPct}%` }}
-            />
-          </div>
-          <span className="min-w-[2.5rem] whitespace-nowrap text-right text-xs tabular-nums text-text-tertiary">
-            {totalProgressPct}%
-          </span>
-          {etaText && (
-            <span
-              className="whitespace-nowrap text-xs text-text-tertiary"
-              title="Geschätzt aus früheren Sitzungen auf diesem Mac. Tatsächliche Dauer kann abweichen."
-            >
-              {etaText}
-            </span>
-          )}
-        </div>
       )}
 
       {showStepBar && (

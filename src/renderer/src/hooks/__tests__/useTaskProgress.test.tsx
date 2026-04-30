@@ -94,7 +94,6 @@ describe('useTaskProgress', () => {
         taskType: 'transcription',
         stepIndex: 3,
         totalSteps: 5,
-        plannedDurationSec: 120
       })
     )
     expect(result.current.current).toMatchObject({
@@ -102,7 +101,6 @@ describe('useTaskProgress', () => {
       progress: 0,
       stepIndex: 3,
       totalSteps: 5,
-      plannedDurationSec: 120,
       isTransitioning: false
     })
   })
@@ -116,17 +114,14 @@ describe('useTaskProgress', () => {
         taskType: 'transcription',
         stepIndex: 3,
         totalSteps: 5,
-        plannedDurationSec: 120
       })
       mock.emit.progress({
         sessionId: 's1',
         taskType: 'transcription',
         progress: 0.42,
-        etaSecondsTotal: 90
       })
     })
     expect(result.current.current?.progress).toBe(0.42)
-    expect(result.current.current?.etaSecondsTotal).toBe(90)
   })
 
   it('ignores progress events for non-active task types', async () => {
@@ -138,13 +133,11 @@ describe('useTaskProgress', () => {
         taskType: 'transcription',
         stepIndex: 3,
         totalSteps: 5,
-        plannedDurationSec: 120
       })
       mock.emit.progress({
         sessionId: 's1',
         taskType: 'diarization', // wrong task — must not overwrite
         progress: 0.99,
-        etaSecondsTotal: 5
       })
     })
     expect(result.current.current?.taskType).toBe('transcription')
@@ -161,7 +154,6 @@ describe('useTaskProgress', () => {
         taskType: 'transcription',
         stepIndex: 3,
         totalSteps: 5,
-        plannedDurationSec: 120
       })
       mock.emit.completed({ sessionId: 's1', taskType: 'transcription' })
     })
@@ -179,7 +171,6 @@ describe('useTaskProgress', () => {
         taskType: 'transcription',
         stepIndex: 3,
         totalSteps: 5,
-        plannedDurationSec: 120
       })
       mock.emit.completed({ sessionId: 's1', taskType: 'transcription' })
     })
@@ -199,7 +190,6 @@ describe('useTaskProgress', () => {
         taskType: 'transcription',
         stepIndex: 3,
         totalSteps: 5,
-        plannedDurationSec: 120
       })
       mock.emit.completed({ sessionId: 's1', taskType: 'transcription' })
       mock.emit.started({
@@ -207,7 +197,6 @@ describe('useTaskProgress', () => {
         taskType: 'anonymization',
         stepIndex: 4,
         totalSteps: 5,
-        plannedDurationSec: 30
       })
     })
     act(() => {
@@ -226,7 +215,6 @@ describe('useTaskProgress', () => {
         taskType: 'transcription',
         stepIndex: 3,
         totalSteps: 5,
-        plannedDurationSec: 120
       })
       mock.emit.error({ sessionId: 's1', taskType: 'transcription', error: 'boom' })
     })
@@ -256,7 +244,6 @@ describe('useTaskProgress', () => {
         taskType: 'transcription',
         stepIndex: 1,
         totalSteps: 5,
-        plannedDurationSec: 120
       })
     )
     expect(result.current.current).toBeNull()

@@ -81,8 +81,6 @@ describe('SessionCard — processing state (audio)', () => {
         progress: 0.64,
         stepIndex: 3,
         totalSteps: 5,
-        etaSecondsTotal: 180,
-        plannedDurationSec: 300,
         isTransitioning: false
       },
       queuePosition: null
@@ -100,8 +98,6 @@ describe('SessionCard — processing state (audio)', () => {
         progress: 1,
         stepIndex: 3,
         totalSteps: 5,
-        etaSecondsTotal: null,
-        plannedDurationSec: null,
         isTransitioning: true
       },
       queuePosition: null
@@ -110,7 +106,7 @@ describe('SessionCard — processing state (audio)', () => {
     expect(screen.getByText('Nächster Schritt wird vorbereitet…')).toBeInTheDocument()
   })
 
-  it('renders ETA text when etaSecondsTotal is available', () => {
+  it('renders the step-bar with step-name aria-label when processing', () => {
     vi.mocked(useTaskProgress).mockReturnValue({
       tasks: [],
       loading: false,
@@ -119,27 +115,6 @@ describe('SessionCard — processing state (audio)', () => {
         progress: 0.5,
         stepIndex: 3,
         totalSteps: 5,
-        etaSecondsTotal: 180,
-        plannedDurationSec: 300,
-        isTransitioning: false
-      },
-      queuePosition: null
-    })
-    render(<SessionCard session={makeSession({ status: 'processing' })} onDelete={vi.fn()} />)
-    expect(screen.getByText('noch ca. 3 Min.')).toBeInTheDocument()
-  })
-
-  it('hides ETA text when etaSecondsTotal is null (uncalibrated)', () => {
-    vi.mocked(useTaskProgress).mockReturnValue({
-      tasks: [],
-      loading: false,
-      current: {
-        taskType: 'transcription',
-        progress: 0.5,
-        stepIndex: 3,
-        totalSteps: 5,
-        etaSecondsTotal: null,
-        plannedDurationSec: null,
         isTransitioning: false
       },
       queuePosition: null
@@ -147,53 +122,6 @@ describe('SessionCard — processing state (audio)', () => {
     const { container } = render(
       <SessionCard session={makeSession({ status: 'processing' })} onDelete={vi.fn()} />
     )
-    expect(container.querySelector('[title*="Geschätzt"]')).toBeNull()
-  })
-
-  it('renders Gesamt-Bar with percentage when calibrated (etaSecondsTotal != null)', () => {
-    vi.mocked(useTaskProgress).mockReturnValue({
-      tasks: [],
-      loading: false,
-      current: {
-        taskType: 'transcription',
-        progress: 0.5,
-        stepIndex: 3,
-        totalSteps: 5,
-        etaSecondsTotal: 180,
-        plannedDurationSec: 300,
-        isTransitioning: false
-      },
-      queuePosition: null
-    })
-    const { container } = render(
-      <SessionCard session={makeSession({ status: 'processing' })} onDelete={vi.fn()} />
-    )
-    // Total progress: ((3-1) + 0.5) / 5 = 0.5 = 50%
-    expect(screen.getByText('50%')).toBeInTheDocument()
-    expect(container.querySelector('[aria-label*="Gesamtfortschritt"]')).toBeTruthy()
-  })
-
-  it('falls back to step-bar (no percentage label) when uncalibrated', () => {
-    vi.mocked(useTaskProgress).mockReturnValue({
-      tasks: [],
-      loading: false,
-      current: {
-        taskType: 'transcription',
-        progress: 0.5,
-        stepIndex: 3,
-        totalSteps: 5,
-        etaSecondsTotal: null,
-        plannedDurationSec: null,
-        isTransitioning: false
-      },
-      queuePosition: null
-    })
-    const { container } = render(
-      <SessionCard session={makeSession({ status: 'processing' })} onDelete={vi.fn()} />
-    )
-    expect(container.querySelector('[aria-label*="Gesamtfortschritt"]')).toBeNull()
-    expect(screen.queryByText('50%')).toBeNull()
-    // Step-bar is present (aria-label contains step name, not "Gesamtfortschritt")
     expect(container.querySelector('[aria-label*="Gespräch transkribieren"]')).toBeTruthy()
   })
 
@@ -206,8 +134,6 @@ describe('SessionCard — processing state (audio)', () => {
         progress: 0.5,
         stepIndex: 0,
         totalSteps: 0,
-        etaSecondsTotal: null,
-        plannedDurationSec: null,
         isTransitioning: false
       },
       queuePosition: null
@@ -234,8 +160,6 @@ describe('SessionCard — processing state (PDF)', () => {
         progress: 0.5,
         stepIndex: 1,
         totalSteps: 2,
-        etaSecondsTotal: null,
-        plannedDurationSec: null,
         isTransitioning: false
       },
       queuePosition: null
@@ -258,8 +182,6 @@ describe('SessionCard — processing state (PDF)', () => {
         progress: 0.3,
         stepIndex: 2,
         totalSteps: 3,
-        etaSecondsTotal: null,
-        plannedDurationSec: null,
         isTransitioning: false
       },
       queuePosition: null

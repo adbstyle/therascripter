@@ -34,8 +34,6 @@ export interface TaskProgressData {
   sessionId: string
   taskType: TaskType
   progress: number
-  /** Total session ETA in seconds, or null until estimator is calibrated (Phase I) */
-  etaSecondsTotal: number | null
 }
 
 export interface TaskStartedData {
@@ -45,8 +43,6 @@ export interface TaskStartedData {
   stepIndex: number
   /** Length of plannedSteps; 0 if no plan was frozen */
   totalSteps: number
-  /** Estimator output for this step in seconds, or null until calibrated */
-  plannedDurationSec: number | null
 }
 
 export interface TaskCompletedData {

@@ -23,16 +23,14 @@ export const TaskTypeSchema = z.enum([
 export const TaskProgressDataSchema = z.object({
   sessionId: z.string().min(1),
   taskType: TaskTypeSchema,
-  progress: z.number().min(0).max(1),
-  etaSecondsTotal: z.number().nonnegative().nullable()
+  progress: z.number().min(0).max(1)
 })
 
 export const TaskStartedDataSchema = z.object({
   sessionId: z.string().min(1),
   taskType: TaskTypeSchema,
   stepIndex: z.number().int().min(0),
-  totalSteps: z.number().int().min(0),
-  plannedDurationSec: z.number().positive().nullable()
+  totalSteps: z.number().int().min(0)
 })
 
 export const TaskCompletedDataSchema = z.object({

@@ -24,10 +24,6 @@ export interface CurrentStepState {
   stepIndex: number
   /** From task:started, or 0 if unknown */
   totalSteps: number
-  /** Total session ETA in seconds, or null until estimator is calibrated */
-  etaSecondsTotal: number | null
-  /** Estimated duration of the current step in seconds, or null */
-  plannedDurationSec: number | null
   /** True after task:completed if no task:started arrives within 500 ms */
   isTransitioning: boolean
 }
@@ -80,9 +76,7 @@ export function useTaskProgress(
   //
   // Recover by synthesising `current` from the running task in tasks[] +
   // session.plannedSteps. progress is live in the Task row (executors update
-  // on every heartbeat). etaSecondsTotal/plannedDurationSec stay null until
-  // the next task:progress tick fills them — that's the same null they would
-  // have under uncalibrated estimator anyway.
+  // on every heartbeat).
   //
   // Guard: only synthesise when current is null. Once a real task:started or
   // task:progress event lands, those handlers own `current` and the synthesis
@@ -99,8 +93,6 @@ export function useTaskProgress(
       progress: running.progress ?? 0,
       stepIndex,
       totalSteps: plannedSteps.length,
-      etaSecondsTotal: null,
-      plannedDurationSec: null,
       isTransitioning: false
     })
   }, [tasks, plannedSteps, current])
@@ -119,26 +111,19 @@ export function useTaskProgress(
         progress: 0,
         stepIndex: data.stepIndex,
         totalSteps: data.totalSteps,
-        etaSecondsTotal: null,
-        plannedDurationSec: data.plannedDurationSec,
         isTransitioning: false
       })
     })
   }, [sessionId])
 
-  // task:progress — updates progress + ETA on the active task
+  // task:progress — updates progress on the active task
   useEffect(() => {
     if (!sessionId) return
     return window.api.tasks.onProgress((data) => {
       if (data.sessionId !== sessionId) return
       setCurrent((prev) =>
         prev && prev.taskType === data.taskType
-          ? {
-              ...prev,
-              progress: data.progress,
-              etaSecondsTotal: data.etaSecondsTotal,
-              isTransitioning: false
-            }
+          ? { ...prev, progress: data.progress, isTransitioning: false }
           : prev
       )
     })
