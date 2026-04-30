@@ -10,6 +10,10 @@ import { validateIntermediateFile } from '../utils/file-ops'
 import type { Task, TaskType, Session, SessionStatus, SessionType } from '../../shared/types'
 import { AUDIO_PIPELINE, PDF_PIPELINE } from '../../shared/constants/pipeline'
 import { getActiveModelId, isModelInstalled } from './ModelDownloadService'
+import { PipelineStatsService } from './PipelineStatsService'
+import { PipelineEstimator, type SessionMeta } from './PipelineEstimator'
+import { getSettings } from './SettingsService'
+import { promises as fsp } from 'fs'
 
 // Issue #80 / DR-5: tasks[] is the source of truth for "current step".
 // SessionStatus only carries lifecycle phase (queued / processing / review / error / recording).
@@ -70,6 +74,33 @@ export class TaskQueueService {
   // abortRunningForSession() (called from SessionService.deleteSession) can
   // signal the executor to stop cleanly. See DR-6 in plans/2026-04-29-pipeline-progress-ui-issue-80.md.
   private runningController: { sessionId: string; controller: AbortController } | null = null
+  // Issue #80 Phase I — telemetry + ETA estimator. Lazy-init via getter so
+  // tests that don't initSettings() first get an in-memory no-op service
+  // instead of crashing on construction.
+  private _stats: PipelineStatsService | null = null
+  private _estimator: PipelineEstimator | null = null
+
+  private get stats(): PipelineStatsService {
+    if (this._stats) return this._stats
+    try {
+      this._stats = new PipelineStatsService(getSettings())
+    } catch {
+      // Settings store not initialised (typical in tests). Use an in-memory
+      // store so estimator/stats remain functional but ephemeral.
+      const memory: Record<string, unknown> = {}
+      this._stats = new PipelineStatsService({
+        get: ((key: string) => memory[key]) as never,
+        set: ((key: string, value: unknown) => {
+          memory[key] = value
+        }) as never
+      })
+    }
+    return this._stats
+  }
+  private get estimator(): PipelineEstimator {
+    if (!this._estimator) this._estimator = new PipelineEstimator(this.stats)
+    return this._estimator
+  }
 
   constructor(db: Database.Database) {
     this.repository = new TaskRepository(db)
@@ -343,19 +374,35 @@ export class TaskQueueService {
       onStall: () => controller.abort()
     })
 
-    // Issue #80 / Phase D — emit task:started so the renderer knows which step
-    // is active without having to predict from local AUDIO_PIPELINE constants.
-    // plannedDurationSec is null until Phase I wires up the estimator.
+    // Issue #80 / Phase D + I — emit task:started with stepIndex/totalSteps
+    // from plannedSteps (Phase D) and plannedDurationSec from the estimator
+    // (Phase I, null when uncalibrated).
     const sessionForPlan = this.sessionService.getSession(task.sessionId)
     const plannedSteps = sessionForPlan?.plannedSteps ?? []
     const stepIndex = plannedSteps.indexOf(task.type) + 1 // 1-based; 0 if missing
     const totalSteps = plannedSteps.length
+
+    // Build session meta once per task (used by both task:started and every
+    // task:progress emit). audioSec uses the same WAV-size derivation as the
+    // watchdog; pages is only read when relevant for the active step.
+    const sessionMeta: SessionMeta = {
+      audioSec: audioDurationSec,
+      wordCount: sessionForPlan?.wordCount ?? undefined
+    }
+    if (task.type === 'extraction' || task.type === 'ocr') {
+      const pages = await this.getPagesForSession(task.sessionId)
+      if (pages != null) sessionMeta.pages = pages
+    }
+
+    const plannedDurationSec = this.estimator.isCalibrated()
+      ? this.estimator.estimate(task.type, sessionMeta)
+      : null
     sendToRenderer('task:started', {
       sessionId: task.sessionId,
       taskType: task.type,
       stepIndex,
       totalSteps,
-      plannedDurationSec: null // wired up in Phase I.4
+      plannedDurationSec
     })
 
     // Issue #80 / Phase E.3 — backend-side throttle to ≤4 Hz so renderer can't
@@ -374,7 +421,7 @@ export class TaskQueueService {
           sessionId: task.sessionId,
           taskType: task.type,
           progress,
-          etaSecondsTotal: null // wired up in Phase I.4
+          etaSecondsTotal: this.estimator.totalEta(plannedSteps, task.type, progress, sessionMeta)
         })
       }
     }
@@ -387,6 +434,7 @@ export class TaskQueueService {
 
     watchdog.start()
 
+    const startedAt = Date.now()
     try {
       await executor.execute(task, onProgress, controller.signal, runtime)
 
@@ -398,6 +446,12 @@ export class TaskQueueService {
       })
 
       console.log(`[TaskQueue] Task ${task.type} completed for session ${task.sessionId}`)
+
+      // Issue #80 Phase I — record duration sample for the estimator.
+      // Best-effort: a failure to record telemetry must not affect pipeline state.
+      this.recordTelemetry(task, sessionMeta, (Date.now() - startedAt) / 1000).catch((err) =>
+        console.warn(`[TaskQueue] Failed to record telemetry for ${task.type}:`, err)
+      )
 
       // Update session status based on completed task
       this.handleTaskCompletion(task)
@@ -529,6 +583,71 @@ export class TaskQueueService {
     if (this.recoveryTimer) {
       clearInterval(this.recoveryTimer)
       this.recoveryTimer = null
+    }
+  }
+
+  /**
+   * Issue #80 Phase I — read PDF page count from extracted JSON.
+   * Returns null if the file isn't yet written or can't be parsed.
+   * Used both for ETA estimation (before extraction completes the count is
+   * unknown) and for telemetry recording (after extraction the count is
+   * authoritative).
+   */
+  private async getPagesForSession(sessionId: string): Promise<number | null> {
+    const session = this.sessionService.getSession(sessionId)
+    if (!session?.extractedPath) return null
+    try {
+      const raw = await fsp.readFile(session.extractedPath, 'utf8')
+      const data = JSON.parse(raw)
+      return Array.isArray(data?.pages) ? data.pages.length : null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Issue #80 Phase I — record a per-step duration sample for the estimator.
+   * Routes to the right recorder based on the step's domain (audio /
+   * wordCount / pages). Best-effort: skips silently if the relevant input
+   * dimension is unknown for this session.
+   */
+  private async recordTelemetry(
+    task: Task,
+    meta: SessionMeta,
+    durationSec: number
+  ): Promise<void> {
+    if (!Number.isFinite(durationSec) || durationSec <= 0) return
+
+    switch (task.type) {
+      case 'diarization':
+      case 'transcription':
+      case 'alignment': {
+        if (meta.audioSec && meta.audioSec > 0) {
+          this.stats.recordRate(task.type, meta.audioSec, durationSec)
+        }
+        return
+      }
+      case 'anonymization':
+      case 'summarization': {
+        // wordCount is set by anonymization, so summarization can read
+        // the freshly persisted value via sessionService.
+        const session = this.sessionService.getSession(task.sessionId)
+        const wc = session?.wordCount ?? meta.wordCount
+        if (wc != null && wc > 0) {
+          this.stats.recordWords(task.type, wc, durationSec)
+        }
+        return
+      }
+      case 'extraction':
+      case 'ocr': {
+        const pages = await this.getPagesForSession(task.sessionId)
+        if (pages != null && pages > 0) {
+          this.stats.recordPages(task.type, pages, durationSec)
+        }
+        return
+      }
+      default:
+        return
     }
   }
 }

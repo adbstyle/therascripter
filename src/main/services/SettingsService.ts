@@ -15,6 +15,40 @@ import {
 export type { DiarizationPipeline }
 export { DIARIZATION_PIPELINES, DEFAULT_DIARIZATION_PIPELINE }
 
+/**
+ * Issue #80 Phase I — pipeline-step duration samples used by PipelineEstimator
+ * to predict ETA. Stored per session-completion as normalised rates so they
+ * generalise across audio lengths / word counts / page counts.
+ *
+ * MAX_SAMPLES_PER_STEP samples are kept; oldest is dropped when the cap is
+ * exceeded. The estimator activates after MIN_SAMPLES_FOR_OVERRIDE (3) samples.
+ */
+export interface RateSample {
+  audioSec: number
+  durationSec: number
+  ts: number
+}
+export interface WordSample {
+  wordCount: number
+  durationSec: number
+  ts: number
+}
+export interface PageSample {
+  pages: number
+  durationSec: number
+  ts: number
+}
+
+export interface PipelineStats {
+  diarization: RateSample[]
+  transcription: RateSample[]
+  alignment: RateSample[]
+  anonymization: WordSample[]
+  summarization: WordSample[]
+  extraction: PageSample[]
+  ocr: PageSample[]
+}
+
 export interface AppSettings {
   activeModels: {
     transcription: string
@@ -33,6 +67,7 @@ export interface AppSettings {
   installedModelVersions: Record<string, InstalledModelVersion>
   pendingModelUpdates: PendingModelUpdate[] | null
   cachedAppUpdateStatus: AppUpdateStatus | null
+  pipelineStats: PipelineStats
 }
 
 const defaults: AppSettings = {
@@ -52,7 +87,16 @@ const defaults: AppSettings = {
   reviewPanelOpen: false,
   installedModelVersions: {},
   pendingModelUpdates: null,
-  cachedAppUpdateStatus: null
+  cachedAppUpdateStatus: null,
+  pipelineStats: {
+    diarization: [],
+    transcription: [],
+    alignment: [],
+    anonymization: [],
+    summarization: [],
+    extraction: [],
+    ocr: []
+  }
 }
 
 let store: Store<AppSettings> | null = null
