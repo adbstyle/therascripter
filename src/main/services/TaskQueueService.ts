@@ -9,12 +9,55 @@ import { sendToRenderer } from '../utils/ipc-helpers'
 import { validateIntermediateFile } from '../utils/file-ops'
 import type { Task, TaskType, Session, SessionStatus, SessionType } from '../../shared/types'
 import { AUDIO_PIPELINE, PDF_PIPELINE } from '../../shared/constants/pipeline'
+import { getActiveModelId, isModelInstalled } from './ModelDownloadService'
 
 // Issue #80 / DR-5: tasks[] is the source of truth for "current step".
 // SessionStatus only carries lifecycle phase (queued / processing / review / error / recording).
 // The previous TASK_TO_SESSION_STATUS map and getSessionStatusForTask helper were removed.
 
 const RECOVERY_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
+
+/**
+ * Issue #80 / Phases C+H — compute the planned (visible) pipeline steps for
+ * a session. Frozen at queued → processing and stored in Session.plannedSteps;
+ * the renderer reads this via task:started's totalSteps/stepIndex.
+ *
+ * Pipeline order is sourced from `src/shared/constants/pipeline.ts`
+ * (CLAUDE.md: no local duplicate of the order).
+ *
+ * Conditional steps:
+ *   - summarization: included iff a summarization model is configured AND
+ *     installed on disk. The executor itself also gracefully skips at runtime
+ *     if the model becomes unavailable, but we omit it from plannedSteps so
+ *     the UI doesn't show a step that won't actually do anything.
+ *   - ocr (PDF only): included iff session.pdfHasScannedPages === true (set
+ *     at import time by the PDF importer's heuristic — Phase G).
+ */
+export function computePlannedSteps(session: Session): TaskType[] {
+  const summarizationActive = (() => {
+    try {
+      const id = getActiveModelId('summarization')
+      return id.length > 0 && isModelInstalled(id)
+    } catch {
+      return false
+    }
+  })()
+
+  if (session.type === 'audio') {
+    return AUDIO_PIPELINE.filter((step) => step !== 'summarization' || summarizationActive)
+  }
+
+  // PDF: include ocr only when import-time detection said scanned pages exist.
+  // Phase G adds the pdfHasScannedPages column; until then it's always undefined
+  // and OCR is omitted from plannedSteps (matching today's PDF UI behaviour).
+  const hasScannedPages =
+    'pdfHasScannedPages' in session && (session as Session & { pdfHasScannedPages?: boolean }).pdfHasScannedPages === true
+  return PDF_PIPELINE.filter((step) => {
+    if (step === 'ocr') return hasScannedPages
+    if (step === 'summarization') return summarizationActive
+    return true
+  })
+}
 
 export class TaskQueueService {
   private repository: TaskRepository
@@ -270,10 +313,15 @@ export class TaskQueueService {
 
     // Issue #80 DR-5: transition session queued → processing on first task start.
     // While further tasks remain, the status stays 'processing' (self-transition allowed).
+    // Also: freeze plannedSteps for the renderer's step counter (DR-4 / Phase H).
     const session = this.sessionService.getSession(task.sessionId)
     if (session && session.status === 'queued') {
+      const plannedSteps = computePlannedSteps(session)
       try {
-        this.sessionService.updateSession(task.sessionId, { status: 'processing' })
+        this.sessionService.updateSession(task.sessionId, {
+          status: 'processing',
+          plannedSteps
+        })
       } catch (err) {
         console.error(`[TaskQueue] Failed to transition session to processing:`, err)
       }
