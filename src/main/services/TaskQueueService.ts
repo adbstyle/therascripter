@@ -127,10 +127,12 @@ export class TaskQueueService {
     // Transition session: error → queued. The first task's start will then push
     // queued → processing automatically (see executeTask). errorMessage is cleared
     // so the renderer doesn't surface stale state from the failed run while the
-    // retry is in flight.
+    // retry is in flight. Issue #80 DR-7: increment retryCount so the UI can
+    // surface the 3-stage support hint after repeated failures.
     this.sessionService.updateSession(sessionId, {
       status: 'queued',
-      errorMessage: null
+      errorMessage: null,
+      retryCount: (session.retryCount ?? 0) + 1
     })
 
     console.log(

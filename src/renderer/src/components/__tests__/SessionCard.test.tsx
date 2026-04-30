@@ -226,19 +226,88 @@ describe('SessionCard — processing state (PDF)', () => {
   })
 })
 
-describe('SessionCard — error state', () => {
+describe('SessionCard — empty-speech variant (review + wordCount === 0)', () => {
   beforeEach(() => {
     vi.mocked(useTaskProgress).mockReturnValue(emptyHookResult)
   })
 
-  it('renders Erneut versuchen button when onRetry is provided', () => {
+  it('renders Keine Sprache erkannt headline when wordCount === 0', () => {
+    render(<SessionCard session={makeSession({ wordCount: 0 })} onDelete={vi.fn()} />)
+    expect(screen.getByText('Keine Sprache erkannt')).toBeInTheDocument()
+  })
+
+  it('renders empty-speech body explanation', () => {
+    render(<SessionCard session={makeSession({ wordCount: 0 })} onDelete={vi.fn()} />)
+    expect(screen.getByText(/ohne dass Sprache erkannt wurde/)).toBeInTheDocument()
+  })
+
+  it('does not render empty-speech variant when wordCount > 0', () => {
+    render(<SessionCard session={makeSession({ wordCount: 5 })} onDelete={vi.fn()} />)
+    expect(screen.queryByText('Keine Sprache erkannt')).toBeNull()
+  })
+
+  it('does not render empty-speech variant for non-review status', () => {
     render(
       <SessionCard
-        session={makeSession({ status: 'error', errorMessage: 'foo' })}
+        session={makeSession({ status: 'processing', wordCount: 0 })}
+        onDelete={vi.fn()}
+      />
+    )
+    expect(screen.queryByText('Keine Sprache erkannt')).toBeNull()
+  })
+})
+
+describe('SessionCard — error state with 3-stage retry-limit UX', () => {
+  beforeEach(() => {
+    vi.mocked(useTaskProgress).mockReturnValue(emptyHookResult)
+  })
+
+  it('shows plain Retry button on first failure (retryCount === 0)', () => {
+    render(
+      <SessionCard
+        session={makeSession({ status: 'error', errorMessage: 'foo', retryCount: 0 })}
         onDelete={vi.fn()}
         onRetry={vi.fn()}
       />
     )
     expect(screen.getByText('Erneut versuchen')).toBeInTheDocument()
+    expect(screen.queryByText(/Erster Versuch/)).toBeNull()
+    expect(screen.queryByText(/Mehrfach-Fehler/)).toBeNull()
+  })
+
+  it('shows Erster Versuch hint on retryCount === 1', () => {
+    render(
+      <SessionCard
+        session={makeSession({ status: 'error', errorMessage: 'foo', retryCount: 1 })}
+        onDelete={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    )
+    expect(screen.getByText('Erster Versuch ist fehlgeschlagen.')).toBeInTheDocument()
+    expect(screen.getByText('Erneut versuchen')).toBeInTheDocument()
+  })
+
+  it('shows escalated Mehrfach-Fehler hint on retryCount === 2', () => {
+    render(
+      <SessionCard
+        session={makeSession({ status: 'error', errorMessage: 'foo', retryCount: 2 })}
+        onDelete={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    )
+    expect(screen.getByText(/Mehrfach-Fehler/)).toBeInTheDocument()
+    expect(screen.getByText('Erneut versuchen')).toBeInTheDocument()
+  })
+
+  it('hides retry button and shows Support hint on retryCount >= 3', () => {
+    render(
+      <SessionCard
+        session={makeSession({ status: 'error', errorMessage: 'foo', retryCount: 3 })}
+        onDelete={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    )
+    expect(screen.queryByText('Erneut versuchen')).toBeNull()
+    expect(screen.getByText(/Wenden Sie sich an den Support/)).toBeInTheDocument()
   })
 })

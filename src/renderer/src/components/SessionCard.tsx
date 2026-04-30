@@ -1,4 +1,4 @@
-import { FileText, Mic, Trash2 } from 'lucide-react'
+import { FileText, Info, Mic, Trash2 } from 'lucide-react'
 import type { Session, SessionStatus } from '../../../shared/types'
 import {
   STEP_LABELS_DE,
@@ -88,14 +88,33 @@ export function SessionCard({
   const isQueued = session.status === 'queued'
   const isReview = session.status === 'review'
 
+  // Phase L: Empty-speech is signalled via wordCount === 0 on a review session.
+  // Visual treatment: Info icon + headline in the status row, body text below.
+  const isEmptySpeech = isReview && session.wordCount === 0
+
   let statusContent: React.ReactNode
   if (isReview) {
-    statusContent =
-      session.wordCount != null ? (
-        <span className="text-xs text-text-tertiary">
-          {session.wordCount.toLocaleString('de-CH')} Wörter
-        </span>
-      ) : null
+    if (isEmptySpeech) {
+      statusContent = (
+        <>
+          <Info
+            className="h-3.5 w-3.5 text-text-secondary"
+            strokeWidth={1.75}
+            aria-hidden="true"
+          />
+          <span className="text-xs font-medium text-text-secondary">
+            {PIPELINE_UI_STRINGS.emptySpeechHeadline}
+          </span>
+        </>
+      )
+    } else {
+      statusContent =
+        session.wordCount != null ? (
+          <span className="text-xs text-text-tertiary">
+            {session.wordCount.toLocaleString('de-CH')} Wörter
+          </span>
+        ) : null
+    }
   } else if (isQueued) {
     statusContent = (
       <span className="text-xs font-medium text-text-secondary" aria-live="polite">
@@ -180,12 +199,32 @@ export function SessionCard({
         />
       </div>
 
+      {isEmptySpeech && (
+        <p
+          className="pointer-events-none relative z-[1] mt-1 line-clamp-2 text-xs text-text-tertiary"
+          role="alert"
+        >
+          {PIPELINE_UI_STRINGS.emptySpeechBody}
+        </p>
+      )}
+
       {session.status === 'error' && session.errorMessage && (
         <p className="pointer-events-none relative z-[1] mt-1 line-clamp-3 text-xs text-text-tertiary">
           {session.errorMessage}
         </p>
       )}
-      {session.status === 'error' && onRetry && (
+      {/* Phase M: 3-stage retry-limit UX driven by Session.retryCount */}
+      {session.status === 'error' && session.retryCount === 1 && (
+        <p className="pointer-events-none relative z-[1] mt-1 text-xs text-text-tertiary">
+          {PIPELINE_UI_STRINGS.retryAfterFirstFailure}
+        </p>
+      )}
+      {session.status === 'error' && session.retryCount === 2 && (
+        <p className="pointer-events-none relative z-[1] mt-1 text-xs text-text-tertiary">
+          {PIPELINE_UI_STRINGS.retryAfterSecondFailure}
+        </p>
+      )}
+      {session.status === 'error' && session.retryCount < 3 && onRetry && (
         <button
           className="pointer-events-auto relative z-10 mt-1.5 text-xs font-medium text-primary hover:text-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
           onClick={onRetry}
@@ -194,6 +233,14 @@ export function SessionCard({
         >
           {PIPELINE_UI_STRINGS.retryButton}
         </button>
+      )}
+      {session.status === 'error' && session.retryCount >= 3 && (
+        <p
+          className="pointer-events-none relative z-[1] mt-1.5 text-xs text-text-tertiary"
+          role="alert"
+        >
+          {PIPELINE_UI_STRINGS.retryExhausted}
+        </p>
       )}
 
       {showStepBar && (
