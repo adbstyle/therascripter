@@ -495,10 +495,19 @@ export class TaskQueueService {
   }
 
   private getAudioDurationSec(task: Task): number | undefined {
-    // Both transcription and diarization use audioDuration-based dynamic stall
+    // transcription + diarization use audioDuration-based dynamic stall
     // thresholds (whisper: duration/40 for 5%-progress gap, pyannote: duration/15
     // from Spike A datapoint).
-    if (task.type !== 'transcription' && task.type !== 'diarization') return undefined
+    // alignment is included for the Phase I telemetry path (recordRate needs
+    // audioSec) — alignment runs sub-second so the dynamic Watchdog threshold
+    // it produces here is irrelevant to stall detection.
+    if (
+      task.type !== 'transcription' &&
+      task.type !== 'diarization' &&
+      task.type !== 'alignment'
+    ) {
+      return undefined
+    }
     try {
       const session = this.sessionService.getSession(task.sessionId)
       if (!session?.audioPath) return undefined

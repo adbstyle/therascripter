@@ -63,7 +63,10 @@ export function SessionCard({
   // Subscribe to progress events for both queued (to receive queue:positions)
   // and processing (to receive task:started / task:progress).
   const subscribed = isInPipeline(session.status)
-  const { current, queuePosition } = useTaskProgress(subscribed ? session.id : null)
+  const { current, queuePosition } = useTaskProgress(
+    subscribed ? session.id : null,
+    session.plannedSteps
+  )
 
   const statusConfig = STATUS_CONFIG[session.status]
   const TypeIcon = session.type === 'audio' ? Mic : FileText
