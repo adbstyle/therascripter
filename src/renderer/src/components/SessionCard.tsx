@@ -1,9 +1,10 @@
 import { FileText, Mic, Trash2 } from 'lucide-react'
-import type { Session, SessionStatus, TaskType } from '../../../shared/types'
+import type { Session, SessionStatus } from '../../../shared/types'
 import {
-  AUDIO_PIPELINE as AUDIO_PIPELINE_STEPS,
-  PDF_PIPELINE as PDF_PIPELINE_STEPS
-} from '../../../shared/constants/pipeline'
+  STEP_LABELS_DE,
+  PIPELINE_UI_STRINGS,
+  formatEta
+} from '../../../shared/constants/pipelineWording'
 import { useTaskProgress } from '../hooks/useTaskProgress'
 
 interface SessionCardProps {
@@ -23,18 +24,8 @@ const STATUS_CONFIG: Record<SessionStatus, { label: string; color: string }> = {
   error: { label: 'Fehler', color: 'text-error-text' }
 }
 
-const TASK_LABELS: Record<TaskType, string> = {
-  transcription: 'Transkription',
-  diarization: 'Sprechererkennung',
-  alignment: 'Zuordnung',
-  extraction: 'Textextraktion',
-  ocr: 'OCR',
-  anonymization: 'Anonymisierung',
-  summarization: 'Zusammenfassung'
-}
-
-function isProcessingStatus(status: SessionStatus): boolean {
-  return status === 'processing'
+function isInPipeline(status: SessionStatus): boolean {
+  return status === 'processing' || status === 'queued'
 }
 
 function formatCardTimestamp(iso: string): string {
@@ -69,23 +60,14 @@ export function SessionCard({
   retryDisabled,
   'data-session-id': dataSessionId
 }: SessionCardProps): React.JSX.Element {
-  const showProgress = isProcessingStatus(session.status)
-  const { tasks, current } = useTaskProgress(showProgress ? session.id : null)
-  // Adapter: Phase E refactor renamed currentProgress → current. Phase F will
-  // restructure this file fully; for now we keep the existing render code
-  // working with the new shape.
-  const currentProgress = current && !current.isTransitioning ? current : null
+  // Subscribe to progress events for both queued (to receive queue:positions)
+  // and processing (to receive task:started / task:progress).
+  const subscribed = isInPipeline(session.status)
+  const { current, queuePosition } = useTaskProgress(subscribed ? session.id : null)
 
   const statusConfig = STATUS_CONFIG[session.status]
   const TypeIcon = session.type === 'audio' ? Mic : FileText
   const typeLabel = session.type === 'audio' ? 'Sprachaufnahme' : 'PDF-Dokument'
-  const pipelineSteps = session.type === 'audio' ? AUDIO_PIPELINE_STEPS : PDF_PIPELINE_STEPS
-
-  let statusLabel = statusConfig.label
-  if (showProgress && currentProgress) {
-    const pct = Math.round(currentProgress.progress * 100)
-    statusLabel = `${TASK_LABELS[currentProgress.taskType]} ${pct}%`
-  }
 
   const displayTitle =
     session.title && session.title.trim().length > 0 ? session.title : 'Unbenannte Transkription'
@@ -98,6 +80,51 @@ export function SessionCard({
     hour: '2-digit',
     minute: '2-digit'
   })
+
+  // ---- Status-Zeile-Inhalt ableiten -------------------------------------
+  // Drei Zustände: review, queued (mit/ohne Position), processing (mit/ohne current).
+  // Phase F deckt review + processing happy path ab; queued kommt in Phase K.
+  const isProcessing = session.status === 'processing'
+  const isQueued = session.status === 'queued'
+  const isReview = session.status === 'review'
+
+  let statusContent: React.ReactNode
+  if (isReview) {
+    statusContent =
+      session.wordCount != null ? (
+        <span className="text-xs text-text-tertiary">
+          {session.wordCount.toLocaleString('de-CH')} Wörter
+        </span>
+      ) : null
+  } else if (isQueued) {
+    statusContent = (
+      <span className="text-xs font-medium text-text-secondary" aria-live="polite">
+        {queuePosition != null ? PIPELINE_UI_STRINGS.waiting(queuePosition) : statusConfig.label}
+      </span>
+    )
+  } else if (isProcessing && current) {
+    const stepLabel = STEP_LABELS_DE[current.taskType]
+    const headline = current.isTransitioning
+      ? PIPELINE_UI_STRINGS.preparingNext
+      : current.totalSteps > 0
+        ? PIPELINE_UI_STRINGS.step(current.stepIndex, current.totalSteps, stepLabel)
+        : stepLabel
+    statusContent = <span className="text-xs font-medium text-primary">{headline}</span>
+  } else {
+    statusContent = (
+      <span className={`text-xs font-medium ${statusConfig.color}`}>{statusConfig.label}</span>
+    )
+  }
+
+  // ---- Progress-Zeile ---------------------------------------------------
+  // Phase F: schritt-eigene Bar bei processing (nicht transitioning).
+  // Phase J wird die Gesamt-Bar + ETA in derselben Zeile ergänzen, sobald der
+  // Estimator kalibriert ist (current.etaSecondsTotal != null).
+  const showStepBar = isProcessing && current != null && !current.isTransitioning
+  const showTransitionBar = isProcessing && current != null && current.isTransitioning
+  const stepProgressPct = current ? Math.round(current.progress * 100) : 0
+  const stepLabel = current ? STEP_LABELS_DE[current.taskType] : ''
+  const etaText = current ? formatEta(current.etaSecondsTotal) : null
 
   return (
     <div
@@ -143,17 +170,7 @@ export function SessionCard({
       </div>
 
       <div className="pointer-events-none relative z-[1] mt-1.5 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          {session.status === 'review' ? (
-            session.wordCount != null && (
-              <span className="text-xs text-text-tertiary">
-                {session.wordCount.toLocaleString('de-CH')} Wörter
-              </span>
-            )
-          ) : (
-            <span className={`text-xs font-medium ${statusConfig.color}`}>{statusLabel}</span>
-          )}
-        </div>
+        <div className="flex min-w-0 items-center gap-2">{statusContent}</div>
 
         <TypeIcon
           className="h-3.5 w-3.5 shrink-0 text-text-tertiary"
@@ -164,10 +181,10 @@ export function SessionCard({
       </div>
 
       {session.status === 'error' && session.errorMessage && (
-          <p className="pointer-events-none relative z-[1] mt-1 line-clamp-3 text-xs text-text-tertiary">
-            {session.errorMessage}
-          </p>
-        )}
+        <p className="pointer-events-none relative z-[1] mt-1 line-clamp-3 text-xs text-text-tertiary">
+          {session.errorMessage}
+        </p>
+      )}
       {session.status === 'error' && onRetry && (
         <button
           className="pointer-events-auto relative z-10 mt-1.5 text-xs font-medium text-primary hover:text-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
@@ -175,47 +192,50 @@ export function SessionCard({
           disabled={retryDisabled}
           title={retryDisabled ? 'Eine andere Transkription wird gerade verarbeitet' : undefined}
         >
-          Erneut versuchen
+          {PIPELINE_UI_STRINGS.retryButton}
         </button>
       )}
 
-      {showProgress && (
-        <div className="pointer-events-none relative z-[1] mt-2">
-          {currentProgress && (
+      {showStepBar && (
+        <div className="pointer-events-none relative z-[1] mt-2 flex items-center gap-2">
+          <div
+            className="h-1 flex-1 overflow-hidden rounded-full bg-surface-2"
+            role="progressbar"
+            aria-valuenow={stepProgressPct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={
+              current && current.totalSteps > 0
+                ? `${PIPELINE_UI_STRINGS.step(current.stepIndex, current.totalSteps, stepLabel)}, ${stepProgressPct} Prozent`
+                : `${stepLabel}, ${stepProgressPct} Prozent`
+            }
+          >
             <div
-              className="mb-1.5 h-1 w-full overflow-hidden rounded-full bg-surface-2"
-              role="progressbar"
-              aria-valuenow={Math.round(currentProgress.progress * 100)}
-              aria-valuemin={0}
-              aria-valuemax={100}
+              className="h-full rounded-full bg-primary transition-all duration-300"
+              style={{ width: `${stepProgressPct}%` }}
+            />
+          </div>
+          {etaText && (
+            <span
+              className="whitespace-nowrap text-xs text-text-tertiary"
+              title="Geschätzt aus früheren Sitzungen auf diesem Mac. Tatsächliche Dauer kann abweichen."
             >
-              <div
-                className="h-full rounded-full bg-primary transition-all duration-300"
-                style={{ width: `${Math.round(currentProgress.progress * 100)}%` }}
-              />
-            </div>
+              {etaText}
+            </span>
           )}
+        </div>
+      )}
 
-          <div className="flex items-center gap-1.5">
-            {pipelineSteps.map((step) => {
-              const task = tasks.find((t) => t.type === step)
-              const isCompleted = task?.status === 'completed'
-              const isRunning = task?.status === 'running'
-              const isFailed = task?.status === 'failed'
-
-              let dotClass = 'bg-surface-3'
-              if (isCompleted) dotClass = 'bg-success'
-              else if (isRunning) dotClass = 'bg-primary animate-pulse'
-              else if (isFailed) dotClass = 'bg-red-500'
-
-              return (
-                <div
-                  key={step}
-                  className={`h-1.5 w-1.5 rounded-full ${dotClass}`}
-                  title={TASK_LABELS[step]}
-                />
-              )
-            })}
+      {showTransitionBar && (
+        <div className="pointer-events-none relative z-[1] mt-2">
+          <div
+            className="h-1 w-full overflow-hidden rounded-full bg-surface-2"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={PIPELINE_UI_STRINGS.preparingNext}
+          >
+            <div className="h-full w-1/4 animate-pulse rounded-full bg-surface-3" />
           </div>
         </div>
       )}
