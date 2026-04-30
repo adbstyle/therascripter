@@ -150,6 +150,53 @@ describe('SessionCard — processing state (audio)', () => {
     expect(container.querySelector('[title*="Geschätzt"]')).toBeNull()
   })
 
+  it('renders Gesamt-Bar with percentage when calibrated (etaSecondsTotal != null)', () => {
+    vi.mocked(useTaskProgress).mockReturnValue({
+      tasks: [],
+      loading: false,
+      current: {
+        taskType: 'transcription',
+        progress: 0.5,
+        stepIndex: 3,
+        totalSteps: 5,
+        etaSecondsTotal: 180,
+        plannedDurationSec: 300,
+        isTransitioning: false
+      },
+      queuePosition: null
+    })
+    const { container } = render(
+      <SessionCard session={makeSession({ status: 'processing' })} onDelete={vi.fn()} />
+    )
+    // Total progress: ((3-1) + 0.5) / 5 = 0.5 = 50%
+    expect(screen.getByText('50%')).toBeInTheDocument()
+    expect(container.querySelector('[aria-label*="Gesamtfortschritt"]')).toBeTruthy()
+  })
+
+  it('falls back to step-bar (no percentage label) when uncalibrated', () => {
+    vi.mocked(useTaskProgress).mockReturnValue({
+      tasks: [],
+      loading: false,
+      current: {
+        taskType: 'transcription',
+        progress: 0.5,
+        stepIndex: 3,
+        totalSteps: 5,
+        etaSecondsTotal: null,
+        plannedDurationSec: null,
+        isTransitioning: false
+      },
+      queuePosition: null
+    })
+    const { container } = render(
+      <SessionCard session={makeSession({ status: 'processing' })} onDelete={vi.fn()} />
+    )
+    expect(container.querySelector('[aria-label*="Gesamtfortschritt"]')).toBeNull()
+    expect(screen.queryByText('50%')).toBeNull()
+    // Step-bar is present (aria-label contains step name, not "Gesamtfortschritt")
+    expect(container.querySelector('[aria-label*="Gespräch transkribieren"]')).toBeTruthy()
+  })
+
   it('shows step-only label when totalSteps is 0 (plannedSteps not yet set)', () => {
     vi.mocked(useTaskProgress).mockReturnValue({
       tasks: [],

@@ -136,11 +136,23 @@ export function SessionCard({
   }
 
   // ---- Progress-Zeile ---------------------------------------------------
-  // Phase F: schritt-eigene Bar bei processing (nicht transitioning).
-  // Phase J wird die Gesamt-Bar + ETA in derselben Zeile ergänzen, sobald der
-  // Estimator kalibriert ist (current.etaSecondsTotal != null).
-  const showStepBar = isProcessing && current != null && !current.isTransitioning
+  // Phase J: when the estimator is calibrated (etaSecondsTotal != null and
+  // totalSteps > 0), render a single Gesamt-Bar covering all steps. Otherwise
+  // fall back to the step-eigene Bar from Phase F.
+  // Both render in the same horizontal row alongside the % + ETA text.
   const showTransitionBar = isProcessing && current != null && current.isTransitioning
+  const isCalibrated =
+    isProcessing && current != null && !current.isTransitioning &&
+    current.etaSecondsTotal != null && current.totalSteps > 0
+  const showTotalBar = isCalibrated
+  const showStepBar = isProcessing && current != null && !current.isTransitioning && !isCalibrated
+
+  // Linear gesamt-Fortschritt: (Schritt-Index - 1 + aktueller Step-Fortschritt) / total
+  // Bewusste Vereinfachung — die echte ETA-Funktion nutzt bereits gewichtete
+  // Schritt-Dauern (PipelineEstimator), die Bar gibt nur visuelles Feedback.
+  const totalProgressPct = current
+    ? Math.round((((current.stepIndex - 1) + current.progress) / Math.max(current.totalSteps, 1)) * 100)
+    : 0
   const stepProgressPct = current ? Math.round(current.progress * 100) : 0
   const stepLabel = current ? STEP_LABELS_DE[current.taskType] : ''
   const etaText = current ? formatEta(current.etaSecondsTotal) : null
@@ -243,10 +255,39 @@ export function SessionCard({
         </p>
       )}
 
-      {showStepBar && (
+      {showTotalBar && current && (
         <div className="pointer-events-none relative z-[1] mt-2 flex items-center gap-2">
           <div
             className="h-1 flex-1 overflow-hidden rounded-full bg-surface-2"
+            role="progressbar"
+            aria-valuenow={totalProgressPct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`Gesamtfortschritt ${totalProgressPct} Prozent${etaText ? `, ${etaText}` : ''}`}
+          >
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300"
+              style={{ width: `${totalProgressPct}%` }}
+            />
+          </div>
+          <span className="min-w-[2.5rem] whitespace-nowrap text-right text-xs tabular-nums text-text-tertiary">
+            {totalProgressPct}%
+          </span>
+          {etaText && (
+            <span
+              className="whitespace-nowrap text-xs text-text-tertiary"
+              title="Geschätzt aus früheren Sitzungen auf diesem Mac. Tatsächliche Dauer kann abweichen."
+            >
+              {etaText}
+            </span>
+          )}
+        </div>
+      )}
+
+      {showStepBar && (
+        <div className="pointer-events-none relative z-[1] mt-2">
+          <div
+            className="h-1 w-full overflow-hidden rounded-full bg-surface-2"
             role="progressbar"
             aria-valuenow={stepProgressPct}
             aria-valuemin={0}
@@ -262,14 +303,6 @@ export function SessionCard({
               style={{ width: `${stepProgressPct}%` }}
             />
           </div>
-          {etaText && (
-            <span
-              className="whitespace-nowrap text-xs text-text-tertiary"
-              title="Geschätzt aus früheren Sitzungen auf diesem Mac. Tatsächliche Dauer kann abweichen."
-            >
-              {etaText}
-            </span>
-          )}
         </div>
       )}
 
