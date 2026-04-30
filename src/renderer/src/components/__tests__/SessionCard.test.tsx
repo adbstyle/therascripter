@@ -32,6 +32,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     summarizedAt: null,
     plannedSteps: null,
     retryCount: 0,
+    pdfHasScannedPages: null,
     ...overrides
   }
 }

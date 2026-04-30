@@ -10,6 +10,7 @@ import addQualityFlag from './009-add-quality-flag.sql?raw'
 import dropPipelineVersion from './010-drop-pipeline-version.sql?raw'
 import pipelineInversion from './011-pipeline-inversion.sql?raw'
 import statusReductionPlannedStepsRetry from './012-status-reduction-planned-steps-retry.sql?raw'
+import pdfHasScannedPages from './013-pdf-has-scanned-pages.sql?raw'
 
 export interface Migration {
   version: number
@@ -28,5 +29,6 @@ export const migrations: Migration[] = [
   { version: 9, sql: addQualityFlag },
   { version: 10, sql: dropPipelineVersion },
   { version: 11, sql: pipelineInversion },
-  { version: 12, sql: statusReductionPlannedStepsRetry }
+  { version: 12, sql: statusReductionPlannedStepsRetry },
+  { version: 13, sql: pdfHasScannedPages }
 ]

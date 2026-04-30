@@ -33,6 +33,7 @@ interface SessionRow {
   summarized_at: string | null
   planned_steps: string | null
   retry_count: number
+  pdf_has_scanned_pages: number | null
 }
 
 function parseEntityMap(json: string | null, sessionId: string): EntityMap | null {
@@ -68,7 +69,9 @@ function rowToSession(row: SessionRow): Session {
     summaryModelId: row.summary_model_id,
     summarizedAt: row.summarized_at,
     plannedSteps: row.planned_steps ? (JSON.parse(row.planned_steps) as TaskType[]) : null,
-    retryCount: row.retry_count
+    retryCount: row.retry_count,
+    pdfHasScannedPages:
+      row.pdf_has_scanned_pages == null ? null : row.pdf_has_scanned_pages === 1
   }
 }
 
@@ -190,6 +193,12 @@ export class SessionRepository {
     if (input.retryCount !== undefined) {
       sets.push('retry_count = ?')
       values.push(input.retryCount)
+    }
+    if (input.pdfHasScannedPages !== undefined) {
+      sets.push('pdf_has_scanned_pages = ?')
+      values.push(
+        input.pdfHasScannedPages == null ? null : input.pdfHasScannedPages ? 1 : 0
+      )
     }
 
     if (sets.length === 0) return this.findById(id)

@@ -1,11 +1,54 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
-import { existsSync, copyFileSync, unlinkSync } from 'fs'
-import { basename, join } from 'path'
+import { existsSync, copyFileSync, readFileSync, unlinkSync } from 'fs'
+import { basename, dirname, join } from 'path'
+import { createRequire } from 'module'
 import { getDatabase, getDataDir } from '../db/connection'
 import { SessionService } from '../services/SessionService'
 import { getTaskQueue } from '../services/TaskQueueService'
 import { ImportPDFSchema } from '../../shared/validation/import-schemas'
 import type { Session } from '../../shared/types'
+
+/**
+ * Issue #80 Phase G — quick scanned-pages heuristic run at PDF import time.
+ *
+ * We extract text from the first up-to-3 pages with pdfjs-dist; if the
+ * combined text length is below a threshold (50 chars), the PDF is
+ * considered "mostly scanned" and OCR will be required. This drives
+ * Session.pdfHasScannedPages, which feeds computePlannedSteps so the
+ * SessionCard's step counter shows the right total ("Schritt 1/3" with
+ * OCR vs "Schritt 1/2" without) before extraction has actually run.
+ *
+ * The full page-by-page contentType detection still happens during
+ * extraction (PDFExtractionExecutor) — this is just an early peek.
+ *
+ * Returns null on failure (corrupted PDF, encrypted, etc.) so the import
+ * can proceed without OCR detection; the user-facing error path stays
+ * with the extraction executor.
+ */
+async function detectScannedPages(pdfPath: string): Promise<boolean | null> {
+  try {
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const require = createRequire(import.meta.url)
+    const pdfjsDir = dirname(require.resolve('pdfjs-dist/package.json'))
+    const standardFontDataUrl = join(pdfjsDir, 'standard_fonts') + '/'
+
+    const data = new Uint8Array(readFileSync(pdfPath))
+    const doc = await pdfjs.getDocument({ data, standardFontDataUrl, useSystemFonts: false })
+      .promise
+    const samplePages = Math.min(3, doc.numPages)
+
+    let totalText = ''
+    for (let i = 1; i <= samplePages; i++) {
+      const page = await doc.getPage(i)
+      const content = await page.getTextContent()
+      totalText += content.items.map((it) => ('str' in it ? it.str : '')).join('')
+      if (totalText.length >= 50) break
+    }
+    return totalText.trim().length < 50
+  } catch {
+    return null
+  }
+}
 
 function formatDate(date: Date): string {
   const d = date.getDate().toString().padStart(2, '0')
@@ -66,7 +109,14 @@ export function registerPDFHandlers(): void {
         )
       }
 
-      sessionService.updateSession(session.id, { pdfPath })
+      // Phase G — quick OCR-needed detection before enqueue so plannedSteps
+      // can include the OCR step (or not) from the very first task:started.
+      const hasScannedPages = await detectScannedPages(pdfPath)
+
+      sessionService.updateSession(session.id, {
+        pdfPath,
+        pdfHasScannedPages: hasScannedPages
+      })
 
       // Enqueue PDF processing pipeline
       taskQueue.enqueuePipeline(session.id, 'pdf')

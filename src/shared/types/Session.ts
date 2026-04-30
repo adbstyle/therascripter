@@ -33,6 +33,12 @@ export interface Session {
   summarizedAt: string | null
   plannedSteps: TaskType[] | null
   retryCount: number
+  /**
+   * Issue #80 Phase G — set by the PDF importer's heuristic (extract first 3
+   * pages of text; <50 chars total → likely scanned, needs OCR). NULL for
+   * audio sessions and legacy PDF rows.
+   */
+  pdfHasScannedPages: boolean | null
 }
 
 export interface CreateSessionInput {
@@ -62,4 +68,5 @@ export interface UpdateSessionInput {
   summarizedAt?: string | null
   plannedSteps?: TaskType[] | null
   retryCount?: number
+  pdfHasScannedPages?: boolean | null
 }
