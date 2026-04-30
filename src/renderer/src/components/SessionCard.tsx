@@ -70,7 +70,11 @@ export function SessionCard({
   'data-session-id': dataSessionId
 }: SessionCardProps): React.JSX.Element {
   const showProgress = isProcessingStatus(session.status)
-  const { tasks, currentProgress } = useTaskProgress(showProgress ? session.id : null)
+  const { tasks, current } = useTaskProgress(showProgress ? session.id : null)
+  // Adapter: Phase E refactor renamed currentProgress → current. Phase F will
+  // restructure this file fully; for now we keep the existing render code
+  // working with the new shape.
+  const currentProgress = current && !current.isTransitioning ? current : null
 
   const statusConfig = STATUS_CONFIG[session.status]
   const TypeIcon = session.type === 'audio' ? Mic : FileText
