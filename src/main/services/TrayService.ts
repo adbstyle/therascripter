@@ -145,7 +145,7 @@ export class TrayService {
     menuItems.push({ type: 'separator' })
 
     // Always visible — also during recording, review, first-launch download
-    // and pending model updates. Issue #69 AC #3.
+    // and pending model updates.
     menuItems.push({
       label: 'Feedback senden…',
       click: () => this.onSendFeedbackCallback?.()

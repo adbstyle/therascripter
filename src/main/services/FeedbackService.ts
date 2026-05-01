@@ -113,7 +113,8 @@ export function buildFeedbackContent(): FeedbackContent {
     'Triage erfolgt im Rahmen der Möglichkeiten — es besteht keine garantierte Antwortfrist.'
   ].join('\n')
 
-  const mailto = `mailto:${encodeURIComponent(FEEDBACK_RECIPIENT)}?subject=${encodeURIComponent(
+  // Per RFC 6068 the addr-spec is not percent-encoded — only the query values are.
+  const mailto = `mailto:${FEEDBACK_RECIPIENT}?subject=${encodeURIComponent(
     subject
   )}&body=${encodeURIComponent(body)}`
 

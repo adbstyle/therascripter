@@ -4,10 +4,7 @@ import { buildClipboardPayload, buildFeedbackContent } from '../services/Feedbac
 export async function sendFeedback(): Promise<void> {
   const content = buildFeedbackContent()
 
-  // Always write the clipboard, regardless of whether the mail client opens.
-  // AC #14: "Bei jedem Auslösen wird zusätzlich der vollständige Inhalt … in
-  // die Zwischenablage geschrieben — unabhängig davon, ob der Mailclient
-  // erfolgreich öffnet."
+  // Clipboard write is the primary contract — mail-client open is best-effort.
   clipboard.writeText(buildClipboardPayload(content))
 
   try {

@@ -133,7 +133,8 @@ describe('buildFeedbackContent', () => {
 
     const { mailto } = buildFeedbackContent()
 
-    expect(mailto.startsWith(`mailto:${encodeURIComponent(FEEDBACK_RECIPIENT)}?`)).toBe(true)
+    expect(mailto.startsWith(`mailto:${FEEDBACK_RECIPIENT}?`)).toBe(true)
+    expect(mailto).not.toContain('%40')
     expect(mailto).toContain('subject=')
     expect(mailto).toContain('body=')
   })
