@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Files, Settings } from 'lucide-react'
+import { Files, MessageSquare, Settings } from 'lucide-react'
 import { useAppUpdate } from '../../hooks/useAppUpdate'
+import { useToast } from '../../hooks/useToast'
 
 type View = 'sessions' | 'settings'
 
@@ -23,6 +24,19 @@ export default function BottomNav({ current, onChange }: BottomNavProps): React.
   const [pill, setPill] = useState<{ x: number; w: number } | null>(null)
   const [appVersion, setAppVersion] = useState<string | null>(null)
   const { status: appUpdateStatus, openReleasePage } = useAppUpdate()
+  const toast = useToast()
+
+  const handleSendFeedback = async (): Promise<void> => {
+    try {
+      await window.api.feedback.send()
+      toast.success(
+        'Feedback-Mail vorbereitet — Inhalt wurde zusätzlich in die Zwischenablage kopiert.'
+      )
+    } catch (error) {
+      console.error('[feedback] send failed:', error)
+      toast.error('Feedback konnte nicht vorbereitet werden.')
+    }
+  }
 
   useLayoutEffect(() => {
     const node = itemRefs.current[current]
@@ -90,6 +104,17 @@ export default function BottomNav({ current, onChange }: BottomNavProps): React.
             </button>
           )
         })}
+
+        <button
+          type="button"
+          onClick={handleSendFeedback}
+          className="bottom-nav-item titlebar-no-drag relative z-10 flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium text-text-tertiary transition-colors duration-200 hover:text-text-secondary"
+        >
+          <span className="bottom-nav-icon inline-flex">
+            <MessageSquare className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          </span>
+          <span>Feedback senden</span>
+        </button>
       </nav>
 
       {updateAvailable ? (
