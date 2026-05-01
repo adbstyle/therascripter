@@ -3,11 +3,10 @@ import { computePlannedSteps } from '../TaskQueueService'
 import type { Session } from '../../../shared/types'
 
 vi.mock('../ModelDownloadService', () => ({
-  getActiveModelId: vi.fn(),
-  isModelInstalled: vi.fn()
+  getActiveModelId: vi.fn()
 }))
 
-import { getActiveModelId, isModelInstalled } from '../ModelDownloadService'
+import { getActiveModelId } from '../ModelDownloadService'
 
 function makeSession(overrides: Partial<Session> = {}): Session {
   return {
@@ -38,10 +37,13 @@ function makeSession(overrides: Partial<Session> = {}): Session {
   }
 }
 
+// Issue #84 / Story C — getActiveModelId now does the disk-presence check
+// internally and returns null on missing-or-unknown-or-not-installed. The
+// computePlannedSteps test bed therefore only needs to mock
+// getActiveModelId; isModelInstalled no longer participates in the decision.
 describe('computePlannedSteps — Issue #80 Phase H', () => {
   beforeEach(() => {
-    vi.mocked(getActiveModelId).mockReturnValue('')
-    vi.mocked(isModelInstalled).mockReturnValue(false)
+    vi.mocked(getActiveModelId).mockReturnValue(null)
   })
 
   describe('audio sessions', () => {
@@ -57,7 +59,6 @@ describe('computePlannedSteps — Issue #80 Phase H', () => {
 
     it('includes summarization when a model is active AND installed', () => {
       vi.mocked(getActiveModelId).mockReturnValue('gemma-3-4b')
-      vi.mocked(isModelInstalled).mockReturnValue(true)
       const session = makeSession({ type: 'audio' })
       expect(computePlannedSteps(session)).toEqual([
         'diarization',
@@ -68,17 +69,8 @@ describe('computePlannedSteps — Issue #80 Phase H', () => {
       ])
     })
 
-    it('omits summarization when configured id points to a non-installed model', () => {
-      vi.mocked(getActiveModelId).mockReturnValue('gemma-3-4b')
-      vi.mocked(isModelInstalled).mockReturnValue(false)
-      const session = makeSession({ type: 'audio' })
-      expect(computePlannedSteps(session)).not.toContain('summarization')
-    })
-
-    it('omits summarization when getActiveModelId throws', () => {
-      vi.mocked(getActiveModelId).mockImplementation(() => {
-        throw new Error('settings store unavailable')
-      })
+    it('omits summarization when getActiveModelId returns null (slot empty or file missing)', () => {
+      vi.mocked(getActiveModelId).mockReturnValue(null)
       const session = makeSession({ type: 'audio' })
       expect(computePlannedSteps(session)).not.toContain('summarization')
     })
@@ -99,7 +91,6 @@ describe('computePlannedSteps — Issue #80 Phase H', () => {
 
     it('includes both OCR and summarization when conditions are met', () => {
       vi.mocked(getActiveModelId).mockReturnValue('gemma-3-4b')
-      vi.mocked(isModelInstalled).mockReturnValue(true)
       const session = makeSession({ type: 'pdf' }) as Session & { pdfHasScannedPages?: boolean }
       session.pdfHasScannedPages = true
       expect(computePlannedSteps(session)).toEqual([

@@ -9,7 +9,7 @@ import { sendToRenderer } from '../utils/ipc-helpers'
 import { validateIntermediateFile } from '../utils/file-ops'
 import type { Task, TaskType, Session, SessionStatus, SessionType } from '../../shared/types'
 import { AUDIO_PIPELINE, PDF_PIPELINE } from '../../shared/constants/pipeline'
-import { getActiveModelId, isModelInstalled } from './ModelDownloadService'
+import { getActiveModelId } from './ModelDownloadService'
 
 // Issue #80 / DR-5: tasks[] is the source of truth for "current step".
 // SessionStatus only carries lifecycle phase (queued / processing / review / error / recording).
@@ -34,14 +34,10 @@ const RECOVERY_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
  *     at import time by the PDF importer's heuristic — Phase G).
  */
 export function computePlannedSteps(session: Session): TaskType[] {
-  const summarizationActive = (() => {
-    try {
-      const id = getActiveModelId('summarization')
-      return id.length > 0 && isModelInstalled(id)
-    } catch {
-      return false
-    }
-  })()
+  // getActiveModelId already verifies disk presence and returns null on
+  // missing/unknown — so a non-null result implies the model is installed
+  // and the executor has a real path to work with.
+  const summarizationActive = getActiveModelId('summarization') !== null
 
   if (session.type === 'audio') {
     return AUDIO_PIPELINE.filter((step) => step !== 'summarization' || summarizationActive)

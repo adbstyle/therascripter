@@ -16,8 +16,7 @@ vi.mock('../../utils/ipc-helpers', () => ({
 // 4 PDF steps); mock ModelDownloadService so the summarization step survives
 // the filter. PDF sessions also need pdfHasScannedPages=true to include ocr.
 vi.mock('../ModelDownloadService', () => ({
-  getActiveModelId: vi.fn().mockReturnValue('gemma-3-4b'),
-  isModelInstalled: vi.fn().mockReturnValue(true)
+  getActiveModelId: vi.fn().mockReturnValue('gemma-3-4b')
 }))
 
 describe('TaskQueueService', () => {

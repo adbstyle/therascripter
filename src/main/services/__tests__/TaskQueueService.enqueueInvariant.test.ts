@@ -10,11 +10,10 @@ vi.mock('../../utils/ipc-helpers', () => ({
 }))
 
 vi.mock('../ModelDownloadService', () => ({
-  getActiveModelId: vi.fn(),
-  isModelInstalled: vi.fn()
+  getActiveModelId: vi.fn()
 }))
 
-import { getActiveModelId, isModelInstalled } from '../ModelDownloadService'
+import { getActiveModelId } from '../ModelDownloadService'
 
 /**
  * Issue #80 invariant: enqueuePipeline + retrySession must enqueue exactly
@@ -31,9 +30,11 @@ describe('TaskQueueService — enqueue + plannedSteps invariant', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    // Default: no summarization model active. Tests opt in by overriding mocks.
-    vi.mocked(getActiveModelId).mockReturnValue('')
-    vi.mocked(isModelInstalled).mockReturnValue(false)
+    // Default: no summarization model active. Issue #84 / Story C — getActiveModelId
+    // does the disk-presence check internally and returns null on
+    // missing-or-not-installed; tests opt into "model active" by returning a
+    // non-null id from the mock.
+    vi.mocked(getActiveModelId).mockReturnValue(null)
     db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
     applyTestSchema(db)
@@ -69,7 +70,6 @@ describe('TaskQueueService — enqueue + plannedSteps invariant', () => {
 
     it('includes summarization when an LLM model is active AND installed', () => {
       vi.mocked(getActiveModelId).mockReturnValue('gemma-3-4b')
-      vi.mocked(isModelInstalled).mockReturnValue(true)
       const session = sessionRepo.create({ title: 'T', type: 'audio', status: 'queued' })
       queue.enqueuePipeline(session.id, 'audio')
 

@@ -168,6 +168,11 @@ const api: IpcApi = {
       ipcRenderer.invoke('pipeline:setDiarization', { pipeline }),
     listDiarization: () => ipcRenderer.invoke('pipeline:listDiarization')
   },
+  modelReconcile: {
+    getEvents: () => ipcRenderer.invoke('modelReconcile:getEvents'),
+    markSeen: () => ipcRenderer.invoke('modelReconcile:markSeen'),
+    dismiss: () => ipcRenderer.invoke('modelReconcile:dismiss')
+  },
   modelUpdate: {
     check: () => ipcRenderer.invoke('modelUpdate:check'),
     restart: (updates: PendingModelUpdate[]) =>

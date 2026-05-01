@@ -129,6 +129,29 @@ export async function checkForUpdates(): Promise<CheckResult> {
         continue // Already up to date
       }
 
+      // Lazy heal of the legacy '' sentinel from migrateInstalledVersions:
+      // for non-archive models we can hash the file on disk and compare against
+      // the manifest. If they match, the install is bit-identical to the
+      // current manifest version — backfill the real hash and skip the update,
+      // closing the upgrade-from-old-build false-positive (Issue #84 / Story B).
+      // Archive models can't be hashed post-extract (the .tar.gz is gone), so
+      // they fall through to the standard update path; one accepted update will
+      // then write the real hash via executeUpdates and the issue resolves.
+      if (installed && installed.sha256 === '' && !definition.archive) {
+        const filePath = join(getModelsDir(), definition.relativePath)
+        if (existsSync(filePath)) {
+          const matches = await verifyFileSha256(filePath, manifestModel.sha256)
+          if (matches) {
+            installedVersions[manifestModel.id] = {
+              ...installed,
+              sha256: manifestModel.sha256
+            }
+            settings.set('installedModelVersions', installedVersions)
+            continue
+          }
+        }
+      }
+
       // Path-traversal guard on relativePath
       if (definition.relativePath.includes('..')) {
         console.warn(

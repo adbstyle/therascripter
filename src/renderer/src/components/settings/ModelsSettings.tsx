@@ -1,20 +1,37 @@
 import { useEffect, useState } from 'react'
 import type { ModelCatalogEntry } from '../../../../shared/validation/model-catalog-schemas'
 import type { ModelDownloadStatus } from '../../../../shared/types/IpcApi'
+import { useReconcileEvents } from '../../hooks/useReconcileEvents'
 import { useToast } from '../../hooks/useToast'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { formatBytes } from '../../utils/formatBytes'
 import ModelCard from './ModelCard'
 import DiarizationPipelineSection from './DiarizationPipelineSection'
+import ReconcileEventsBanner from './ReconcileEventsBanner'
 
 export default function ModelsSettings(): React.JSX.Element {
   const toast = useToast()
+  const reconcile = useReconcileEvents()
   const [asrModels, setAsrModels] = useState<ModelCatalogEntry[]>([])
   const [nerModels, setNerModels] = useState<ModelCatalogEntry[]>([])
   const [summarizationModels, setSummarizationModels] = useState<ModelCatalogEntry[]>([])
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [progress, setProgress] = useState<number | undefined>(undefined)
   const [deleteCandidate, setDeleteCandidate] = useState<ModelCatalogEntry | null>(null)
+
+  // Mark reconcile events as seen on mount — the banner stays visible until
+  // the user clicks "Verstanden", but the BottomNav dot disappears immediately
+  // because the user has now reached the surface that explains the change.
+  // Dep is the events array (changes when the hook refreshes) + the stable
+  // markSeen callback. The `.some` guard short-circuits subsequent runs once
+  // every event has transitioned to `seen`.
+  const reconcileEvents = reconcile.events
+  const reconcileMarkSeen = reconcile.markSeen
+  useEffect(() => {
+    if (reconcileEvents.some((e) => e.status === 'pending')) {
+      reconcileMarkSeen()
+    }
+  }, [reconcileEvents, reconcileMarkSeen])
 
   const reload = async (): Promise<void> => {
     const [asr, ner, summarization] = await Promise.all([
@@ -109,6 +126,10 @@ export default function ModelsSettings(): React.JSX.Element {
 
   return (
     <div className="space-y-8 p-6">
+      {reconcile.events.length > 0 && (
+        <ReconcileEventsBanner events={reconcile.events} onDismiss={reconcile.dismiss} />
+      )}
+
       <section className="space-y-3">
         <div>
           <h2 className="mb-1 text-lg font-semibold">Transkriptions-Modelle</h2>

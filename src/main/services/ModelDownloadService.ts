@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import { existsSync, mkdirSync, rmSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { BrowserWindow } from 'electron'
@@ -6,6 +7,7 @@ import { getSettings, type AppSettings } from './SettingsService'
 import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
 import type { ModelGroup } from '../../shared/validation/model-catalog-schemas'
 import { MODEL_DEFINITIONS, type ModelDefinition } from '../../shared/model-catalog'
+import type { ReconcileEvent, ReconcileReason } from '../../shared/types/ReconcileEvent'
 
 export type { ModelGroup, ModelDefinition }
 
@@ -73,23 +75,45 @@ export function getModelById(id: string): ModelDefinition | null {
   return def && isPublishable(def) ? def : null
 }
 
-/** Liefert die aktuell aktive Model-ID für eine Gruppe aus den Settings. */
-export function getActiveModelId(group: ModelGroup): string {
+/**
+ * Liefert die aktuell aktive Model-ID für eine Gruppe aus den Settings, oder
+ * `null` wenn kein ausführbares Modell aktiv ist. "Ausführbar" heisst:
+ *   1. die Slot-Spalte enthält eine ID,
+ *   2. die ID existiert im Katalog,
+ *   3. die zugehörige `checkPath`-Datei liegt auf Disk.
+ *
+ * Issue #84 / Story A: Diese defensive Disk-Prüfung ist der Hot-Path-Backstop
+ * gegen "App glaubt Aktiv, aber Datei fehlt"-Inkonsistenzen (z. B. nach manuellem
+ * Löschen im Finder, nach abgebrochenem Update, nach Spotlight-Cleanup). Der
+ * Bootstrap-Reconciler `reconcileActiveModels` repariert solche Zustände
+ * proaktiv beim App-Start; `getActiveModelId` ist die zweite Verteidigungslinie
+ * für Inkonsistenzen, die _während_ einer Session entstehen.
+ */
+export function getActiveModelId(group: ModelGroup): string | null {
   const active = getSettings().get('activeModels')
-  if (group === 'asr') return active.transcription
-  if (group === 'diarization') return active.diarization
-  if (group === 'ner') return active.ner
-  if (group === 'summarization') return active.summarization
-  throw new Error(`Keine aktive Modell-Konfiguration für Gruppe "${group}"`)
+  let id: string | null
+  if (group === 'asr') id = active.transcription
+  else if (group === 'diarization') id = active.diarization
+  else if (group === 'ner') id = active.ner
+  else if (group === 'summarization') id = active.summarization
+  else throw new Error(`Keine aktive Modell-Konfiguration für Gruppe "${group}"`)
+
+  if (id === null || id === '') return null
+  if (!isModelInstalled(id)) return null
+  return id
 }
 
-/** Liefert den absoluten Pfad zum aktiven Modell einer Gruppe (für Subprozess-Aufrufe). */
-export function getActiveModelPath(group: ModelGroup): string {
+/**
+ * Liefert den absoluten Pfad zum aktiven Modell einer Gruppe — oder `null`,
+ * wenn die Gruppe kein installiertes aktives Modell hat. Aufrufer (Executors,
+ * Pipeline-Plan) müssen den Null-Fall explizit behandeln (Pflicht-Gruppen:
+ * Fehler werfen; optionale: Step skippen).
+ */
+export function getActiveModelPath(group: ModelGroup): string | null {
   const id = getActiveModelId(group)
+  if (id === null) return null
   const def = getModelById(id)
-  if (!def) {
-    throw new Error(`Aktive Modell-ID "${id}" für Gruppe "${group}" nicht im Katalog gefunden`)
-  }
+  if (!def) return null
   return join(getModelsDir(), def.relativePath)
 }
 
@@ -106,13 +130,13 @@ export function getActiveModelPath(group: ModelGroup): string {
  * `activeDiarId` wird aus Backward-Compat-Gründen akzeptiert, aber ignoriert.
  */
 export function getModelsToLoadOnFirstLaunch(
-  activeAsrId: string,
-  _activeDiarId?: string
+  activeAsrId: string | null,
+  _activeDiarId?: string | null
 ): ModelDefinition[] {
   const seen = new Set<string>()
   const out: ModelDefinition[] = []
 
-  const activeAsr = getModelById(activeAsrId)
+  const activeAsr = activeAsrId ? getModelById(activeAsrId) : null
   if (activeAsr && activeAsr.group === 'asr' && !seen.has(activeAsr.id)) {
     seen.add(activeAsr.id)
     out.push(activeAsr)
@@ -128,18 +152,21 @@ export function getModelsToLoadOnFirstLaunch(
 
 /**
  * Prüft, ob die Minimal-Menge (required + aktives ASR + aktives Diarization) installiert ist.
+ * Wenn `activeAsrId` null ist (z. B. nach Reconcile auf einer frisch installierten App),
+ * fehlt strukturell ein ASR-Modell → false; FirstLaunchScreen wird angezeigt.
  */
 export function checkRequiredAndActiveExist(
-  activeAsrId: string,
-  activeDiarId: string
+  activeAsrId: string | null,
+  activeDiarId: string | null
 ): boolean {
+  if (activeAsrId === null) return false
   const modelsDir = getModelsDir()
   const toCheck = getModelsToLoadOnFirstLaunch(activeAsrId, activeDiarId)
   return toCheck.every((m) => existsSync(join(modelsDir, m.checkPath)))
 }
 
 /** Backward-Compat-Alias. */
-export function checkRequiredAndActiveAsrExist(activeAsrId: string): boolean {
+export function checkRequiredAndActiveAsrExist(activeAsrId: string | null): boolean {
   const activeDiar = getSettings().get('activeModels').diarization
   return checkRequiredAndActiveExist(activeAsrId, activeDiar)
 }
@@ -155,6 +182,30 @@ export function isModelInstalled(id: string): boolean {
 
 export function getModelsDir(): string {
   return join(getDataDir(), 'models')
+}
+
+/**
+ * Persist that a model with the given catalog hash is installed on disk.
+ * Called from the download paths immediately after SHA-256 verification +
+ * archive extraction succeed — at that point we KNOW the catalog hash matches
+ * the bytes on disk (we just verified). Writing the real hash here closes the
+ * Erstinstallation false-positive update banner: the next manifest check
+ * compares string-equal against this hash and only flags an update when the
+ * manifest publishes a new version.
+ *
+ * Distinct from the `''` sentinel written by `migrateInstalledVersions` for
+ * pre-existing installs from app builds that did not yet track per-install
+ * hashes; those entries are healed lazily by `UpdateCheckService.checkForUpdates`.
+ */
+export function recordInstalledVersion(id: string, sha256: string): void {
+  const settings = getSettings()
+  const installed = { ...settings.get('installedModelVersions') }
+  installed[id] = {
+    version: 'installed',
+    sha256,
+    installedAt: new Date().toISOString()
+  }
+  settings.set('installedModelVersions', installed)
 }
 
 export function checkModelsExist(): boolean {
@@ -322,6 +373,15 @@ export async function startModelDownload(): Promise<void> {
       }
     }
 
+    // Only record the install hash once `checkPath` is observable on disk —
+    // a successful tar exit doesn't guarantee the inner file we use as the
+    // installed-marker actually landed (malformed archive, disk-full mid-write).
+    // Skipping the recordInstalledVersion call here lets `migrateInstalledVersions`
+    // / lazy heal recover on the next manifest check rather than persisting a
+    // hash for a half-installed model.
+    if (existsSync(join(modelsDir, model.checkPath))) {
+      recordInstalledVersion(model.id, model.sha256)
+    }
     overallDownloaded += model.sizeBytes
   }
 
@@ -437,6 +497,12 @@ export async function downloadSingleModel(id: string): Promise<void> {
     }
   }
 
+  // Disk-presence guard before recording — see startModelDownload for the
+  // reasoning. A successful tar exit isn't a guarantee that `checkPath` is
+  // populated.
+  if (existsSync(join(modelsDir, def.checkPath))) {
+    recordInstalledVersion(def.id, def.sha256)
+  }
   sendProgress({ state: 'complete' })
   abortSignal = null
 }
@@ -497,7 +563,7 @@ export async function deleteModel(id: string): Promise<void> {
   if (def.group && OPTIONAL_GROUPS.has(def.group)) {
     const slot = GROUP_TO_SETTINGS_KEY[def.group]
     if (active[slot] === id) {
-      settings.set('activeModels', { ...settings.get('activeModels'), [slot]: '' })
+      settings.set('activeModels', { ...settings.get('activeModels'), [slot]: null })
     }
   }
 }
@@ -555,10 +621,166 @@ export function clearActiveModel(group: ModelGroup): void {
   }
   const settings = getSettings()
   const current = settings.get('activeModels')
-  settings.set('activeModels', { ...current, [GROUP_TO_SETTINGS_KEY[group]]: '' })
+  settings.set('activeModels', { ...current, [GROUP_TO_SETTINGS_KEY[group]]: null })
 }
 
 /** Backward-Compat-Alias. */
 export function setActiveAsrModel(id: string): void {
   setActiveModel('asr', id)
+}
+
+// ─── Bootstrap reconcile (Issue #84 / Story C) ────────────────────────────────
+// "Disk ist die einzige Wahrheit": die App darf keinen Belief-State haben, der
+// von der beobachtbaren Realität abweichen kann. Wo sie es heute hat (Slot
+// zeigt auf gelöschte Datei nach Finder-Mülleimer-Aktion / abgebrochenem
+// Update / Disk-Korruption), gewinnt die Realität — beim nächsten Bootstrap.
+
+/**
+ * Pipeline-Pflichtgruppen im Sinne der Reconcile-Logik: ohne ein installiertes
+ * Modell in jeder dieser Gruppen ist die Audio-Pipeline nicht ausführbar.
+ * `summarization` lebt in OPTIONAL_GROUPS (oben definiert).
+ */
+const REQUIRED_GROUPS_FOR_RECONCILE: ReadonlySet<ModelGroup> = new Set([
+  'asr',
+  'diarization',
+  'ner'
+])
+
+/**
+ * Katalog-Default pro Gruppe — manuell synchron gehalten mit
+ * `defaults.activeModels` in `SettingsService.ts`. Der Reconciler bevorzugt den
+ * Default beim Auto-Activate, fällt aber auf das nächste installierte
+ * Gruppenmitglied zurück, wenn der Default selbst fehlt (ASR-Variante anstelle
+ * des multilingualen Default).
+ */
+const GROUP_DEFAULTS: Record<ModelGroup, string> = {
+  asr: 'whisper-large-v3-turbo',
+  diarization: 'pyannote-suite',
+  ner: 'flair-ner-german-large',
+  summarization: 'gemma-summarization'
+}
+
+function pickInstalledForGroup(group: ModelGroup): string | null {
+  const preferred = GROUP_DEFAULTS[group]
+  if (isModelInstalled(preferred)) return preferred
+  for (const m of getModelsByGroup(group)) {
+    if (isModelInstalled(m.id)) return m.id
+  }
+  return null
+}
+
+export interface ReconcileRepair {
+  group: ModelGroup
+  fromModelId: string | null
+  toModelId: string | null
+  reason: ReconcileReason
+}
+
+/**
+ * Bootstrap reconciler — läuft einmal beim App-Start, NACH `initSettings()`
+ * und VOR `createWindow()`. Geht jede Modell-Gruppe durch und stellt das
+ * Invariant sicher:
+ *   "Der active-Slot zeigt entweder auf ein installiertes Katalog-Modell
+ *    oder ist null."
+ *
+ * Inkonsistenzen werden so repariert:
+ *   - Pflicht-Gruppe mit fehlendem aktiven Modell → installierten Katalog-
+ *     Default aktivieren (oder ein anderes installiertes Gruppenmitglied,
+ *     wenn der Default nicht installiert ist); andernfalls null + der
+ *     FirstLaunchScreen wird angezeigt.
+ *   - Optionale Gruppe mit fehlendem aktiven Modell → null (Pipeline-Step
+ *     wird zur Laufzeit übersprungen).
+ *
+ * Wird auf wirklich frischen Installationen (`modelsDownloaded === false`)
+ * komplett übersprungen — dort ist der FirstLaunchScreen das Gate. Jede
+ * Reparatur wird als `pending` ReconcileEvent persistiert, was den Dot im
+ * BottomNav und das Banner in Settings → Modelle treibt.
+ *
+ * Performance: nur `existsSync`-Calls (≤ Katalog-Größe, derzeit 6), kein I/O
+ * darüber hinaus. Crash-sicher per design — Disk ist Source of Truth,
+ * electron-store ist Cache; ein Crash mitten im Write heilt sich beim nächsten
+ * Bootstrap.
+ */
+export function reconcileActiveModels(): ReadonlyArray<ReconcileRepair> {
+  const settings = getSettings()
+  if (settings.get('modelsDownloaded') !== true) return []
+
+  const groups: readonly ModelGroup[] = ['asr', 'diarization', 'ner', 'summarization']
+  const repairs: ReconcileRepair[] = []
+  let nextActive = { ...settings.get('activeModels') }
+  let activeChanged = false
+
+  for (const group of groups) {
+    const slot = GROUP_TO_SETTINGS_KEY[group]
+    const current: string | null = nextActive[slot] ?? null
+
+    // Steady state — slot points at an installed catalog model.
+    if (current !== null && isModelInstalled(current)) continue
+
+    // Steady state for optional groups the user has deactivated — no event.
+    if (current === null && !REQUIRED_GROUPS_FOR_RECONCILE.has(group)) continue
+
+    let next: string | null
+    let reason: ReconcileReason
+
+    if (REQUIRED_GROUPS_FOR_RECONCILE.has(group)) {
+      next = pickInstalledForGroup(group)
+      reason = next === null ? 'model-removed' : 'default-promoted'
+    } else {
+      next = null
+      reason = 'group-cleared'
+    }
+
+    if (next === current) continue
+
+    nextActive = { ...nextActive, [slot]: next }
+    activeChanged = true
+    repairs.push({ group, fromModelId: current, toModelId: next, reason })
+  }
+
+  if (activeChanged) {
+    settings.set('activeModels', nextActive)
+  }
+
+  if (repairs.length > 0) {
+    const previous = settings.get('reconcileEvents') ?? []
+    const additions: ReconcileEvent[] = repairs.map((r) => ({
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      group: r.group,
+      fromModelId: r.fromModelId,
+      toModelId: r.toModelId,
+      reason: r.reason,
+      status: 'pending'
+    }))
+    settings.set('reconcileEvents', [...previous, ...additions])
+    for (const r of repairs) {
+      console.log(
+        `[reconcile] ${r.group}: ${r.fromModelId ?? '<null>'} → ${r.toModelId ?? '<null>'} (${r.reason})`
+      )
+    }
+  }
+
+  return repairs
+}
+
+// ─── Reconcile event lifecycle ────────────────────────────────────────────────
+
+export function getReconcileEvents(): ReconcileEvent[] {
+  return getSettings().get('reconcileEvents') ?? []
+}
+
+/** Renderer hat Settings → Modelle gemountet — Banner gesehen, BottomNav-Dot kann weg. */
+export function markReconcileEventsSeen(): ReconcileEvent[] {
+  const settings = getSettings()
+  const events = settings.get('reconcileEvents') ?? []
+  if (events.length === 0 || events.every((e) => e.status === 'seen')) return events
+  const next: ReconcileEvent[] = events.map((e) => ({ ...e, status: 'seen' as const }))
+  settings.set('reconcileEvents', next)
+  return next
+}
+
+/** User klickte "Verstanden" — alle Events permanent löschen. */
+export function dismissReconcileEvents(): void {
+  getSettings().set('reconcileEvents', [])
 }

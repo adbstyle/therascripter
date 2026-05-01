@@ -53,13 +53,13 @@ function getMacOSVersion(): string {
   }
 }
 
-function getActiveIdForGroup(group: ModelGroup): string {
+function getActiveIdForGroup(group: ModelGroup): string | null {
   const active = getSettings().get('activeModels')
   if (group === 'asr') return active.transcription
   if (group === 'diarization') return active.diarization
   if (group === 'ner') return active.ner
   if (group === 'summarization') return active.summarization
-  return ''
+  return null
 }
 
 function formatModelLine(line: ModelLine): string {

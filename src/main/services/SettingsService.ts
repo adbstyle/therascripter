@@ -5,6 +5,7 @@ import type {
   InstalledModelVersion,
   AppUpdateStatus
 } from '../../shared/types/ModelUpdate'
+import type { ReconcileEvent } from '../../shared/types/ReconcileEvent'
 import { getModelDefinitions } from './ModelDownloadService'
 import {
   DIARIZATION_PIPELINES,
@@ -17,12 +18,18 @@ export { DIARIZATION_PIPELINES, DEFAULT_DIARIZATION_PIPELINE }
 
 export interface AppSettings {
   activeModels: {
-    transcription: string
-    diarization: string
+    // null when no model is selected for the slot — optional groups (summarization)
+    // ship deactivated; required groups become null only transiently when the
+    // active model is missing on disk and no installed default exists, in which
+    // case the FirstLaunchScreen forces re-download. The bootstrap reconciler
+    // (`reconcileActiveModels`) maintains the invariant that either the slot
+    // points to an installed catalog model or it is null.
+    transcription: string | null
+    diarization: string | null
     diarizationPipeline: DiarizationPipeline
-    ner: string
+    ner: string | null
     ocr: string
-    summarization: string
+    summarization: string | null
   }
   firstLaunchDone: boolean
   consentReminderShown: boolean
@@ -33,6 +40,7 @@ export interface AppSettings {
   installedModelVersions: Record<string, InstalledModelVersion>
   pendingModelUpdates: PendingModelUpdate[] | null
   cachedAppUpdateStatus: AppUpdateStatus | null
+  reconcileEvents: ReconcileEvent[]
 }
 
 const defaults: AppSettings = {
@@ -52,7 +60,8 @@ const defaults: AppSettings = {
   reviewPanelOpen: false,
   installedModelVersions: {},
   pendingModelUpdates: null,
-  cachedAppUpdateStatus: null
+  cachedAppUpdateStatus: null,
+  reconcileEvents: []
 }
 
 let store: Store<AppSettings> | null = null
@@ -91,7 +100,13 @@ export function initSettings(): Store<AppSettings> {
   )
   const EXPECTED_DIAR = 'pyannote-suite'
 
-  if (!knownDiarIds.has(active.diarization) || active.diarization !== EXPECTED_DIAR) {
+  // null is a valid post-migration state for the diarization slot (cleared by
+  // the reconciler when the suite is missing on disk); only fire the legacy
+  // reset for known-bad string IDs, not for null.
+  if (
+    active.diarization !== null &&
+    (!knownDiarIds.has(active.diarization) || active.diarization !== EXPECTED_DIAR)
+  ) {
     const inferredPipeline = inferPipelineFromLegacyId(active.diarization)
     console.warn(
       `[settings-migration] activeModels.diarization="${active.diarization}" → reset auf "${EXPECTED_DIAR}" (Pipeline: ${inferredPipeline})`
@@ -126,7 +141,7 @@ export function initSettings(): Store<AppSettings> {
   )
   const EXPECTED_NER = 'flair-ner-german-large'
   const currentNer = store.get('activeModels').ner
-  if (!knownNerIds.has(currentNer)) {
+  if (currentNer === null || !knownNerIds.has(currentNer)) {
     console.warn(
       `[settings-migration] activeModels.ner="${currentNer}" unbekannt → reset auf "${EXPECTED_NER}"`
     )
@@ -139,14 +154,39 @@ export function initSettings(): Store<AppSettings> {
   // Defensiv: Bestehende electron-store-Instanzen haben kein activeModels.summarization,
   // weil das Feld erst mit dem lokalen LLM eingeführt wurde. defaults füllt nested keys
   // nicht nach, also Wert hier explizit setzen, falls nicht vorhanden.
-  // Leerer String ist ein gültiger Wert ("Zusammenfassung deaktiviert") — nicht überschreiben.
-  const currentSummarization = (store.get('activeModels') as { summarization?: string })
-    .summarization
-  if (typeof currentSummarization !== 'string') {
+  const currentSummarization = (
+    store.get('activeModels') as { summarization?: string | null }
+  ).summarization
+  if (typeof currentSummarization !== 'string' && currentSummarization !== null) {
     store.set('activeModels', {
       ...store.get('activeModels'),
       summarization: 'gemma-summarization'
     })
+  }
+
+  // Issue #84 / Story C — convert the legacy '' sentinel ("deaktiviert") to null,
+  // matching the new `string | null` type. The reconciler relies on null to
+  // detect "no active model" without ambiguity. `ocr` and `diarizationPipeline`
+  // are not user-clearable and stay non-null.
+  const activeForLegacy = store.get('activeModels') as Record<string, string | null>
+  const legacyEmptyKeys = ['transcription', 'diarization', 'ner', 'summarization'] as const
+  let activeChanged = false
+  const next = { ...activeForLegacy }
+  for (const key of legacyEmptyKeys) {
+    if (next[key] === '') {
+      next[key] = null
+      activeChanged = true
+    }
+  }
+  if (activeChanged) {
+    store.set('activeModels', next as AppSettings['activeModels'])
+  }
+
+  // Issue #84 / Story C — ensure reconcileEvents exists for stores from
+  // previous app versions (electron-store does not deep-merge top-level defaults
+  // into already-persisted instances).
+  if (!Array.isArray(store.get('reconcileEvents'))) {
+    store.set('reconcileEvents', [])
   }
 
   // installedModelVersions: Altlasten-Keys (Legacy + PR-Zwischenstände) auf den neuen

@@ -4,6 +4,7 @@ import type { BlocklistEntry } from './NerTypes'
 import type { EntityMap, PlaceholderType } from './EntityMap'
 import type { TipTapDocument } from './TipTapDocument'
 import type { PendingModelUpdate, AppUpdateStatus, CheckResult } from './ModelUpdate'
+import type { ReconcileEvent } from './ReconcileEvent'
 import type {
   ModelCatalogEntry,
   ModelGroup,
@@ -214,6 +215,15 @@ export interface PipelineApi {
   listDiarization(): Promise<readonly DiarizationPipeline[]>
 }
 
+export interface ModelReconcileApi {
+  /** Read all reconcile events (pending + seen). */
+  getEvents(): Promise<ReconcileEvent[]>
+  /** Mark every pending event as seen — call when Settings → Modelle mounts. */
+  markSeen(): Promise<ReconcileEvent[]>
+  /** Permanently dismiss all reconcile events — call from the "Verstanden" button. */
+  dismiss(): Promise<void>
+}
+
 export interface IpcApi {
   sessions: SessionApi
   recording: RecordingApi
@@ -226,6 +236,7 @@ export interface IpcApi {
   modelDownload: ModelDownloadApi
   modelCatalog: ModelCatalogApi
   modelUpdate: ModelUpdateApi
+  modelReconcile: ModelReconcileApi
   pipeline: PipelineApi
   appUpdate: AppUpdateApi
   summary: SummaryApi

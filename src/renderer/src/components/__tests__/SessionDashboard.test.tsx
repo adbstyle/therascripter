@@ -183,6 +183,11 @@ beforeEach(() => {
     },
     feedback: {
       send: vi.fn().mockResolvedValue(undefined)
+    },
+    modelReconcile: {
+      getEvents: vi.fn().mockResolvedValue([]),
+      markSeen: vi.fn().mockResolvedValue([]),
+      dismiss: vi.fn().mockResolvedValue(undefined)
     }
   } as typeof window.api
   vi.clearAllMocks()
