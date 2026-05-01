@@ -85,7 +85,9 @@ import {
   cleanupIncompleteUpdates,
   migrateInstalledVersions,
   executeUpdates,
-  isNewerVersion
+  isNewerVersion,
+  dismissManifestVersions,
+  manifestEntryKey
 } from '../UpdateCheckService'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -275,6 +277,131 @@ describe('checkForUpdates', () => {
 
     const { modelUpdates } = await checkForUpdates()
     expect(modelUpdates).toHaveLength(0)
+  })
+})
+
+describe('checkForUpdates — dismissed manifest versions (Story F+G)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // The settings store is mocked with a single mockReturnValue; for the dismiss
+  // filter we need different return values per key, so route by key.
+  function setupMockSettings(opts: {
+    installed?: Record<string, { version: string; sha256: string; installedAt: string }>
+    dismissed?: string[]
+  }): void {
+    mockSettingsStore.get.mockImplementation((key: string) => {
+      if (key === 'installedModelVersions') return opts.installed ?? {}
+      if (key === 'dismissedManifestVersions') return opts.dismissed ?? []
+      return null
+    })
+  }
+
+  it('skips a manifest entry whose id+sha256 is in the dismiss list', async () => {
+    setupMockSettings({
+      installed: {
+        'whisper-large-v3-turbo': {
+          version: '2025-01-15',
+          sha256: 'aaaa' + 'a'.repeat(60),
+          installedAt: ''
+        },
+        'pyannote-suite': {
+          version: '2025-01-15',
+          sha256: 'bbbb' + 'b'.repeat(60),
+          installedAt: ''
+        }
+      },
+      dismissed: [manifestEntryKey('whisper-large-v3-turbo', 'cccc' + 'c'.repeat(60))]
+    })
+    makeHttpsResponse(200, validManifest)
+
+    const { modelUpdates } = await checkForUpdates()
+    // whisper would normally be flagged (sha differs) but is dismissed.
+    expect(modelUpdates).toHaveLength(0)
+  })
+
+  it('still flags a different sha256 for the same id (new manifest revision)', async () => {
+    setupMockSettings({
+      installed: {
+        'whisper-large-v3-turbo': {
+          version: '2025-01-15',
+          sha256: 'aaaa' + 'a'.repeat(60),
+          installedAt: ''
+        },
+        'pyannote-suite': {
+          version: '2025-01-15',
+          sha256: 'bbbb' + 'b'.repeat(60),
+          installedAt: ''
+        }
+      },
+      // Stale dismiss entry for an older sha256 — manifest now ships 'cccc...'
+      // for whisper, so this entry must NOT silence the new update.
+      dismissed: [manifestEntryKey('whisper-large-v3-turbo', 'eeee' + 'e'.repeat(60))]
+    })
+    makeHttpsResponse(200, validManifest)
+
+    const { modelUpdates } = await checkForUpdates()
+    expect(modelUpdates).toHaveLength(1)
+    expect(modelUpdates[0].id).toBe('whisper-large-v3-turbo')
+  })
+
+  it('tolerates a non-array dismissed value (corrupted setting)', async () => {
+    mockSettingsStore.get.mockImplementation((key: string) => {
+      if (key === 'installedModelVersions') {
+        return {
+          'whisper-large-v3-turbo': {
+            version: '2025-01-15',
+            sha256: 'aaaa' + 'a'.repeat(60),
+            installedAt: ''
+          },
+          'pyannote-suite': {
+            version: '2025-01-15',
+            sha256: 'bbbb' + 'b'.repeat(60),
+            installedAt: ''
+          }
+        }
+      }
+      if (key === 'dismissedManifestVersions') return null
+      return null
+    })
+    makeHttpsResponse(200, validManifest)
+
+    const { modelUpdates } = await checkForUpdates()
+    // Filter must default to empty set and behave like the baseline check.
+    expect(modelUpdates).toHaveLength(1)
+  })
+})
+
+describe('dismissManifestVersions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('appends entries and de-duplicates', () => {
+    mockSettingsStore.get.mockReturnValue([
+      manifestEntryKey('a', '1'.repeat(64))
+    ])
+
+    dismissManifestVersions([
+      { id: 'a', sha256: '1'.repeat(64) }, // duplicate
+      { id: 'b', sha256: '2'.repeat(64) }
+    ])
+
+    expect(mockSettingsStore.set).toHaveBeenCalledWith(
+      'dismissedManifestVersions',
+      [manifestEntryKey('a', '1'.repeat(64)), manifestEntryKey('b', '2'.repeat(64))]
+    )
+  })
+
+  it('initializes the list when the existing value is not an array', () => {
+    mockSettingsStore.get.mockReturnValue(null)
+
+    dismissManifestVersions([{ id: 'a', sha256: '1'.repeat(64) }])
+
+    expect(mockSettingsStore.set).toHaveBeenCalledWith('dismissedManifestVersions', [
+      manifestEntryKey('a', '1'.repeat(64))
+    ])
   })
 })
 

@@ -88,6 +88,30 @@ function fetchManifestJson(url: string): Promise<unknown> {
   })
 }
 
+// ─── Manifest dismissal ──────────────────────────────────────────────────────
+
+/**
+ * Issue #84 / Story F+G — stable key for "this exact manifest entry was
+ * dismissed by the user". Combines model id and sha256 so that a new manifest
+ * publishing a different hash for the same id is automatically eligible again,
+ * without explicit cleanup.
+ */
+export function manifestEntryKey(id: string, sha256: string): string {
+  return `${id}@${sha256}`
+}
+
+/** Append entries to the dismiss list, preserving order and dropping duplicates. */
+export function dismissManifestVersions(entries: Array<{ id: string; sha256: string }>): void {
+  const settings = getSettings()
+  const raw = settings.get('dismissedManifestVersions')
+  const existing = Array.isArray(raw) ? raw : []
+  const seen = new Set(existing)
+  for (const e of entries) {
+    seen.add(manifestEntryKey(e.id, e.sha256))
+  }
+  settings.set('dismissedManifestVersions', Array.from(seen))
+}
+
 // ─── checkForUpdates ─────────────────────────────────────────────────────────
 
 const NO_APP_UPDATE: AppUpdateStatus = { available: false, latestVersion: null, checkedAt: null }
@@ -99,6 +123,8 @@ export async function checkForUpdates(): Promise<CheckResult> {
 
     const settings = getSettings()
     const installedVersions = settings.get('installedModelVersions') ?? {}
+    const dismissedRaw = settings.get('dismissedManifestVersions')
+    const dismissed = new Set(Array.isArray(dismissedRaw) ? dismissedRaw : [])
     const definitions = getModelDefinitions()
 
     // ── Model update check ──
@@ -127,6 +153,14 @@ export async function checkForUpdates(): Promise<CheckResult> {
       const installed = installedVersions[manifestModel.id]
       if (installed && installed.sha256 === manifestModel.sha256) {
         continue // Already up to date
+      }
+
+      // Issue #84 / Story F+G — user actively dismissed this exact manifest
+      // entry (UpdateBanner dismiss or ModelUpdateScreen "Diese Version
+      // überspringen"). Re-becomes eligible when the manifest publishes a new
+      // sha256 for the same id.
+      if (dismissed.has(manifestEntryKey(manifestModel.id, manifestModel.sha256))) {
+        continue
       }
 
       // Lazy heal of the legacy '' sentinel from migrateInstalledVersions:

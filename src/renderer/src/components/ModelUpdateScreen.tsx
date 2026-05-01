@@ -60,8 +60,28 @@ export default function ModelUpdateScreen({
     await window.api.modelUpdate.startDownload()
   }, [updates])
 
-  const handleSkip = useCallback(async () => {
-    // Clear pending updates in settings so the screen doesn't reappear next launch
+  // Story G — three distinct exits from the pre-download state:
+  //
+  // 1. handleLater: keep `pendingModelUpdates` intact → screen reappears on
+  //    next start. Used by the "Später" button.
+  // 2. handleSkipVersion: clear pending AND dismiss this manifest entry so the
+  //    UpdateBanner won't bring it back this manifest revision. Used by the
+  //    "Diese Version überspringen" button.
+  // 3. handleErrorContinue: error path — clear pending and dismiss the screen
+  //    without dismissing the manifest entry (executeUpdates kept pending on
+  //    failure; the user explicitly dropping out of the screen should release
+  //    that hold without permanently silencing the banner).
+  const handleLater = useCallback(() => {
+    onComplete()
+  }, [onComplete])
+
+  const handleSkipVersion = useCallback(async () => {
+    await window.api.modelUpdate.dismissVersions(updates)
+    await window.api.modelUpdate.clearPending()
+    onComplete()
+  }, [onComplete, updates])
+
+  const handleErrorContinue = useCallback(async () => {
     await window.api.modelUpdate.clearPending()
     onComplete()
   }, [onComplete])
@@ -99,12 +119,20 @@ export default function ModelUpdateScreen({
               {updates.length} {updates.length === 1 ? 'Modell wird' : 'Modelle werden'}{' '}
               aktualisiert (~{formatBytes(updates.reduce((s, u) => s + u.sizeBytes, 0))}).
             </p>
-            <div className="flex justify-center gap-3">
+            <div className="flex flex-wrap justify-center gap-3">
               <button
                 className="rounded-lg border border-border-strong bg-surface-0 px-4 py-2.5 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
-                onClick={handleSkip}
+                onClick={handleSkipVersion}
+                title="Diese Version überspringen — wird erst beim nächsten Modell-Update wieder gezeigt"
               >
-                Überspringen
+                Diese Version überspringen
+              </button>
+              <button
+                className="rounded-lg border border-border-strong bg-surface-0 px-4 py-2.5 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
+                onClick={handleLater}
+                title="Das Update wird beim nächsten Start vorgeschlagen"
+              >
+                Später
               </button>
               <button
                 className="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
@@ -113,6 +141,10 @@ export default function ModelUpdateScreen({
                 Update starten
               </button>
             </div>
+            <p className="mt-4 text-xs text-text-tertiary">
+              Später: erscheint beim nächsten Start erneut. Überspringen: erst beim nächsten
+              Modell-Update wieder gezeigt.
+            </p>
           </div>
         )}
 
@@ -194,7 +226,7 @@ export default function ModelUpdateScreen({
             </p>
             <button
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
-              onClick={handleSkip}
+              onClick={handleErrorContinue}
             >
               Weiter
             </button>

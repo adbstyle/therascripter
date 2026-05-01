@@ -41,6 +41,13 @@ export interface AppSettings {
   pendingModelUpdates: PendingModelUpdate[] | null
   cachedAppUpdateStatus: AppUpdateStatus | null
   reconcileEvents: ReconcileEvent[]
+  /**
+   * Issue #84 / Story F+G — manifest entries the user has actively dismissed.
+   * Each entry is `${modelId}@${sha256}`; the SHA-256 is what makes the entry
+   * obsolete on its own when a new manifest publishes a different hash for the
+   * same id, so no explicit cleanup is needed.
+   */
+  dismissedManifestVersions: string[]
 }
 
 const defaults: AppSettings = {
@@ -61,7 +68,8 @@ const defaults: AppSettings = {
   installedModelVersions: {},
   pendingModelUpdates: null,
   cachedAppUpdateStatus: null,
-  reconcileEvents: []
+  reconcileEvents: [],
+  dismissedManifestVersions: []
 }
 
 let store: Store<AppSettings> | null = null
@@ -187,6 +195,11 @@ export function initSettings(): Store<AppSettings> {
   // into already-persisted instances).
   if (!Array.isArray(store.get('reconcileEvents'))) {
     store.set('reconcileEvents', [])
+  }
+
+  // Issue #84 / Story F+G — same reasoning for dismissedManifestVersions.
+  if (!Array.isArray(store.get('dismissedManifestVersions'))) {
+    store.set('dismissedManifestVersions', [])
   }
 
   // installedModelVersions: Altlasten-Keys (Legacy + PR-Zwischenstände) auf den neuen

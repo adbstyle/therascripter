@@ -35,6 +35,13 @@ export const RestartUpdateSchema = z.object({
   updates: z.array(PendingModelUpdateSchema).min(1)
 })
 
+// Wrapper object schema for the dismiss IPC handler (Story F+G).
+// Reuses PendingModelUpdate so the renderer can pass the same payload it
+// already has from useModelUpdates / ModelUpdateScreen without rebuilding.
+export const DismissUpdatesSchema = z.object({
+  updates: z.array(PendingModelUpdateSchema).min(1)
+})
+
 // App update status (persisted in electron-store, validated on read)
 export const AppUpdateStatusSchema = z.object({
   available: z.boolean(),

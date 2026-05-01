@@ -180,6 +180,8 @@ const api: IpcApi = {
     startDownload: () => ipcRenderer.invoke('modelUpdate:startDownload'),
     getPending: () => ipcRenderer.invoke('modelUpdate:getPending'),
     clearPending: () => ipcRenderer.invoke('modelUpdate:clearPending'),
+    dismissVersions: (updates: PendingModelUpdate[]) =>
+      ipcRenderer.invoke('modelUpdate:dismissVersions', { updates }),
     onAvailable: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, updates: PendingModelUpdate[]): void =>
         callback(updates)

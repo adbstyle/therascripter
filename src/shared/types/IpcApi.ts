@@ -165,6 +165,12 @@ export interface ModelUpdateApi {
   startDownload(): Promise<void>
   getPending(): Promise<PendingModelUpdate[] | null>
   clearPending(): Promise<void>
+  /**
+   * Issue #84 / Story F+G — record that the user actively dismissed these
+   * manifest entries. Future update checks filter them out until the manifest
+   * publishes a new sha256 for the same id.
+   */
+  dismissVersions(updates: PendingModelUpdate[]): Promise<void>
   onAvailable(callback: (updates: PendingModelUpdate[]) => void): () => void
   onDownloadProgress(callback: (status: ModelDownloadStatus) => void): () => void
   onDownloadComplete(callback: () => void): () => void

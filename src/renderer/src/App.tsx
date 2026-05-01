@@ -105,6 +105,12 @@ export default function App(): React.JSX.Element {
     // If allowed, the app will relaunch — no further action needed
   }, [availableUpdates])
 
+  const handleDismissUpdates = useCallback(async () => {
+    if (!availableUpdates || availableUpdates.length === 0) return
+    await window.api.modelUpdate.dismissVersions(availableUpdates)
+    clearUpdates()
+  }, [availableUpdates, clearUpdates])
+
   const isInReview = currentView === 'review'
   const navHidden = isRecording || isInReview
 
@@ -156,7 +162,11 @@ export default function App(): React.JSX.Element {
 
       {/* Update banner — shown when updates are available (non-blocking) */}
       {availableUpdates && availableUpdates.length > 0 && (
-        <UpdateBanner updates={availableUpdates} onRestart={handleRestartForUpdate} />
+        <UpdateBanner
+          updates={availableUpdates}
+          onRestart={handleRestartForUpdate}
+          onDismiss={handleDismissUpdates}
+        />
       )}
 
       {/* Main content */}
