@@ -15,7 +15,8 @@ SET status = 'error',
 WHERE status NOT IN ('review', 'error');
 
 -- Step 3: cancel all pending/running tasks for those sessions so retry recreates them
-UPDATE tasks
+-- (Table name is task_queue per src/main/db/migrations/001-initial-schema.sql)
+UPDATE task_queue
 SET status = 'cancelled'
 WHERE session_id IN (
   SELECT id FROM sessions WHERE status = 'error'

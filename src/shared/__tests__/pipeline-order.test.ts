@@ -48,12 +48,23 @@ describe('Pipeline-order single-source-of-truth assertions', () => {
     expect(src).not.toMatch(/^const AUDIO_PIPELINE\s*:/m)
   })
 
-  it('SessionCard imports from shared/constants/pipeline (no local duplicate)', () => {
+  it('SessionCard does not duplicate the pipeline order locally', () => {
+    // Issue #80 Phase F: SessionCard no longer needs to walk the pipeline
+    // constant — stepIndex / totalSteps now come from the task:started IPC
+    // event (Session.plannedSteps, frozen at queued → processing). The
+    // pipeline order itself is therefore not imported here.
+    // The CLAUDE.md "no local duplicate" rule still applies though — no
+    // hardcoded list of pipeline steps in this file.
     const src = readFileSync(
       join(ROOT, 'src/renderer/src/components/SessionCard.tsx'),
       'utf-8'
     )
-    expect(src).toContain("from '../../../shared/constants/pipeline'")
     expect(src).not.toMatch(/^const AUDIO_PIPELINE_STEPS\s*[:=]/m)
+    expect(src).not.toMatch(/^const PDF_PIPELINE_STEPS\s*[:=]/m)
+    // Local pipeline arrays would look like one of these patterns:
+    expect(src).not.toMatch(
+      /\['diarization',\s*'transcription',\s*'alignment',\s*'anonymization'/
+    )
+    expect(src).not.toMatch(/\['extraction',\s*'ocr',\s*'anonymization'/)
   })
 })

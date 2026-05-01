@@ -11,6 +11,15 @@ vi.mock('../../utils/ipc-helpers', () => ({
   sendToRenderer: vi.fn()
 }))
 
+// Issue #80: enqueuePipeline now filters via computePlannedSteps. These tests
+// pre-date the filter and assert against the full pipeline (5 audio steps,
+// 4 PDF steps); mock ModelDownloadService so the summarization step survives
+// the filter. PDF sessions also need pdfHasScannedPages=true to include ocr.
+vi.mock('../ModelDownloadService', () => ({
+  getActiveModelId: vi.fn().mockReturnValue('gemma-3-4b'),
+  isModelInstalled: vi.fn().mockReturnValue(true)
+}))
+
 describe('TaskQueueService', () => {
   let db: Database.Database
   let queue: TaskQueueService
@@ -31,7 +40,7 @@ describe('TaskQueueService', () => {
     const session = sessionRepo.create({
       title: 'Test Session',
       type: 'audio',
-      status: 'transcribing'
+      status: 'processing'
     })
     sessionId = session.id
   })
@@ -48,8 +57,8 @@ describe('TaskQueueService', () => {
       const tasks = queue.enqueuePipeline(sessionId, 'audio')
 
       expect(tasks).toHaveLength(5)
-      expect(tasks[0].type).toBe('transcription')
-      expect(tasks[1].type).toBe('diarization')
+      expect(tasks[0].type).toBe('diarization')
+      expect(tasks[1].type).toBe('transcription')
       expect(tasks[2].type).toBe('alignment')
       expect(tasks[3].type).toBe('anonymization')
       expect(tasks[4].type).toBe('summarization')
@@ -66,6 +75,8 @@ describe('TaskQueueService', () => {
         title: 'PDF Test',
         type: 'pdf'
       })
+      // Force OCR into plannedSteps; default pdfHasScannedPages is null/false.
+      sessionRepo.update(pdfSession.id, { pdfHasScannedPages: true })
 
       const tasks = queue.enqueuePipeline(pdfSession.id, 'pdf')
 
@@ -129,8 +140,8 @@ describe('TaskQueueService', () => {
       await new Promise((resolve) => setTimeout(resolve, 200))
 
       expect(executionOrder).toEqual([
-        'transcription',
         'diarization',
+        'transcription',
         'alignment',
         'anonymization',
         'summarization'
@@ -190,7 +201,8 @@ describe('TaskQueueService', () => {
         }
       }
 
-      queue.registerExecutor('transcription', failingExecutor)
+      // Diarization is the first pipeline step (post-ADR-007)
+      queue.registerExecutor('diarization', failingExecutor)
 
       queue.enqueuePipeline(sessionId, 'audio')
 
@@ -201,7 +213,7 @@ describe('TaskQueueService', () => {
       expect(session?.errorMessage).toBe('ML model failed')
 
       const tasks = queue.getSessionTasks(sessionId)
-      const failedTask = tasks.find((t) => t.type === 'transcription')
+      const failedTask = tasks.find((t) => t.type === 'diarization')
       expect(failedTask?.status).toBe('failed')
       expect(failedTask?.error).toBe('ML model failed')
     })
@@ -240,11 +252,12 @@ describe('TaskQueueService', () => {
     it('cancels remaining pending tasks when a task fails', async () => {
       const failingExecutor: TaskExecutor = {
         async execute() {
-          throw new Error('Transcription failed')
+          throw new Error('Diarization failed')
         }
       }
 
-      queue.registerExecutor('transcription', failingExecutor)
+      // Diarization is the first pipeline step (post-ADR-007)
+      queue.registerExecutor('diarization', failingExecutor)
 
       queue.enqueuePipeline(sessionId, 'audio')
 
@@ -255,16 +268,18 @@ describe('TaskQueueService', () => {
       const cancelled = tasks.filter((t) => t.status === 'cancelled')
 
       expect(failed).toHaveLength(1)
-      expect(failed[0].type).toBe('transcription')
-      expect(cancelled).toHaveLength(4) // diarization, alignment, anonymization, summarization
+      expect(failed[0].type).toBe('diarization')
+      expect(cancelled).toHaveLength(4) // transcription, alignment, anonymization, summarization
     })
 
     it('does not execute cancelled tasks', async () => {
       const executionOrder: string[] = []
 
-      const failingTranscription: TaskExecutor = {
+      // Diarization is the first pipeline step (post-ADR-007); fail it to
+      // verify subsequent steps are cancelled rather than executed.
+      const failingDiarization: TaskExecutor = {
         async execute() {
-          executionOrder.push('transcription')
+          executionOrder.push('diarization')
           throw new Error('fail')
         }
       }
@@ -275,8 +290,8 @@ describe('TaskQueueService', () => {
         }
       }
 
-      queue.registerExecutor('transcription', failingTranscription)
-      queue.registerExecutor('diarization', trackingExecutor)
+      queue.registerExecutor('diarization', failingDiarization)
+      queue.registerExecutor('transcription', trackingExecutor)
       queue.registerExecutor('alignment', trackingExecutor)
       queue.registerExecutor('anonymization', trackingExecutor)
       queue.registerExecutor('summarization', trackingExecutor)
@@ -285,8 +300,8 @@ describe('TaskQueueService', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 200))
 
-      // Only transcription should have executed — the rest were cancelled
-      expect(executionOrder).toEqual(['transcription'])
+      // Only diarization should have executed — the rest were cancelled
+      expect(executionOrder).toEqual(['diarization'])
     })
   })
 
@@ -295,7 +310,7 @@ describe('TaskQueueService', () => {
       const session2 = sessionRepo.create({
         title: 'Session 2',
         type: 'audio',
-        status: 'transcribing'
+        status: 'processing'
       })
 
       const executionOrder: string[] = []
@@ -332,7 +347,7 @@ describe('TaskQueueService', () => {
       const session2 = sessionRepo.create({
         title: 'Session 2',
         type: 'audio',
-        status: 'transcribing'
+        status: 'processing'
       })
 
       const failOnFirst: TaskExecutor = {

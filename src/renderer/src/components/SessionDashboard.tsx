@@ -5,12 +5,7 @@ import { groupSessionsByTime, GROUP_ORDER } from '../utils/groupSessionsByTime'
 import { SessionCard } from './SessionCard'
 import { ConfirmDialog } from './ConfirmDialog'
 
-const PROCESSING_STATUSES: SessionStatus[] = [
-  'transcribing',
-  'diarizing',
-  'extracting',
-  'anonymizing'
-]
+const PROCESSING_STATUSES: SessionStatus[] = ['queued', 'processing']
 
 interface SessionDashboardProps {
   refreshTrigger?: number

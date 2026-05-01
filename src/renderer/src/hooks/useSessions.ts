@@ -31,8 +31,15 @@ export function useSessions(): UseSessionsResult {
     refresh()
   }, [refresh])
 
-  // Refresh session list when tasks complete or fail (session status changes)
+  // Refresh session list when tasks change phase. Issue #80: also listen to
+  // task:started so that the renderer learns about queued → processing
+  // transitions without waiting for the first task:completed (~12s+ for
+  // diarization). Without this, SessionCard mounts only after step 1 finishes
+  // and misses the early task:started events.
   useEffect(() => {
+    const cleanupStarted = window.api.tasks.onStarted(() => {
+      refresh()
+    })
     const cleanupCompleted = window.api.tasks.onCompleted(() => {
       refresh()
     })
@@ -40,6 +47,7 @@ export function useSessions(): UseSessionsResult {
       refresh()
     })
     return () => {
+      cleanupStarted()
       cleanupCompleted()
       cleanupError()
     }
