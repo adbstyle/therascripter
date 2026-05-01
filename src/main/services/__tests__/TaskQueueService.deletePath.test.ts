@@ -83,17 +83,19 @@ describe('TaskQueueService.abortRunningForSession — DR-6 verification', () => 
     const session = sessionRepo.create({ title: 'T', type: 'audio', status: 'queued' })
     queue.enqueuePipeline(session.id, 'audio')
 
-    // Confirm baseline: 5 tasks, 1 will be running, 4 pending
+    // Issue #80: enqueuePipeline filters via computePlannedSteps. Without a
+    // summarization model mocked-as-installed, audio plannedSteps = 4 steps
+    // (no summarization). After 30ms: 1 running + 3 pending.
     await new Promise((resolve) => setTimeout(resolve, 30))
     let tasks = taskRepo.findBySession(session.id)
-    expect(tasks.filter((t) => t.status === 'pending').length).toBe(4)
+    expect(tasks.filter((t) => t.status === 'pending').length).toBe(3)
     expect(tasks.filter((t) => t.status === 'running').length).toBe(1)
 
     queue.abortRunningForSession(session.id)
 
     tasks = taskRepo.findBySession(session.id)
     expect(tasks.filter((t) => t.status === 'pending').length).toBe(0)
-    expect(tasks.filter((t) => t.status === 'cancelled').length).toBe(4)
+    expect(tasks.filter((t) => t.status === 'cancelled').length).toBe(3)
   })
 
   it('is a no-op when no task is running for the given session', () => {

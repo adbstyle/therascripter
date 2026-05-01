@@ -82,14 +82,31 @@ export class TaskQueueService {
   }
 
   enqueuePipeline(sessionId: string, sessionType: SessionType): Task[] {
-    const pipeline = sessionType === 'audio' ? AUDIO_PIPELINE : PDF_PIPELINE
-    const tasks: Task[] = []
+    const session = this.sessionService.getSession(sessionId)
+    if (!session) {
+      throw new Error(`Session ${sessionId} not found in enqueuePipeline`)
+    }
 
-    for (const type of pipeline) {
+    // Issue #80: filter the pipeline through computePlannedSteps and freeze
+    // the result on the session. This is the single source of truth for
+    //   - which tasks get enqueued (here)
+    //   - the renderer's "Schritt N/M" counter (via task:started)
+    //   - retrySession's resume slice
+    // Previously enqueuePipeline used the raw AUDIO_PIPELINE / PDF_PIPELINE
+    // constants while computePlannedSteps filtered them, causing a brief
+    // "Schritt 0/N" flicker for filtered-out tasks (summarization without
+    // model installed, ocr on text-only PDFs).
+    const plannedSteps = computePlannedSteps(session)
+    this.sessionService.updateSession(sessionId, { plannedSteps })
+
+    const tasks: Task[] = []
+    for (const type of plannedSteps) {
       tasks.push(this.repository.create({ sessionId, type }))
     }
 
-    console.log(`[TaskQueue] Enqueued ${pipeline.length} tasks for session ${sessionId} (${sessionType})`)
+    console.log(
+      `[TaskQueue] Enqueued ${plannedSteps.length} tasks for session ${sessionId} (${sessionType}) — ${plannedSteps.join(',')}`
+    )
 
     // Phase D.4 — emit queue positions so waiting cards can render "Wartet — Position N"
     this.broadcastQueuePositions()
@@ -152,7 +169,12 @@ export class TaskQueueService {
       throw new Error(`Session ${sessionId} ist nicht im Fehlerstatus`)
     }
 
-    const pipeline = session.type === 'audio' ? AUDIO_PIPELINE : PDF_PIPELINE
+    // Issue #80: slice from session.plannedSteps (frozen at first enqueue) so
+    // retry honours the same filter the original run used (no OCR re-add for
+    // text-only PDFs, no summarization re-add when no model installed).
+    // Legacy session rows from before Phase H have null plannedSteps —
+    // recompute now and freeze so processNext doesn't drift.
+    const pipeline = session.plannedSteps ?? computePlannedSteps(session)
     const resumeIndex = this.findResumeIndex(session, pipeline)
 
     // Remove all non-completed task rows (failed + cancelled)
@@ -175,7 +197,8 @@ export class TaskQueueService {
     this.sessionService.updateSession(sessionId, {
       status: 'queued',
       errorMessage: null,
-      retryCount: (session.retryCount ?? 0) + 1
+      retryCount: (session.retryCount ?? 0) + 1,
+      plannedSteps: pipeline
     })
 
     console.log(
@@ -313,10 +336,11 @@ export class TaskQueueService {
 
     // Issue #80 DR-5: transition session queued → processing on first task start.
     // While further tasks remain, the status stays 'processing' (self-transition allowed).
-    // Also: freeze plannedSteps for the renderer's step counter (DR-4 / Phase H).
+    // plannedSteps is normally already frozen by enqueuePipeline; fall back to
+    // computePlannedSteps only for legacy migration rows that have null plannedSteps.
     const session = this.sessionService.getSession(task.sessionId)
     if (session && session.status === 'queued') {
-      const plannedSteps = computePlannedSteps(session)
+      const plannedSteps = session.plannedSteps ?? computePlannedSteps(session)
       try {
         this.sessionService.updateSession(task.sessionId, {
           status: 'processing',

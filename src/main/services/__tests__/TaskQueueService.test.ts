@@ -11,6 +11,15 @@ vi.mock('../../utils/ipc-helpers', () => ({
   sendToRenderer: vi.fn()
 }))
 
+// Issue #80: enqueuePipeline now filters via computePlannedSteps. These tests
+// pre-date the filter and assert against the full pipeline (5 audio steps,
+// 4 PDF steps); mock ModelDownloadService so the summarization step survives
+// the filter. PDF sessions also need pdfHasScannedPages=true to include ocr.
+vi.mock('../ModelDownloadService', () => ({
+  getActiveModelId: vi.fn().mockReturnValue('gemma-3-4b'),
+  isModelInstalled: vi.fn().mockReturnValue(true)
+}))
+
 describe('TaskQueueService', () => {
   let db: Database.Database
   let queue: TaskQueueService
@@ -66,6 +75,8 @@ describe('TaskQueueService', () => {
         title: 'PDF Test',
         type: 'pdf'
       })
+      // Force OCR into plannedSteps; default pdfHasScannedPages is null/false.
+      sessionRepo.update(pdfSession.id, { pdfHasScannedPages: true })
 
       const tasks = queue.enqueuePipeline(pdfSession.id, 'pdf')
 
