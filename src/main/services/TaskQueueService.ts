@@ -8,30 +8,56 @@ import { createStubExecutors } from './task-executors'
 import { sendToRenderer } from '../utils/ipc-helpers'
 import { validateIntermediateFile } from '../utils/file-ops'
 import type { Task, TaskType, Session, SessionStatus, SessionType } from '../../shared/types'
+import { AUDIO_PIPELINE, PDF_PIPELINE } from '../../shared/constants/pipeline'
+import { getActiveModelId, isModelInstalled } from './ModelDownloadService'
 
-const AUDIO_PIPELINE: TaskType[] = [
-  'transcription',
-  'diarization',
-  'alignment',
-  'anonymization',
-  'summarization'
-]
-const PDF_PIPELINE: TaskType[] = ['extraction', 'ocr', 'anonymization', 'summarization']
-
-// Maps a completed task type to the next session status
-const TASK_TO_SESSION_STATUS: Partial<Record<TaskType, SessionStatus>> = {
-  transcription: 'diarizing',
-  diarization: 'anonymizing',
-  alignment: 'anonymizing',
-  extraction: 'anonymizing',
-  ocr: 'anonymizing',
-  // anonymization no longer transitions immediately — summarization (the new tail step)
-  // can still be pending. handleTaskCompletion handles the all-done case explicitly.
-  anonymization: 'anonymizing',
-  summarization: 'review'
-}
+// Issue #80 / DR-5: tasks[] is the source of truth for "current step".
+// SessionStatus only carries lifecycle phase (queued / processing / review / error / recording).
+// The previous TASK_TO_SESSION_STATUS map and getSessionStatusForTask helper were removed.
 
 const RECOVERY_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
+
+/**
+ * Issue #80 / Phases C+H — compute the planned (visible) pipeline steps for
+ * a session. Frozen at queued → processing and stored in Session.plannedSteps;
+ * the renderer reads this via task:started's totalSteps/stepIndex.
+ *
+ * Pipeline order is sourced from `src/shared/constants/pipeline.ts`
+ * (CLAUDE.md: no local duplicate of the order).
+ *
+ * Conditional steps:
+ *   - summarization: included iff a summarization model is configured AND
+ *     installed on disk. The executor itself also gracefully skips at runtime
+ *     if the model becomes unavailable, but we omit it from plannedSteps so
+ *     the UI doesn't show a step that won't actually do anything.
+ *   - ocr (PDF only): included iff session.pdfHasScannedPages === true (set
+ *     at import time by the PDF importer's heuristic — Phase G).
+ */
+export function computePlannedSteps(session: Session): TaskType[] {
+  const summarizationActive = (() => {
+    try {
+      const id = getActiveModelId('summarization')
+      return id.length > 0 && isModelInstalled(id)
+    } catch {
+      return false
+    }
+  })()
+
+  if (session.type === 'audio') {
+    return AUDIO_PIPELINE.filter((step) => step !== 'summarization' || summarizationActive)
+  }
+
+  // PDF: include ocr only when import-time detection said scanned pages exist.
+  // Phase G adds the pdfHasScannedPages column; until then it's always undefined
+  // and OCR is omitted from plannedSteps (matching today's PDF UI behaviour).
+  const hasScannedPages =
+    'pdfHasScannedPages' in session && (session as Session & { pdfHasScannedPages?: boolean }).pdfHasScannedPages === true
+  return PDF_PIPELINE.filter((step) => {
+    if (step === 'ocr') return hasScannedPages
+    if (step === 'summarization') return summarizationActive
+    return true
+  })
+}
 
 export class TaskQueueService {
   private repository: TaskRepository
@@ -40,6 +66,10 @@ export class TaskQueueService {
   private processing = false
   private shouldStop = false
   private recoveryTimer: ReturnType<typeof setInterval> | null = null
+  // Tracks the AbortController for the currently running task so that
+  // abortRunningForSession() (called from SessionService.deleteSession) can
+  // signal the executor to stop cleanly. See DR-6 in plans/2026-04-29-pipeline-progress-ui-issue-80.md.
+  private runningController: { sessionId: string; controller: AbortController } | null = null
 
   constructor(db: Database.Database) {
     this.repository = new TaskRepository(db)
@@ -52,14 +82,34 @@ export class TaskQueueService {
   }
 
   enqueuePipeline(sessionId: string, sessionType: SessionType): Task[] {
-    const pipeline = sessionType === 'audio' ? AUDIO_PIPELINE : PDF_PIPELINE
-    const tasks: Task[] = []
+    const session = this.sessionService.getSession(sessionId)
+    if (!session) {
+      throw new Error(`Session ${sessionId} not found in enqueuePipeline`)
+    }
 
-    for (const type of pipeline) {
+    // Issue #80: filter the pipeline through computePlannedSteps and freeze
+    // the result on the session. This is the single source of truth for
+    //   - which tasks get enqueued (here)
+    //   - the renderer's "Schritt N/M" counter (via task:started)
+    //   - retrySession's resume slice
+    // Previously enqueuePipeline used the raw AUDIO_PIPELINE / PDF_PIPELINE
+    // constants while computePlannedSteps filtered them, causing a brief
+    // "Schritt 0/N" flicker for filtered-out tasks (summarization without
+    // model installed, ocr on text-only PDFs).
+    const plannedSteps = computePlannedSteps(session)
+    this.sessionService.updateSession(sessionId, { plannedSteps })
+
+    const tasks: Task[] = []
+    for (const type of plannedSteps) {
       tasks.push(this.repository.create({ sessionId, type }))
     }
 
-    console.log(`[TaskQueue] Enqueued ${pipeline.length} tasks for session ${sessionId} (${sessionType})`)
+    console.log(
+      `[TaskQueue] Enqueued ${plannedSteps.length} tasks for session ${sessionId} (${sessionType}) — ${plannedSteps.join(',')}`
+    )
+
+    // Phase D.4 — emit queue positions so waiting cards can render "Wartet — Position N"
+    this.broadcastQueuePositions()
 
     // Kick off processing if not already running
     this.scheduleNext()
@@ -71,6 +121,47 @@ export class TaskQueueService {
     return this.repository.findBySession(sessionId)
   }
 
+  /**
+   * Aborts the running task (if any) for the given session and cancels all
+   * pending tasks. Called from SessionService.deleteSession to ensure no
+   * zombie executor remains after the session is removed.
+   *
+   * Idempotent: calling multiple times for the same session is safe.
+   * If no task is running for the session, only pending cancellation runs.
+   */
+  abortRunningForSession(sessionId: string): void {
+    if (this.runningController?.sessionId === sessionId) {
+      this.runningController.controller.abort()
+    }
+    const cancelled = this.repository.cancelPendingForSession(sessionId)
+    if (cancelled > 0) {
+      console.log(
+        `[TaskQueue] Cancelled ${cancelled} pending tasks for deleted session ${sessionId}`
+      )
+    }
+    this.broadcastQueuePositions()
+  }
+
+  /**
+   * Issue #80 / Phase D.4 — broadcasts the current queue positions to all
+   * renderers so waiting cards can show "Wartet — Position N". Emitted on
+   * every queue mutation (enqueue, completion, abort).
+   *
+   * Position is 1-based and ordered by createdAt ascending. Sessions in
+   * 'recording' or already 'processing' are excluded from the queue map.
+   */
+  private broadcastQueuePositions(): void {
+    const queued = this.sessionService
+      .getAllSessions()
+      .filter((s) => s.status === 'queued')
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    const positions: Record<string, number> = {}
+    queued.forEach((s, idx) => {
+      positions[s.id] = idx + 1
+    })
+    sendToRenderer('queue:positions', { positions })
+  }
+
   retrySession(sessionId: string): void {
     const session = this.sessionService.getSession(sessionId)
     if (!session) throw new Error(`Session ${sessionId} nicht gefunden`)
@@ -78,7 +169,12 @@ export class TaskQueueService {
       throw new Error(`Session ${sessionId} ist nicht im Fehlerstatus`)
     }
 
-    const pipeline = session.type === 'audio' ? AUDIO_PIPELINE : PDF_PIPELINE
+    // Issue #80: slice from session.plannedSteps (frozen at first enqueue) so
+    // retry honours the same filter the original run used (no OCR re-add for
+    // text-only PDFs, no summarization re-add when no model installed).
+    // Legacy session rows from before Phase H have null plannedSteps —
+    // recompute now and freeze so processNext doesn't drift.
+    const pipeline = session.plannedSteps ?? computePlannedSteps(session)
     const resumeIndex = this.findResumeIndex(session, pipeline)
 
     // Remove all non-completed task rows (failed + cancelled)
@@ -93,14 +189,16 @@ export class TaskQueueService {
       this.repository.create({ sessionId, type })
     }
 
-    // Transition session: error → first pending task's processing status.
-    // Also clears errorMessage and qualityFlag so the renderer doesn't surface
-    // stale state from the failed run while the retry is in flight.
-    const firstStatus = this.getSessionStatusForTask(remainingSteps[0])
+    // Transition session: error → queued. The first task's start will then push
+    // queued → processing automatically (see executeTask). errorMessage is cleared
+    // so the renderer doesn't surface stale state from the failed run while the
+    // retry is in flight. Issue #80 DR-7: increment retryCount so the UI can
+    // surface the 3-stage support hint after repeated failures.
     this.sessionService.updateSession(sessionId, {
-      status: firstStatus ?? 'transcribing',
+      status: 'queued',
       errorMessage: null,
-      qualityFlag: null
+      retryCount: (session.retryCount ?? 0) + 1,
+      plannedSteps: pipeline
     })
 
     console.log(
@@ -111,7 +209,7 @@ export class TaskQueueService {
     this.scheduleNext()
   }
 
-  private findResumeIndex(session: Session, pipeline: TaskType[]): number {
+  private findResumeIndex(session: Session, pipeline: readonly TaskType[]): number {
     // Maps each task type to the session field that proves it completed successfully
     const outputField: Partial<Record<TaskType, string | null>> = {
       transcription: session.transcriptPath,
@@ -154,12 +252,7 @@ export class TaskQueueService {
 
   /** Find sessions stuck in a processing state with no pending/running tasks and mark as error */
   recoverOrphanedSessions(): number {
-    const processingStatuses: SessionStatus[] = [
-      'extracting',
-      'transcribing',
-      'diarizing',
-      'anonymizing'
-    ]
+    const processingStatuses: SessionStatus[] = ['queued', 'processing']
     let recovered = 0
 
     const allSessions = this.sessionService.getAllSessions()
@@ -241,6 +334,23 @@ export class TaskQueueService {
       return
     }
 
+    // Issue #80 DR-5: transition session queued → processing on first task start.
+    // While further tasks remain, the status stays 'processing' (self-transition allowed).
+    // plannedSteps is normally already frozen by enqueuePipeline; fall back to
+    // computePlannedSteps only for legacy migration rows that have null plannedSteps.
+    const session = this.sessionService.getSession(task.sessionId)
+    if (session && session.status === 'queued') {
+      const plannedSteps = session.plannedSteps ?? computePlannedSteps(session)
+      try {
+        this.sessionService.updateSession(task.sessionId, {
+          status: 'processing',
+          plannedSteps
+        })
+      } catch (err) {
+        console.error(`[TaskQueue] Failed to transition session to processing:`, err)
+      }
+    }
+
     // Mark as running
     this.repository.update(task.id, {
       status: 'running',
@@ -249,6 +359,7 @@ export class TaskQueueService {
 
     // Set up watchdog with AbortController
     const controller = new AbortController()
+    this.runningController = { sessionId: task.sessionId, controller }
     const audioDurationSec = this.getAudioDurationSec(task)
     const watchdog = new ProcessWatchdog({
       taskType: task.type,
@@ -256,20 +367,51 @@ export class TaskQueueService {
       onStall: () => controller.abort()
     })
 
+    // Issue #80 / Phase D — emit task:started with stepIndex/totalSteps
+    // derived from session.plannedSteps. The renderer uses this to avoid
+    // predicting the next task locally (DR-2).
+    const sessionForPlan = this.sessionService.getSession(task.sessionId)
+    const plannedSteps = sessionForPlan?.plannedSteps ?? []
+    const stepIndex = plannedSteps.indexOf(task.type) + 1 // 1-based; 0 if missing
+    const totalSteps = plannedSteps.length
+
+    sendToRenderer('task:started', {
+      sessionId: task.sessionId,
+      taskType: task.type,
+      stepIndex,
+      totalSteps
+    })
+
+    // Issue #80 / Phase E.3 — backend-side throttle to ≤4 Hz so renderer can't
+    // be overwhelmed by chatty executors (whisper-cli emits ~20 Hz from stderr).
+    // Boundary values 0 and 1 always pass through.
+    let lastProgressEmit = 0
+    const PROGRESS_THROTTLE_MS = 250
+
     const onProgress = (progress: number): void => {
       watchdog.heartbeat()
       this.repository.update(task.id, { progress })
-      sendToRenderer('task:progress', {
-        sessionId: task.sessionId,
-        taskType: task.type,
-        progress
-      })
+      const now = Date.now()
+      if (progress === 0 || progress >= 1 || now - lastProgressEmit >= PROGRESS_THROTTLE_MS) {
+        lastProgressEmit = now
+        sendToRenderer('task:progress', {
+          sessionId: task.sessionId,
+          taskType: task.type,
+          progress
+        })
+      }
+    }
+
+    const runtime = {
+      setAudioDurationSec: (sec: number): void => {
+        watchdog.setAudioDurationSec(sec)
+      }
     }
 
     watchdog.start()
 
     try {
-      await executor.execute(task, onProgress, controller.signal)
+      await executor.execute(task, onProgress, controller.signal, runtime)
 
       // Mark completed
       this.repository.update(task.id, {
@@ -308,7 +450,11 @@ export class TaskQueueService {
       this.handleTaskFailure(task, errorMessage)
     } finally {
       watchdog.stop()
+      this.runningController = null
       this.processing = false
+
+      // Phase D.4 — task ended (success or fail), queue positions may have shifted
+      this.broadcastQueuePositions()
 
       // Process next task (use setTimeout to avoid stack overflow on long chains)
       if (!this.shouldStop) {
@@ -318,7 +464,10 @@ export class TaskQueueService {
   }
 
   private getAudioDurationSec(task: Task): number | undefined {
-    if (task.type !== 'transcription') return undefined
+    // Both transcription and diarization use audioDuration-based dynamic stall
+    // thresholds (whisper: duration/40 for 5%-progress gap, pyannote: duration/15
+    // from Spike A datapoint).
+    if (task.type !== 'transcription' && task.type !== 'diarization') return undefined
     try {
       const session = this.sessionService.getSession(task.sessionId)
       if (!session?.audioPath) return undefined
@@ -331,53 +480,25 @@ export class TaskQueueService {
   }
 
   private handleTaskCompletion(task: Task): void {
-    const nextStatus = TASK_TO_SESSION_STATUS[task.type]
-    if (!nextStatus) return
-
-    // Only transition if this is the last task of its kind for the session
-    // (e.g., don't transition to 'anonymizing' after 'diarization' if 'alignment' is still pending)
     const remainingTasks = this.repository.findBySession(task.sessionId)
     const pendingOrRunning = remainingTasks.filter(
       (t) => t.status === 'pending' || t.status === 'running'
     )
 
     if (pendingOrRunning.length === 0) {
-      // All tasks done — set final status
+      // All tasks done — set final status. Reset retryCount on successful review
+      // (DR-7: counter resets when the session reaches review).
       try {
-        this.sessionService.updateSession(task.sessionId, { status: 'review' })
+        this.sessionService.updateSession(task.sessionId, {
+          status: 'review',
+          retryCount: 0
+        })
       } catch (err) {
         console.error(`[TaskQueue] Failed to transition session ${task.sessionId} to review:`, err)
       }
-    } else {
-      // Determine next status from the next pending task type
-      const nextTask = pendingOrRunning[0]
-      const statusForNextTask = this.getSessionStatusForTask(nextTask.type)
-      if (statusForNextTask) {
-        try {
-          this.sessionService.updateSession(task.sessionId, { status: statusForNextTask })
-        } catch (err) {
-          console.error(
-            `[TaskQueue] Failed to transition session ${task.sessionId} to ${statusForNextTask}:`,
-            err
-          )
-        }
-      }
     }
-  }
-
-  private getSessionStatusForTask(taskType: TaskType): SessionStatus | null {
-    const mapping: Partial<Record<TaskType, SessionStatus>> = {
-      transcription: 'transcribing',
-      diarization: 'diarizing',
-      alignment: 'diarizing', // alignment is part of diarization phase
-      extraction: 'extracting',
-      ocr: 'extracting',
-      anonymization: 'anonymizing',
-      // Summarization runs as the pipeline tail — keep the session in 'anonymizing'
-      // so the existing UX (no dedicated 'summarizing' status) covers the LLM step.
-      summarization: 'anonymizing'
-    }
-    return mapping[taskType] ?? null
+    // While tasks remain pending, the session stays in 'processing'.
+    // The actual current step is conveyed via task:started IPC events (Phase D).
   }
 
   private handleTaskFailure(task: Task, errorMessage: string): void {
@@ -433,6 +554,7 @@ export class TaskQueueService {
       this.recoveryTimer = null
     }
   }
+
 }
 
 // Singleton

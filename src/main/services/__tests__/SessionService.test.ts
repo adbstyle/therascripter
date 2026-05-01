@@ -33,11 +33,11 @@ describe('SessionService', () => {
       expect(session.status).toBe('recording')
     })
 
-    it('creates a pdf session with extracting status', () => {
+    it('creates a pdf session with queued status', () => {
       const session = service.createSession('Arztbericht', 'pdf', '/path/report.pdf')
 
       expect(session.type).toBe('pdf')
-      expect(session.status).toBe('extracting')
+      expect(session.status).toBe('queued')
       expect(session.pdfPath).toBe('/path/report.pdf')
     })
   })
@@ -63,60 +63,54 @@ describe('SessionService', () => {
   })
 
   describe('updateSession — status transitions', () => {
-    it('allows recording → transcribing', () => {
+    // Issue #80 DR-5: lifecycle is recording → queued → processing → review.
+    // Pipeline-step granularity is now in tasks[]; SessionStatus only tracks phase.
+    it('allows recording → queued', () => {
       const session = service.createSession('Test', 'audio')
-      const updated = service.updateSession(session.id, { status: 'transcribing' })
+      const updated = service.updateSession(session.id, { status: 'queued' })
 
-      expect(updated?.status).toBe('transcribing')
+      expect(updated?.status).toBe('queued')
     })
 
-    it('allows transcribing → diarizing', () => {
+    it('allows queued → processing', () => {
       const session = service.createSession('Test', 'audio')
-      service.updateSession(session.id, { status: 'transcribing' })
-      const updated = service.updateSession(session.id, { status: 'diarizing' })
+      service.updateSession(session.id, { status: 'queued' })
+      const updated = service.updateSession(session.id, { status: 'processing' })
 
-      expect(updated?.status).toBe('diarizing')
+      expect(updated?.status).toBe('processing')
     })
 
-    it('allows diarizing → anonymizing', () => {
+    it('allows processing → review', () => {
       const session = service.createSession('Test', 'audio')
-      service.updateSession(session.id, { status: 'transcribing' })
-      service.updateSession(session.id, { status: 'diarizing' })
-      const updated = service.updateSession(session.id, { status: 'anonymizing' })
-
-      expect(updated?.status).toBe('anonymizing')
-    })
-
-    it('allows anonymizing → review', () => {
-      const session = service.createSession('Test', 'audio')
-      service.updateSession(session.id, { status: 'transcribing' })
-      service.updateSession(session.id, { status: 'diarizing' })
-      service.updateSession(session.id, { status: 'anonymizing' })
+      service.updateSession(session.id, { status: 'queued' })
+      service.updateSession(session.id, { status: 'processing' })
       const updated = service.updateSession(session.id, { status: 'review' })
 
       expect(updated?.status).toBe('review')
     })
 
-    it('allows extracting → anonymizing (pdf pipeline)', () => {
+    it('allows pdf queued → processing', () => {
       const session = service.createSession('PDF', 'pdf')
-      const updated = service.updateSession(session.id, { status: 'anonymizing' })
+      // PDF sessions default to 'queued' (post-Issue #80)
+      expect(session.status).toBe('queued')
+      const updated = service.updateSession(session.id, { status: 'processing' })
 
-      expect(updated?.status).toBe('anonymizing')
+      expect(updated?.status).toBe('processing')
     })
 
-    it('allows any status → error', () => {
+    it('allows recording → error', () => {
       const session = service.createSession('Test', 'audio')
       const updated = service.updateSession(session.id, { status: 'error' })
 
       expect(updated?.status).toBe('error')
     })
 
-    it('allows error → transcribing (retry)', () => {
+    it('allows error → queued (retry)', () => {
       const session = service.createSession('Test', 'audio')
       service.updateSession(session.id, { status: 'error' })
-      const updated = service.updateSession(session.id, { status: 'transcribing' })
+      const updated = service.updateSession(session.id, { status: 'queued' })
 
-      expect(updated?.status).toBe('transcribing')
+      expect(updated?.status).toBe('queued')
     })
 
     it('rejects invalid transition recording → review', () => {
@@ -127,11 +121,11 @@ describe('SessionService', () => {
       }).toThrow('Invalid status transition: recording → review')
     })
 
-    it('rejects invalid transition recording → diarizing (skipping transcribing)', () => {
+    it('rejects invalid transition recording → processing (must go via queued)', () => {
       const session = service.createSession('Test', 'audio')
 
       expect(() => {
-        service.updateSession(session.id, { status: 'diarizing' })
+        service.updateSession(session.id, { status: 'processing' })
       }).toThrow('Invalid status transition')
     })
 
@@ -141,14 +135,14 @@ describe('SessionService', () => {
       }).toThrow('Session non-existent not found')
     })
 
-    it('allows idempotent self-transition (same status → same status)', () => {
+    it('allows idempotent self-transition processing → processing', () => {
       const session = service.createSession('Test', 'audio')
-      service.updateSession(session.id, { status: 'transcribing' })
-      service.updateSession(session.id, { status: 'diarizing' })
+      service.updateSession(session.id, { status: 'queued' })
+      service.updateSession(session.id, { status: 'processing' })
 
-      // diarizing → diarizing should not throw (alignment task triggers this)
-      const updated = service.updateSession(session.id, { status: 'diarizing' })
-      expect(updated?.status).toBe('diarizing')
+      // processing → processing is legitimate (multiple tasks within the same phase)
+      const updated = service.updateSession(session.id, { status: 'processing' })
+      expect(updated?.status).toBe('processing')
     })
   })
 
@@ -182,9 +176,8 @@ describe('SessionService', () => {
   describe('updateSession — reviewAt auto-set', () => {
     it('sets reviewAt on first transition to review', () => {
       const session = service.createSession('Test', 'audio')
-      service.updateSession(session.id, { status: 'transcribing' })
-      service.updateSession(session.id, { status: 'diarizing' })
-      service.updateSession(session.id, { status: 'anonymizing' })
+      service.updateSession(session.id, { status: 'queued' })
+      service.updateSession(session.id, { status: 'processing' })
       const updated = service.updateSession(session.id, { status: 'review' })
 
       expect(updated?.reviewAt).toBeTruthy()
@@ -193,9 +186,8 @@ describe('SessionService', () => {
 
     it('does not reset reviewAt on review → review (re-anonymization)', () => {
       const session = service.createSession('Test', 'audio')
-      service.updateSession(session.id, { status: 'transcribing' })
-      service.updateSession(session.id, { status: 'diarizing' })
-      service.updateSession(session.id, { status: 'anonymizing' })
+      service.updateSession(session.id, { status: 'queued' })
+      service.updateSession(session.id, { status: 'processing' })
       const firstReview = service.updateSession(session.id, { status: 'review' })
       const firstReviewAt = firstReview!.reviewAt
 
@@ -206,7 +198,7 @@ describe('SessionService', () => {
 
     it('reviewAt is null for non-review sessions', () => {
       const session = service.createSession('Test', 'audio')
-      const updated = service.updateSession(session.id, { status: 'transcribing' })
+      const updated = service.updateSession(session.id, { status: 'queued' })
 
       expect(updated?.reviewAt).toBeNull()
     })

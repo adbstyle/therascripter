@@ -72,9 +72,8 @@ describe('ReviewService', () => {
   function createReviewSession(): string {
     const session = sessionService.createSession('Test Session', 'audio')
     // Transition through pipeline: recording → transcribing → diarizing → anonymizing → review
-    sessionService.updateSession(session.id, { status: 'transcribing' })
-    sessionService.updateSession(session.id, { status: 'diarizing' })
-    sessionService.updateSession(session.id, { status: 'anonymizing' })
+    sessionService.updateSession(session.id, { status: 'queued' })
+    sessionService.updateSession(session.id, { status: 'processing' })
     const docPath = join(tmpDir, `${session.id}.json`)
     writeFileSync(docPath, JSON.stringify(sampleDoc), 'utf-8')
     sessionService.updateSession(session.id, {
@@ -108,9 +107,8 @@ describe('ReviewService', () => {
 
     it('throws for session without anonymizedPath', () => {
       const session = sessionService.createSession('Test', 'audio')
-      sessionService.updateSession(session.id, { status: 'transcribing' })
-      sessionService.updateSession(session.id, { status: 'diarizing' })
-      sessionService.updateSession(session.id, { status: 'anonymizing' })
+      sessionService.updateSession(session.id, { status: 'queued' })
+      sessionService.updateSession(session.id, { status: 'processing' })
       sessionService.updateSession(session.id, { status: 'review' })
 
       expect(() => reviewService.load(session.id)).toThrow('no anonymized document')
@@ -118,9 +116,8 @@ describe('ReviewService', () => {
 
     it('returns empty entityMap when session has none', () => {
       const session = sessionService.createSession('Test', 'audio')
-      sessionService.updateSession(session.id, { status: 'transcribing' })
-      sessionService.updateSession(session.id, { status: 'diarizing' })
-      sessionService.updateSession(session.id, { status: 'anonymizing' })
+      sessionService.updateSession(session.id, { status: 'queued' })
+      sessionService.updateSession(session.id, { status: 'processing' })
       const docPath = join(tmpDir, `${session.id}.json`)
       writeFileSync(docPath, JSON.stringify(sampleDoc), 'utf-8')
       sessionService.updateSession(session.id, {

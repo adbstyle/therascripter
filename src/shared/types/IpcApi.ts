@@ -1,4 +1,4 @@
-import type { Session, SessionType, QualityFlag } from './Session'
+import type { Session, SessionType } from './Session'
 import type { Task, TaskType } from './Task'
 import type { BlocklistEntry } from './NerTypes'
 import type { EntityMap, PlaceholderType } from './EntityMap'
@@ -36,6 +36,15 @@ export interface TaskProgressData {
   progress: number
 }
 
+export interface TaskStartedData {
+  sessionId: string
+  taskType: TaskType
+  /** 1-based position in plannedSteps; 0 if task not in plannedSteps */
+  stepIndex: number
+  /** Length of plannedSteps; 0 if no plan was frozen */
+  totalSteps: number
+}
+
 export interface TaskCompletedData {
   sessionId: string
   taskType: TaskType
@@ -47,13 +56,20 @@ export interface TaskErrorData {
   error: string
 }
 
+export interface QueuePositionsData {
+  /** Map sessionId → 1-based position in queue. Sessions not queued are absent. */
+  positions: Record<string, number>
+}
+
 export interface TasksApi {
   getSessionTasks(sessionId: string): Promise<Task[]>
   isProcessing(): Promise<boolean>
   retry(sessionId: string): Promise<void>
   onProgress(callback: (data: TaskProgressData) => void): () => void
+  onStarted(callback: (data: TaskStartedData) => void): () => void
   onCompleted(callback: (data: TaskCompletedData) => void): () => void
   onError(callback: (data: TaskErrorData) => void): () => void
+  onQueuePositions(callback: (data: QueuePositionsData) => void): () => void
 }
 
 export interface BlocklistApi {
@@ -74,7 +90,6 @@ export interface ReviewData {
   entityMap: EntityMap
   sessionType: SessionType
   sessionTitle: string
-  qualityFlag: QualityFlag | null
 }
 
 export interface ReviewApi {

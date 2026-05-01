@@ -33,8 +33,7 @@ export class ReviewService {
       document,
       entityMap,
       sessionType: session.type,
-      sessionTitle: session.title,
-      qualityFlag: session.qualityFlag
+      sessionTitle: session.title
     }
   }
 

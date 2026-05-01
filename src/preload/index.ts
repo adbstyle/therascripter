@@ -3,10 +3,19 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type {
   IpcApi,
   TaskProgressData,
+  TaskStartedData,
   TaskCompletedData,
   TaskErrorData,
+  QueuePositionsData,
   ModelDownloadStatus
 } from '../shared/types'
+import {
+  TaskProgressDataSchema,
+  TaskStartedDataSchema,
+  TaskCompletedDataSchema,
+  TaskErrorDataSchema,
+  QueuePositionsDataSchema
+} from '../shared/validation/task-schemas'
 import type { PendingModelUpdate, AppUpdateStatus } from '../shared/types/ModelUpdate'
 import type {
   ModelGroup,
@@ -56,27 +65,53 @@ const api: IpcApi = {
     isProcessing: () => ipcRenderer.invoke('task:isProcessing'),
     retry: (sessionId) => ipcRenderer.invoke('task:retry', { sessionId }),
     onProgress: (callback) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: TaskProgressData): void =>
+      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
+        const data: TaskProgressData = TaskProgressDataSchema.parse(raw)
         callback(data)
+      }
       ipcRenderer.on('task:progress', handler)
       return () => {
         ipcRenderer.removeListener('task:progress', handler)
       }
     },
-    onCompleted: (callback) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: TaskCompletedData): void =>
+    onStarted: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
+        const data: TaskStartedData = TaskStartedDataSchema.parse(raw)
         callback(data)
+      }
+      ipcRenderer.on('task:started', handler)
+      return () => {
+        ipcRenderer.removeListener('task:started', handler)
+      }
+    },
+    onCompleted: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
+        const data: TaskCompletedData = TaskCompletedDataSchema.parse(raw)
+        callback(data)
+      }
       ipcRenderer.on('task:completed', handler)
       return () => {
         ipcRenderer.removeListener('task:completed', handler)
       }
     },
     onError: (callback) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: TaskErrorData): void =>
+      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
+        const data: TaskErrorData = TaskErrorDataSchema.parse(raw)
         callback(data)
+      }
       ipcRenderer.on('task:error', handler)
       return () => {
         ipcRenderer.removeListener('task:error', handler)
+      }
+    },
+    onQueuePositions: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
+        const data: QueuePositionsData = QueuePositionsDataSchema.parse(raw)
+        callback(data)
+      }
+      ipcRenderer.on('queue:positions', handler)
+      return () => {
+        ipcRenderer.removeListener('queue:positions', handler)
       }
     }
   },

@@ -37,7 +37,7 @@ describe('SessionRepository', () => {
       expect(session.updatedAt).toBeTruthy()
     })
 
-    it('creates a pdf session with extracting status', () => {
+    it('creates a pdf session with queued status', () => {
       const session = repo.create({
         title: 'Arztbericht',
         type: 'pdf',
@@ -45,7 +45,7 @@ describe('SessionRepository', () => {
       })
 
       expect(session.type).toBe('pdf')
-      expect(session.status).toBe('extracting')
+      expect(session.status).toBe('queued')
       expect(session.pdfPath).toBe('/path/to/report.pdf')
     })
 
@@ -125,9 +125,9 @@ describe('SessionRepository', () => {
 
     it('updates the status', () => {
       const session = repo.create({ title: 'Test', type: 'audio' })
-      const updated = repo.update(session.id, { status: 'transcribing' })
+      const updated = repo.update(session.id, { status: 'processing' })
 
-      expect(updated?.status).toBe('transcribing')
+      expect(updated?.status).toBe('processing')
     })
 
     it('updates updated_at timestamp', async () => {

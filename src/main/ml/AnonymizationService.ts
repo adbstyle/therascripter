@@ -52,7 +52,24 @@ export class AnonymizationService implements TaskExecutor {
     const transcript = JSON.parse(readFileSync(transcriptSource, 'utf-8')) as TranscriptData
 
     if (!transcript.segments || transcript.segments.length === 0) {
-      throw new Error('Transkript enthält keine Segmente für die Anonymisierung')
+      // Audio-only graceful path (ADR-007 / Issue #78): empty transcripts from
+      // recordings without speech reach 'review' with an empty editor.
+      // For PDFs, an empty transcript indicates a failed extraction (corrupt/
+      // unreadable file) — surface as 'error' so the user knows to re-import,
+      // matching the pre-inversion behaviour.
+      if (session?.type !== 'audio') {
+        throw new Error('Transkript enthält keine Segmente für die Anonymisierung')
+      }
+      const emptyDoc = { type: 'doc', content: [{ type: 'paragraph' }] }
+      const anonymizedPath = sessionService.generateAnonymizedPath(task.sessionId)
+      writeFileAtomic(anonymizedPath, JSON.stringify(emptyDoc, null, 2))
+      sessionService.updateSession(task.sessionId, {
+        anonymizedPath,
+        entityMap: {},
+        wordCount: 0
+      })
+      onProgress(1)
+      return
     }
 
     onProgress(0.05)

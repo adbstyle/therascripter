@@ -1,20 +1,14 @@
 import type { EntityMap } from './EntityMap'
+import type { TaskType } from './Task'
 
 export type SessionType = 'audio' | 'pdf'
 
 export type SessionStatus =
   | 'recording'
-  | 'transcribing'
-  | 'diarizing'
-  | 'extracting'
-  | 'anonymizing'
+  | 'queued'
+  | 'processing'
   | 'review'
   | 'error'
-
-// Two severity levels for whisper repetition-loop detection. The pipeline
-// always runs to completion regardless — these flags drive a non-blocking
-// banner so the user can spot bad output and report it as a bug.
-export type QualityFlag = 'repetition_warning' | 'repetition_critical'
 
 export interface Session {
   id: string
@@ -37,7 +31,14 @@ export interface Session {
   summary: string | null
   summaryModelId: string | null
   summarizedAt: string | null
-  qualityFlag: QualityFlag | null
+  plannedSteps: TaskType[] | null
+  retryCount: number
+  /**
+   * Issue #80 Phase G — set by the PDF importer's heuristic (extract first 3
+   * pages of text; <50 chars total → likely scanned, needs OCR). NULL for
+   * audio sessions and legacy PDF rows.
+   */
+  pdfHasScannedPages: boolean | null
 }
 
 export interface CreateSessionInput {
@@ -65,5 +66,7 @@ export interface UpdateSessionInput {
   summary?: string | null
   summaryModelId?: string | null
   summarizedAt?: string | null
-  qualityFlag?: QualityFlag | null
+  plannedSteps?: TaskType[] | null
+  retryCount?: number
+  pdfHasScannedPages?: boolean | null
 }

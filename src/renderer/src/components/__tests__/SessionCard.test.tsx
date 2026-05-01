@@ -1,0 +1,283 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { SessionCard } from '../SessionCard'
+import type { Session } from '../../../../shared/types'
+import { useTaskProgress } from '../../hooks/useTaskProgress'
+
+vi.mock('../../hooks/useTaskProgress', () => ({
+  useTaskProgress: vi.fn()
+}))
+
+function makeSession(overrides: Partial<Session> = {}): Session {
+  return {
+    id: 's1',
+    title: 'Test',
+    type: 'audio',
+    status: 'review',
+    audioPath: null,
+    transcriptPath: null,
+    anonymizedPath: null,
+    diarizationPath: null,
+    alignedTranscriptPath: null,
+    pdfPath: null,
+    extractedPath: null,
+    entityMap: null,
+    errorMessage: null,
+    createdAt: '2026-04-29T12:00:00Z',
+    updatedAt: '2026-04-29T12:00:00Z',
+    reviewAt: null,
+    wordCount: 4287,
+    summary: null,
+    summaryModelId: null,
+    summarizedAt: null,
+    plannedSteps: null,
+    retryCount: 0,
+    pdfHasScannedPages: null,
+    ...overrides
+  }
+}
+
+const emptyHookResult = {
+  tasks: [],
+  loading: false,
+  current: null,
+  queuePosition: null
+}
+
+describe('SessionCard — review state', () => {
+  beforeEach(() => {
+    vi.mocked(useTaskProgress).mockReturnValue(emptyHookResult)
+  })
+
+  it('renders word count when wordCount > 0', () => {
+    render(<SessionCard session={makeSession({ wordCount: 4287 })} onDelete={vi.fn()} />)
+    // de-CH locale formats 4287 with a thin-space or apostrophe-like grouping.
+    // Match flexibly on the prefix + suffix; the grouping char is locale-impl-specific.
+    expect(screen.getByText(/4.{0,3}287 Wörter/)).toBeInTheDocument()
+  })
+})
+
+describe('SessionCard — queued state', () => {
+  it('renders waiting label with position from useTaskProgress', () => {
+    vi.mocked(useTaskProgress).mockReturnValue({ ...emptyHookResult, queuePosition: 2 })
+    render(<SessionCard session={makeSession({ status: 'queued' })} onDelete={vi.fn()} />)
+    expect(screen.getByText('Wartet — Position 2')).toBeInTheDocument()
+  })
+
+  it('falls back to plain "Wartet" before queue:positions arrives', () => {
+    vi.mocked(useTaskProgress).mockReturnValue({ ...emptyHookResult, queuePosition: null })
+    render(<SessionCard session={makeSession({ status: 'queued' })} onDelete={vi.fn()} />)
+    expect(screen.getByText('Wartet')).toBeInTheDocument()
+  })
+})
+
+describe('SessionCard — processing state (audio)', () => {
+  it('renders Schritt 3/5 · Gespräch transkribieren during transcription', () => {
+    vi.mocked(useTaskProgress).mockReturnValue({
+      tasks: [],
+      loading: false,
+      current: {
+        taskType: 'transcription',
+        progress: 0.64,
+        stepIndex: 3,
+        totalSteps: 5,
+        isTransitioning: false
+      },
+      queuePosition: null
+    })
+    render(<SessionCard session={makeSession({ status: 'processing' })} onDelete={vi.fn()} />)
+    expect(screen.getByText('Schritt 3/5 · Gespräch transkribieren')).toBeInTheDocument()
+  })
+
+  it('renders preparingNext during transitioning state', () => {
+    vi.mocked(useTaskProgress).mockReturnValue({
+      tasks: [],
+      loading: false,
+      current: {
+        taskType: 'transcription',
+        progress: 1,
+        stepIndex: 3,
+        totalSteps: 5,
+        isTransitioning: true
+      },
+      queuePosition: null
+    })
+    render(<SessionCard session={makeSession({ status: 'processing' })} onDelete={vi.fn()} />)
+    expect(screen.getByText('Nächster Schritt wird vorbereitet…')).toBeInTheDocument()
+  })
+
+  it('renders the step-bar with step-name aria-label when processing', () => {
+    vi.mocked(useTaskProgress).mockReturnValue({
+      tasks: [],
+      loading: false,
+      current: {
+        taskType: 'transcription',
+        progress: 0.5,
+        stepIndex: 3,
+        totalSteps: 5,
+        isTransitioning: false
+      },
+      queuePosition: null
+    })
+    const { container } = render(
+      <SessionCard session={makeSession({ status: 'processing' })} onDelete={vi.fn()} />
+    )
+    expect(container.querySelector('[aria-label*="Gespräch transkribieren"]')).toBeTruthy()
+  })
+
+  it('shows step-only label when totalSteps is 0 (plannedSteps not yet set)', () => {
+    vi.mocked(useTaskProgress).mockReturnValue({
+      tasks: [],
+      loading: false,
+      current: {
+        taskType: 'transcription',
+        progress: 0.5,
+        stepIndex: 0,
+        totalSteps: 0,
+        isTransitioning: false
+      },
+      queuePosition: null
+    })
+    render(<SessionCard session={makeSession({ status: 'processing' })} onDelete={vi.fn()} />)
+    expect(screen.getByText('Gespräch transkribieren')).toBeInTheDocument()
+    expect(screen.queryByText(/Schritt 0/)).toBeNull()
+  })
+
+  it('falls back to status label when current is null mid-processing', () => {
+    vi.mocked(useTaskProgress).mockReturnValue(emptyHookResult)
+    render(<SessionCard session={makeSession({ status: 'processing' })} onDelete={vi.fn()} />)
+    expect(screen.getByText('Verarbeitung')).toBeInTheDocument()
+  })
+})
+
+describe('SessionCard — processing state (PDF)', () => {
+  it('renders Text auslesen for extraction step', () => {
+    vi.mocked(useTaskProgress).mockReturnValue({
+      tasks: [],
+      loading: false,
+      current: {
+        taskType: 'extraction',
+        progress: 0.5,
+        stepIndex: 1,
+        totalSteps: 2,
+        isTransitioning: false
+      },
+      queuePosition: null
+    })
+    render(
+      <SessionCard
+        session={makeSession({ type: 'pdf', status: 'processing' })}
+        onDelete={vi.fn()}
+      />
+    )
+    expect(screen.getByText('Schritt 1/2 · Text auslesen')).toBeInTheDocument()
+  })
+
+  it('renders Schrift erkennen for OCR step', () => {
+    vi.mocked(useTaskProgress).mockReturnValue({
+      tasks: [],
+      loading: false,
+      current: {
+        taskType: 'ocr',
+        progress: 0.3,
+        stepIndex: 2,
+        totalSteps: 3,
+        isTransitioning: false
+      },
+      queuePosition: null
+    })
+    render(
+      <SessionCard
+        session={makeSession({ type: 'pdf', status: 'processing' })}
+        onDelete={vi.fn()}
+      />
+    )
+    expect(screen.getByText('Schritt 2/3 · Schrift erkennen')).toBeInTheDocument()
+  })
+})
+
+describe('SessionCard — empty-speech variant (review + wordCount === 0)', () => {
+  beforeEach(() => {
+    vi.mocked(useTaskProgress).mockReturnValue(emptyHookResult)
+  })
+
+  it('renders Keine Sprache erkannt headline when wordCount === 0', () => {
+    render(<SessionCard session={makeSession({ wordCount: 0 })} onDelete={vi.fn()} />)
+    expect(screen.getByText('Keine Sprache erkannt')).toBeInTheDocument()
+  })
+
+  it('renders empty-speech body explanation', () => {
+    render(<SessionCard session={makeSession({ wordCount: 0 })} onDelete={vi.fn()} />)
+    expect(screen.getByText(/ohne dass Sprache erkannt wurde/)).toBeInTheDocument()
+  })
+
+  it('does not render empty-speech variant when wordCount > 0', () => {
+    render(<SessionCard session={makeSession({ wordCount: 5 })} onDelete={vi.fn()} />)
+    expect(screen.queryByText('Keine Sprache erkannt')).toBeNull()
+  })
+
+  it('does not render empty-speech variant for non-review status', () => {
+    render(
+      <SessionCard
+        session={makeSession({ status: 'processing', wordCount: 0 })}
+        onDelete={vi.fn()}
+      />
+    )
+    expect(screen.queryByText('Keine Sprache erkannt')).toBeNull()
+  })
+})
+
+describe('SessionCard — error state with 3-stage retry-limit UX', () => {
+  beforeEach(() => {
+    vi.mocked(useTaskProgress).mockReturnValue(emptyHookResult)
+  })
+
+  it('shows plain Retry button on first failure (retryCount === 0)', () => {
+    render(
+      <SessionCard
+        session={makeSession({ status: 'error', errorMessage: 'foo', retryCount: 0 })}
+        onDelete={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    )
+    expect(screen.getByText('Erneut versuchen')).toBeInTheDocument()
+    expect(screen.queryByText(/Erster Versuch/)).toBeNull()
+    expect(screen.queryByText(/Mehrfach-Fehler/)).toBeNull()
+  })
+
+  it('shows Erster Versuch hint on retryCount === 1', () => {
+    render(
+      <SessionCard
+        session={makeSession({ status: 'error', errorMessage: 'foo', retryCount: 1 })}
+        onDelete={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    )
+    expect(screen.getByText('Erster Versuch ist fehlgeschlagen.')).toBeInTheDocument()
+    expect(screen.getByText('Erneut versuchen')).toBeInTheDocument()
+  })
+
+  it('shows escalated Mehrfach-Fehler hint on retryCount === 2', () => {
+    render(
+      <SessionCard
+        session={makeSession({ status: 'error', errorMessage: 'foo', retryCount: 2 })}
+        onDelete={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    )
+    expect(screen.getByText(/Mehrfach-Fehler/)).toBeInTheDocument()
+    expect(screen.getByText('Erneut versuchen')).toBeInTheDocument()
+  })
+
+  it('hides retry button and shows Support hint on retryCount >= 3', () => {
+    render(
+      <SessionCard
+        session={makeSession({ status: 'error', errorMessage: 'foo', retryCount: 3 })}
+        onDelete={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    )
+    expect(screen.queryByText('Erneut versuchen')).toBeNull()
+    expect(screen.getByText(/Wenden Sie sich an den Support/)).toBeInTheDocument()
+  })
+})

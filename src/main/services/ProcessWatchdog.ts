@@ -2,9 +2,10 @@ import type { TaskType } from '../../shared/types'
 
 const POLL_INTERVAL_MS = 15_000
 
-// Per-service stall thresholds (conservative, M1-based)
+// Per-service stall thresholds (conservative, M1-based).
+// Note: diarization and transcription use dynamic thresholds based on audio
+// duration (computed in computeThreshold). See ADR-007 / Issue #78.
 const STALL_THRESHOLDS: Partial<Record<TaskType, number>> = {
-  diarization: 120_000,
   anonymization: 120_000,
   ocr: 60_000,
   // LlamaSummarizer reports no fine-grained progress — onProgress is never called
@@ -28,11 +29,13 @@ export class ProcessWatchdog {
   private lastHeartbeatAt = Date.now()
   private timer: ReturnType<typeof setInterval> | null = null
   private fired = false
-  private readonly stallThresholdMs: number
+  private stallThresholdMs: number
+  private readonly taskType: TaskType
   private readonly onStall: () => void
   private readonly skip: boolean
 
   constructor(config: WatchdogConfig) {
+    this.taskType = config.taskType
     this.onStall = config.onStall
     this.skip = IN_PROCESS_TASKS.includes(config.taskType)
     this.stallThresholdMs = this.computeThreshold(config.taskType, config.audioDurationSec)
@@ -51,6 +54,20 @@ export class ProcessWatchdog {
 
   heartbeat(): void {
     this.lastHeartbeatAt = Date.now()
+  }
+
+  /**
+   * Recompute the stall threshold from a new audio duration. Used by
+   * WhisperService after stitching: the original audio duration is the
+   * upper bound, but ASR runs on the (possibly much shorter) stitched WAV
+   * — readjusting prevents 120s+ slack on tiny stitched payloads, where a
+   * true stall would otherwise take longer to detect than necessary.
+   */
+  setAudioDurationSec(audioDurationSec: number): void {
+    if (this.skip) return
+    // Shrink or grow the threshold; both are safe because heartbeat resets
+    // the elapsed-time counter on every progress event.
+    this.stallThresholdMs = this.computeThreshold(this.taskType, audioDurationSec)
   }
 
   stop(): void {
@@ -79,6 +96,14 @@ export class ProcessWatchdog {
       // Dynamic threshold: audioDuration / 40 gives the expected gap between
       // whisper.cpp 5%-step progress events. Minimum 120s.
       const dynamicSec = (audioDurationSec ?? 0) / 40
+      return Math.max(dynamicSec, 120) * 1000
+    }
+
+    if (taskType === 'diarization') {
+      // ADR-007 / Issue #78: pyannote runs first now and can take minutes per
+      // stage with no progress event. Spike A datapoint: ~4 min on 62 min audio.
+      // N=15 → 240s for 1h audio as safe reserve. Minimum 120s.
+      const dynamicSec = (audioDurationSec ?? 0) / 15
       return Math.max(dynamicSec, 120) * 1000
     }
 
