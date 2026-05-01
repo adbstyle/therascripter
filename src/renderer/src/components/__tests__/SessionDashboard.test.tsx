@@ -180,6 +180,9 @@ beforeEach(() => {
     },
     nav: {
       onOpenSettings: vi.fn().mockReturnValue(() => {})
+    },
+    feedback: {
+      send: vi.fn().mockResolvedValue(undefined)
     }
   } as typeof window.api
   vi.clearAllMocks()

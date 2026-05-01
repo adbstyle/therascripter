@@ -194,6 +194,10 @@ export interface NavApi {
   onOpenSettings(callback: () => void): () => void
 }
 
+export interface FeedbackApi {
+  send(): Promise<void>
+}
+
 export interface ModelCatalogApi {
   list(group: ModelGroup): Promise<ModelCatalogEntry[]>
   listAsr(): Promise<ModelCatalogEntry[]>
@@ -226,4 +230,5 @@ export interface IpcApi {
   appUpdate: AppUpdateApi
   summary: SummaryApi
   nav: NavApi
+  feedback: FeedbackApi
 }
