@@ -58,7 +58,17 @@ export function EditableSessionTitle({
       })
   }
 
-  const onBlur = (e: FocusEvent<HTMLHeadingElement>): void => commit(e.currentTarget)
+  const onBlur = (e: FocusEvent<HTMLHeadingElement>): void => {
+    // Focused state had `overflow-x: auto` (so the user could edit past the
+    // visible width); contentEditable auto-scrolls to keep the caret visible.
+    // On blur the CSS reverts to `truncate` (= overflow: hidden), but the
+    // browser preserves scrollLeft through that transition — without this
+    // reset the filled state would render the middle of the title with
+    // ellipsis on the right, looking like a rendering bug. Resetting here
+    // restores the expected "start of title + …" view.
+    e.currentTarget.scrollLeft = 0
+    commit(e.currentTarget)
+  }
   const onKeyDown = (e: KeyboardEvent<HTMLHeadingElement>): void => {
     if (e.key === 'Escape') {
       e.currentTarget.textContent = originalRef.current
@@ -79,7 +89,20 @@ export function EditableSessionTitle({
       // receives focus. A contentEditable element must always pass clicks
       // through, so the class belongs on the component itself, not the call
       // site.
-      className={`titlebar-no-drag session-title outline-none focus:ring-1 focus:ring-primary rounded-sm ${className ?? ''}`}
+      //
+      // Standard inline-edit-title pattern (Linear/Notion/Figma):
+      // - Filled (default): looks like a plain bold heading. truncate +
+      //   transparent border that reserves space so focus does not shift
+      //   the layout.
+      // - Focused: same dimensions, border becomes primary (the only
+      //   visual change), overflow-x-auto + text-clip replaces truncate
+      //   so the user edits without ellipsis. text-clip is required —
+      //   overflow-x-auto alone does not suppress text-overflow:ellipsis,
+      //   the dots keep rendering.
+      // The contentEditable element shows a text caret on hover by
+      // default — that is the discoverability hint, no extra hover chrome
+      // needed.
+      className={`titlebar-no-drag session-title h-9 rounded-lg border border-transparent px-4 leading-9 outline-none transition-colors truncate focus:border-primary focus:overflow-x-auto focus:text-clip ${className ?? ''}`}
       contentEditable
       suppressContentEditableWarning
       onBlur={onBlur}

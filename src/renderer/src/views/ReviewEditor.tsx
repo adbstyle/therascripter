@@ -557,7 +557,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
             title={sessionTitle}
             fallback="Transkription ohne Titel"
             onSaved={setSessionTitle}
-            className="min-w-0 flex-1 truncate text-lg font-semibold text-text-primary"
+            className="min-w-0 flex-1 text-base font-semibold text-text-primary"
           />
         </div>
         <div className="flex shrink-0 items-center gap-2">
