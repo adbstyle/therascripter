@@ -94,6 +94,25 @@ export function getModelById(id: string): ModelDefinition | null {
  * für Inkonsistenzen, die _während_ einer Session entstehen.
  */
 export function getActiveModelId(group: ModelGroup): string | null {
+  const id = getActiveModelIdBelief(group)
+  if (id === null) return null
+  if (!isModelInstalled(id)) return null
+  return id
+}
+
+/**
+ * Issue #84 / Story E follow-up — raw settings-belief without the disk
+ * presence check. Used by the catalog handler to expose the "user has
+ * marked this active" bit independently of "the file is there", so the
+ * Settings UI can surface the `inconsistent` ModelStatusBadge state when
+ * the two diverge (e.g. user deletes the file in Finder mid-session and
+ * re-opens Settings → Modelle before restarting).
+ *
+ * Executors must keep using `getActiveModelId` (the disk-checked variant);
+ * trusting belief without the file check would re-introduce the original
+ * trust gap this epic closes.
+ */
+export function getActiveModelIdBelief(group: ModelGroup): string | null {
   const active = getSettings().get('activeModels')
   let id: string | null
   if (group === 'asr') id = active.transcription
@@ -103,7 +122,6 @@ export function getActiveModelId(group: ModelGroup): string | null {
   else throw new Error(`Keine aktive Modell-Konfiguration für Gruppe "${group}"`)
 
   if (id === null || id === '') return null
-  if (!isModelInstalled(id)) return null
   return id
 }
 

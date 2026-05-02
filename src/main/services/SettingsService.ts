@@ -142,6 +142,13 @@ export function initSettings(): Store<AppSettings> {
   // einer rückgängig gemachten Multi-Backend-Iteration) auf den einzig
   // verfügbaren NER-Default zurücksetzen, damit AnonymizationService nicht
   // mit "ungültiges NER-Modell" abbricht.
+  //
+  // null ist ein gültiger Post-Reconciler-Zustand (Story C clears the slot
+  // when the model file is missing on disk) und darf hier NICHT zurück auf
+  // den Default gesetzt werden — sonst stösst jeder Boot ein neues
+  // ReconcileEvent an: initSettings setzt ner = EXPECTED_NER, der gleich
+  // danach laufende Reconciler räumt es wieder auf null und schreibt ein
+  // pending Event. Spiegelt das Diarization-Pattern weiter oben.
   const knownNerIds = new Set(
     getModelDefinitions()
       .filter((m) => m.group === 'ner')
@@ -149,7 +156,7 @@ export function initSettings(): Store<AppSettings> {
   )
   const EXPECTED_NER = 'flair-ner-german-large'
   const currentNer = store.get('activeModels').ner
-  if (currentNer === null || !knownNerIds.has(currentNer)) {
+  if (currentNer !== null && !knownNerIds.has(currentNer)) {
     console.warn(
       `[settings-migration] activeModels.ner="${currentNer}" unbekannt → reset auf "${EXPECTED_NER}"`
     )
@@ -251,4 +258,9 @@ export function getSettings(): Store<AppSettings> {
     throw new Error('Settings not initialized. Call initSettings() first.')
   }
   return store
+}
+
+/** Test-only — clears the module-level singleton so a fresh initSettings() runs. */
+export function _resetSettingsForTests(): void {
+  store = null
 }

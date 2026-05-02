@@ -43,9 +43,9 @@ describe('<ModelStatusBadge>', () => {
     expect(screen.getByText('Nicht installiert')).toBeInTheDocument()
   })
 
-  it('renders the label "Aktiv, aber fehlt" with a self-heal hint for inconsistent status', () => {
+  it('renders the locked label including the self-heal promise for inconsistent status', () => {
     render(<ModelStatusBadge status="inconsistent" />)
-    expect(screen.getByText('Aktiv, aber fehlt')).toBeInTheDocument()
+    expect(screen.getByText('Aktiv, aber fehlt — wird repariert')).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveAttribute(
       'aria-label',
       expect.stringContaining('wird beim nächsten Start automatisch repariert')

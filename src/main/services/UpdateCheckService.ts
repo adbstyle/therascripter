@@ -505,8 +505,25 @@ export function cleanupIncompleteUpdates(): void {
  * Story D — the per-channel guard means a freshly switched channel sees
  * its own (initially empty) view, even when other channels already have
  * entries; the disk files are reused in-place by the new channel.
+ *
+ * Boot-phase invariant: this MUST run after `initSettings` has applied the
+ * Story-D channel-tag migration. If we hit untagged keys in the raw record,
+ * the channel-aware adapter would silently filter them out (treating the
+ * channel view as empty) and write fresh `prod:`-prefixed sentinel rows
+ * alongside the legacy untagged ones — producing duplicate entries. Bailing
+ * loudly here surfaces the boot-order regression at the source rather than
+ * a few releases later as a mysterious manifest mismatch.
  */
 export function migrateInstalledVersions(): void {
+  const raw = getSettings().get('installedModelVersions') ?? {}
+  const untaggedKey = Object.keys(raw).find((k) => !k.includes(':'))
+  if (untaggedKey !== undefined) {
+    throw new Error(
+      `migrateInstalledVersions called before initSettings: untagged key "${untaggedKey}" present. ` +
+        'The Story-D channel-tag migration in initSettings must run first.'
+    )
+  }
+
   const installedVersions = getInstalledVersions()
   if (Object.keys(installedVersions).length > 0) return
 

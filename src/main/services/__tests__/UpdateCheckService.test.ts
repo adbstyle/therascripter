@@ -657,6 +657,26 @@ describe('migrateInstalledVersions', () => {
 
     expect(mockSettingsStore.set).not.toHaveBeenCalled()
   })
+
+  it('throws clearly if untagged keys are still present (boot-order invariant)', () => {
+    // Simulates initSettings's channel-tag migration not having run yet —
+    // for example because someone reordered main/index.ts and called
+    // migrateInstalledVersions before initSettings. Without this guard the
+    // function would silently filter the untagged keys out via the
+    // channel-aware adapter, see an empty channel view, and write fresh
+    // prod: sentinel rows alongside the legacy ones.
+    storedInstalled = {
+      'whisper-large-v3-turbo': {
+        version: 'pre-update',
+        sha256: '',
+        installedAt: ''
+      }
+    }
+
+    expect(() => migrateInstalledVersions()).toThrow(
+      /channel-tag migration in initSettings must run first/i
+    )
+  })
 })
 
 describe('executeUpdates', () => {

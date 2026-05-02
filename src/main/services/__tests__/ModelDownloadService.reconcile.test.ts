@@ -74,7 +74,9 @@ import {
   getReconcileEvents,
   markReconcileEventsSeen,
   dismissReconcileEvents,
-  recordInstalledVersion
+  recordInstalledVersion,
+  getActiveModelId,
+  getActiveModelIdBelief
 } from '../ModelDownloadService'
 
 const MODELS_DIR = '/tmp/therascript-test/models'
@@ -382,5 +384,41 @@ describe('recordInstalledVersion', () => {
       installedAt: '2026-01-01T00:00:00Z'
     })
     expect(storeState.installedModelVersions['prod:whisper-large-v3-turbo'].sha256).toBe('abc123')
+  })
+})
+
+// Issue #84 Story E follow-up — getActiveModelIdBelief returns the raw
+// settings value without the disk-presence check, so the Settings catalog
+// can expose the inconsistent state (active=true, installed=false) via the
+// <ModelStatusBadge>. Executors keep using getActiveModelId (the filtered
+// variant) — verified here too.
+describe('getActiveModelIdBelief vs getActiveModelId', () => {
+  beforeEach(() => {
+    freshState()
+    vi.clearAllMocks()
+  })
+
+  it('belief returns the raw settings value even when the file is missing', () => {
+    // No pretendInstalled() — every checkPath misses on disk.
+    expect(getActiveModelIdBelief('asr')).toBe('whisper-large-v3-turbo')
+    expect(getActiveModelIdBelief('diarization')).toBe('pyannote-suite')
+    expect(getActiveModelIdBelief('ner')).toBe('flair-ner-german-large')
+  })
+
+  it('the disk-checked variant masks the same state as null', () => {
+    expect(getActiveModelId('asr')).toBeNull()
+    expect(getActiveModelId('diarization')).toBeNull()
+    expect(getActiveModelId('ner')).toBeNull()
+  })
+
+  it('belief returns null when the slot is null (post-reconciler steady state)', () => {
+    storeState.activeModels.summarization = null
+    expect(getActiveModelIdBelief('summarization')).toBeNull()
+  })
+
+  it('both return the same id when the file is on disk', () => {
+    pretendInstalled('asr/ggml-large-v3-turbo-q5_0.bin')
+    expect(getActiveModelIdBelief('asr')).toBe('whisper-large-v3-turbo')
+    expect(getActiveModelId('asr')).toBe('whisper-large-v3-turbo')
   })
 })

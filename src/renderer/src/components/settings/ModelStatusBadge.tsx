@@ -63,7 +63,10 @@ const STYLES: Record<ModelStatus, BadgeStyle> = {
   },
   inconsistent: {
     Icon: AlertTriangle,
-    label: 'Aktiv, aber fehlt',
+    // Locked spec text from Issue #84 UX update — pill carries the full
+    // sentence (not truncated to a tooltip) so the self-heal promise is
+    // visible without hover.
+    label: 'Aktiv, aber fehlt — wird repariert',
     description:
       'Aktiv markiert, aber nicht auf Disk gefunden — wird beim nächsten Start automatisch repariert',
     pillClassName: 'border-warning-border bg-warning-bg text-warning-text',
