@@ -70,7 +70,7 @@ scripts/sim-clean-install.sh       # Simulate fresh / upgrade / models-only inst
 3. Python sidecar — flair NER + Regex + Blocklist → TipTap document (shared with audio) ✓ implemented
 4. llama.cpp subprocess — optional summarization (shared with audio). ✓ implemented
 
-**ML models:** Stored in `~/.therascript/models/<type>/` (e.g. `models/asr/`, `models/diarization/`, `models/ner/`). Directories created at startup by `initDatabase()`.
+**ML models:** Stored in `~/.therascript/models/<type>/` (e.g. `models/asr/`, `models/diarization/`, `models/ner/`). Required-group dirs are bootstrapped at startup by `initDatabase()`; optional-group dirs (e.g. `models/summarization/`) are created on-demand by `downloadSingleModel` — only existing once the user actually downloads an optional model.
 
 **First launch:** FirstLaunchScreen checks for models, validates disk space (5 GB minimum), downloads ~4.1 GB (Whisper 1.7 GB + Pyannote 0.2 GB + flair NER 2.2 GB) with progress tracking. Models persist across app updates.
 

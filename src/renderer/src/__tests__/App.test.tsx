@@ -16,6 +16,7 @@ const mockModelUpdate = {
   startDownload: vi.fn(),
   getPending: vi.fn().mockResolvedValue(null),
   clearPending: vi.fn().mockResolvedValue(undefined),
+  dismissVersions: vi.fn().mockResolvedValue(undefined),
   onAvailable: vi.fn().mockReturnValue(() => {}),
   onDownloadProgress: vi.fn().mockReturnValue(() => {}),
   onDownloadComplete: vi.fn().mockReturnValue(() => {}),
@@ -111,6 +112,11 @@ beforeEach(() => {
     },
     feedback: {
       send: vi.fn().mockResolvedValue(undefined)
+    },
+    modelReconcile: {
+      getEvents: vi.fn().mockResolvedValue([]),
+      markSeen: vi.fn().mockResolvedValue([]),
+      dismiss: vi.fn().mockResolvedValue(undefined)
     }
   } as typeof window.api
 })

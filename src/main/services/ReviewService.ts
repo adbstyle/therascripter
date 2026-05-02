@@ -33,7 +33,9 @@ export class ReviewService {
       document,
       entityMap,
       sessionType: session.type,
-      sessionTitle: session.title
+      sessionTitle: session.title,
+      processedWithModels: session.processedWithModels,
+      reviewAt: session.reviewAt
     }
   }
 

@@ -122,7 +122,7 @@ const BlocklistManager = forwardRef<BlocklistManagerHandle>(function BlocklistMa
       <div className="p-6">
         <div className="mb-4 flex items-baseline justify-between gap-4">
           <p className="text-sm text-text-secondary">
-            Begriffe, die immer automatisch anonymisiert werden.
+            Begriffe, die immer automatisch pseudonymisiert werden.
           </p>
           {entries.length > 0 && (
             <span className="shrink-0 text-xs text-text-tertiary">

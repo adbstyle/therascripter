@@ -5,6 +5,7 @@ import type {
   InstalledModelVersion,
   AppUpdateStatus
 } from '../../shared/types/ModelUpdate'
+import type { ReconcileEvent } from '../../shared/types/ReconcileEvent'
 import { getModelDefinitions } from './ModelDownloadService'
 import {
   DIARIZATION_PIPELINES,
@@ -17,12 +18,18 @@ export { DIARIZATION_PIPELINES, DEFAULT_DIARIZATION_PIPELINE }
 
 export interface AppSettings {
   activeModels: {
-    transcription: string
-    diarization: string
+    // null when no model is selected for the slot — optional groups (summarization)
+    // ship deactivated; required groups become null only transiently when the
+    // active model is missing on disk and no installed default exists, in which
+    // case the FirstLaunchScreen forces re-download. The bootstrap reconciler
+    // (`reconcileActiveModels`) maintains the invariant that either the slot
+    // points to an installed catalog model or it is null.
+    transcription: string | null
+    diarization: string | null
     diarizationPipeline: DiarizationPipeline
-    ner: string
+    ner: string | null
     ocr: string
-    summarization: string
+    summarization: string | null
   }
   firstLaunchDone: boolean
   consentReminderShown: boolean
@@ -33,6 +40,14 @@ export interface AppSettings {
   installedModelVersions: Record<string, InstalledModelVersion>
   pendingModelUpdates: PendingModelUpdate[] | null
   cachedAppUpdateStatus: AppUpdateStatus | null
+  reconcileEvents: ReconcileEvent[]
+  /**
+   * Issue #84 / Story F+G — manifest entries the user has actively dismissed.
+   * Each entry is `${modelId}@${sha256}`; the SHA-256 is what makes the entry
+   * obsolete on its own when a new manifest publishes a different hash for the
+   * same id, so no explicit cleanup is needed.
+   */
+  dismissedManifestVersions: string[]
 }
 
 const defaults: AppSettings = {
@@ -52,7 +67,9 @@ const defaults: AppSettings = {
   reviewPanelOpen: false,
   installedModelVersions: {},
   pendingModelUpdates: null,
-  cachedAppUpdateStatus: null
+  cachedAppUpdateStatus: null,
+  reconcileEvents: [],
+  dismissedManifestVersions: []
 }
 
 let store: Store<AppSettings> | null = null
@@ -91,7 +108,13 @@ export function initSettings(): Store<AppSettings> {
   )
   const EXPECTED_DIAR = 'pyannote-suite'
 
-  if (!knownDiarIds.has(active.diarization) || active.diarization !== EXPECTED_DIAR) {
+  // null is a valid post-migration state for the diarization slot (cleared by
+  // the reconciler when the suite is missing on disk); only fire the legacy
+  // reset for known-bad string IDs, not for null.
+  if (
+    active.diarization !== null &&
+    (!knownDiarIds.has(active.diarization) || active.diarization !== EXPECTED_DIAR)
+  ) {
     const inferredPipeline = inferPipelineFromLegacyId(active.diarization)
     console.warn(
       `[settings-migration] activeModels.diarization="${active.diarization}" → reset auf "${EXPECTED_DIAR}" (Pipeline: ${inferredPipeline})`
@@ -119,6 +142,13 @@ export function initSettings(): Store<AppSettings> {
   // einer rückgängig gemachten Multi-Backend-Iteration) auf den einzig
   // verfügbaren NER-Default zurücksetzen, damit AnonymizationService nicht
   // mit "ungültiges NER-Modell" abbricht.
+  //
+  // null ist ein gültiger Post-Reconciler-Zustand (Story C clears the slot
+  // when the model file is missing on disk) und darf hier NICHT zurück auf
+  // den Default gesetzt werden — sonst stösst jeder Boot ein neues
+  // ReconcileEvent an: initSettings setzt ner = EXPECTED_NER, der gleich
+  // danach laufende Reconciler räumt es wieder auf null und schreibt ein
+  // pending Event. Spiegelt das Diarization-Pattern weiter oben.
   const knownNerIds = new Set(
     getModelDefinitions()
       .filter((m) => m.group === 'ner')
@@ -126,7 +156,7 @@ export function initSettings(): Store<AppSettings> {
   )
   const EXPECTED_NER = 'flair-ner-german-large'
   const currentNer = store.get('activeModels').ner
-  if (!knownNerIds.has(currentNer)) {
+  if (currentNer !== null && !knownNerIds.has(currentNer)) {
     console.warn(
       `[settings-migration] activeModels.ner="${currentNer}" unbekannt → reset auf "${EXPECTED_NER}"`
     )
@@ -139,19 +169,50 @@ export function initSettings(): Store<AppSettings> {
   // Defensiv: Bestehende electron-store-Instanzen haben kein activeModels.summarization,
   // weil das Feld erst mit dem lokalen LLM eingeführt wurde. defaults füllt nested keys
   // nicht nach, also Wert hier explizit setzen, falls nicht vorhanden.
-  // Leerer String ist ein gültiger Wert ("Zusammenfassung deaktiviert") — nicht überschreiben.
-  const currentSummarization = (store.get('activeModels') as { summarization?: string })
-    .summarization
-  if (typeof currentSummarization !== 'string') {
+  const currentSummarization = (
+    store.get('activeModels') as { summarization?: string | null }
+  ).summarization
+  if (typeof currentSummarization !== 'string' && currentSummarization !== null) {
     store.set('activeModels', {
       ...store.get('activeModels'),
       summarization: 'gemma-summarization'
     })
   }
 
+  // Issue #84 / Story C — convert the legacy '' sentinel ("deaktiviert") to null,
+  // matching the new `string | null` type. The reconciler relies on null to
+  // detect "no active model" without ambiguity. `ocr` and `diarizationPipeline`
+  // are not user-clearable and stay non-null.
+  const activeForLegacy = store.get('activeModels') as Record<string, string | null>
+  const legacyEmptyKeys = ['transcription', 'diarization', 'ner', 'summarization'] as const
+  let activeChanged = false
+  const next = { ...activeForLegacy }
+  for (const key of legacyEmptyKeys) {
+    if (next[key] === '') {
+      next[key] = null
+      activeChanged = true
+    }
+  }
+  if (activeChanged) {
+    store.set('activeModels', next as AppSettings['activeModels'])
+  }
+
+  // Issue #84 / Story C — ensure reconcileEvents exists for stores from
+  // previous app versions (electron-store does not deep-merge top-level defaults
+  // into already-persisted instances).
+  if (!Array.isArray(store.get('reconcileEvents'))) {
+    store.set('reconcileEvents', [])
+  }
+
+  // Issue #84 / Story F+G — same reasoning for dismissedManifestVersions.
+  if (!Array.isArray(store.get('dismissedManifestVersions'))) {
+    store.set('dismissedManifestVersions', [])
+  }
+
   // installedModelVersions: Altlasten-Keys (Legacy + PR-Zwischenstände) auf den neuen
   // Key umbenennen, sonst bleiben sie für immer verwaist (UpdateCheckService iteriert
-  // über Manifest-IDs, nicht über installed-keys).
+  // über Manifest-IDs, nicht über installed-keys). Läuft VOR der Channel-Tag-Migration
+  // weiter unten, weil die Renames untagged-Keys erwarten.
   const installed = { ...store.get('installedModelVersions') }
   const legacyInstalledKeys = [
     'pyannote-community-1',
@@ -170,6 +231,25 @@ export function initSettings(): Store<AppSettings> {
     store.set('installedModelVersions', installed)
   }
 
+  // Issue #84 / Story D — channel-tag migration. Pre-D installs wrote raw
+  // model-id keys; tag them as `prod:` so the channel-aware adapter (see
+  // InstalledVersionsStore.ts) can read them. Already-tagged keys (anything
+  // containing `:`) are passed through unchanged. Idempotent.
+  const installedForChannelTag = { ...store.get('installedModelVersions') }
+  let channelTagChanged = false
+  const tagged: Record<string, InstalledModelVersion> = {}
+  for (const [key, val] of Object.entries(installedForChannelTag)) {
+    if (key.includes(':')) {
+      tagged[key] = val
+    } else {
+      tagged[`prod:${key}`] = val
+      channelTagChanged = true
+    }
+  }
+  if (channelTagChanged) {
+    store.set('installedModelVersions', tagged)
+  }
+
   return store
 }
 
@@ -178,4 +258,9 @@ export function getSettings(): Store<AppSettings> {
     throw new Error('Settings not initialized. Call initSettings() first.')
   }
   return store
+}
+
+/** Test-only — clears the module-level singleton so a fresh initSettings() runs. */
+export function _resetSettingsForTests(): void {
+  store = null
 }

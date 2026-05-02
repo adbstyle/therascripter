@@ -1,5 +1,6 @@
 import type { EntityMap } from './EntityMap'
 import type { TaskType } from './Task'
+import type { ProcessedModelsSnapshot } from './Provenance'
 
 export type SessionType = 'audio' | 'pdf'
 
@@ -39,6 +40,12 @@ export interface Session {
    * audio sessions and legacy PDF rows.
    */
   pdfHasScannedPages: boolean | null
+  /**
+   * Issue #84 Story I — captured-at-source snapshot of the active models per
+   * pipeline group, written by TaskQueueService when the pipeline starts.
+   * NULL for legacy rows that reached 'review' before this column existed.
+   */
+  processedWithModels: ProcessedModelsSnapshot | null
 }
 
 export interface CreateSessionInput {
@@ -69,4 +76,5 @@ export interface UpdateSessionInput {
   plannedSteps?: TaskType[] | null
   retryCount?: number
   pdfHasScannedPages?: boolean | null
+  processedWithModels?: ProcessedModelsSnapshot | null
 }

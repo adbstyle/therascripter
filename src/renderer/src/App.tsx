@@ -80,6 +80,14 @@ export default function App(): React.JSX.Element {
     clearUpdates()
   }, [clearUpdates])
 
+  // Issue #84 / Story G — "Später" + Error-Continue exits leave the
+  // pending entry in electron-store intact (next-launch retry promise) and
+  // must not clear the live banner state — the user did not dismiss the
+  // update, only the current screen.
+  const handleUpdateLater = useCallback(() => {
+    setPendingUpdates(null)
+  }, [])
+
   const handleCloseReview = useCallback(() => {
     scrollToSessionId.current = reviewSessionId
     setReviewSessionId(null)
@@ -104,6 +112,12 @@ export default function App(): React.JSX.Element {
     }
     // If allowed, the app will relaunch — no further action needed
   }, [availableUpdates])
+
+  const handleDismissUpdates = useCallback(async () => {
+    if (!availableUpdates || availableUpdates.length === 0) return
+    await window.api.modelUpdate.dismissVersions(availableUpdates)
+    clearUpdates()
+  }, [availableUpdates, clearUpdates])
 
   const isInReview = currentView === 'review'
   const navHidden = isRecording || isInReview
@@ -144,7 +158,11 @@ export default function App(): React.JSX.Element {
       <div className="flex h-screen flex-col bg-surface-0">
         <TitleBar />
         <div className="min-h-0 flex-1">
-          <ModelUpdateScreen updates={pendingUpdates} onComplete={handleUpdateComplete} />
+          <ModelUpdateScreen
+            updates={pendingUpdates}
+            onComplete={handleUpdateComplete}
+            onLater={handleUpdateLater}
+          />
         </div>
       </div>
     )
@@ -156,7 +174,11 @@ export default function App(): React.JSX.Element {
 
       {/* Update banner — shown when updates are available (non-blocking) */}
       {availableUpdates && availableUpdates.length > 0 && (
-        <UpdateBanner updates={availableUpdates} onRestart={handleRestartForUpdate} />
+        <UpdateBanner
+          updates={availableUpdates}
+          onRestart={handleRestartForUpdate}
+          onDismiss={handleDismissUpdates}
+        />
       )}
 
       {/* Main content */}

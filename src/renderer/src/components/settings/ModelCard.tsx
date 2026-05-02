@@ -2,6 +2,7 @@ import { Download, ExternalLink, Power, PowerOff, Trash2, X } from 'lucide-react
 import type { LucideIcon } from 'lucide-react'
 import type { ModelCatalogEntry } from '../../../../shared/validation/model-catalog-schemas'
 import { formatBytes } from '../../utils/formatBytes'
+import ModelStatusBadge, { deriveModelStatus } from './ModelStatusBadge'
 
 interface Props {
   model: ModelCatalogEntry
@@ -162,11 +163,7 @@ export default function ModelCard({
                 <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
               </a>
             )}
-            {model.isActive && (
-              <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-white">
-                Aktiv
-              </span>
-            )}
+            <ModelStatusBadge status={deriveModelStatus(model)} />
           </div>
 
           {showChips && (

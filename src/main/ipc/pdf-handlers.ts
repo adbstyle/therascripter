@@ -134,7 +134,7 @@ export function registerPDFHandlers(): void {
     const result = await dialog.showOpenDialog(window, {
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'PDF-Dokumente', extensions: ['pdf'] }],
-      message: 'PDF-Dokumente zum Anonymisieren auswählen'
+      message: 'PDF-Dokumente zur Pseudonymisierung auswählen'
     })
 
     if (result.canceled) return []

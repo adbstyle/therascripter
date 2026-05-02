@@ -94,16 +94,17 @@ export class PDFExtractionExecutor implements TaskExecutor {
     const extractedPath = join(getDataDir(), 'extracted', `${task.sessionId}.json`)
     writeFileAtomic(extractedPath, JSON.stringify(extractionResult, null, 2))
 
-    sessionService.updateSession(task.sessionId, { extractedPath })
+    // Always write a transcript from extracted text — guarantees the
+    // anonymization step has a transcriptPath to read even when the
+    // import-time scanned-page heuristic disagrees with extraction-time
+    // detection. If OCR runs after this, it overwrites the transcript with
+    // a merged version that includes OCR'd scanned pages.
+    const transcriptPath = buildPDFTranscript(task.sessionId, pages, 'pdfjs-dist', sessionService)
 
-    // If all pages have text (no scanned pages), build the transcript directly
-    // so the OCR step can skip quickly
-    const hasScannedPages = pages.some((p) => p.contentType === 'scanned')
-
-    if (!hasScannedPages) {
-      const transcriptPath = buildPDFTranscript(task.sessionId, pages, 'pdfjs-dist', sessionService)
-      sessionService.updateSession(task.sessionId, { transcriptPath })
-    }
+    // Single DB write so a crash between updates can't leave the session in
+    // the (extractedPath set, transcriptPath null) state that previously
+    // wedged retries at anonymization.
+    sessionService.updateSession(task.sessionId, { extractedPath, transcriptPath })
 
     onProgress(1)
   }

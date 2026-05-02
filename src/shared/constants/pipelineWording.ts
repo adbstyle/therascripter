@@ -14,7 +14,7 @@ export const STEP_LABELS_DE: Record<TaskType, string> = {
   diarization: 'Sprecher unterscheiden',
   transcription: 'Gespräch transkribieren',
   alignment: 'Audio aufbereiten',
-  anonymization: 'Persönliche Angaben anonymisieren',
+  anonymization: 'Persönliche Angaben pseudonymisieren',
   summarization: 'Zusammenfassung erstellen',
   extraction: 'Text auslesen',
   ocr: 'Schrift erkennen'

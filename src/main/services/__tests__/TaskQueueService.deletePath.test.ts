@@ -10,6 +10,13 @@ vi.mock('../../utils/ipc-helpers', () => ({
   sendToRenderer: vi.fn()
 }))
 
+// Issue #84 / Story C — computePlannedSteps reads getActiveModelId which
+// reaches into electron-store; mock it so this test doesn't have to init
+// the real settings layer.
+vi.mock('../ModelDownloadService', () => ({
+  getActiveModelId: vi.fn().mockReturnValue(null)
+}))
+
 /**
  * Issue #80 DR-6: deletePath verification.
  * Four contracts:

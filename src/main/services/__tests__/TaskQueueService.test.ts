@@ -17,7 +17,22 @@ vi.mock('../../utils/ipc-helpers', () => ({
 // the filter. PDF sessions also need pdfHasScannedPages=true to include ocr.
 vi.mock('../ModelDownloadService', () => ({
   getActiveModelId: vi.fn().mockReturnValue('gemma-3-4b'),
-  isModelInstalled: vi.fn().mockReturnValue(true)
+  // Issue #84 Story I — ProvenanceCapture (called from enqueuePipeline)
+  // resolves the active id to a catalog entry. Stub a minimal shape so the
+  // capture path doesn't NPE in tests; the snapshot itself is irrelevant
+  // for the assertions below.
+  getModelById: vi.fn().mockReturnValue({
+    id: 'stub',
+    label: 'Stub',
+    sha256: '0'.repeat(64),
+    sizeBytes: 0
+  })
+}))
+
+// ProvenanceCapture also reads installedModelVersions from electron-store;
+// tests don't init settings, so stub the module entirely.
+vi.mock('../SettingsService', () => ({
+  getSettings: () => ({ get: () => ({}) })
 }))
 
 describe('TaskQueueService', () => {
@@ -75,8 +90,6 @@ describe('TaskQueueService', () => {
         title: 'PDF Test',
         type: 'pdf'
       })
-      // Force OCR into plannedSteps; default pdfHasScannedPages is null/false.
-      sessionRepo.update(pdfSession.id, { pdfHasScannedPages: true })
 
       const tasks = queue.enqueuePipeline(pdfSession.id, 'pdf')
 

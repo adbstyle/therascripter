@@ -56,8 +56,8 @@ export function BlocklistConfirmDialog({
           Sperrliste hinzufügen?
         </p>
         <p className="mb-4 text-xs text-text-tertiary">
-          Der Begriff wird in zukünftigen Transkriptionen automatisch anonymisiert und retroaktiv
-          im aktuellen Dokument ersetzt.
+          Der Begriff wird in zukünftigen Transkriptionen automatisch pseudonymisiert und
+          retroaktiv im aktuellen Dokument ersetzt.
         </p>
 
         <div className="flex justify-end gap-2">

@@ -7,12 +7,19 @@ import AppLogo from './AppLogo'
 
 interface ModelUpdateScreenProps {
   updates: PendingModelUpdate[]
+  /** Download finished or user actively skipped this version — wipe both
+   *  the pending entry in electron-store and any live banner state. */
   onComplete: () => void
+  /** "Später" + error-state "Weiter" — close the screen but keep the pending
+   *  entry intact so the next launch can retry, matching the in-screen
+   *  promise "Das Update wird beim nächsten Start erneut versucht." */
+  onLater: () => void
 }
 
 export default function ModelUpdateScreen({
   updates,
-  onComplete
+  onComplete,
+  onLater
 }: ModelUpdateScreenProps): React.JSX.Element {
   const [status, setStatus] = useState<ModelDownloadStatus>({ state: 'idle' })
   const [started, setStarted] = useState(false)
@@ -60,11 +67,25 @@ export default function ModelUpdateScreen({
     await window.api.modelUpdate.startDownload()
   }, [updates])
 
-  const handleSkip = useCallback(async () => {
-    // Clear pending updates in settings so the screen doesn't reappear next launch
+  // Story G — exits from the pre-download / error states:
+  //
+  // 1. handleLater: keep `pendingModelUpdates` intact → screen reappears on
+  //    next start (executeUpdates retries automatically). Used by both the
+  //    "Später" button (pre-download) and the "Weiter" button (error state),
+  //    matching the existing "wird beim nächsten Start erneut versucht"
+  //    promise rendered inside the error panel.
+  // 2. handleSkipVersion: clear pending AND dismiss this manifest entry so
+  //    the UpdateBanner won't bring it back this manifest revision. Used by
+  //    the "Diese Version überspringen" button.
+  const handleLater = useCallback(() => {
+    onLater()
+  }, [onLater])
+
+  const handleSkipVersion = useCallback(async () => {
+    await window.api.modelUpdate.dismissVersions(updates)
     await window.api.modelUpdate.clearPending()
     onComplete()
-  }, [onComplete])
+  }, [onComplete, updates])
 
   const isDownloading = status.state === 'downloading'
   const isExtracting = status.state === 'extracting'
@@ -99,12 +120,20 @@ export default function ModelUpdateScreen({
               {updates.length} {updates.length === 1 ? 'Modell wird' : 'Modelle werden'}{' '}
               aktualisiert (~{formatBytes(updates.reduce((s, u) => s + u.sizeBytes, 0))}).
             </p>
-            <div className="flex justify-center gap-3">
+            <div className="flex flex-wrap justify-center gap-3">
               <button
                 className="rounded-lg border border-border-strong bg-surface-0 px-4 py-2.5 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
-                onClick={handleSkip}
+                onClick={handleSkipVersion}
+                title="Diese Version überspringen — wird erst beim nächsten Modell-Update wieder gezeigt"
               >
-                Überspringen
+                Diese Version überspringen
+              </button>
+              <button
+                className="rounded-lg border border-border-strong bg-surface-0 px-4 py-2.5 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
+                onClick={handleLater}
+                title="Das Update wird beim nächsten Start vorgeschlagen"
+              >
+                Später
               </button>
               <button
                 className="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
@@ -113,6 +142,10 @@ export default function ModelUpdateScreen({
                 Update starten
               </button>
             </div>
+            <p className="mt-4 text-xs text-text-tertiary">
+              Später: erscheint beim nächsten Start erneut. Überspringen: erst beim nächsten
+              Modell-Update wieder gezeigt.
+            </p>
           </div>
         )}
 
@@ -194,7 +227,7 @@ export default function ModelUpdateScreen({
             </p>
             <button
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
-              onClick={handleSkip}
+              onClick={handleLater}
             >
               Weiter
             </button>

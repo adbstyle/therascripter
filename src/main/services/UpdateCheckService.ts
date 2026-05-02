@@ -1,9 +1,10 @@
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'fs'
 import { join } from 'path'
 import { get as httpsGet } from 'https'
 import { getSettings } from './SettingsService'
 import { getModelDefinitions, getModelsDir, isModelInstalled } from './ModelDownloadService'
+import { getInstalledVersions, setInstalledVersion } from './InstalledVersionsStore'
 import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
 import {
   ManifestSchema,
@@ -88,6 +89,30 @@ function fetchManifestJson(url: string): Promise<unknown> {
   })
 }
 
+// ─── Manifest dismissal ──────────────────────────────────────────────────────
+
+/**
+ * Issue #84 / Story F+G — stable key for "this exact manifest entry was
+ * dismissed by the user". Combines model id and sha256 so that a new manifest
+ * publishing a different hash for the same id is automatically eligible again,
+ * without explicit cleanup.
+ */
+export function manifestEntryKey(id: string, sha256: string): string {
+  return `${id}@${sha256}`
+}
+
+/** Append entries to the dismiss list, preserving order and dropping duplicates. */
+export function dismissManifestVersions(entries: Array<{ id: string; sha256: string }>): void {
+  const settings = getSettings()
+  const raw = settings.get('dismissedManifestVersions')
+  const existing = Array.isArray(raw) ? raw : []
+  const seen = new Set(existing)
+  for (const e of entries) {
+    seen.add(manifestEntryKey(e.id, e.sha256))
+  }
+  settings.set('dismissedManifestVersions', Array.from(seen))
+}
+
 // ─── checkForUpdates ─────────────────────────────────────────────────────────
 
 const NO_APP_UPDATE: AppUpdateStatus = { available: false, latestVersion: null, checkedAt: null }
@@ -98,7 +123,9 @@ export async function checkForUpdates(): Promise<CheckResult> {
     const manifest = ManifestSchema.parse(raw)
 
     const settings = getSettings()
-    const installedVersions = settings.get('installedModelVersions') ?? {}
+    const installedVersions = getInstalledVersions()
+    const dismissedRaw = settings.get('dismissedManifestVersions')
+    const dismissed = new Set(Array.isArray(dismissedRaw) ? dismissedRaw : [])
     const definitions = getModelDefinitions()
 
     // ── Model update check ──
@@ -127,6 +154,35 @@ export async function checkForUpdates(): Promise<CheckResult> {
       const installed = installedVersions[manifestModel.id]
       if (installed && installed.sha256 === manifestModel.sha256) {
         continue // Already up to date
+      }
+
+      // Issue #84 / Story F+G — user actively dismissed this exact manifest
+      // entry (UpdateBanner dismiss or ModelUpdateScreen "Diese Version
+      // überspringen"). Re-becomes eligible when the manifest publishes a new
+      // sha256 for the same id.
+      if (dismissed.has(manifestEntryKey(manifestModel.id, manifestModel.sha256))) {
+        continue
+      }
+
+      // Lazy heal of the legacy '' sentinel from migrateInstalledVersions:
+      // for non-archive models we can hash the file on disk and compare against
+      // the manifest. If they match, the install is bit-identical to the
+      // current manifest version — backfill the real hash and skip the update,
+      // closing the upgrade-from-old-build false-positive (Issue #84 / Story B).
+      // Archive models can't be hashed post-extract (the .tar.gz is gone), so
+      // they fall through to the standard update path; one accepted update will
+      // then write the real hash via executeUpdates and the issue resolves.
+      if (installed && installed.sha256 === '' && !definition.archive) {
+        const filePath = join(getModelsDir(), definition.relativePath)
+        if (existsSync(filePath)) {
+          const matches = await verifyFileSha256(filePath, manifestModel.sha256)
+          if (matches) {
+            const healed = { ...installed, sha256: manifestModel.sha256 }
+            setInstalledVersion(manifestModel.id, healed)
+            installedVersions[manifestModel.id] = healed
+            continue
+          }
+        }
       }
 
       // Path-traversal guard on relativePath
@@ -178,8 +234,31 @@ export async function checkForUpdates(): Promise<CheckResult> {
 
 // ─── triggerUpdateRestart ────────────────────────────────────────────────────
 
+/**
+ * Persists the pending updates and relaunches the app so the next boot picks
+ * them up via `getPending()` and renders ModelUpdateScreen.
+ *
+ * Dev-mode shim (Issue #84 follow-up): in `npm run dev`, `app.relaunch()`
+ * spawns a fresh electron pointed at `localhost:5173`, but the `app.quit()`
+ * that follows kills electron-vite's parent process — the dev server dies
+ * before the new electron can load anything, leaving a white window.
+ *
+ * In dev we instead reload the renderer in place. The renderer remounts,
+ * its startup `getPending()` call sees the freshly-written
+ * `pendingModelUpdates`, and ModelUpdateScreen appears — same observable
+ * UX as the production restart, without trashing the dev server. Main-
+ * process state (TaskQueue, etc.) is not actually reset, but for QA of
+ * the update flow the renderer remount is what's being exercised.
+ */
 export function triggerUpdateRestart(updates: PendingModelUpdate[]): void {
   getSettings().set('pendingModelUpdates', updates)
+
+  if (!app.isPackaged) {
+    const mainWindow = BrowserWindow.getAllWindows()[0]
+    mainWindow?.webContents.reload()
+    return
+  }
+
   app.relaunch()
   app.quit()
 }
@@ -351,13 +430,11 @@ export async function executeUpdates(): Promise<void> {
     }
 
     // ── 7. Record installed version ──
-    const installedVersions = settings.get('installedModelVersions') ?? {}
-    installedVersions[update.id] = {
+    setInstalledVersion(update.id, {
       version: update.version,
       sha256: update.sha256,
       installedAt: new Date().toISOString()
-    }
-    settings.set('installedModelVersions', installedVersions)
+    })
 
     overallDownloaded += update.sizeBytes
   }
@@ -444,11 +521,33 @@ export function cleanupIncompleteUpdates(): void {
 
 // ─── migrateInstalledVersions ─────────────────────────────────────────────────
 
+/**
+ * Backfills an empty `installedModelVersions` view for the active channel
+ * with `'pre-update'` sentinel rows whenever a model file exists on disk.
+ *
+ * Story D — the per-channel guard means a freshly switched channel sees
+ * its own (initially empty) view, even when other channels already have
+ * entries; the disk files are reused in-place by the new channel.
+ *
+ * Boot-phase invariant: this MUST run after `initSettings` has applied the
+ * Story-D channel-tag migration. If we hit untagged keys in the raw record,
+ * the channel-aware adapter would silently filter them out (treating the
+ * channel view as empty) and write fresh `prod:`-prefixed sentinel rows
+ * alongside the legacy untagged ones — producing duplicate entries. Bailing
+ * loudly here surfaces the boot-order regression at the source rather than
+ * a few releases later as a mysterious manifest mismatch.
+ */
 export function migrateInstalledVersions(): void {
-  const settings = getSettings()
-  const installedVersions = settings.get('installedModelVersions') ?? {}
+  const raw = getSettings().get('installedModelVersions') ?? {}
+  const untaggedKey = Object.keys(raw).find((k) => !k.includes(':'))
+  if (untaggedKey !== undefined) {
+    throw new Error(
+      `migrateInstalledVersions called before initSettings: untagged key "${untaggedKey}" present. ` +
+        'The Story-D channel-tag migration in initSettings must run first.'
+    )
+  }
 
-  // Only migrate if no versions recorded yet
+  const installedVersions = getInstalledVersions()
   if (Object.keys(installedVersions).length > 0) return
 
   const modelsDir = getModelsDir()
@@ -459,17 +558,16 @@ export function migrateInstalledVersions(): void {
   for (const def of definitions) {
     const checkTarget = join(modelsDir, def.checkPath)
     if (existsSync(checkTarget)) {
-      installedVersions[def.id] = {
+      setInstalledVersion(def.id, {
         version: 'pre-update',
         sha256: '', // Unknown — forces update on first manifest check
         installedAt: now
-      }
+      })
       migrated++
     }
   }
 
   if (migrated > 0) {
-    settings.set('installedModelVersions', installedVersions)
     console.log(`UpdateCheckService: ${migrated} bestehende Modelle migriert`)
   }
 }

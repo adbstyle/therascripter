@@ -21,7 +21,7 @@ const ACKNOWLEDGMENTS = [
   },
   {
     name: 'TipTap',
-    description: 'Review-Editor — ermöglicht die Bearbeitung des anonymisierten Textes'
+    description: 'Review-Editor — ermöglicht die Bearbeitung des pseudonymisierten Textes'
   },
   {
     name: 'Electron',
@@ -96,6 +96,31 @@ export default function AboutPage(): React.JSX.Element {
         <p className="text-sm text-text-secondary">
           Alle Verarbeitung findet komplett lokal auf Ihrem Mac statt.
         </p>
+
+        {/* Pseudonymisierung — Erklärung der DSGVO-Terminologie (Issue #84 / Story H) */}
+        <section
+          id="pseudonymisierung"
+          className="rounded-lg border border-border bg-surface-1 p-4"
+        >
+          <h4 className="mb-2 text-sm font-medium text-text-primary">
+            Wie TheraScript Daten schützt
+          </h4>
+          <p className="mb-2 text-sm text-text-secondary">
+            Erkannte personenbezogene Angaben werden durch typisierte Platzhalter ersetzt:{' '}
+            <span className="whitespace-nowrap">[PERSON 1]</span>,{' '}
+            <span className="whitespace-nowrap">[ORT 1]</span>,{' '}
+            <span className="whitespace-nowrap">[DATUM 1]</span>.
+          </p>
+          <p className="mb-2 text-sm text-text-secondary">
+            DSGVO-rechtlich heisst das <span className="font-medium">Pseudonymisierung</span> —
+            die Originaldaten bleiben in Ihrem lokalen Backup vorhanden, sind aber im
+            exportierten Text nicht mehr enthalten.
+          </p>
+          <p className="text-sm text-text-secondary">
+            Echte Anonymisierung wäre, die Originale zu löschen — das machen wir bewusst nicht,
+            damit Sie Korrekturen rückgängig machen können.
+          </p>
+        </section>
 
         {/* Quellcode */}
         <div>

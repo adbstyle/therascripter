@@ -10,7 +10,7 @@ const makeDeps = (
       saveGeneratedSummary?: ReturnType<typeof vi.fn>
     }
     isModelInstalled?: () => boolean
-    getActiveModelId?: () => string
+    getActiveModelId?: () => string | null
   } = {}
 ): {
   llamaSummarizer: { summarize: ReturnType<typeof vi.fn> }
@@ -19,7 +19,7 @@ const makeDeps = (
     saveGeneratedSummary: ReturnType<typeof vi.fn>
   }
   isModelInstalled: () => boolean
-  getActiveModelId: () => string
+  getActiveModelId: () => string | null
   logger: { info: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> }
 } => ({
   llamaSummarizer: {
@@ -33,7 +33,7 @@ const makeDeps = (
     saveGeneratedSummary: over.sessionService?.saveGeneratedSummary ?? vi.fn()
   },
   isModelInstalled: over.isModelInstalled ?? ((): boolean => true),
-  getActiveModelId: over.getActiveModelId ?? ((): string => 'gemma-summarization'),
+  getActiveModelId: over.getActiveModelId ?? ((): string | null => 'gemma-summarization'),
   logger: { info: vi.fn(), error: vi.fn() }
 })
 

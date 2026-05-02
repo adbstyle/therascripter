@@ -3,11 +3,10 @@ import { computePlannedSteps } from '../TaskQueueService'
 import type { Session } from '../../../shared/types'
 
 vi.mock('../ModelDownloadService', () => ({
-  getActiveModelId: vi.fn(),
-  isModelInstalled: vi.fn()
+  getActiveModelId: vi.fn()
 }))
 
-import { getActiveModelId, isModelInstalled } from '../ModelDownloadService'
+import { getActiveModelId } from '../ModelDownloadService'
 
 function makeSession(overrides: Partial<Session> = {}): Session {
   return {
@@ -34,14 +33,18 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     plannedSteps: null,
     retryCount: 0,
     pdfHasScannedPages: null,
+    processedWithModels: null,
     ...overrides
   }
 }
 
+// Issue #84 / Story C — getActiveModelId now does the disk-presence check
+// internally and returns null on missing-or-unknown-or-not-installed. The
+// computePlannedSteps test bed therefore only needs to mock
+// getActiveModelId; isModelInstalled no longer participates in the decision.
 describe('computePlannedSteps — Issue #80 Phase H', () => {
   beforeEach(() => {
-    vi.mocked(getActiveModelId).mockReturnValue('')
-    vi.mocked(isModelInstalled).mockReturnValue(false)
+    vi.mocked(getActiveModelId).mockReturnValue(null)
   })
 
   describe('audio sessions', () => {
@@ -57,7 +60,6 @@ describe('computePlannedSteps — Issue #80 Phase H', () => {
 
     it('includes summarization when a model is active AND installed', () => {
       vi.mocked(getActiveModelId).mockReturnValue('gemma-3-4b')
-      vi.mocked(isModelInstalled).mockReturnValue(true)
       const session = makeSession({ type: 'audio' })
       expect(computePlannedSteps(session)).toEqual([
         'diarization',
@@ -68,40 +70,28 @@ describe('computePlannedSteps — Issue #80 Phase H', () => {
       ])
     })
 
-    it('omits summarization when configured id points to a non-installed model', () => {
-      vi.mocked(getActiveModelId).mockReturnValue('gemma-3-4b')
-      vi.mocked(isModelInstalled).mockReturnValue(false)
-      const session = makeSession({ type: 'audio' })
-      expect(computePlannedSteps(session)).not.toContain('summarization')
-    })
-
-    it('omits summarization when getActiveModelId throws', () => {
-      vi.mocked(getActiveModelId).mockImplementation(() => {
-        throw new Error('settings store unavailable')
-      })
+    it('omits summarization when getActiveModelId returns null (slot empty or file missing)', () => {
+      vi.mocked(getActiveModelId).mockReturnValue(null)
       const session = makeSession({ type: 'audio' })
       expect(computePlannedSteps(session)).not.toContain('summarization')
     })
   })
 
   describe('pdf sessions', () => {
-    it('returns extraction → anonymization without OCR or summarization by default', () => {
+    it('always includes OCR — independent of pdfHasScannedPages (executor self-skips)', () => {
       const session = makeSession({ type: 'pdf' })
-      expect(computePlannedSteps(session)).toEqual(['extraction', 'anonymization'])
+      expect(computePlannedSteps(session)).toEqual(['extraction', 'ocr', 'anonymization'])
     })
 
-    it('includes OCR when pdfHasScannedPages === true', () => {
-      // pdfHasScannedPages is added by Phase G's migration 013; cast for now.
+    it('still includes OCR when pdfHasScannedPages === true', () => {
       const session = makeSession({ type: 'pdf' }) as Session & { pdfHasScannedPages?: boolean }
       session.pdfHasScannedPages = true
       expect(computePlannedSteps(session)).toEqual(['extraction', 'ocr', 'anonymization'])
     })
 
-    it('includes both OCR and summarization when conditions are met', () => {
+    it('includes summarization when an LLM model is active', () => {
       vi.mocked(getActiveModelId).mockReturnValue('gemma-3-4b')
-      vi.mocked(isModelInstalled).mockReturnValue(true)
-      const session = makeSession({ type: 'pdf' }) as Session & { pdfHasScannedPages?: boolean }
-      session.pdfHasScannedPages = true
+      const session = makeSession({ type: 'pdf' })
       expect(computePlannedSteps(session)).toEqual([
         'extraction',
         'ocr',

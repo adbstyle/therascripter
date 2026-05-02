@@ -18,11 +18,11 @@ const makeUpdate = (id: string, sizeBytes: number): PendingModelUpdate => ({
 
 describe('UpdateBanner', () => {
   it('displays update count and size for a single update', () => {
-    const onRestart = vi.fn()
     render(
       <UpdateBanner
         updates={[makeUpdate('whisper-large-v3-turbo', 100 * 1024 * 1024)]}
-        onRestart={onRestart}
+        onRestart={vi.fn()}
+        onDismiss={vi.fn()}
       />
     )
 
@@ -38,21 +38,41 @@ describe('UpdateBanner', () => {
           makeUpdate('pyannote-suite', 30 * 1024 * 1024)
         ]}
         onRestart={vi.fn()}
+        onDismiss={vi.fn()}
       />
     )
 
     expect(screen.getByText(/2 Modelle/)).toBeInTheDocument()
   })
 
-  it('calls onRestart when button is clicked', async () => {
+  it('calls onRestart when restart button is clicked', async () => {
     const user = userEvent.setup()
     const onRestart = vi.fn()
     render(
-      <UpdateBanner updates={[makeUpdate('whisper-large-v3-turbo', 100)]} onRestart={onRestart} />
+      <UpdateBanner
+        updates={[makeUpdate('whisper-large-v3-turbo', 100)]}
+        onRestart={onRestart}
+        onDismiss={vi.fn()}
+      />
     )
 
     await user.click(screen.getByRole('button', { name: /neu starten/i }))
     expect(onRestart).toHaveBeenCalledOnce()
+  })
+
+  it('calls onDismiss when the close button is clicked', async () => {
+    const user = userEvent.setup()
+    const onDismiss = vi.fn()
+    render(
+      <UpdateBanner
+        updates={[makeUpdate('whisper-large-v3-turbo', 100)]}
+        onRestart={vi.fn()}
+        onDismiss={onDismiss}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /ausblenden/i }))
+    expect(onDismiss).toHaveBeenCalledOnce()
   })
 
   it('shows size in GB for large updates', () => {
@@ -60,14 +80,22 @@ describe('UpdateBanner', () => {
       <UpdateBanner
         updates={[makeUpdate('flair-ner-german-large', 2 * 1024 * 1024 * 1024)]}
         onRestart={vi.fn()}
+        onDismiss={vi.fn()}
       />
     )
 
     expect(screen.getByText(/2\.0 GB/)).toBeInTheDocument()
   })
 
-  it('renders the restart button', () => {
-    render(<UpdateBanner updates={[makeUpdate('test', 1000)]} onRestart={vi.fn()} />)
+  it('renders both restart and dismiss buttons', () => {
+    render(
+      <UpdateBanner
+        updates={[makeUpdate('test', 1000)]}
+        onRestart={vi.fn()}
+        onDismiss={vi.fn()}
+      />
+    )
     expect(screen.getByRole('button', { name: /neu starten/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /ausblenden/i })).toBeInTheDocument()
   })
 })
