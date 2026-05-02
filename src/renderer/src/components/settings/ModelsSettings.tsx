@@ -9,13 +9,6 @@ import ModelCard from './ModelCard'
 import DiarizationPipelineSection from './DiarizationPipelineSection'
 import ReconcileEventsBanner from './ReconcileEventsBanner'
 
-interface ModelsSettingsProps {
-  /** Issue #84 / Story H — open the About sub-page so the user can read the
-   *  Pseudonymisierung explainer. Triggered by the "Was ist Pseudonymisierung?"
-   *  link below the group header. */
-  onOpenAbout: () => void
-}
-
 /**
  * Issue #84 / Story E — sort by status (active first, then installed, then
  * missing). Within each bucket, preserve the catalog order. This replaces
@@ -32,7 +25,7 @@ function sortByStatus(entries: ModelCatalogEntry[]): ModelCatalogEntry[] {
   return [...entries].sort((a, b) => statusOrder(a) - statusOrder(b))
 }
 
-export default function ModelsSettings({ onOpenAbout }: ModelsSettingsProps): React.JSX.Element {
+export default function ModelsSettings(): React.JSX.Element {
   const toast = useToast()
   const reconcile = useReconcileEvents()
   const [asrModels, setAsrModels] = useState<ModelCatalogEntry[]>([])
@@ -224,14 +217,10 @@ export default function ModelsSettings({ onOpenAbout }: ModelsSettingsProps): Re
         <div>
           <h2 className="mb-1 text-lg font-semibold">Pseudonymisierung</h2>
           <p className="text-sm text-text-secondary">
-            Erkennt Personen, Orte und andere sensible Entitäten.{' '}
-            <button
-              type="button"
-              className="titlebar-no-drag font-medium text-primary transition-colors hover:text-primary-hover"
-              onClick={onOpenAbout}
-            >
-              Was ist Pseudonymisierung? →
-            </button>
+            Erkennt Personen, Orte und andere sensible Entitäten und ersetzt sie durch
+            typisierte Platzhalter (z.&nbsp;B. [PERSON&nbsp;1]). DSGVO-rechtlich
+            Pseudonymisierung — die Originale bleiben lokal und werden nach 30&nbsp;Tagen
+            automatisch gelöscht.
           </p>
         </div>
 
