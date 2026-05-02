@@ -31,16 +31,25 @@ vi.mock('../SettingsService', () => ({
   initSettings: () => mockSettingsStore
 }))
 
+const mockMkdirSync = vi.fn()
 vi.mock('fs', () => {
   const fsMock = {
     existsSync: vi.fn().mockReturnValue(false),
-    mkdirSync: vi.fn(),
+    mkdirSync: (...a: unknown[]) => mockMkdirSync(...a),
     statSync: vi.fn(),
     unlinkSync: vi.fn(),
     rmSync: vi.fn()
   }
   return { ...fsMock, default: fsMock }
 })
+
+const mockDownloadFile = vi.fn()
+const mockVerifyFileSha256 = vi.fn()
+vi.mock('../DownloadService', () => ({
+  downloadFile: (...a: unknown[]) => mockDownloadFile(...a),
+  verifyFileSha256: (...a: unknown[]) => mockVerifyFileSha256(...a),
+  extractTarGz: vi.fn()
+}))
 
 // Import after mocks
 import {
@@ -107,6 +116,30 @@ describe('downloadSingleModel', () => {
     await expect(downloadSingleModel('flair-ner-german-large')).rejects.toThrow(
       /Pflicht-Modell/i
     )
+  })
+
+  // Issue #84 follow-up — required-group dirs (asr/diarization/ner) are
+  // bootstrapped at startup by initDatabase, but optional groups
+  // (summarization, …) are not. The first download for an optional group
+  // lands in a parent that does not exist yet; the entry point owns the
+  // parent. This test pins the contract: mkdirSync(parent) must run before
+  // downloadFile() opens the .partial file for write.
+  it('creates the target parent directory before invoking downloadFile (optional group)', async () => {
+    mockMkdirSync.mockClear()
+    mockDownloadFile.mockClear()
+    mockDownloadFile.mockResolvedValue({ success: true })
+    mockVerifyFileSha256.mockResolvedValue(true)
+
+    await downloadSingleModel('gemma-summarization')
+
+    expect(mockMkdirSync).toHaveBeenCalledWith(
+      expect.stringContaining('/models/summarization'),
+      { recursive: true }
+    )
+    // Order: mkdirSync ran before downloadFile.
+    const mkdirInvocation = mockMkdirSync.mock.invocationCallOrder[0]
+    const downloadInvocation = mockDownloadFile.mock.invocationCallOrder[0]
+    expect(mkdirInvocation).toBeLessThan(downloadInvocation)
   })
 })
 

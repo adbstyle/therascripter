@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import { existsSync, mkdirSync, rmSync, statSync, unlinkSync } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { BrowserWindow } from 'electron'
 import { getDataDir } from '../db/connection'
 import { getSettings, type AppSettings } from './SettingsService'
@@ -458,6 +458,12 @@ export async function downloadSingleModel(id: string): Promise<void> {
   const targetPath = def.archive
     ? join(modelsDir, `${def.id}.tar.gz`)
     : join(modelsDir, def.relativePath)
+  // Required-group dirs (asr/diarization/ner) are bootstrapped at startup by
+  // initDatabase. Optional groups (summarization, …) are not — first
+  // download for such a group lands in a parent that does not exist yet.
+  // Mirroring the same defensive mkdirSync used in executeUpdates' atomic
+  // swap path, the entry point for download owns the parent.
+  mkdirSync(dirname(targetPath), { recursive: true })
 
   const result = await downloadFile(
     def.url,
