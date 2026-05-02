@@ -31,12 +31,12 @@ export interface ContextMenuState {
     number: number
     count: number
   }
-  /** If true, text is selected — show "Anonymisieren als..." */
+  /** If true, text is selected — show "Pseudonymisieren als..." */
   hasSelection: boolean
   /**
    * If true, the selection consists exclusively of two or more chips with no
    * neutral text outside them — re-flagging would be ambiguous, so the
-   * "Anonymisieren als..." block is hidden (AK 12).
+   * "Pseudonymisieren als..." block is hidden (AK 12).
    */
   selectionSpansMultipleChipsOnly: boolean
 }
@@ -113,11 +113,11 @@ export function EditorContextMenu({
       {/* Separator when both chip and selection options present */}
       {state.chip && state.hasSelection && <div className="my-1 border-t border-border" />}
 
-      {/* Selection context: "Anonymisieren als..." — hidden when selection is multiple chips only */}
+      {/* Selection context: "Pseudonymisieren als..." — hidden when selection is multiple chips only */}
       {state.hasSelection && !state.selectionSpansMultipleChipsOnly && (
         <>
           <div className="px-3 py-1.5 text-xs font-medium text-text-tertiary">
-            Anonymisieren als...
+            Pseudonymisieren als...
           </div>
           {ANONYMIZE_TYPES.map((type) => (
             <button

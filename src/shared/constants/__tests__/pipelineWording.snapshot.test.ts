@@ -14,7 +14,7 @@ describe('pipelineWording snapshot — Issue #80 Story 9 / AC#2 final lock', () 
       diarization: 'Sprecher unterscheiden',
       transcription: 'Gespräch transkribieren',
       alignment: 'Audio aufbereiten',
-      anonymization: 'Persönliche Angaben anonymisieren',
+      anonymization: 'Persönliche Angaben pseudonymisieren',
       summarization: 'Zusammenfassung erstellen',
       extraction: 'Text auslesen',
       ocr: 'Schrift erkennen'

@@ -49,7 +49,9 @@ export default function Settings(): React.JSX.Element {
         <div className="min-h-0 flex-1 overflow-y-auto">
           {subpage === 'sperrliste' && <BlocklistManager ref={blocklistRef} />}
           {subpage === 'darstellung' && <AppearanceSettings />}
-          {subpage === 'modelle' && <ModelsSettings />}
+          {subpage === 'modelle' && (
+            <ModelsSettings onOpenAbout={() => setSubpage('ueber')} />
+          )}
           {subpage === 'ueber' && <AboutPage />}
         </div>
       )}

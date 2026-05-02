@@ -28,7 +28,7 @@ export function AnonymizationPanel({
       <div className="flex h-full w-[300px] flex-col border-l border-border bg-surface-1">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-text-primary">Anonymisierungen</h3>
+            <h3 className="text-sm font-semibold text-text-primary">Pseudonymisierungen</h3>
             {data.totalChips > 0 && (
               <span className="rounded-full bg-surface-3 px-1.5 py-0.5 text-[11px] font-medium text-text-secondary">
                 {data.totalChips}
@@ -40,7 +40,7 @@ export function AnonymizationPanel({
         <div className="flex-1 overflow-y-auto px-3 py-3">
           {data.totalIdentities === 0 ? (
             <p className="py-8 text-center text-sm text-text-tertiary">
-              Keine Anonymisierungen
+              Keine Pseudonymisierungen
             </p>
           ) : (
             <div className="flex flex-col gap-4">

@@ -9,7 +9,14 @@ import ModelCard from './ModelCard'
 import DiarizationPipelineSection from './DiarizationPipelineSection'
 import ReconcileEventsBanner from './ReconcileEventsBanner'
 
-export default function ModelsSettings(): React.JSX.Element {
+interface ModelsSettingsProps {
+  /** Issue #84 / Story H — open the About sub-page so the user can read the
+   *  Pseudonymisierung explainer. Triggered by the "Was ist Pseudonymisierung?"
+   *  link below the group header. */
+  onOpenAbout: () => void
+}
+
+export default function ModelsSettings({ onOpenAbout }: ModelsSettingsProps): React.JSX.Element {
   const toast = useToast()
   const reconcile = useReconcileEvents()
   const [asrModels, setAsrModels] = useState<ModelCatalogEntry[]>([])
@@ -188,9 +195,16 @@ export default function ModelsSettings(): React.JSX.Element {
 
       <section className="space-y-3">
         <div>
-          <h2 className="mb-1 text-lg font-semibold">Anonymisierung</h2>
+          <h2 className="mb-1 text-lg font-semibold">Pseudonymisierung</h2>
           <p className="text-sm text-text-secondary">
-            Erkennt Personen, Orte und andere sensible Entitäten.
+            Erkennt Personen, Orte und andere sensible Entitäten.{' '}
+            <button
+              type="button"
+              className="titlebar-no-drag font-medium text-primary transition-colors hover:text-primary-hover"
+              onClick={onOpenAbout}
+            >
+              Was ist Pseudonymisierung? →
+            </button>
           </p>
         </div>
 

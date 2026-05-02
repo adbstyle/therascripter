@@ -58,7 +58,7 @@ export class AnonymizationService implements TaskExecutor {
       // unreadable file) — surface as 'error' so the user knows to re-import,
       // matching the pre-inversion behaviour.
       if (session?.type !== 'audio') {
-        throw new Error('Transkript enthält keine Segmente für die Anonymisierung')
+        throw new Error('Transkript enthält keine Segmente für die Pseudonymisierung')
       }
       const emptyDoc = { type: 'doc', content: [{ type: 'paragraph' }] }
       const anonymizedPath = sessionService.generateAnonymizedPath(task.sessionId)
