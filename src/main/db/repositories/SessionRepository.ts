@@ -7,7 +7,8 @@ import type {
   CreateSessionInput,
   UpdateSessionInput,
   EntityMap,
-  TaskType
+  TaskType,
+  ProcessedModelsSnapshot
 } from '../../../shared/types'
 
 interface SessionRow {
@@ -34,6 +35,7 @@ interface SessionRow {
   planned_steps: string | null
   retry_count: number
   pdf_has_scanned_pages: number | null
+  processed_with_models: string | null
 }
 
 function parseEntityMap(json: string | null, sessionId: string): EntityMap | null {
@@ -42,6 +44,23 @@ function parseEntityMap(json: string | null, sessionId: string): EntityMap | nul
     return JSON.parse(json) as EntityMap
   } catch {
     console.error(`Corrupted entity_map in session ${sessionId}, treating as null`)
+    return null
+  }
+}
+
+function parseProcessedModels(
+  json: string | null,
+  sessionId: string
+): ProcessedModelsSnapshot | null {
+  if (!json) return null
+  try {
+    return JSON.parse(json) as ProcessedModelsSnapshot
+  } catch {
+    // A corrupted blob shouldn't hide the session — degrade to "legacy
+    // unknown" so the UI shows the neutral hint instead of crashing.
+    console.error(
+      `Corrupted processed_with_models in session ${sessionId}, treating as null`
+    )
     return null
   }
 }
@@ -71,7 +90,8 @@ function rowToSession(row: SessionRow): Session {
     plannedSteps: row.planned_steps ? (JSON.parse(row.planned_steps) as TaskType[]) : null,
     retryCount: row.retry_count,
     pdfHasScannedPages:
-      row.pdf_has_scanned_pages == null ? null : row.pdf_has_scanned_pages === 1
+      row.pdf_has_scanned_pages == null ? null : row.pdf_has_scanned_pages === 1,
+    processedWithModels: parseProcessedModels(row.processed_with_models, row.id)
   }
 }
 
@@ -198,6 +218,12 @@ export class SessionRepository {
       sets.push('pdf_has_scanned_pages = ?')
       values.push(
         input.pdfHasScannedPages == null ? null : input.pdfHasScannedPages ? 1 : 0
+      )
+    }
+    if (input.processedWithModels !== undefined) {
+      sets.push('processed_with_models = ?')
+      values.push(
+        input.processedWithModels === null ? null : JSON.stringify(input.processedWithModels)
       )
     }
 

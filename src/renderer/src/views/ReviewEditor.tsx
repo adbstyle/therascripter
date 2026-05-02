@@ -13,6 +13,7 @@ import { BlocklistConfirmDialog } from '../components/editor/BlocklistConfirmDia
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EditableSessionTitle } from '../components/review/EditableSessionTitle'
 import { SummaryPanel } from '../components/review/SummaryPanel'
+import { ProvenancePanel } from '../components/review/ProvenancePanel'
 import {
   batchRemovePlaceholder,
   anonymizeSelectionWithPropagation,
@@ -28,6 +29,7 @@ import { AnonymizationPanel } from '../components/editor/AnonymizationPanel'
 import type {
   EntityMap,
   PlaceholderType,
+  ProcessedModelsSnapshot,
   ReviewData,
   SessionType
 } from '../../../shared/types'
@@ -53,6 +55,8 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const [loadError, setLoadError] = useState<string | null>(null)
   const [sessionTitle, setSessionTitle] = useState('')
   const [sessionType, setSessionType] = useState<SessionType>('audio')
+  const [provenance, setProvenance] = useState<ProcessedModelsSnapshot | null>(null)
+  const [reviewAt, setReviewAt] = useState<string | null>(null)
   const [_entityMap, setEntityMap] = useState<EntityMap>({})
   const [updateCounter, setUpdateCounter] = useState(0)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -242,6 +246,8 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
         setSessionTitle(data.sessionTitle)
         setSessionType(data.sessionType)
         setEntityMap(data.entityMap)
+        setProvenance(data.processedWithModels)
+        setReviewAt(data.reviewAt)
         entityMapRef.current = data.entityMap
 
         editor?.commands.setContent(data.document)
@@ -605,6 +611,10 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           {/* Optional LLM-generated summary scrolls with the transcript */}
           <div className="px-6 pt-4 [&:empty]:p-0">
             <SummaryPanel sessionId={sessionId} />
+          </div>
+          {/* Issue #84 Story I — collapsible Modell-Provenienz, default closed */}
+          <div className="px-6 pt-4">
+            <ProvenancePanel data={provenance} reviewAt={reviewAt} />
           </div>
           <EditorContent editor={editor} />
         </div>

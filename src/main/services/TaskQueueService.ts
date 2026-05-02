@@ -10,6 +10,7 @@ import { validateIntermediateFile } from '../utils/file-ops'
 import type { Task, TaskType, Session, SessionStatus, SessionType } from '../../shared/types'
 import { AUDIO_PIPELINE, PDF_PIPELINE } from '../../shared/constants/pipeline'
 import { getActiveModelId } from './ModelDownloadService'
+import { captureProcessedModels } from './ProvenanceCapture'
 
 // Issue #80 / DR-5: tasks[] is the source of truth for "current step".
 // SessionStatus only carries lifecycle phase (queued / processing / review / error / recording).
@@ -93,7 +94,11 @@ export class TaskQueueService {
     // "Schritt 0/N" flicker for filtered-out tasks (summarization without
     // model installed, ocr on text-only PDFs).
     const plannedSteps = computePlannedSteps(session)
-    this.sessionService.updateSession(sessionId, { plannedSteps })
+    // Issue #84 Story I — capture-at-source: snapshot the active models per
+    // group for this run so the Review-Editor can show provenance later.
+    // Done together with plannedSteps so both states are consistent.
+    const processedWithModels = captureProcessedModels(plannedSteps)
+    this.sessionService.updateSession(sessionId, { plannedSteps, processedWithModels })
 
     const tasks: Task[] = []
     for (const type of plannedSteps) {
@@ -190,11 +195,17 @@ export class TaskQueueService {
     // so the renderer doesn't surface stale state from the failed run while the
     // retry is in flight. Issue #80 DR-7: increment retryCount so the UI can
     // surface the 3-stage support hint after repeated failures.
+    // Issue #84 Story I — re-capture provenance: the user may have switched
+    // the active model between runs; the relevant snapshot is what actually
+    // produces the next attempt, not the previous failed one.
+    const processedWithModels = captureProcessedModels(pipeline)
+
     this.sessionService.updateSession(sessionId, {
       status: 'queued',
       errorMessage: null,
       retryCount: (session.retryCount ?? 0) + 1,
-      plannedSteps: pipeline
+      plannedSteps: pipeline,
+      processedWithModels
     })
 
     console.log(

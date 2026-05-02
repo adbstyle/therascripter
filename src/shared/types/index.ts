@@ -82,3 +82,5 @@ export type {
   AppUpdateStatus,
   CheckResult
 } from './ModelUpdate'
+
+export type { ModelSnapshot, ProcessedModelsSnapshot } from './Provenance'

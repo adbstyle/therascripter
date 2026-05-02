@@ -10,7 +10,22 @@ vi.mock('../../utils/ipc-helpers', () => ({
 }))
 
 vi.mock('../ModelDownloadService', () => ({
-  getActiveModelId: vi.fn()
+  getActiveModelId: vi.fn(),
+  // Issue #84 Story I — ProvenanceCapture (called from enqueuePipeline)
+  // resolves the active id to a catalog entry. Stub a minimal shape so the
+  // capture path doesn't NPE; provenance content is not asserted here.
+  getModelById: vi.fn().mockReturnValue({
+    id: 'stub',
+    label: 'Stub',
+    sha256: '0'.repeat(64),
+    sizeBytes: 0
+  })
+}))
+
+// ProvenanceCapture also reads installedModelVersions from electron-store;
+// tests don't init settings, so stub the module entirely.
+vi.mock('../SettingsService', () => ({
+  getSettings: () => ({ get: () => ({}) })
 }))
 
 import { getActiveModelId } from '../ModelDownloadService'

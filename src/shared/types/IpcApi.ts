@@ -5,6 +5,7 @@ import type { EntityMap, PlaceholderType } from './EntityMap'
 import type { TipTapDocument } from './TipTapDocument'
 import type { PendingModelUpdate, AppUpdateStatus, CheckResult } from './ModelUpdate'
 import type { ReconcileEvent } from './ReconcileEvent'
+import type { ProcessedModelsSnapshot } from './Provenance'
 import type {
   ModelCatalogEntry,
   ModelGroup,
@@ -91,6 +92,19 @@ export interface ReviewData {
   entityMap: EntityMap
   sessionType: SessionType
   sessionTitle: string
+  /**
+   * Issue #84 Story I — captured at pipeline-start. NULL for sessions that
+   * reached 'review' before this column was introduced; the renderer surfaces
+   * the legacy hint in that case.
+   */
+  processedWithModels: ProcessedModelsSnapshot | null
+  /**
+   * Issue #84 Story I — when the session transitioned to 'review' (≈ when the
+   * pipeline finished). Used as "Verarbeitet am" in the provenance panel.
+   * NULL only if the row pre-dates Migration 003 which is unlikely in
+   * practice; the panel falls back to omitting the timestamp.
+   */
+  reviewAt: string | null
 }
 
 export interface ReviewApi {

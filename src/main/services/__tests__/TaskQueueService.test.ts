@@ -16,7 +16,23 @@ vi.mock('../../utils/ipc-helpers', () => ({
 // 4 PDF steps); mock ModelDownloadService so the summarization step survives
 // the filter. PDF sessions also need pdfHasScannedPages=true to include ocr.
 vi.mock('../ModelDownloadService', () => ({
-  getActiveModelId: vi.fn().mockReturnValue('gemma-3-4b')
+  getActiveModelId: vi.fn().mockReturnValue('gemma-3-4b'),
+  // Issue #84 Story I — ProvenanceCapture (called from enqueuePipeline)
+  // resolves the active id to a catalog entry. Stub a minimal shape so the
+  // capture path doesn't NPE in tests; the snapshot itself is irrelevant
+  // for the assertions below.
+  getModelById: vi.fn().mockReturnValue({
+    id: 'stub',
+    label: 'Stub',
+    sha256: '0'.repeat(64),
+    sizeBytes: 0
+  })
+}))
+
+// ProvenanceCapture also reads installedModelVersions from electron-store;
+// tests don't init settings, so stub the module entirely.
+vi.mock('../SettingsService', () => ({
+  getSettings: () => ({ get: () => ({}) })
 }))
 
 describe('TaskQueueService', () => {

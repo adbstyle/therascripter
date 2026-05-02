@@ -33,6 +33,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     plannedSteps: null,
     retryCount: 0,
     pdfHasScannedPages: null,
+    processedWithModels: null,
     ...overrides
   }
 }
