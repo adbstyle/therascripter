@@ -32,14 +32,25 @@ beforeEach(() => {
 })
 
 describe('ModelUpdateScreen — pre-download exits (Story G)', () => {
-  it('"Später" calls onComplete without clearing or dismissing', async () => {
+  it('"Später" calls onLater without clearing or dismissing — and does NOT call onComplete', async () => {
     const user = userEvent.setup()
     const onComplete = vi.fn()
-    render(<ModelUpdateScreen updates={[update]} onComplete={onComplete} />)
+    const onLater = vi.fn()
+    render(
+      <ModelUpdateScreen
+        updates={[update]}
+        onComplete={onComplete}
+        onLater={onLater}
+      />
+    )
 
     await user.click(screen.getByRole('button', { name: /^Später$/i }))
 
-    expect(onComplete).toHaveBeenCalledOnce()
+    expect(onLater).toHaveBeenCalledOnce()
+    // onComplete must not fire — that path also clears the live banner state
+    // in App.tsx via clearUpdates(), which "Später" must not do (Issue #84
+    // architect review #3).
+    expect(onComplete).not.toHaveBeenCalled()
     expect(mockModelUpdate.clearPending).not.toHaveBeenCalled()
     expect(mockModelUpdate.dismissVersions).not.toHaveBeenCalled()
   })
@@ -47,18 +58,28 @@ describe('ModelUpdateScreen — pre-download exits (Story G)', () => {
   it('"Diese Version überspringen" dismisses the manifest entry and clears pending', async () => {
     const user = userEvent.setup()
     const onComplete = vi.fn()
-    render(<ModelUpdateScreen updates={[update]} onComplete={onComplete} />)
+    const onLater = vi.fn()
+    render(
+      <ModelUpdateScreen
+        updates={[update]}
+        onComplete={onComplete}
+        onLater={onLater}
+      />
+    )
 
     await user.click(screen.getByRole('button', { name: /Diese Version überspringen/i }))
 
     expect(mockModelUpdate.dismissVersions).toHaveBeenCalledWith([update])
     expect(mockModelUpdate.clearPending).toHaveBeenCalledOnce()
     expect(onComplete).toHaveBeenCalledOnce()
+    expect(onLater).not.toHaveBeenCalled()
   })
 
   it('"Update starten" begins the download', async () => {
     const user = userEvent.setup()
-    render(<ModelUpdateScreen updates={[update]} onComplete={vi.fn()} />)
+    render(
+      <ModelUpdateScreen updates={[update]} onComplete={vi.fn()} onLater={vi.fn()} />
+    )
 
     await user.click(screen.getByRole('button', { name: /Update starten/i }))
 

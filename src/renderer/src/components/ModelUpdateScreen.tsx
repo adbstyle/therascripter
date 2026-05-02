@@ -7,12 +7,19 @@ import AppLogo from './AppLogo'
 
 interface ModelUpdateScreenProps {
   updates: PendingModelUpdate[]
+  /** Download finished or user actively skipped this version — wipe both
+   *  the pending entry in electron-store and any live banner state. */
   onComplete: () => void
+  /** "Später" + error-state "Weiter" — close the screen but keep the pending
+   *  entry intact so the next launch can retry, matching the in-screen
+   *  promise "Das Update wird beim nächsten Start erneut versucht." */
+  onLater: () => void
 }
 
 export default function ModelUpdateScreen({
   updates,
-  onComplete
+  onComplete,
+  onLater
 }: ModelUpdateScreenProps): React.JSX.Element {
   const [status, setStatus] = useState<ModelDownloadStatus>({ state: 'idle' })
   const [started, setStarted] = useState(false)
@@ -60,31 +67,25 @@ export default function ModelUpdateScreen({
     await window.api.modelUpdate.startDownload()
   }, [updates])
 
-  // Story G — three distinct exits from the pre-download state:
+  // Story G — exits from the pre-download / error states:
   //
   // 1. handleLater: keep `pendingModelUpdates` intact → screen reappears on
-  //    next start. Used by the "Später" button.
-  // 2. handleSkipVersion: clear pending AND dismiss this manifest entry so the
-  //    UpdateBanner won't bring it back this manifest revision. Used by the
-  //    "Diese Version überspringen" button.
-  // 3. handleErrorContinue: error path — clear pending and dismiss the screen
-  //    without dismissing the manifest entry (executeUpdates kept pending on
-  //    failure; the user explicitly dropping out of the screen should release
-  //    that hold without permanently silencing the banner).
+  //    next start (executeUpdates retries automatically). Used by both the
+  //    "Später" button (pre-download) and the "Weiter" button (error state),
+  //    matching the existing "wird beim nächsten Start erneut versucht"
+  //    promise rendered inside the error panel.
+  // 2. handleSkipVersion: clear pending AND dismiss this manifest entry so
+  //    the UpdateBanner won't bring it back this manifest revision. Used by
+  //    the "Diese Version überspringen" button.
   const handleLater = useCallback(() => {
-    onComplete()
-  }, [onComplete])
+    onLater()
+  }, [onLater])
 
   const handleSkipVersion = useCallback(async () => {
     await window.api.modelUpdate.dismissVersions(updates)
     await window.api.modelUpdate.clearPending()
     onComplete()
   }, [onComplete, updates])
-
-  const handleErrorContinue = useCallback(async () => {
-    await window.api.modelUpdate.clearPending()
-    onComplete()
-  }, [onComplete])
 
   const isDownloading = status.state === 'downloading'
   const isExtracting = status.state === 'extracting'
@@ -226,7 +227,7 @@ export default function ModelUpdateScreen({
             </p>
             <button
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
-              onClick={handleErrorContinue}
+              onClick={handleLater}
             >
               Weiter
             </button>

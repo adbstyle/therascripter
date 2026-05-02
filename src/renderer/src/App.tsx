@@ -80,6 +80,14 @@ export default function App(): React.JSX.Element {
     clearUpdates()
   }, [clearUpdates])
 
+  // Issue #84 / Story G — "Später" + Error-Continue exits leave the
+  // pending entry in electron-store intact (next-launch retry promise) and
+  // must not clear the live banner state — the user did not dismiss the
+  // update, only the current screen.
+  const handleUpdateLater = useCallback(() => {
+    setPendingUpdates(null)
+  }, [])
+
   const handleCloseReview = useCallback(() => {
     scrollToSessionId.current = reviewSessionId
     setReviewSessionId(null)
@@ -150,7 +158,11 @@ export default function App(): React.JSX.Element {
       <div className="flex h-screen flex-col bg-surface-0">
         <TitleBar />
         <div className="min-h-0 flex-1">
-          <ModelUpdateScreen updates={pendingUpdates} onComplete={handleUpdateComplete} />
+          <ModelUpdateScreen
+            updates={pendingUpdates}
+            onComplete={handleUpdateComplete}
+            onLater={handleUpdateLater}
+          />
         </div>
       </div>
     )
