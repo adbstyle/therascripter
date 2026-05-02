@@ -44,11 +44,12 @@ describe('captureProcessedModels', () => {
       sha256: SHA('a'),
       sizeBytes: 100
     }))
+    // Issue #84 Story D — keys are channel-prefixed; default test env = prod.
     mockSettingsGet.mockReturnValue({
-      'whisper-large-v3-turbo': { version: '2025-02-01', sha256: SHA('a'), installedAt: '' },
-      'pyannote-suite': { version: '2025-03-12', sha256: SHA('a'), installedAt: '' },
-      'flair-ner-german-large': { version: '2025-02-08', sha256: SHA('a'), installedAt: '' },
-      'gemma-summarization': { version: '2025-04-01', sha256: SHA('a'), installedAt: '' }
+      'prod:whisper-large-v3-turbo': { version: '2025-02-01', sha256: SHA('a'), installedAt: '' },
+      'prod:pyannote-suite': { version: '2025-03-12', sha256: SHA('a'), installedAt: '' },
+      'prod:flair-ner-german-large': { version: '2025-02-08', sha256: SHA('a'), installedAt: '' },
+      'prod:gemma-summarization': { version: '2025-04-01', sha256: SHA('a'), installedAt: '' }
     })
 
     const snap = captureProcessedModels([

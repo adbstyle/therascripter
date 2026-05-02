@@ -354,19 +354,21 @@ describe('recordInstalledVersion', () => {
     vi.clearAllMocks()
   })
 
+  // Issue #84 Story D — keys are now `${channel}:${modelId}` so the
+  // active-channel adapter can isolate per-channel install records.
+  // Tests run with the default `prod` channel (no env override).
   it('writes {version: installed, sha256, installedAt} for the given id', () => {
     recordInstalledVersion('whisper-large-v3-turbo', 'abc123')
 
-    expect(storeState.installedModelVersions['whisper-large-v3-turbo']).toBeDefined()
-    expect(storeState.installedModelVersions['whisper-large-v3-turbo'].version).toBe('installed')
-    expect(storeState.installedModelVersions['whisper-large-v3-turbo'].sha256).toBe('abc123')
-    expect(storeState.installedModelVersions['whisper-large-v3-turbo'].installedAt).toMatch(
-      /\d{4}-\d{2}-\d{2}T/
-    )
+    const entry = storeState.installedModelVersions['prod:whisper-large-v3-turbo']
+    expect(entry).toBeDefined()
+    expect(entry.version).toBe('installed')
+    expect(entry.sha256).toBe('abc123')
+    expect(entry.installedAt).toMatch(/\d{4}-\d{2}-\d{2}T/)
   })
 
   it('preserves existing entries for other ids', () => {
-    storeState.installedModelVersions['flair-ner-german-large'] = {
+    storeState.installedModelVersions['prod:flair-ner-german-large'] = {
       version: 'pre-update',
       sha256: 'def456',
       installedAt: '2026-01-01T00:00:00Z'
@@ -374,11 +376,11 @@ describe('recordInstalledVersion', () => {
 
     recordInstalledVersion('whisper-large-v3-turbo', 'abc123')
 
-    expect(storeState.installedModelVersions['flair-ner-german-large']).toEqual({
+    expect(storeState.installedModelVersions['prod:flair-ner-german-large']).toEqual({
       version: 'pre-update',
       sha256: 'def456',
       installedAt: '2026-01-01T00:00:00Z'
     })
-    expect(storeState.installedModelVersions['whisper-large-v3-turbo'].sha256).toBe('abc123')
+    expect(storeState.installedModelVersions['prod:whisper-large-v3-turbo'].sha256).toBe('abc123')
   })
 })

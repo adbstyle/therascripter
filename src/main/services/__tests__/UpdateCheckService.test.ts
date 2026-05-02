@@ -154,14 +154,16 @@ describe('checkForUpdates', () => {
     vi.clearAllMocks()
   })
 
+  // Issue #84 Story D — installedModelVersions keys are now `${channel}:${id}`;
+  // default test env yields the `prod` channel.
   it('returns updates when manifest sha256 differs from installed', async () => {
     mockSettingsStore.get.mockReturnValue({
-      'whisper-large-v3-turbo': {
+      'prod:whisper-large-v3-turbo': {
         version: '2025-01-15',
         sha256: 'aaaa' + 'a'.repeat(60),
         installedAt: ''
       },
-      'pyannote-suite': {
+      'prod:pyannote-suite': {
         version: '2025-01-15',
         sha256: 'bbbb' + 'b'.repeat(60),
         installedAt: ''
@@ -180,12 +182,12 @@ describe('checkForUpdates', () => {
 
   it('returns no updates when all sha256 match', async () => {
     mockSettingsStore.get.mockReturnValue({
-      'whisper-large-v3-turbo': {
+      'prod:whisper-large-v3-turbo': {
         version: '2025-01-15',
         sha256: 'cccc' + 'c'.repeat(60),
         installedAt: ''
       },
-      'pyannote-suite': {
+      'prod:pyannote-suite': {
         version: '2025-01-15',
         sha256: 'bbbb' + 'b'.repeat(60),
         installedAt: ''
@@ -287,12 +289,19 @@ describe('checkForUpdates — dismissed manifest versions (Story F+G)', () => {
 
   // The settings store is mocked with a single mockReturnValue; for the dismiss
   // filter we need different return values per key, so route by key.
+  // Issue #84 Story D — installed entries are passed in plain modelId form
+  // for readability; this helper applies the `prod:` channel prefix the
+  // adapter expects.
   function setupMockSettings(opts: {
     installed?: Record<string, { version: string; sha256: string; installedAt: string }>
     dismissed?: string[]
   }): void {
+    const prefixed: Record<string, { version: string; sha256: string; installedAt: string }> = {}
+    for (const [id, val] of Object.entries(opts.installed ?? {})) {
+      prefixed[`prod:${id}`] = val
+    }
     mockSettingsStore.get.mockImplementation((key: string) => {
-      if (key === 'installedModelVersions') return opts.installed ?? {}
+      if (key === 'installedModelVersions') return prefixed
       if (key === 'dismissedManifestVersions') return opts.dismissed ?? []
       return null
     })
@@ -350,12 +359,12 @@ describe('checkForUpdates — dismissed manifest versions (Story F+G)', () => {
     mockSettingsStore.get.mockImplementation((key: string) => {
       if (key === 'installedModelVersions') {
         return {
-          'whisper-large-v3-turbo': {
+          'prod:whisper-large-v3-turbo': {
             version: '2025-01-15',
             sha256: 'aaaa' + 'a'.repeat(60),
             installedAt: ''
           },
-          'pyannote-suite': {
+          'prod:pyannote-suite': {
             version: '2025-01-15',
             sha256: 'bbbb' + 'b'.repeat(60),
             installedAt: ''
@@ -583,33 +592,47 @@ describe('cleanupIncompleteUpdates', () => {
 })
 
 describe('migrateInstalledVersions', () => {
+  // Issue #84 Story D — migrateInstalledVersions now writes via the
+  // channel-aware adapter. Use a stateful mock that round-trips writes back
+  // through reads, so the per-model setInstalledVersion calls accumulate
+  // observably (the first call's read sees an empty record, the second
+  // sees the first entry, …).
+  let storedInstalled: Record<string, unknown> = {}
   beforeEach(() => {
     vi.clearAllMocks()
+    storedInstalled = {}
+    mockSettingsStore.get.mockImplementation((key: string) => {
+      if (key === 'installedModelVersions') return storedInstalled
+      return null
+    })
+    mockSettingsStore.set.mockImplementation((key: string, value: unknown) => {
+      if (key === 'installedModelVersions') {
+        storedInstalled = value as Record<string, unknown>
+      }
+    })
   })
 
   it('populates installed versions for existing models', () => {
-    mockSettingsStore.get.mockReturnValue({})
     mockExistsSync.mockReturnValue(true) // all models exist
 
     migrateInstalledVersions()
 
-    expect(mockSettingsStore.set).toHaveBeenCalledWith(
-      'installedModelVersions',
+    // Final state contains both models, channel-prefixed (`prod` default).
+    expect(storedInstalled).toEqual(
       expect.objectContaining({
-        'whisper-large-v3-turbo': expect.objectContaining({
+        'prod:whisper-large-v3-turbo': expect.objectContaining({
           version: 'pre-update',
           sha256: '' // empty — forces update on first manifest check
         }),
-        'pyannote-suite': expect.objectContaining({
+        'prod:pyannote-suite': expect.objectContaining({
           version: 'pre-update',
-          sha256: '' // empty — forces update on first manifest check
+          sha256: ''
         })
       })
     )
   })
 
   it('skips models that are not installed on disk', () => {
-    mockSettingsStore.get.mockReturnValue({})
     // whisper not installed, pyannote installed
     mockExistsSync.mockImplementation(
       (p: string) => p.includes('diarization') || p.includes('speaker-diarization')
@@ -617,20 +640,18 @@ describe('migrateInstalledVersions', () => {
 
     migrateInstalledVersions()
 
-    const call = mockSettingsStore.set.mock.calls[0]
-    const versions = call[1] as Record<string, unknown>
-    expect(versions['pyannote-suite']).toBeDefined()
-    expect(versions['whisper-large-v3-turbo']).toBeUndefined()
+    expect(storedInstalled['prod:pyannote-suite']).toBeDefined()
+    expect(storedInstalled['prod:whisper-large-v3-turbo']).toBeUndefined()
   })
 
   it('does nothing if installedModelVersions already has entries', () => {
-    mockSettingsStore.get.mockReturnValue({
-      'whisper-large-v3-turbo': {
+    storedInstalled = {
+      'prod:whisper-large-v3-turbo': {
         version: '2025-01-15',
         sha256: 'aaaa' + 'a'.repeat(60),
         installedAt: ''
       }
-    })
+    }
 
     migrateInstalledVersions()
 
@@ -686,11 +707,11 @@ describe('executeUpdates', () => {
       expect.stringContaining('.staging'),
       expect.stringContaining('ggml-large-v3-turbo')
     )
-    // Record new version
+    // Record new version (channel-prefixed key per Story D)
     expect(mockSettingsStore.set).toHaveBeenCalledWith(
       'installedModelVersions',
       expect.objectContaining({
-        'whisper-large-v3-turbo': expect.objectContaining({ sha256: pendingUpdate.sha256 })
+        'prod:whisper-large-v3-turbo': expect.objectContaining({ sha256: pendingUpdate.sha256 })
       })
     )
     // Clear pending

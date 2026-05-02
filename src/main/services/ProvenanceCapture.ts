@@ -1,5 +1,5 @@
 import { getActiveModelId, getModelById } from './ModelDownloadService'
-import { getSettings } from './SettingsService'
+import { getInstalledVersion } from './InstalledVersionsStore'
 import type { ModelGroup } from '../../shared/validation/model-catalog-schemas'
 import type {
   ModelSnapshot,
@@ -27,7 +27,7 @@ function snapshotGroup(group: ModelGroup): ModelSnapshot | null {
   if (!id) return null
   const def = getModelById(id)
   if (!def) return null
-  const installed = getSettings().get('installedModelVersions')?.[id]
+  const installed = getInstalledVersion(id)
   return {
     id,
     label: def.label,

@@ -4,6 +4,7 @@ import { join } from 'path'
 import { get as httpsGet } from 'https'
 import { getSettings } from './SettingsService'
 import { getModelDefinitions, getModelsDir, isModelInstalled } from './ModelDownloadService'
+import { getInstalledVersions, setInstalledVersion } from './InstalledVersionsStore'
 import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
 import {
   ManifestSchema,
@@ -122,7 +123,7 @@ export async function checkForUpdates(): Promise<CheckResult> {
     const manifest = ManifestSchema.parse(raw)
 
     const settings = getSettings()
-    const installedVersions = settings.get('installedModelVersions') ?? {}
+    const installedVersions = getInstalledVersions()
     const dismissedRaw = settings.get('dismissedManifestVersions')
     const dismissed = new Set(Array.isArray(dismissedRaw) ? dismissedRaw : [])
     const definitions = getModelDefinitions()
@@ -176,11 +177,9 @@ export async function checkForUpdates(): Promise<CheckResult> {
         if (existsSync(filePath)) {
           const matches = await verifyFileSha256(filePath, manifestModel.sha256)
           if (matches) {
-            installedVersions[manifestModel.id] = {
-              ...installed,
-              sha256: manifestModel.sha256
-            }
-            settings.set('installedModelVersions', installedVersions)
+            const healed = { ...installed, sha256: manifestModel.sha256 }
+            setInstalledVersion(manifestModel.id, healed)
+            installedVersions[manifestModel.id] = healed
             continue
           }
         }
@@ -408,13 +407,11 @@ export async function executeUpdates(): Promise<void> {
     }
 
     // ── 7. Record installed version ──
-    const installedVersions = settings.get('installedModelVersions') ?? {}
-    installedVersions[update.id] = {
+    setInstalledVersion(update.id, {
       version: update.version,
       sha256: update.sha256,
       installedAt: new Date().toISOString()
-    }
-    settings.set('installedModelVersions', installedVersions)
+    })
 
     overallDownloaded += update.sizeBytes
   }
@@ -501,11 +498,16 @@ export function cleanupIncompleteUpdates(): void {
 
 // ─── migrateInstalledVersions ─────────────────────────────────────────────────
 
+/**
+ * Backfills an empty `installedModelVersions` view for the active channel
+ * with `'pre-update'` sentinel rows whenever a model file exists on disk.
+ *
+ * Story D — the per-channel guard means a freshly switched channel sees
+ * its own (initially empty) view, even when other channels already have
+ * entries; the disk files are reused in-place by the new channel.
+ */
 export function migrateInstalledVersions(): void {
-  const settings = getSettings()
-  const installedVersions = settings.get('installedModelVersions') ?? {}
-
-  // Only migrate if no versions recorded yet
+  const installedVersions = getInstalledVersions()
   if (Object.keys(installedVersions).length > 0) return
 
   const modelsDir = getModelsDir()
@@ -516,17 +518,16 @@ export function migrateInstalledVersions(): void {
   for (const def of definitions) {
     const checkTarget = join(modelsDir, def.checkPath)
     if (existsSync(checkTarget)) {
-      installedVersions[def.id] = {
+      setInstalledVersion(def.id, {
         version: 'pre-update',
         sha256: '', // Unknown — forces update on first manifest check
         installedAt: now
-      }
+      })
       migrated++
     }
   }
 
   if (migrated > 0) {
-    settings.set('installedModelVersions', installedVersions)
     console.log(`UpdateCheckService: ${migrated} bestehende Modelle migriert`)
   }
 }

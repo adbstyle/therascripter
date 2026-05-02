@@ -204,7 +204,8 @@ export function initSettings(): Store<AppSettings> {
 
   // installedModelVersions: Altlasten-Keys (Legacy + PR-Zwischenstände) auf den neuen
   // Key umbenennen, sonst bleiben sie für immer verwaist (UpdateCheckService iteriert
-  // über Manifest-IDs, nicht über installed-keys).
+  // über Manifest-IDs, nicht über installed-keys). Läuft VOR der Channel-Tag-Migration
+  // weiter unten, weil die Renames untagged-Keys erwarten.
   const installed = { ...store.get('installedModelVersions') }
   const legacyInstalledKeys = [
     'pyannote-community-1',
@@ -221,6 +222,25 @@ export function initSettings(): Store<AppSettings> {
   }
   if (installedChanged) {
     store.set('installedModelVersions', installed)
+  }
+
+  // Issue #84 / Story D — channel-tag migration. Pre-D installs wrote raw
+  // model-id keys; tag them as `prod:` so the channel-aware adapter (see
+  // InstalledVersionsStore.ts) can read them. Already-tagged keys (anything
+  // containing `:`) are passed through unchanged. Idempotent.
+  const installedForChannelTag = { ...store.get('installedModelVersions') }
+  let channelTagChanged = false
+  const tagged: Record<string, InstalledModelVersion> = {}
+  for (const [key, val] of Object.entries(installedForChannelTag)) {
+    if (key.includes(':')) {
+      tagged[key] = val
+    } else {
+      tagged[`prod:${key}`] = val
+      channelTagChanged = true
+    }
+  }
+  if (channelTagChanged) {
+    store.set('installedModelVersions', tagged)
   }
 
   return store

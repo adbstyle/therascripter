@@ -4,6 +4,10 @@ import { join } from 'path'
 import { BrowserWindow } from 'electron'
 import { getDataDir } from '../db/connection'
 import { getSettings, type AppSettings } from './SettingsService'
+import {
+  deleteInstalledVersion,
+  setInstalledVersion
+} from './InstalledVersionsStore'
 import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
 import type { ModelGroup } from '../../shared/validation/model-catalog-schemas'
 import { MODEL_DEFINITIONS, type ModelDefinition } from '../../shared/model-catalog'
@@ -198,14 +202,11 @@ export function getModelsDir(): string {
  * hashes; those entries are healed lazily by `UpdateCheckService.checkForUpdates`.
  */
 export function recordInstalledVersion(id: string, sha256: string): void {
-  const settings = getSettings()
-  const installed = { ...settings.get('installedModelVersions') }
-  installed[id] = {
+  setInstalledVersion(id, {
     version: 'installed',
     sha256,
     installedAt: new Date().toISOString()
-  }
-  settings.set('installedModelVersions', installed)
+  })
 }
 
 export function checkModelsExist(): boolean {
@@ -552,9 +553,7 @@ export async function deleteModel(id: string): Promise<void> {
     }
   }
 
-  const installed = { ...settings.get('installedModelVersions') }
-  delete installed[id]
-  settings.set('installedModelVersions', installed)
+  deleteInstalledVersion(id)
 
   // Optionale Gruppen: war das gelöschte Modell aktiv, Active-Slot räumen,
   // damit die UI nicht „Aktiv" auf etwas Nichtexistentem anzeigt. Erlaubt durch
