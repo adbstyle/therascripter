@@ -90,8 +90,6 @@ describe('TaskQueueService', () => {
         title: 'PDF Test',
         type: 'pdf'
       })
-      // Force OCR into plannedSteps; default pdfHasScannedPages is null/false.
-      sessionRepo.update(pdfSession.id, { pdfHasScannedPages: true })
 
       const tasks = queue.enqueuePipeline(pdfSession.id, 'pdf')
 

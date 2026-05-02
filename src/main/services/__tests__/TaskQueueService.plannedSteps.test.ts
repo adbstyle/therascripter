@@ -78,22 +78,20 @@ describe('computePlannedSteps — Issue #80 Phase H', () => {
   })
 
   describe('pdf sessions', () => {
-    it('returns extraction → anonymization without OCR or summarization by default', () => {
+    it('always includes OCR — independent of pdfHasScannedPages (executor self-skips)', () => {
       const session = makeSession({ type: 'pdf' })
-      expect(computePlannedSteps(session)).toEqual(['extraction', 'anonymization'])
+      expect(computePlannedSteps(session)).toEqual(['extraction', 'ocr', 'anonymization'])
     })
 
-    it('includes OCR when pdfHasScannedPages === true', () => {
-      // pdfHasScannedPages is added by Phase G's migration 013; cast for now.
+    it('still includes OCR when pdfHasScannedPages === true', () => {
       const session = makeSession({ type: 'pdf' }) as Session & { pdfHasScannedPages?: boolean }
       session.pdfHasScannedPages = true
       expect(computePlannedSteps(session)).toEqual(['extraction', 'ocr', 'anonymization'])
     })
 
-    it('includes both OCR and summarization when conditions are met', () => {
+    it('includes summarization when an LLM model is active', () => {
       vi.mocked(getActiveModelId).mockReturnValue('gemma-3-4b')
-      const session = makeSession({ type: 'pdf' }) as Session & { pdfHasScannedPages?: boolean }
-      session.pdfHasScannedPages = true
+      const session = makeSession({ type: 'pdf' })
       expect(computePlannedSteps(session)).toEqual([
         'extraction',
         'ocr',
