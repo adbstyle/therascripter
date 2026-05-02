@@ -73,7 +73,13 @@ export function EditableSessionTitle({
   return (
     <h2
       ref={setRef}
-      className={`session-title outline-none focus:ring-1 focus:ring-primary rounded-sm ${className ?? ''}`}
+      // `titlebar-no-drag` is mandatory: the parent ReviewEditor header is a
+      // macOS hiddenInset drag region (`titlebar-drag`); without this opt-out
+      // the OS treats clicks as window-drags and the contentEditable never
+      // receives focus. A contentEditable element must always pass clicks
+      // through, so the class belongs on the component itself, not the call
+      // site.
+      className={`titlebar-no-drag session-title outline-none focus:ring-1 focus:ring-primary rounded-sm ${className ?? ''}`}
       contentEditable
       suppressContentEditableWarning
       onBlur={onBlur}
