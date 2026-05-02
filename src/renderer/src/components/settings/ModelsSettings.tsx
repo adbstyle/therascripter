@@ -16,10 +16,27 @@ interface ModelsSettingsProps {
   onOpenAbout: () => void
 }
 
+/**
+ * Issue #84 / Story E — sort by status (active first, then installed, then
+ * missing). Within each bucket, preserve the catalog order. This replaces
+ * the previous "Installiert" / "Zum Download verfügbar" sub-headers, which
+ * fragmented a small list and hid the disk-reality behind two clicks.
+ */
+function statusOrder(entry: ModelCatalogEntry): number {
+  if (entry.isActive) return 0
+  if (entry.isInstalled) return 1
+  return 2
+}
+
+function sortByStatus(entries: ModelCatalogEntry[]): ModelCatalogEntry[] {
+  return [...entries].sort((a, b) => statusOrder(a) - statusOrder(b))
+}
+
 export default function ModelsSettings({ onOpenAbout }: ModelsSettingsProps): React.JSX.Element {
   const toast = useToast()
   const reconcile = useReconcileEvents()
   const [asrModels, setAsrModels] = useState<ModelCatalogEntry[]>([])
+  const [diarizationModels, setDiarizationModels] = useState<ModelCatalogEntry[]>([])
   const [nerModels, setNerModels] = useState<ModelCatalogEntry[]>([])
   const [summarizationModels, setSummarizationModels] = useState<ModelCatalogEntry[]>([])
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
@@ -41,12 +58,14 @@ export default function ModelsSettings({ onOpenAbout }: ModelsSettingsProps): Re
   }, [reconcileEvents, reconcileMarkSeen])
 
   const reload = async (): Promise<void> => {
-    const [asr, ner, summarization] = await Promise.all([
+    const [asr, diarization, ner, summarization] = await Promise.all([
       window.api.modelCatalog.list('asr'),
+      window.api.modelCatalog.list('diarization'),
       window.api.modelCatalog.list('ner'),
       window.api.modelCatalog.list('summarization')
     ])
     setAsrModels(asr)
+    setDiarizationModels(diarization)
     setNerModels(ner)
     setSummarizationModels(summarization)
   }
@@ -73,9 +92,9 @@ export default function ModelsSettings({ onOpenAbout }: ModelsSettingsProps): Re
     setDownloadingId(id)
     try {
       await window.api.modelCatalog.download(id)
-      // download returns the catalog for the model's group only — reload both
-      // to keep ASR + summarization grids in sync regardless of which one
-      // triggered the download.
+      // download returns the catalog for the model's group only — reload all
+      // groups to keep grids in sync regardless of which one triggered the
+      // download.
       await reload()
       toast.success('Modell erfolgreich heruntergeladen.')
     } catch (err) {
@@ -127,9 +146,17 @@ export default function ModelsSettings({ onOpenAbout }: ModelsSettingsProps): Re
     }
   }
 
-  const installed = asrModels.filter((m) => m.isInstalled)
-  const available = asrModels.filter((m) => !m.isInstalled)
   const anyBusy = downloadingId !== null
+  const sharedActions = {
+    onCancelDownload: handleCancelDownload,
+    onDelete: (m: ModelCatalogEntry) => setDeleteCandidate(m)
+  }
+
+  // Diarization is shipped as a single bundled suite (pyannote-suite). The
+  // pipeline picker (3.1 vs community-1) only makes sense when the suite is
+  // installed; otherwise the whole pyannote step is unavailable.
+  const diarizationSuite = diarizationModels[0] ?? null
+  const diarizationInstalled = diarizationSuite?.isInstalled === true
 
   return (
     <div className="space-y-8 p-6">
@@ -137,62 +164,62 @@ export default function ModelsSettings({ onOpenAbout }: ModelsSettingsProps): Re
         <ReconcileEventsBanner events={reconcile.events} onDismiss={reconcile.dismiss} />
       )}
 
+      {/* ── Spracherkennung ───────────────────────────────────────────── */}
       <section className="space-y-3">
         <div>
-          <h2 className="mb-1 text-lg font-semibold">Transkriptions-Modelle</h2>
+          <h2 className="mb-1 text-lg font-semibold">Spracherkennung</h2>
           <p className="text-sm text-text-secondary">
-            Wähle das Modell, das für die Transkription verwendet werden soll. Ein
-            Modellwechsel wirkt sich nur auf neue Transkriptionen aus.
+            Wandelt Audio in Text um. Ein Modellwechsel wirkt sich nur auf neue
+            Transkriptionen aus.
           </p>
         </div>
 
-        {installed.length > 0 && (
-          <div>
-            <h3 className="mb-2 text-sm font-medium text-text-tertiary">Installiert</h3>
-            <div className="space-y-3">
-              {installed.map((m) => (
-                <ModelCard
-                  key={m.id}
-                  model={m}
-                  downloading={downloadingId === m.id}
-                  progress={downloadingId === m.id ? progress : undefined}
-                  anyBusy={anyBusy}
-                  onDownload={() => handleDownload(m.id)}
-                  onCancelDownload={handleCancelDownload}
-                  onDelete={() => setDeleteCandidate(m)}
-                  onActivate={() => handleActivate(m)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {available.length > 0 && (
-          <div>
-            <h3 className="mb-2 text-sm font-medium text-text-tertiary">
-              Zum Download verfügbar
-            </h3>
-            <div className="space-y-3">
-              {available.map((m) => (
-                <ModelCard
-                  key={m.id}
-                  model={m}
-                  downloading={downloadingId === m.id}
-                  progress={downloadingId === m.id ? progress : undefined}
-                  anyBusy={anyBusy}
-                  onDownload={() => handleDownload(m.id)}
-                  onCancelDownload={handleCancelDownload}
-                  onDelete={() => setDeleteCandidate(m)}
-                  onActivate={() => handleActivate(m)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="space-y-3">
+          {sortByStatus(asrModels).map((m) => (
+            <ModelCard
+              key={m.id}
+              model={m}
+              downloading={downloadingId === m.id}
+              progress={downloadingId === m.id ? progress : undefined}
+              anyBusy={anyBusy}
+              onDownload={() => handleDownload(m.id)}
+              onCancelDownload={sharedActions.onCancelDownload}
+              onDelete={() => sharedActions.onDelete(m)}
+              onActivate={() => handleActivate(m)}
+            />
+          ))}
+        </div>
       </section>
 
-      <DiarizationPipelineSection />
+      {/* ── Sprechererkennung ─────────────────────────────────────────── */}
+      <section className="space-y-3">
+        <div>
+          <h2 className="mb-1 text-lg font-semibold">Sprechererkennung</h2>
+          <p className="text-sm text-text-secondary">
+            Trennt verschiedene Gesprächspersonen anhand der Stimmenmerkmale.
+          </p>
+        </div>
 
+        {diarizationSuite && (
+          <ModelCard
+            model={diarizationSuite}
+            downloading={downloadingId === diarizationSuite.id}
+            progress={downloadingId === diarizationSuite.id ? progress : undefined}
+            anyBusy={anyBusy}
+            deletable={false}
+            onDownload={() => handleDownload(diarizationSuite.id)}
+            onCancelDownload={sharedActions.onCancelDownload}
+            onDelete={() => sharedActions.onDelete(diarizationSuite)}
+            onActivate={() => handleActivate(diarizationSuite)}
+          />
+        )}
+
+        {/* Pipeline-Picker erscheint nur, wenn das pyannote-Bundle installiert ist —
+            Wahl-Affordances existieren nicht, wo nichts wählbar ist. */}
+        {diarizationInstalled && <DiarizationPipelineSection />}
+      </section>
+
+      {/* ── Pseudonymisierung ─────────────────────────────────────────── */}
       <section className="space-y-3">
         <div>
           <h2 className="mb-1 text-lg font-semibold">Pseudonymisierung</h2>
@@ -208,118 +235,51 @@ export default function ModelsSettings({ onOpenAbout }: ModelsSettingsProps): Re
           </p>
         </div>
 
-        {nerModels.filter((m) => m.isInstalled).length > 0 && (
-          <div>
-            <h3 className="mb-2 text-sm font-medium text-text-tertiary">Installiert</h3>
-            <div className="space-y-3">
-              {nerModels
-                .filter((m) => m.isInstalled)
-                .map((m) => (
-                  <ModelCard
-                    key={m.id}
-                    model={m}
-                    downloading={downloadingId === m.id}
-                    progress={downloadingId === m.id ? progress : undefined}
-                    anyBusy={anyBusy}
-                    deletable={false}
-                    onDownload={() => handleDownload(m.id)}
-                    onCancelDownload={handleCancelDownload}
-                    onDelete={() => setDeleteCandidate(m)}
-                    onActivate={() => handleActivate(m)}
-                  />
-                ))}
-            </div>
-          </div>
-        )}
-
-        {nerModels.filter((m) => !m.isInstalled).length > 0 && (
-          <div>
-            <h3 className="mb-2 text-sm font-medium text-text-tertiary">
-              Zum Download verfügbar
-            </h3>
-            <div className="space-y-3">
-              {nerModels
-                .filter((m) => !m.isInstalled)
-                .map((m) => (
-                  <ModelCard
-                    key={m.id}
-                    model={m}
-                    downloading={downloadingId === m.id}
-                    progress={downloadingId === m.id ? progress : undefined}
-                    anyBusy={anyBusy}
-                    deletable={false}
-                    onDownload={() => handleDownload(m.id)}
-                    onCancelDownload={handleCancelDownload}
-                    onDelete={() => setDeleteCandidate(m)}
-                    onActivate={() => handleActivate(m)}
-                  />
-                ))}
-            </div>
-          </div>
-        )}
+        <div className="space-y-3">
+          {sortByStatus(nerModels).map((m) => (
+            <ModelCard
+              key={m.id}
+              model={m}
+              downloading={downloadingId === m.id}
+              progress={downloadingId === m.id ? progress : undefined}
+              anyBusy={anyBusy}
+              deletable={false}
+              onDownload={() => handleDownload(m.id)}
+              onCancelDownload={sharedActions.onCancelDownload}
+              onDelete={() => sharedActions.onDelete(m)}
+              onActivate={() => handleActivate(m)}
+            />
+          ))}
+        </div>
       </section>
 
+      {/* ── Zusammenfassung ───────────────────────────────────────────── */}
       <section className="space-y-3">
         <div>
           <h2 className="mb-1 text-lg font-semibold">Zusammenfassung (optional)</h2>
           <p className="text-sm text-text-secondary">
             Lokales Sprachmodell für 2-Satz-Zusammenfassungen am Ende der Verarbeitung.
-            Optional — ohne installiertes Modell wird der Schritt geräuschlos
-            übersprungen.
+            Ohne installiertes Modell wird der Schritt geräuschlos übersprungen.
           </p>
         </div>
 
-        {summarizationModels.filter((m) => m.isInstalled).length > 0 && (
-          <div>
-            <h3 className="mb-2 text-sm font-medium text-text-tertiary">Installiert</h3>
-            <div className="space-y-3">
-              {summarizationModels
-                .filter((m) => m.isInstalled)
-                .map((m) => (
-                  <ModelCard
-                    key={m.id}
-                    model={m}
-                    downloading={downloadingId === m.id}
-                    progress={downloadingId === m.id ? progress : undefined}
-                    anyBusy={anyBusy}
-                    optional
-                    onDownload={() => handleDownload(m.id)}
-                    onCancelDownload={handleCancelDownload}
-                    onDelete={() => setDeleteCandidate(m)}
-                    onActivate={() => handleActivate(m)}
-                    onDeactivate={() => handleDeactivate(m)}
-                  />
-                ))}
-            </div>
-          </div>
-        )}
-
-        {summarizationModels.filter((m) => !m.isInstalled).length > 0 && (
-          <div>
-            <h3 className="mb-2 text-sm font-medium text-text-tertiary">
-              Zum Download verfügbar
-            </h3>
-            <div className="space-y-3">
-              {summarizationModels
-                .filter((m) => !m.isInstalled)
-                .map((m) => (
-                  <ModelCard
-                    key={m.id}
-                    model={m}
-                    downloading={downloadingId === m.id}
-                    progress={downloadingId === m.id ? progress : undefined}
-                    anyBusy={anyBusy}
-                    optional
-                    onDownload={() => handleDownload(m.id)}
-                    onCancelDownload={handleCancelDownload}
-                    onDelete={() => setDeleteCandidate(m)}
-                    onActivate={() => handleActivate(m)}
-                    onDeactivate={() => handleDeactivate(m)}
-                  />
-                ))}
-            </div>
-          </div>
-        )}
+        <div className="space-y-3">
+          {sortByStatus(summarizationModels).map((m) => (
+            <ModelCard
+              key={m.id}
+              model={m}
+              downloading={downloadingId === m.id}
+              progress={downloadingId === m.id ? progress : undefined}
+              anyBusy={anyBusy}
+              optional
+              onDownload={() => handleDownload(m.id)}
+              onCancelDownload={sharedActions.onCancelDownload}
+              onDelete={() => sharedActions.onDelete(m)}
+              onActivate={() => handleActivate(m)}
+              onDeactivate={() => handleDeactivate(m)}
+            />
+          ))}
+        </div>
       </section>
 
       {deleteCandidate && (
@@ -335,3 +295,6 @@ export default function ModelsSettings({ onOpenAbout }: ModelsSettingsProps): Re
     </div>
   )
 }
+
+/** Issue #84 / Story E — exported for unit tests. */
+export { sortByStatus }
