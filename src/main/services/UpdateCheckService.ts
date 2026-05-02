@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'fs'
 import { join } from 'path'
 import { get as httpsGet } from 'https'
@@ -234,8 +234,31 @@ export async function checkForUpdates(): Promise<CheckResult> {
 
 // ─── triggerUpdateRestart ────────────────────────────────────────────────────
 
+/**
+ * Persists the pending updates and relaunches the app so the next boot picks
+ * them up via `getPending()` and renders ModelUpdateScreen.
+ *
+ * Dev-mode shim (Issue #84 follow-up): in `npm run dev`, `app.relaunch()`
+ * spawns a fresh electron pointed at `localhost:5173`, but the `app.quit()`
+ * that follows kills electron-vite's parent process — the dev server dies
+ * before the new electron can load anything, leaving a white window.
+ *
+ * In dev we instead reload the renderer in place. The renderer remounts,
+ * its startup `getPending()` call sees the freshly-written
+ * `pendingModelUpdates`, and ModelUpdateScreen appears — same observable
+ * UX as the production restart, without trashing the dev server. Main-
+ * process state (TaskQueue, etc.) is not actually reset, but for QA of
+ * the update flow the renderer remount is what's being exercised.
+ */
 export function triggerUpdateRestart(updates: PendingModelUpdate[]): void {
   getSettings().set('pendingModelUpdates', updates)
+
+  if (!app.isPackaged) {
+    const mainWindow = BrowserWindow.getAllWindows()[0]
+    mainWindow?.webContents.reload()
+    return
+  }
+
   app.relaunch()
   app.quit()
 }

@@ -2,9 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
+const mockReloadFn = vi.fn()
+const mockSendFn = vi.fn()
 vi.mock('electron', () => ({
-  app: { relaunch: vi.fn(), quit: vi.fn(), getVersion: vi.fn().mockReturnValue('0.3.3') },
-  BrowserWindow: { getAllWindows: vi.fn().mockReturnValue([]) }
+  app: {
+    relaunch: vi.fn(),
+    quit: vi.fn(),
+    getVersion: vi.fn().mockReturnValue('0.3.3'),
+    // Default to packaged for tests; the dev-shim test overrides this.
+    isPackaged: true
+  },
+  BrowserWindow: {
+    getAllWindows: vi.fn(() => [
+      { webContents: { reload: mockReloadFn, send: mockSendFn } }
+    ])
+  }
 }))
 
 const mockExistsSync = vi.fn()
@@ -503,27 +515,54 @@ describe('checkForUpdates — app update', () => {
 })
 
 describe('triggerUpdateRestart', () => {
-  it('saves pending updates and triggers relaunch', async () => {
+  const updates = [
+    {
+      id: 'whisper-large-v3-turbo',
+      version: '2025-02-01',
+      label: 'Spracherkennung',
+      url: 'https://example.com/whisper.bin',
+      sha256: 'cccc' + 'c'.repeat(60),
+      sizeBytes: 100,
+      relativePath: 'asr/ggml-large-v3-turbo-q5_0.bin',
+      archive: false,
+      checkPath: 'asr/ggml-large-v3-turbo-q5_0.bin'
+    }
+  ]
+
+  beforeEach(async () => {
+    mockReloadFn.mockClear()
     const { app } = await import('electron')
-    const updates = [
-      {
-        id: 'whisper-large-v3-turbo',
-        version: '2025-02-01',
-        label: 'Spracherkennung',
-        url: 'https://example.com/whisper.bin',
-        sha256: 'cccc' + 'c'.repeat(60),
-        sizeBytes: 100,
-        relativePath: 'asr/ggml-large-v3-turbo-q5_0.bin',
-        archive: false,
-        checkPath: 'asr/ggml-large-v3-turbo-q5_0.bin'
-      }
-    ]
+    vi.mocked(app.relaunch).mockClear()
+    vi.mocked(app.quit).mockClear()
+  })
+
+  it('saves pending updates and triggers relaunch in packaged builds', async () => {
+    const { app } = await import('electron')
+    ;(app as { isPackaged: boolean }).isPackaged = true
 
     triggerUpdateRestart(updates)
 
     expect(mockSettingsStore.set).toHaveBeenCalledWith('pendingModelUpdates', updates)
     expect(app.relaunch).toHaveBeenCalled()
     expect(app.quit).toHaveBeenCalled()
+    expect(mockReloadFn).not.toHaveBeenCalled()
+  })
+
+  it('reloads the renderer in dev mode without quitting (Issue #84 dev-shim)', async () => {
+    // Dev-mode: app.relaunch() + app.quit() would kill electron-vite's
+    // parent process and orphan a window pointed at a dead localhost:5173.
+    // The shim writes pendingModelUpdates and reloads the renderer instead;
+    // the next mount of App.tsx reads the pending state and shows
+    // ModelUpdateScreen — same observable UX, without the white screen.
+    const { app } = await import('electron')
+    ;(app as { isPackaged: boolean }).isPackaged = false
+
+    triggerUpdateRestart(updates)
+
+    expect(mockSettingsStore.set).toHaveBeenCalledWith('pendingModelUpdates', updates)
+    expect(mockReloadFn).toHaveBeenCalledOnce()
+    expect(app.relaunch).not.toHaveBeenCalled()
+    expect(app.quit).not.toHaveBeenCalled()
   })
 })
 
