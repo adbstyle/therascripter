@@ -170,6 +170,10 @@ export function ActionPopover({
     function handleKey(e: KeyboardEvent): void {
       if (e.key === 'Escape') {
         e.preventDefault()
+        // The popover owns this Escape — prevent it from reaching window-level
+        // listeners that would otherwise interpret it as a "close the editor"
+        // gesture. Affects both the chip menu and the selection toolbar.
+        e.stopPropagation()
         if (openSub) {
           setOpenSub(null)
           return

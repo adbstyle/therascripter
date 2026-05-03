@@ -105,4 +105,19 @@ describe('SelectionToolbar', () => {
     await user.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('Esc does not bubble past the popover (regression: stopPropagation)', async () => {
+    const user = userEvent.setup()
+    const windowListener = vi.fn()
+    window.addEventListener('keydown', windowListener)
+    try {
+      setup()
+      await user.keyboard('{Escape}')
+      // ReviewEditor wires a window-level Escape listener that calls onBack().
+      // The popover must consume Escape so it never reaches the window.
+      expect(windowListener).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener('keydown', windowListener)
+    }
+  })
 })
