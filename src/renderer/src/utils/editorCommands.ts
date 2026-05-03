@@ -366,7 +366,7 @@ export interface ChangeChipTypeResult {
  * entityId of the new type with `getNextNumber`, preserves each chip's original
  * `source` and `original` text by default, and replaces all chips in a single
  * transaction (one undo step). Returns null when the target type equals the
- * current type (silent no-op, AK 11 spirit) or when no chips exist for `entityId`.
+ * current type (silent no-op) or when no chips exist for `entityId`.
  *
  * Unlike `anonymizeSelectionWithPropagation`, this does NOT propagate to plain
  * text matches — only chips that already share the entityId are rewritten.

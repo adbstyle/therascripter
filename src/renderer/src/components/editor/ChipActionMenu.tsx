@@ -95,10 +95,16 @@ export function ChipActionMenu({
   )
 
   const subItems = useMemo(() => {
-    if (openSub === 'changeType') return ANONYMIZE_TYPE_OPTIONS
+    // The current type is excluded from "Typ ändern" — picking it would be a
+    // no-op, and surfacing it as a choice would expose a side-effect-before-
+    // validation path in the caller (deletes SQLite blocklist row before the
+    // no-op returns).
+    if (openSub === 'changeType') {
+      return ANONYMIZE_TYPE_OPTIONS.filter((opt) => opt.value !== entityType)
+    }
     if (openSub === 'blocklist') return BLOCKLIST_TYPE_OPTIONS
     return []
-  }, [openSub])
+  }, [openSub, entityType])
 
   // Main menu positioning — open above the chip if there's room, else below.
   useLayoutEffect(() => {
@@ -122,9 +128,10 @@ export function ChipActionMenu({
     )
 
     setMainPos({ left, top })
-    // Mount transparent, flip to visible on the next frame so the 100 ms fade-in
-    // has somewhere to start (per Issue #88 NFR-3 / design decision).
-    requestAnimationFrame(() => setVisible(true))
+    // Mount transparent, flip to visible on the next frame so the fade-in
+    // transition has somewhere to start.
+    const rafId = requestAnimationFrame(() => setVisible(true))
+    return () => cancelAnimationFrame(rafId)
   }, [anchorRect])
 
   // Submenu positioning — to the right of main if room, else flip left.

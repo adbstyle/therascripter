@@ -308,10 +308,9 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
       const { state } = editor
       const { selection } = state
 
-      // AK 13: chip right-click is no longer surfaced — chip actions are
-      // exclusively reachable via the trailing-chevron action menu (handled
-      // inside PlaceholderChipView). The text-selection branch below stays
-      // unchanged (Postcondition 5).
+      // Chip right-click is no longer surfaced — chip actions are exclusively
+      // reachable via the trailing-chevron action menu (handled inside
+      // PlaceholderChipView). The text-selection branch below stays unchanged.
 
       // Check if text is selected (non-empty selection)
       const hasSelection = !selection.empty
@@ -423,8 +422,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   )
 
   /**
-   * Handle "Typ ändern" invoked from a chip's action menu (Issue #88, AK 11).
-   * Rewrites every chip with `entityId` under a fresh entityId of `newType`,
+   * Rewrite every chip with `entityId` under a fresh entityId of `newType`,
    * single transaction = one undo step.
    *
    * If the entity was originally blocklist-sourced, the type change invalidates
@@ -462,10 +460,9 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   )
 
   /**
-   * Handle "Zur Sperrliste hinzufügen" invoked from a chip's action menu
-   * (Issue #88, AK 12 + Postcondition 3). Adds `original` to SQLite, then
-   * doc-wide rewrites every match (text + chips) of `term` under a fresh
-   * blocklist entityId of the chosen type.
+   * Add a chip's original term to the Sperrliste, then doc-wide rewrite every
+   * match (text + chips) of `term` under a fresh blocklist entityId of the
+   * chosen type.
    *
    * Order mirrors `handleBlocklistConfirm` (selection-flow): IPC first, then
    * doc mutation, then track for undo/redo. With this ordering Cmd+Z during

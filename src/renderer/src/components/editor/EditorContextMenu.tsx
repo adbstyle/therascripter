@@ -7,8 +7,8 @@ export interface ContextMenuState {
   y: number
   /**
    * Always true — the menu is only opened on a non-empty text selection.
-   * Chip-target right-clicks are swallowed by PlaceholderChipView (AK 13);
-   * chip actions live in the inline trailing-chevron menu.
+   * Chip-target right-clicks are swallowed by PlaceholderChipView; chip
+   * actions live in the inline trailing-chevron menu.
    */
   hasSelection: boolean
   /**

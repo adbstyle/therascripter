@@ -88,7 +88,7 @@ export function PlaceholderChipView({ node, selected }: NodeViewProps): React.JS
     [openMenu]
   )
 
-  // AK 13: chips no longer expose a right-click menu — actions are exclusively
+  // Chips no longer expose a right-click menu — actions are exclusively
   // reachable via the trailing-chevron action menu. Right-click on a chip is
   // swallowed so the editor's text-selection context menu does not appear when
   // the chip itself is the click target.

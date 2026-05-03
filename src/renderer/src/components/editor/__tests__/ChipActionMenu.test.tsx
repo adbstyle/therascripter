@@ -99,16 +99,15 @@ describe('ChipActionMenu', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('clicking "Typ ändern" opens submenu with 5 options', async () => {
+  it('"Typ ändern" submenu omits the current type (PERSON → 4 options)', async () => {
     const user = userEvent.setup()
-    setup()
+    setup({ type: 'PERSON' })
     await user.click(screen.getByRole('menuitem', { name: /Typ ändern/ }))
 
     const submenu = screen.getByRole('menu', { name: /Typ ändern/i })
     const subItems = within(submenu).getAllByRole('menuitem')
-    expect(subItems).toHaveLength(5)
+    expect(subItems).toHaveLength(4)
     expect(subItems.map((b) => b.textContent)).toEqual([
-      'Person',
       'Ort',
       'Datum',
       'Kontakt',
@@ -116,9 +115,25 @@ describe('ChipActionMenu', () => {
     ])
   })
 
+  it('"Typ ändern" submenu omits the current type (ORGANISATION → 4 options)', async () => {
+    const user = userEvent.setup()
+    setup({ type: 'ORGANISATION' })
+    await user.click(screen.getByRole('menuitem', { name: /Typ ändern/ }))
+
+    const subItems = within(screen.getByRole('menu', { name: /Typ ändern/i })).getAllByRole(
+      'menuitem'
+    )
+    expect(subItems.map((b) => b.textContent)).toEqual([
+      'Person',
+      'Ort',
+      'Datum',
+      'Kontakt'
+    ])
+  })
+
   it('clicking a "Typ ändern" submenu item calls onChangeType + onClose', async () => {
     const user = userEvent.setup()
-    const { onChangeType, onClose } = setup()
+    const { onChangeType, onClose } = setup({ type: 'PERSON' })
     await user.click(screen.getByRole('menuitem', { name: /Typ ändern/ }))
     await user.click(screen.getByRole('menuitem', { name: /^Ort$/ }))
     expect(onChangeType).toHaveBeenCalledWith('person-1', 'ORT')
@@ -186,14 +201,11 @@ describe('ChipActionMenu', () => {
 
   it('ArrowDown skips disabled "Zur Sperrliste" item when source=blocklist', async () => {
     const user = userEvent.setup()
-    const { onChangeType } = setup({ source: 'blocklist' })
-    // mainFocus starts at 0. Down → Typ ändern (idx 1). Down again → wraps back to 0
-    // because idx 2 (Sperrliste) is disabled.
-    await user.keyboard('{ArrowDown}{ArrowDown}')
-    // We are on "Rückgängig machen" again — go right? no, go enter.
-    // Actually let's verify by going down once and then opening the submenu via right.
-    await user.keyboard('{ArrowDown}{ArrowRight}{ArrowDown}{Enter}')
-    // first ArrowDown → idx 1 (Typ ändern), ArrowRight opens submenu, ArrowDown → idx 1 in submenu (Ort), Enter
-    expect(onChangeType).toHaveBeenCalledWith('person-1', 'ORT')
+    const { onUndo } = setup({ source: 'blocklist', type: 'PERSON' })
+    // mainFocus starts at 0 (Rückgängig machen). Two ArrowDowns: first → 1 (Typ
+    // ändern), second skips idx 2 (disabled Sperrliste) and wraps back to 0.
+    // Enter on idx 0 fires onUndo.
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}')
+    expect(onUndo).toHaveBeenCalledWith('person-1')
   })
 })
