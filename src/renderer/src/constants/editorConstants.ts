@@ -41,3 +41,27 @@ export const PLACEHOLDER_TYPE_ORDER: PlaceholderType[] = [
   'MEDIZINISCH',
   'SONSTIGES'
 ]
+
+/**
+ * Types selectable when manually anonymizing a text selection or changing the
+ * type of an existing chip — 5 entries (Decision #151). MEDIZINISCH and
+ * SONSTIGES are NER-output sinks, not user-pickable manual targets.
+ */
+export const ANONYMIZE_TYPE_OPTIONS: ReadonlyArray<{ value: PlaceholderType; label: string }> = [
+  { value: 'PERSON', label: 'Person' },
+  { value: 'ORT', label: 'Ort' },
+  { value: 'DATUM', label: 'Datum' },
+  { value: 'KONTAKT', label: 'Kontakt' },
+  { value: 'ORGANISATION', label: 'Organisation' }
+]
+
+/** Types selectable when adding a term to the Sperrliste — all 7. */
+export const BLOCKLIST_TYPE_OPTIONS: ReadonlyArray<{ value: PlaceholderType; label: string }> = [
+  { value: 'PERSON', label: 'Person' },
+  { value: 'ORT', label: 'Ort' },
+  { value: 'DATUM', label: 'Datum' },
+  { value: 'KONTAKT', label: 'Kontakt' },
+  { value: 'ORGANISATION', label: 'Organisation' },
+  { value: 'MEDIZINISCH', label: 'Medizinisch' },
+  { value: 'SONSTIGES', label: 'Sonstiges' }
+]
