@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 import { AnonymizationPanel } from '../editor/AnonymizationPanel'
 import { SecondaryTabs } from '../editor/SecondaryTabs'
 import { ProvenancePanel } from './ProvenancePanel'
@@ -25,20 +25,6 @@ export function ReviewSidePanel({
   reviewAt
 }: ReviewSidePanelProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<TabId>('anonymization')
-  // Counter bumps every time the user lands on the provenance tab, so the
-  // ProvenancePanel remounts and its native `<details>` "Technische Details"
-  // sub-section resets to closed. Postcondition of issue #86.
-  const [provenanceVisitKey, setProvenanceVisitKey] = useState(0)
-
-  const handleTabChange = useCallback(
-    (id: TabId) => {
-      if (id === 'provenance' && id !== activeTab) {
-        setProvenanceVisitKey((c) => c + 1)
-      }
-      setActiveTab(id)
-    },
-    [activeTab]
-  )
 
   const tabs = [
     {
@@ -68,7 +54,7 @@ export function ReviewSidePanel({
         <SecondaryTabs
           tabs={tabs}
           activeId={activeTab}
-          onChange={handleTabChange}
+          onChange={setActiveTab}
           ariaLabel="Side-Panel-Bereiche"
           idPrefix={ID_PREFIX}
         />
@@ -90,7 +76,7 @@ export function ReviewSidePanel({
           hidden={activeTab !== 'provenance'}
           className="min-h-0 flex-1 overflow-y-auto"
         >
-          <ProvenancePanel key={provenanceVisitKey} data={provenance} reviewAt={reviewAt} />
+          <ProvenancePanel data={provenance} reviewAt={reviewAt} />
         </div>
       </div>
     </div>

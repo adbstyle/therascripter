@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { ProvenancePanel } from '../ProvenancePanel'
 import type { ProcessedModelsSnapshot } from '../../../../../shared/types'
 
@@ -56,11 +55,8 @@ describe('ProvenancePanel', () => {
     expect(screen.getByText('nicht erstellt')).toBeInTheDocument()
   })
 
-  it('exposes id + sha256 inside the "Technische Details" sub-disclosure', async () => {
-    const user = userEvent.setup()
+  it('shows id + sha256 inline under each model row', () => {
     render(<ProvenancePanel data={fullSnapshot} reviewAt={null} />)
-
-    await user.click(screen.getByText(/Technische Details/i))
 
     expect(screen.getByText('id: whisper-large-v3-turbo')).toBeInTheDocument()
     expect(screen.getByText(`sha256: ${SHA('a')}`)).toBeInTheDocument()

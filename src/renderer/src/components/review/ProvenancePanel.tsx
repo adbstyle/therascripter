@@ -36,15 +36,11 @@ function formatProcessedAt(iso: string | null): string | null {
 /**
  * Verarbeitungs-Information — content-only side-panel tab body. Stacked
  * label/value rows because the 300px panel cannot accommodate the
- * two-column layout used in the editor area before issue #86.
+ * two-column layout used in the editor area before issue #86. Each model
+ * shows label, version + size, id, and sha256 inline.
  *
  * Legacy sessions (processed_with_models == null) render the neutral
  * hint instead of model rows.
- *
- * The "Technische Details" sub-section uses native `<details>`. It
- * resets to closed on every tab switch because `ReviewSidePanel`
- * conditionally renders this component, so each return to the tab
- * mounts a fresh `<details>` element.
  */
 export function ProvenancePanel({ data, reviewAt }: Props): React.JSX.Element {
   const processedAt = formatProcessedAt(reviewAt)
@@ -61,25 +57,6 @@ export function ProvenancePanel({ data, reviewAt }: Props): React.JSX.Element {
           <GroupRow key={group} label={GROUP_LABELS[group]} snapshot={data[group]} />
         ))}
       </div>
-
-      <details className="pt-1">
-        <summary className="cursor-pointer list-none text-xs text-text-tertiary hover:text-text-secondary">
-          ▸ Technische Details (Hash, IDs)
-        </summary>
-        <div className="mt-2 space-y-2 rounded-md border border-border bg-surface-0 px-3 py-2 font-mono text-[11px] leading-relaxed text-text-tertiary">
-          {GROUP_ORDER.map((group) => {
-            const snap = data[group]
-            if (!snap) return null
-            return (
-              <div key={group}>
-                <div className="text-text-secondary">{GROUP_LABELS[group]}</div>
-                <div>id: {snap.id}</div>
-                <div className="break-all">sha256: {snap.sha256}</div>
-              </div>
-            )
-          })}
-        </div>
-      </details>
     </div>
   )
 }
@@ -106,12 +83,18 @@ function GroupRow({
       {snapshot === null ? (
         <div className="text-text-tertiary">nicht erstellt</div>
       ) : (
-        <div className="text-text-primary">
-          <span className="break-words">{snapshot.label}</span>
-          <div className="text-xs text-text-tertiary">
-            Version {snapshot.version} · {formatBytes(snapshot.sizeBytes)}
+        <>
+          <div className="text-text-primary">
+            <span className="break-words">{snapshot.label}</span>
+            <div className="text-xs text-text-tertiary">
+              Version {snapshot.version} · {formatBytes(snapshot.sizeBytes)}
+            </div>
+            <div className="text-xs text-text-tertiary">
+              <div className="break-all">id: {snapshot.id}</div>
+              <div className="break-all">sha256: {snapshot.sha256}</div>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   )
