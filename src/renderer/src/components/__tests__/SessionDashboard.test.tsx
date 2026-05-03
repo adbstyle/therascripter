@@ -30,6 +30,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     plannedSteps: null,
     retryCount: 0,
     pdfHasScannedPages: null,
+    processedWithModels: null,
     ...overrides
   }
 }
@@ -92,6 +93,7 @@ const mockModelUpdate = {
   startDownload: vi.fn(),
   getPending: vi.fn().mockResolvedValue(null),
   clearPending: vi.fn().mockResolvedValue(undefined),
+  dismissVersions: vi.fn().mockResolvedValue(undefined),
   onAvailable: vi.fn().mockReturnValue(() => {}),
   onDownloadProgress: vi.fn().mockReturnValue(() => {}),
   onDownloadComplete: vi.fn().mockReturnValue(() => {}),
@@ -180,6 +182,14 @@ beforeEach(() => {
     },
     nav: {
       onOpenSettings: vi.fn().mockReturnValue(() => {})
+    },
+    feedback: {
+      send: vi.fn().mockResolvedValue(undefined)
+    },
+    modelReconcile: {
+      getEvents: vi.fn().mockResolvedValue([]),
+      markSeen: vi.fn().mockResolvedValue([]),
+      dismiss: vi.fn().mockResolvedValue(undefined)
     }
   } as typeof window.api
   vi.clearAllMocks()

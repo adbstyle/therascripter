@@ -4,7 +4,9 @@ import {
   getNextNumber,
   anonymizeSelectionWithPropagation,
   reconcileEntityMapWithDoc,
-  addToBlocklistRetroactive
+  addToBlocklistRetroactive,
+  addToBlocklistFromTerm,
+  changeChipTypeForEntity
 } from '../editorCommands'
 import type { EntityMap } from '../../../../shared/types'
 import {
@@ -538,6 +540,341 @@ describe('addToBlocklistRetroactive (regression after Task 2 refactor)', () => {
     handle.editor.commands.undo()
     expect(handle.getChips()).toHaveLength(0)
     expect(handle.editor.state.doc.textContent).toBe('Anna war Anna und Anna.')
+  })
+})
+
+describe('addToBlocklistFromTerm (chip-flow, no selection)', () => {
+  it('returns null when term is empty/whitespace', () => {
+    handle = seedDoc('Anna war hier.')
+    expect(addToBlocklistFromTerm(handle.editor, '   ', 'PERSON', emptyMap())).toBeNull()
+  })
+
+  it('returns null when term has no occurrences in the doc', () => {
+    handle = seedDoc('Anna war hier.')
+    expect(addToBlocklistFromTerm(handle.editor, 'Bert', 'PERSON', emptyMap())).toBeNull()
+  })
+
+  it('replaces all text occurrences of term in one transaction', () => {
+    handle = seedDoc('Anna und Anna trafen Anna.')
+    const result = addToBlocklistFromTerm(handle.editor, 'Anna', 'PERSON', emptyMap())
+
+    expect(result).not.toBeNull()
+    const chips = handle.getChips()
+    expect(chips).toHaveLength(3)
+    expect(chips.every((c) => c.entityId === result!.entityId)).toBe(true)
+    expect(chips.every((c) => c.source === 'blocklist')).toBe(true)
+    expect(result!.entityMap[result!.entityId]).toMatchObject({
+      placeholder: '[PERSON 1]',
+      type: 'PERSON',
+      source: 'blocklist',
+      original: 'Anna'
+    })
+
+    handle.editor.commands.undo()
+    expect(handle.getChips()).toHaveLength(0)
+  })
+
+  it('overwrites existing chips matching the term (overwritesChips: true)', () => {
+    handle = createTestEditor({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'placeholderChip',
+              attrs: {
+                entityId: 'person-1',
+                type: 'PERSON',
+                number: 1,
+                source: 'ner',
+                original: 'Anna'
+              }
+            },
+            { type: 'text', text: ' und Anna' }
+          ]
+        }
+      ]
+    })
+
+    const result = addToBlocklistFromTerm(handle.editor, 'Anna', 'PERSON', {
+      'person-1': { original: 'Anna', placeholder: '[PERSON 1]', type: 'PERSON', source: 'ner' }
+    })
+
+    expect(result).not.toBeNull()
+    const chips = handle.getChips()
+    expect(chips).toHaveLength(2)
+    expect(chips.every((c) => c.entityId === result!.entityId)).toBe(true)
+    expect(chips.every((c) => c.source === 'blocklist')).toBe(true)
+  })
+
+  it('respects whole-word boundary (Bern not inside Berner)', () => {
+    handle = seedDoc('Bern und Berner.')
+    const result = addToBlocklistFromTerm(handle.editor, 'Bern', 'ORT', emptyMap())
+
+    expect(result).not.toBeNull()
+    expect(handle.getChips()).toHaveLength(1)
+  })
+})
+
+describe('changeChipTypeForEntity', () => {
+  it('returns null when no chip with the entityId exists', () => {
+    handle = seedDoc('Anna war hier.')
+    expect(changeChipTypeForEntity(handle.editor, 'person-99', 'ORT', emptyMap())).toBeNull()
+  })
+
+  it('returns null when newType equals current type (silent no-op)', () => {
+    handle = createTestEditor()
+    handle.insertChip(1, {
+      entityId: 'person-1',
+      type: 'PERSON',
+      number: 1,
+      source: 'manual',
+      original: 'Anna'
+    })
+    const map: EntityMap = {
+      'person-1': { original: 'Anna', placeholder: '[PERSON 1]', type: 'PERSON', source: 'manual' }
+    }
+    expect(changeChipTypeForEntity(handle.editor, 'person-1', 'PERSON', map)).toBeNull()
+    expect(handle.getChips()).toHaveLength(1)
+    expect(handle.getChips()[0].type).toBe('PERSON')
+  })
+
+  it('rewrites every chip with entityId under a new entityId of newType', () => {
+    handle = createTestEditor({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'placeholderChip',
+              attrs: {
+                entityId: 'person-1',
+                type: 'PERSON',
+                number: 1,
+                source: 'ner',
+                original: 'Bern'
+              }
+            },
+            { type: 'text', text: ' war ' },
+            {
+              type: 'placeholderChip',
+              attrs: {
+                entityId: 'person-1',
+                type: 'PERSON',
+                number: 1,
+                source: 'ner',
+                original: 'Bern'
+              }
+            }
+          ]
+        }
+      ]
+    })
+
+    const map: EntityMap = {
+      'person-1': { original: 'Bern', placeholder: '[PERSON 1]', type: 'PERSON', source: 'ner' }
+    }
+    const result = changeChipTypeForEntity(handle.editor, 'person-1', 'ORT', map)
+
+    expect(result).not.toBeNull()
+    expect(result!.rewrittenCount).toBe(2)
+    expect(result!.entityId).toBe('ort-1')
+
+    const chips = handle.getChips()
+    expect(chips).toHaveLength(2)
+    expect(chips.every((c) => c.type === 'ORT')).toBe(true)
+    expect(chips.every((c) => c.entityId === 'ort-1')).toBe(true)
+    expect(chips.every((c) => c.source === 'ner')).toBe(true)
+
+    expect(result!.entityMap['ort-1']).toMatchObject({
+      placeholder: '[ORT 1]',
+      type: 'ORT',
+      source: 'ner',
+      original: 'Bern'
+    })
+    expect(result!.entityMap['person-1']).toBeUndefined()
+  })
+
+  it('does NOT touch other chips with a different entityId or text matches', () => {
+    handle = createTestEditor({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'placeholderChip',
+              attrs: {
+                entityId: 'person-1',
+                type: 'PERSON',
+                number: 1,
+                source: 'ner',
+                original: 'Anna'
+              }
+            },
+            { type: 'text', text: ' und Anna und ' },
+            {
+              type: 'placeholderChip',
+              attrs: {
+                entityId: 'person-2',
+                type: 'PERSON',
+                number: 2,
+                source: 'ner',
+                original: 'Anna'
+              }
+            }
+          ]
+        }
+      ]
+    })
+
+    const map: EntityMap = {
+      'person-1': { original: 'Anna', placeholder: '[PERSON 1]', type: 'PERSON', source: 'ner' },
+      'person-2': { original: 'Anna', placeholder: '[PERSON 2]', type: 'PERSON', source: 'ner' }
+    }
+    const result = changeChipTypeForEntity(handle.editor, 'person-1', 'ORT', map)
+
+    expect(result).not.toBeNull()
+    expect(result!.rewrittenCount).toBe(1)
+
+    const chips = handle.getChips()
+    expect(chips).toHaveLength(2)
+    const ort = chips.filter((c) => c.type === 'ORT')
+    const person = chips.filter((c) => c.type === 'PERSON')
+    expect(ort).toHaveLength(1)
+    expect(ort[0].entityId).toBe('ort-1')
+    expect(person).toHaveLength(1)
+    expect(person[0].entityId).toBe('person-2')
+    expect(handle.editor.state.doc.textContent).toContain('Anna')
+  })
+
+  it('sourceOverride forces every rewritten chip to a single source', () => {
+    handle = createTestEditor({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'placeholderChip',
+              attrs: {
+                entityId: 'person-1',
+                type: 'PERSON',
+                number: 1,
+                source: 'blocklist',
+                original: 'Anna'
+              }
+            },
+            { type: 'text', text: ' x ' },
+            {
+              type: 'placeholderChip',
+              attrs: {
+                entityId: 'person-1',
+                type: 'PERSON',
+                number: 1,
+                source: 'blocklist',
+                original: 'Anna'
+              }
+            }
+          ]
+        }
+      ]
+    })
+    const map: EntityMap = {
+      'person-1': {
+        original: 'Anna',
+        placeholder: '[PERSON 1]',
+        type: 'PERSON',
+        source: 'blocklist'
+      }
+    }
+    const result = changeChipTypeForEntity(handle.editor, 'person-1', 'ORT', map, 'manual')
+
+    expect(result).not.toBeNull()
+    const chips = handle.getChips()
+    expect(chips.every((c) => c.source === 'manual')).toBe(true)
+    expect(result!.entityMap['ort-1']).toMatchObject({ source: 'manual' })
+  })
+
+  it('preserves source per-chip (e.g. blocklist chip stays blocklist)', () => {
+    handle = createTestEditor({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'placeholderChip',
+              attrs: {
+                entityId: 'person-1',
+                type: 'PERSON',
+                number: 1,
+                source: 'blocklist',
+                original: 'Anna'
+              }
+            }
+          ]
+        }
+      ]
+    })
+    const map: EntityMap = {
+      'person-1': {
+        original: 'Anna',
+        placeholder: '[PERSON 1]',
+        type: 'PERSON',
+        source: 'blocklist'
+      }
+    }
+    const result = changeChipTypeForEntity(handle.editor, 'person-1', 'ORT', map)
+
+    expect(result).not.toBeNull()
+    const chips = handle.getChips()
+    expect(chips[0].source).toBe('blocklist')
+    expect(result!.entityMap['ort-1']).toMatchObject({ source: 'blocklist' })
+  })
+
+  it('atomicity: a single Cmd+Z reverts every rewritten chip', () => {
+    handle = createTestEditor({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'placeholderChip',
+              attrs: {
+                entityId: 'person-1',
+                type: 'PERSON',
+                number: 1,
+                source: 'ner',
+                original: 'Anna'
+              }
+            },
+            { type: 'text', text: ' x ' },
+            {
+              type: 'placeholderChip',
+              attrs: {
+                entityId: 'person-1',
+                type: 'PERSON',
+                number: 1,
+                source: 'ner',
+                original: 'Anna'
+              }
+            }
+          ]
+        }
+      ]
+    })
+    const map: EntityMap = {
+      'person-1': { original: 'Anna', placeholder: '[PERSON 1]', type: 'PERSON', source: 'ner' }
+    }
+    changeChipTypeForEntity(handle.editor, 'person-1', 'ORT', map)
+    expect(handle.getChips().every((c) => c.type === 'ORT')).toBe(true)
+
+    handle.editor.commands.undo()
+    expect(handle.getChips().every((c) => c.type === 'PERSON')).toBe(true)
   })
 })
 

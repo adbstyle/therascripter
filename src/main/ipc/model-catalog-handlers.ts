@@ -5,7 +5,7 @@ import {
   clearActiveModel,
   deleteModel,
   downloadSingleModel,
-  getActiveModelId,
+  getActiveModelIdBelief,
   getModelById,
   getModelsByGroup,
   isModelInstalled,
@@ -21,7 +21,12 @@ import {
 } from '../../shared/validation/model-catalog-schemas'
 
 function buildCatalogEntries(group: ModelGroup): ModelCatalogEntry[] {
-  const activeId = getActiveModelId(group)
+  // Issue #84 Story E follow-up — read the raw settings belief, not the
+  // disk-filtered active id. The two flags must be reported independently
+  // so the renderer's <ModelStatusBadge> can surface the `inconsistent`
+  // state (active=true ∧ installed=false) when settings drift from disk.
+  // Executors keep using `getActiveModelId` (the filtered variant).
+  const activeBeliefId = getActiveModelIdBelief(group)
   return getModelsByGroup(group).map((def) => ({
     id: def.id,
     label: def.label,
@@ -34,7 +39,7 @@ function buildCatalogEntries(group: ModelGroup): ModelCatalogEntry[] {
     speedScore: def.speedScore,
     hfRepo: def.hfRepo,
     isInstalled: isModelInstalled(def.id),
-    isActive: def.id === activeId
+    isActive: def.id === activeBeliefId
   }))
 }
 

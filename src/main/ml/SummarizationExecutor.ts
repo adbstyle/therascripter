@@ -10,7 +10,7 @@ export interface SummarizationExecutorDeps {
     saveGeneratedSummary(sessionId: string, title: string, text: string, modelId: string): unknown
   }
   isModelInstalled: () => boolean
-  getActiveModelId: () => string
+  getActiveModelId: () => string | null
   logger: { info(msg: string): void; error(msg: string): void }
 }
 
@@ -64,11 +64,22 @@ export class SummarizationExecutor implements TaskExecutor {
       return
     }
 
+    const modelId = this.deps.getActiveModelId()
+    if (modelId === null) {
+      // Unreachable — `isModelInstalled()` above already gates on the same
+      // accessor. Guard kept narrow so saveGeneratedSummary's modelId param
+      // stays `string`.
+      this.deps.logger.info(
+        `Summarization completed but active model became null mid-run for session ${task.sessionId}`
+      )
+      return
+    }
+
     this.deps.sessionService.saveGeneratedSummary(
       task.sessionId,
       result.title,
       result.text,
-      this.deps.getActiveModelId()
+      modelId
     )
   }
 }

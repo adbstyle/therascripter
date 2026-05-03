@@ -27,7 +27,12 @@ const PIPELINE_INFOS: PipelineInfo[] = [
   }
 ]
 
-/** Baut einen Pseudo-ModelCatalogEntry, damit die Pipeline im ModelCard gerendert werden kann. */
+/**
+ * Build a pseudo-ModelCatalogEntry so the pipeline choices render as
+ * ModelCards. Both pipelines piggyback on the installed pyannote-suite —
+ * this section is only mounted when the suite is on disk (gated by
+ * ModelsSettings, Story E), so `isInstalled: true` is accurate here.
+ */
 function toCatalogEntry(info: PipelineInfo, isActive: boolean): ModelCatalogEntry {
   return {
     id: info.id,
@@ -66,34 +71,28 @@ export default function DiarizationPipelineSection(): React.JSX.Element {
   }
 
   return (
-    <section className="space-y-3">
-      <div>
-        <h2 className="mb-1 text-lg font-semibold">Sprechererkennungs-Pipeline</h2>
-        <p className="text-sm text-text-secondary">
-          Das pyannote-Paket enthält zwei Pipelines. Wähle, welche für neue Transkriptionen
-          verwendet werden soll.
-        </p>
-      </div>
+    <div className="space-y-3">
+      <p className="text-sm text-text-secondary">
+        Das pyannote-Paket enthält zwei Pipelines. Wähle, welche für neue Transkriptionen
+        verwendet werden soll.
+      </p>
 
-      <div>
-        <h3 className="mb-2 text-sm font-medium text-text-tertiary">Installiert</h3>
-        <div className="space-y-3">
-          {PIPELINE_INFOS.map((info) => (
-            <ModelCard
-              key={info.id}
-              model={toCatalogEntry(info, active === info.id)}
-              downloading={false}
-              anyBusy={false}
-              deletable={false}
-              showChips={false}
-              onDownload={noop}
-              onCancelDownload={noop}
-              onDelete={noop}
-              onActivate={() => handleActivate(info.id)}
-            />
-          ))}
-        </div>
+      <div className="space-y-3">
+        {PIPELINE_INFOS.map((info) => (
+          <ModelCard
+            key={info.id}
+            model={toCatalogEntry(info, active === info.id)}
+            downloading={false}
+            anyBusy={false}
+            deletable={false}
+            showChips={false}
+            onDownload={noop}
+            onCancelDownload={noop}
+            onDelete={noop}
+            onActivate={() => handleActivate(info.id)}
+          />
+        ))}
       </div>
-    </section>
+    </div>
   )
 }

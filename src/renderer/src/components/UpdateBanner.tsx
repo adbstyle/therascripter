@@ -1,12 +1,18 @@
+import { X } from 'lucide-react'
 import type { PendingModelUpdate } from '../../../shared/types/ModelUpdate'
 import { formatBytes } from '../utils/formatBytes'
 
 interface UpdateBannerProps {
   updates: PendingModelUpdate[]
   onRestart: () => void
+  onDismiss: () => void
 }
 
-export default function UpdateBanner({ updates, onRestart }: UpdateBannerProps): React.JSX.Element {
+export default function UpdateBanner({
+  updates,
+  onRestart,
+  onDismiss
+}: UpdateBannerProps): React.JSX.Element {
   const totalBytes = updates.reduce((sum, u) => sum + u.sizeBytes, 0)
   const count = updates.length
 
@@ -19,12 +25,22 @@ export default function UpdateBanner({ updates, onRestart }: UpdateBannerProps):
           ~{formatBytes(totalBytes)})
         </span>
       </div>
-      <button
-        className="titlebar-no-drag rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-hover"
-        onClick={onRestart}
-      >
-        Jetzt neu starten
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          className="titlebar-no-drag rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-hover"
+          onClick={onRestart}
+        >
+          Jetzt neu starten
+        </button>
+        <button
+          aria-label="Update-Hinweis ausblenden"
+          title="Diese Version überspringen — Banner erscheint erst beim nächsten Modell-Update wieder"
+          className="titlebar-no-drag flex h-7 w-7 items-center justify-center rounded-md text-info-text transition-colors hover:bg-info-border/40"
+          onClick={onDismiss}
+        >
+          <X className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+        </button>
+      </div>
     </div>
   )
 }

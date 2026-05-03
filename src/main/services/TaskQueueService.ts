@@ -9,7 +9,8 @@ import { sendToRenderer } from '../utils/ipc-helpers'
 import { validateIntermediateFile } from '../utils/file-ops'
 import type { Task, TaskType, Session, SessionStatus, SessionType } from '../../shared/types'
 import { AUDIO_PIPELINE, PDF_PIPELINE } from '../../shared/constants/pipeline'
-import { getActiveModelId, isModelInstalled } from './ModelDownloadService'
+import { getActiveModelId } from './ModelDownloadService'
+import { captureProcessedModels } from './ProvenanceCapture'
 
 // Issue #80 / DR-5: tasks[] is the source of truth for "current step".
 // SessionStatus only carries lifecycle phase (queued / processing / review / error / recording).
@@ -30,33 +31,25 @@ const RECOVERY_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
  *     installed on disk. The executor itself also gracefully skips at runtime
  *     if the model becomes unavailable, but we omit it from plannedSteps so
  *     the UI doesn't show a step that won't actually do anything.
- *   - ocr (PDF only): included iff session.pdfHasScannedPages === true (set
- *     at import time by the PDF importer's heuristic — Phase G).
+ *   - ocr (PDF only): always included. The executor self-skips when extraction
+ *     reports no scanned pages, so the cost for text-only PDFs is one no-op
+ *     task. Previously gated on the import-time pdfHasScannedPages heuristic,
+ *     but that heuristic samples only the first 3 pages and could disagree
+ *     with extraction-time per-page detection, leaving partially-scanned PDFs
+ *     stuck without a transcriptPath when extraction discovered scanned pages
+ *     beyond the sample window.
  */
 export function computePlannedSteps(session: Session): TaskType[] {
-  const summarizationActive = (() => {
-    try {
-      const id = getActiveModelId('summarization')
-      return id.length > 0 && isModelInstalled(id)
-    } catch {
-      return false
-    }
-  })()
+  // getActiveModelId already verifies disk presence and returns null on
+  // missing/unknown — so a non-null result implies the model is installed
+  // and the executor has a real path to work with.
+  const summarizationActive = getActiveModelId('summarization') !== null
 
   if (session.type === 'audio') {
     return AUDIO_PIPELINE.filter((step) => step !== 'summarization' || summarizationActive)
   }
 
-  // PDF: include ocr only when import-time detection said scanned pages exist.
-  // Phase G adds the pdfHasScannedPages column; until then it's always undefined
-  // and OCR is omitted from plannedSteps (matching today's PDF UI behaviour).
-  const hasScannedPages =
-    'pdfHasScannedPages' in session && (session as Session & { pdfHasScannedPages?: boolean }).pdfHasScannedPages === true
-  return PDF_PIPELINE.filter((step) => {
-    if (step === 'ocr') return hasScannedPages
-    if (step === 'summarization') return summarizationActive
-    return true
-  })
+  return PDF_PIPELINE.filter((step) => step !== 'summarization' || summarizationActive)
 }
 
 export class TaskQueueService {
@@ -97,7 +90,11 @@ export class TaskQueueService {
     // "Schritt 0/N" flicker for filtered-out tasks (summarization without
     // model installed, ocr on text-only PDFs).
     const plannedSteps = computePlannedSteps(session)
-    this.sessionService.updateSession(sessionId, { plannedSteps })
+    // Issue #84 Story I — capture-at-source: snapshot the active models per
+    // group for this run so the Review-Editor can show provenance later.
+    // Done together with plannedSteps so both states are consistent.
+    const processedWithModels = captureProcessedModels(plannedSteps)
+    this.sessionService.updateSession(sessionId, { plannedSteps, processedWithModels })
 
     const tasks: Task[] = []
     for (const type of plannedSteps) {
@@ -194,11 +191,17 @@ export class TaskQueueService {
     // so the renderer doesn't surface stale state from the failed run while the
     // retry is in flight. Issue #80 DR-7: increment retryCount so the UI can
     // surface the 3-stage support hint after repeated failures.
+    // Issue #84 Story I — re-capture provenance: the user may have switched
+    // the active model between runs; the relevant snapshot is what actually
+    // produces the next attempt, not the previous failed one.
+    const processedWithModels = captureProcessedModels(pipeline)
+
     this.sessionService.updateSession(sessionId, {
       status: 'queued',
       errorMessage: null,
       retryCount: (session.retryCount ?? 0) + 1,
-      plannedSteps: pipeline
+      plannedSteps: pipeline,
+      processedWithModels
     })
 
     console.log(
@@ -210,12 +213,18 @@ export class TaskQueueService {
   }
 
   private findResumeIndex(session: Session, pipeline: readonly TaskType[]): number {
-    // Maps each task type to the session field that proves it completed successfully
+    // Maps each task type to the session field that proves it completed successfully.
+    // PDF extraction's success is gated on BOTH extractedPath AND transcriptPath:
+    // pre-fix sessions could end up with extractedPath set but transcriptPath
+    // missing, which used to wedge retries at anonymization. Treating the pair
+    // as a single proof restarts those sessions from extraction on retry.
+    const extractionOutput =
+      session.extractedPath && session.transcriptPath ? session.extractedPath : null
     const outputField: Partial<Record<TaskType, string | null>> = {
       transcription: session.transcriptPath,
       diarization: session.diarizationPath,
       alignment: session.alignedTranscriptPath,
-      extraction: session.extractedPath,
+      extraction: extractionOutput,
       anonymization: session.anonymizedPath
     }
 

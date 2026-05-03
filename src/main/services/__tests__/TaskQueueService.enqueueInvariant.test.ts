@@ -11,10 +11,24 @@ vi.mock('../../utils/ipc-helpers', () => ({
 
 vi.mock('../ModelDownloadService', () => ({
   getActiveModelId: vi.fn(),
-  isModelInstalled: vi.fn()
+  // Issue #84 Story I — ProvenanceCapture (called from enqueuePipeline)
+  // resolves the active id to a catalog entry. Stub a minimal shape so the
+  // capture path doesn't NPE; provenance content is not asserted here.
+  getModelById: vi.fn().mockReturnValue({
+    id: 'stub',
+    label: 'Stub',
+    sha256: '0'.repeat(64),
+    sizeBytes: 0
+  })
 }))
 
-import { getActiveModelId, isModelInstalled } from '../ModelDownloadService'
+// ProvenanceCapture also reads installedModelVersions from electron-store;
+// tests don't init settings, so stub the module entirely.
+vi.mock('../SettingsService', () => ({
+  getSettings: () => ({ get: () => ({}) })
+}))
+
+import { getActiveModelId } from '../ModelDownloadService'
 
 /**
  * Issue #80 invariant: enqueuePipeline + retrySession must enqueue exactly
@@ -31,9 +45,11 @@ describe('TaskQueueService — enqueue + plannedSteps invariant', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    // Default: no summarization model active. Tests opt in by overriding mocks.
-    vi.mocked(getActiveModelId).mockReturnValue('')
-    vi.mocked(isModelInstalled).mockReturnValue(false)
+    // Default: no summarization model active. Issue #84 / Story C — getActiveModelId
+    // does the disk-presence check internally and returns null on
+    // missing-or-not-installed; tests opt into "model active" by returning a
+    // non-null id from the mock.
+    vi.mocked(getActiveModelId).mockReturnValue(null)
     db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
     applyTestSchema(db)
@@ -69,7 +85,6 @@ describe('TaskQueueService — enqueue + plannedSteps invariant', () => {
 
     it('includes summarization when an LLM model is active AND installed', () => {
       vi.mocked(getActiveModelId).mockReturnValue('gemma-3-4b')
-      vi.mocked(isModelInstalled).mockReturnValue(true)
       const session = sessionRepo.create({ title: 'T', type: 'audio', status: 'queued' })
       queue.enqueuePipeline(session.id, 'audio')
 
@@ -79,21 +94,20 @@ describe('TaskQueueService — enqueue + plannedSteps invariant', () => {
       expect(sessionRepo.findById(session.id)?.plannedSteps).toContain('summarization')
     })
 
-    it('omits ocr when pdfHasScannedPages is false (text-only PDF)', () => {
+    it('always includes ocr for PDF — executor self-skips when no scanned pages', () => {
       const session = sessionRepo.create({ title: 'T', type: 'pdf', status: 'queued' })
       sessionRepo.update(session.id, { pdfHasScannedPages: false })
       queue.enqueuePipeline(session.id, 'pdf')
 
       const tasks = taskRepo.findBySession(session.id)
       const types = tasks.map((t) => t.type)
-      expect(types).toEqual(['extraction', 'anonymization'])
-      expect(types).not.toContain('ocr')
+      expect(types).toEqual(['extraction', 'ocr', 'anonymization'])
 
       const reloaded = sessionRepo.findById(session.id)
-      expect(reloaded?.plannedSteps).toEqual(['extraction', 'anonymization'])
+      expect(reloaded?.plannedSteps).toEqual(['extraction', 'ocr', 'anonymization'])
     })
 
-    it('includes ocr when pdfHasScannedPages is true', () => {
+    it('includes ocr regardless of pdfHasScannedPages flag', () => {
       const session = sessionRepo.create({ title: 'T', type: 'pdf', status: 'queued' })
       sessionRepo.update(session.id, { pdfHasScannedPages: true })
       queue.enqueuePipeline(session.id, 'pdf')
@@ -117,9 +131,10 @@ describe('TaskQueueService — enqueue + plannedSteps invariant', () => {
   })
 
   describe('retrySession', () => {
-    it('honours frozen plannedSteps — text-only PDF does not re-add ocr on retry', () => {
-      // Arrange: simulate original run's frozen state. Text-only PDF without
-      // summarization → plannedSteps = [extraction, anonymization].
+    it('honours frozen plannedSteps on retry — even legacy plans without ocr', () => {
+      // Arrange: simulate a pre-fix session whose frozen plan omitted ocr.
+      // Retry must replay exactly what was frozen, not the new always-include-ocr
+      // default — that's the whole point of freezing plannedSteps.
       const session = sessionRepo.create({ title: 'T', type: 'pdf', status: 'queued' })
       sessionRepo.update(session.id, {
         pdfHasScannedPages: false,
@@ -133,9 +148,8 @@ describe('TaskQueueService — enqueue + plannedSteps invariant', () => {
       // Act
       queue.retrySession(session.id)
 
-      // Assert: no ocr / summarization re-introduced.
+      // Assert: frozen plan is replayed verbatim.
       const types = taskRepo.findBySession(session.id).map((t) => t.type)
-      expect(types).not.toContain('ocr')
       expect(types).not.toContain('summarization')
       expect(types).toEqual(['extraction', 'anonymization'])
     })

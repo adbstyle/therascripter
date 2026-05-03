@@ -1,6 +1,14 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import App from '../App'
+import { ToastProvider } from '../contexts/ToastContext'
+
+const renderApp = (): ReturnType<typeof render> =>
+  render(
+    <ToastProvider>
+      <App />
+    </ToastProvider>
+  )
 
 const mockModelUpdate = {
   check: vi.fn().mockResolvedValue([]),
@@ -8,6 +16,7 @@ const mockModelUpdate = {
   startDownload: vi.fn(),
   getPending: vi.fn().mockResolvedValue(null),
   clearPending: vi.fn().mockResolvedValue(undefined),
+  dismissVersions: vi.fn().mockResolvedValue(undefined),
   onAvailable: vi.fn().mockReturnValue(() => {}),
   onDownloadProgress: vi.fn().mockReturnValue(() => {}),
   onDownloadComplete: vi.fn().mockReturnValue(() => {}),
@@ -100,13 +109,21 @@ beforeEach(() => {
     },
     nav: {
       onOpenSettings: vi.fn().mockReturnValue(() => {})
+    },
+    feedback: {
+      send: vi.fn().mockResolvedValue(undefined)
+    },
+    modelReconcile: {
+      getEvents: vi.fn().mockResolvedValue([]),
+      markSeen: vi.fn().mockResolvedValue([]),
+      dismiss: vi.fn().mockResolvedValue(undefined)
     }
   } as typeof window.api
 })
 
 describe('App', () => {
   it('renders bottom navigation', async () => {
-    render(<App />)
+    renderApp()
     await waitFor(() => {
       expect(screen.getByRole('tab', { name: 'Transkriptionen' })).toBeInTheDocument()
       expect(screen.getByRole('tab', { name: 'Einstellungen' })).toBeInTheDocument()
@@ -114,7 +131,7 @@ describe('App', () => {
   })
 
   it('shows empty state message when no sessions', async () => {
-    render(<App />)
+    renderApp()
 
     await waitFor(() => {
       expect(screen.getByText('Keine Transkriptionen')).toBeInTheDocument()

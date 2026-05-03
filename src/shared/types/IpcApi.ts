@@ -4,6 +4,8 @@ import type { BlocklistEntry } from './NerTypes'
 import type { EntityMap, PlaceholderType } from './EntityMap'
 import type { TipTapDocument } from './TipTapDocument'
 import type { PendingModelUpdate, AppUpdateStatus, CheckResult } from './ModelUpdate'
+import type { ReconcileEvent } from './ReconcileEvent'
+import type { ProcessedModelsSnapshot } from './Provenance'
 import type {
   ModelCatalogEntry,
   ModelGroup,
@@ -90,6 +92,19 @@ export interface ReviewData {
   entityMap: EntityMap
   sessionType: SessionType
   sessionTitle: string
+  /**
+   * Issue #84 Story I — captured at pipeline-start. NULL for sessions that
+   * reached 'review' before this column was introduced; the renderer surfaces
+   * the legacy hint in that case.
+   */
+  processedWithModels: ProcessedModelsSnapshot | null
+  /**
+   * Issue #84 Story I — when the session transitioned to 'review' (≈ when the
+   * pipeline finished). Used as "Verarbeitet am" in the provenance panel.
+   * NULL only if the row pre-dates Migration 003 which is unlikely in
+   * practice; the panel falls back to omitting the timestamp.
+   */
+  reviewAt: string | null
 }
 
 export interface ReviewApi {
@@ -164,6 +179,12 @@ export interface ModelUpdateApi {
   startDownload(): Promise<void>
   getPending(): Promise<PendingModelUpdate[] | null>
   clearPending(): Promise<void>
+  /**
+   * Issue #84 / Story F+G — record that the user actively dismissed these
+   * manifest entries. Future update checks filter them out until the manifest
+   * publishes a new sha256 for the same id.
+   */
+  dismissVersions(updates: PendingModelUpdate[]): Promise<void>
   onAvailable(callback: (updates: PendingModelUpdate[]) => void): () => void
   onDownloadProgress(callback: (status: ModelDownloadStatus) => void): () => void
   onDownloadComplete(callback: () => void): () => void
@@ -194,6 +215,10 @@ export interface NavApi {
   onOpenSettings(callback: () => void): () => void
 }
 
+export interface FeedbackApi {
+  send(): Promise<void>
+}
+
 export interface ModelCatalogApi {
   list(group: ModelGroup): Promise<ModelCatalogEntry[]>
   listAsr(): Promise<ModelCatalogEntry[]>
@@ -210,6 +235,15 @@ export interface PipelineApi {
   listDiarization(): Promise<readonly DiarizationPipeline[]>
 }
 
+export interface ModelReconcileApi {
+  /** Read all reconcile events (pending + seen). */
+  getEvents(): Promise<ReconcileEvent[]>
+  /** Mark every pending event as seen — call when Settings → Modelle mounts. */
+  markSeen(): Promise<ReconcileEvent[]>
+  /** Permanently dismiss all reconcile events — call from the "Verstanden" button. */
+  dismiss(): Promise<void>
+}
+
 export interface IpcApi {
   sessions: SessionApi
   recording: RecordingApi
@@ -222,8 +256,10 @@ export interface IpcApi {
   modelDownload: ModelDownloadApi
   modelCatalog: ModelCatalogApi
   modelUpdate: ModelUpdateApi
+  modelReconcile: ModelReconcileApi
   pipeline: PipelineApi
   appUpdate: AppUpdateApi
   summary: SummaryApi
   nav: NavApi
+  feedback: FeedbackApi
 }

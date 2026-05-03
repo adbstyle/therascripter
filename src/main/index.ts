@@ -18,6 +18,7 @@ import { registerSystemHandlers } from './ipc/system-handlers'
 import { registerModelDownloadHandlers } from './ipc/model-download-handlers'
 import { registerModelCatalogHandlers } from './ipc/model-catalog-handlers'
 import { registerModelUpdateHandlers } from './ipc/model-update-handlers'
+import { registerModelReconcileHandlers } from './ipc/model-reconcile-handlers'
 import { registerPipelineHandlers } from './ipc/pipeline-handlers'
 import { initTray, getTray } from './services/TrayService'
 import { initAppMenu } from './services/AppMenuService'
@@ -29,6 +30,7 @@ import {
 } from './services/AutoDeletionService'
 import { checkFileVaultOnStartup } from './services/FileVaultService'
 import { registerAppUpdateHandlers } from './ipc/app-update-handlers'
+import { registerFeedbackHandlers, sendFeedback } from './ipc/feedback-handlers'
 import {
   cleanupIncompleteUpdates,
   migrateInstalledVersions,
@@ -47,8 +49,8 @@ import { SessionService } from './services/SessionService'
 import {
   getActiveModelPath,
   getActiveModelId,
-  isModelInstalled,
-  getModelsDir
+  getModelsDir,
+  reconcileActiveModels
 } from './services/ModelDownloadService'
 import { registerSummaryHandlers } from './ipc/summary-handlers'
 
@@ -172,6 +174,13 @@ app.whenReady().then(() => {
   // Clean up any incomplete model updates from a previous crashed update
   cleanupIncompleteUpdates()
 
+  // Issue #84 / Story C — verify the invariant that every active-model slot
+  // either points at an installed catalog model or is null. Heals stale slots
+  // (e.g. a model the user deleted in Finder) before any executor or the
+  // FirstLaunchScreen reads them. Skipped on a truly-fresh install — see
+  // reconcileActiveModels().
+  reconcileActiveModels()
+
   // Initialize task queue + crash recovery (before IPC handlers that may enqueue tasks)
   const taskQueue = initTaskQueue(getDatabase())
   const recovered = taskQueue.recoverStuckTasks()
@@ -192,7 +201,18 @@ app.whenReady().then(() => {
   taskQueue.registerExecutor('ocr', new VisionOCRService())
 
   const llamaSummarizer = new LlamaSummarizer({
-    getModelPath: () => getActiveModelPath('summarization'),
+    getModelPath: () => {
+      const path = getActiveModelPath('summarization')
+      if (path === null) {
+        // The SummarizationExecutor checks isModelInstalled() before reaching
+        // summarize(), so this throw is a defensive belt: it would only fire
+        // on a race where the model is deleted between the gate and the
+        // subprocess launch. Caught by SummarizationExecutor's try/catch and
+        // logged; session reaches review with summary=NULL.
+        throw new Error('Summarization-Modell ist nicht aktiv')
+      }
+      return path
+    },
     getBinaryPath: () =>
       app.isPackaged
         ? join(process.resourcesPath, 'bin', 'llama-cli')
@@ -205,7 +225,9 @@ app.whenReady().then(() => {
     new SummarizationExecutor({
       llamaSummarizer,
       sessionService,
-      isModelInstalled: () => isModelInstalled(getActiveModelId('summarization')),
+      // Both checks delegate to getActiveModelId, which returns null whenever
+      // the slot is empty / unknown / file-missing — see ModelDownloadService.
+      isModelInstalled: () => getActiveModelId('summarization') !== null,
       getActiveModelId: () => getActiveModelId('summarization'),
       logger: { info: (msg): void => console.log(msg), error: (msg): void => console.error(msg) }
     })
@@ -224,8 +246,10 @@ app.whenReady().then(() => {
   registerModelDownloadHandlers()
   registerModelCatalogHandlers()
   registerModelUpdateHandlers()
+  registerModelReconcileHandlers()
   registerPipelineHandlers()
   registerAppUpdateHandlers()
+  registerFeedbackHandlers()
   registerSummaryHandlers({ sessionService })
 
   setupCSP()
@@ -239,6 +263,11 @@ app.whenReady().then(() => {
   const tray = initTray()
   tray.onStop(() => stopRecordingFromTray())
   tray.onOpenSettings(() => sendToRenderer('nav:openSettings'))
+  tray.onSendFeedback(() => {
+    sendFeedback().catch((error) => {
+      console.error('[feedback] sendFeedback aus Tray fehlgeschlagen:', error)
+    })
+  })
 
   // Application Menu owns ⌘, (Einstellungen) and ⌘Q (Beenden) so the
   // shortcuts only fire while Therascript is the focused app.
