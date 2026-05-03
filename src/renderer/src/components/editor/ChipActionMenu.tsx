@@ -76,11 +76,9 @@ export function ChipActionMenu({
       {
         kind: 'action',
         key: 'undo',
-        label: 'Rückgängig machen',
+        label: 'Pseudonym entfernen',
         supporting:
-          occurrenceCount > 1
-            ? `Hebt ${occurrenceCount} Vorkommen ${entityType} ${entityNumber} auf`
-            : `Hebt ${entityType} ${entityNumber} auf`
+          occurrenceCount > 1 ? `»${original}« · ${occurrenceCount} Vorkommen` : `»${original}«`
       },
       { kind: 'submenu', key: 'changeType', label: 'Typ ändern' },
       {
@@ -91,7 +89,7 @@ export function ChipActionMenu({
         disabledHint: 'Bereits in Sperrliste'
       }
     ],
-    [entityType, entityNumber, occurrenceCount, isBlocklisted]
+    [original, occurrenceCount, isBlocklisted]
   )
 
   const subItems = useMemo(() => {
@@ -336,7 +334,7 @@ export function ChipActionMenu({
               <span className="flex min-w-0 flex-col">
                 <span className="font-medium text-text-primary">{item.label}</span>
                 {item.kind === 'action' && (
-                  <span className="text-xs text-text-tertiary">{item.supporting}</span>
+                  <span className="truncate text-xs text-text-tertiary">{item.supporting}</span>
                 )}
                 {item.kind === 'submenu' && item.disabled && item.disabledHint && (
                   <span className="text-xs text-text-tertiary">{item.disabledHint}</span>

@@ -66,21 +66,21 @@ describe('ChipActionMenu', () => {
 
     const items = within(menu).getAllByRole('menuitem')
     expect(items).toHaveLength(3)
-    expect(items[0]).toHaveTextContent('Rückgängig machen')
+    expect(items[0]).toHaveTextContent('Pseudonym entfernen')
     expect(items[1]).toHaveTextContent('Typ ändern')
     expect(items[1]).toHaveAttribute('aria-haspopup', 'menu')
     expect(items[2]).toHaveTextContent('Zur Sperrliste hinzufügen')
     expect(items[2]).toHaveAttribute('aria-haspopup', 'menu')
   })
 
-  it('shows occurrence count in the "Rückgängig machen" supporting text when > 1', () => {
+  it('shows the original text + occurrence count in the supporting line when > 1', () => {
     setup({ count: 3 })
-    expect(screen.getByText(/Hebt 3 Vorkommen PERSON 1 auf/)).toBeInTheDocument()
+    expect(screen.getByText('»Anna« · 3 Vorkommen')).toBeInTheDocument()
   })
 
-  it('omits occurrence count when count is 1', () => {
+  it('shows only the original text when count is 1', () => {
     setup({ count: 1 })
-    expect(screen.getByText(/^Hebt PERSON 1 auf$/)).toBeInTheDocument()
+    expect(screen.getByText('»Anna«')).toBeInTheDocument()
   })
 
   it('disables "Zur Sperrliste hinzufügen" when source is blocklist', () => {
@@ -91,10 +91,10 @@ describe('ChipActionMenu', () => {
     expect(within(item).getByText('Bereits in Sperrliste')).toBeInTheDocument()
   })
 
-  it('clicking "Rückgängig machen" calls onUndo with entityId and closes', async () => {
+  it('clicking "Pseudonym entfernen" calls onUndo with entityId and closes', async () => {
     const user = userEvent.setup()
     const { onUndo, onClose } = setup()
-    await user.click(screen.getByRole('menuitem', { name: /Rückgängig machen/ }))
+    await user.click(screen.getByRole('menuitem', { name: /Pseudonym entfernen/ }))
     expect(onUndo).toHaveBeenCalledWith('person-1')
     expect(onClose).toHaveBeenCalled()
   })
@@ -187,12 +187,12 @@ describe('ChipActionMenu', () => {
   it('ArrowRight on focused submenu trigger opens its submenu', async () => {
     const user = userEvent.setup()
     setup()
-    // mainFocus starts at 0 → "Rückgängig machen". Move down to "Typ ändern".
+    // mainFocus starts at 0 → "Pseudonym entfernen". Move down to "Typ ändern".
     await user.keyboard('{ArrowDown}{ArrowRight}')
     expect(screen.getByRole('menu', { name: /Typ ändern/i })).toBeInTheDocument()
   })
 
-  it('ArrowDown then Enter on first item activates "Rückgängig machen"', async () => {
+  it('ArrowDown then Enter on first item activates "Pseudonym entfernen"', async () => {
     const user = userEvent.setup()
     const { onUndo } = setup()
     await user.keyboard('{Enter}')
@@ -202,7 +202,7 @@ describe('ChipActionMenu', () => {
   it('ArrowDown skips disabled "Zur Sperrliste" item when source=blocklist', async () => {
     const user = userEvent.setup()
     const { onUndo } = setup({ source: 'blocklist', type: 'PERSON' })
-    // mainFocus starts at 0 (Rückgängig machen). Two ArrowDowns: first → 1 (Typ
+    // mainFocus starts at 0 (Pseudonym entfernen). Two ArrowDowns: first → 1 (Typ
     // ändern), second skips idx 2 (disabled Sperrliste) and wraps back to 0.
     // Enter on idx 0 fires onUndo.
     await user.keyboard('{ArrowDown}{ArrowDown}{Enter}')
