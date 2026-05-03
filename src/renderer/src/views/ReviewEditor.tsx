@@ -13,7 +13,7 @@ import { BlocklistConfirmDialog } from '../components/editor/BlocklistConfirmDia
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EditableSessionTitle } from '../components/review/EditableSessionTitle'
 import { SummaryPanel } from '../components/review/SummaryPanel'
-import { ProvenancePanel } from '../components/review/ProvenancePanel'
+import { ReviewSidePanel } from '../components/review/ReviewSidePanel'
 import {
   batchRemovePlaceholder,
   anonymizeSelectionWithPropagation,
@@ -25,7 +25,6 @@ import {
 import { serializeDocument } from '../../../shared/utils/serializeDocument'
 import { countWords } from '../../../shared/utils/countWords'
 import { useAnonymizationOverview } from '../hooks/useAnonymizationOverview'
-import { AnonymizationPanel } from '../components/editor/AnonymizationPanel'
 import type {
   EntityMap,
   PlaceholderType,
@@ -579,9 +578,9 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           <button
             className={`titlebar-no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong transition-colors hover:bg-surface-1 ${panelOpen ? 'bg-surface-2 text-text-primary' : 'bg-surface-0 text-text-secondary'}`}
             onClick={togglePanel}
-            aria-label="Pseudonymisierungen anzeigen"
+            aria-label="Seitenleiste anzeigen"
             aria-pressed={panelOpen}
-            title="Pseudonymisierungen"
+            title="Seitenleiste"
           >
             <PanelRight className="h-4 w-4" strokeWidth={1.75} aria-hidden />
           </button>
@@ -612,16 +611,14 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           <div className="px-6 pt-4 [&:empty]:p-0">
             <SummaryPanel sessionId={sessionId} />
           </div>
-          {/* Issue #84 Story I — collapsible Modell-Provenienz, default closed */}
-          <div className="px-6 pt-4">
-            <ProvenancePanel data={provenance} reviewAt={reviewAt} />
-          </div>
           <EditorContent editor={editor} />
         </div>
-        <AnonymizationPanel
-          data={overviewData}
+        <ReviewSidePanel
           isOpen={panelOpen}
+          anonymization={overviewData}
           onRevert={handleBatchRemove}
+          provenance={provenance}
+          reviewAt={reviewAt}
         />
       </div>
 
