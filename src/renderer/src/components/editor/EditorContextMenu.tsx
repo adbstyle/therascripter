@@ -1,42 +1,20 @@
 import { useEffect, useRef } from 'react'
 import type { PlaceholderType } from '../../../../shared/types'
-
-/** Types available for manual anonymization (Decision #151: 5 types) */
-const ANONYMIZE_TYPES: Array<{ value: PlaceholderType; label: string }> = [
-  { value: 'PERSON', label: 'Person' },
-  { value: 'ORT', label: 'Ort' },
-  { value: 'DATUM', label: 'Datum' },
-  { value: 'KONTAKT', label: 'Kontakt' },
-  { value: 'ORGANISATION', label: 'Organisation' }
-]
-
-/** Types available for blocklist quick-add (all 7 types including MEDIZINISCH/SONSTIGES) */
-const BLOCKLIST_TYPES: Array<{ value: PlaceholderType; label: string }> = [
-  { value: 'PERSON', label: 'Person' },
-  { value: 'ORT', label: 'Ort' },
-  { value: 'DATUM', label: 'Datum' },
-  { value: 'KONTAKT', label: 'Kontakt' },
-  { value: 'ORGANISATION', label: 'Organisation' },
-  { value: 'MEDIZINISCH', label: 'Medizinisch' },
-  { value: 'SONSTIGES', label: 'Sonstiges' }
-]
+import { ANONYMIZE_TYPE_OPTIONS, BLOCKLIST_TYPE_OPTIONS } from '../../constants/editorConstants'
 
 export interface ContextMenuState {
   x: number
   y: number
-  /** If set, the menu was opened on a chip — show "Rückgängig machen" */
-  chip?: {
-    entityId: string
-    type: PlaceholderType
-    number: number
-    count: number
-  }
-  /** If true, text is selected — show "Pseudonymisieren als..." */
+  /**
+   * Always true — the menu is only opened on a non-empty text selection.
+   * Chip-target right-clicks are swallowed by PlaceholderChipView (AK 13);
+   * chip actions live in the inline trailing-chevron menu.
+   */
   hasSelection: boolean
   /**
    * If true, the selection consists exclusively of two or more chips with no
    * neutral text outside them — re-flagging would be ambiguous, so the
-   * "Pseudonymisieren als..." block is hidden (AK 12).
+   * "Pseudonymisieren als..." block is hidden.
    */
   selectionSpansMultipleChipsOnly: boolean
 }
@@ -44,7 +22,6 @@ export interface ContextMenuState {
 interface EditorContextMenuProps {
   state: ContextMenuState
   onClose: () => void
-  onBatchRemove: (entityId: string) => void
   onAnonymize: (type: PlaceholderType) => void
   onAddToBlocklist: (type: PlaceholderType) => void
 }
@@ -52,7 +29,6 @@ interface EditorContextMenuProps {
 export function EditorContextMenu({
   state,
   onClose,
-  onBatchRemove,
   onAnonymize,
   onAddToBlocklist
 }: EditorContextMenuProps): React.JSX.Element {
@@ -93,33 +69,12 @@ export function EditorContextMenu({
       className="fixed z-50 min-w-[220px] rounded-lg border border-border bg-surface-1 py-1 shadow-lg"
       style={style}
     >
-      {/* Chip context: "Rückgängig machen" */}
-      {state.chip && (
-        <button
-          className="flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-surface-2"
-          onClick={() => {
-            onBatchRemove(state.chip!.entityId)
-            onClose()
-          }}
-        >
-          <span className="font-medium text-text-primary">Rückgängig machen</span>
-          <span className="text-xs text-text-tertiary">
-            Macht alle [{state.chip.type} {state.chip.number}] im Text rückgängig
-            {state.chip.count > 1 ? ` (${state.chip.count} Vorkommen)` : ''}
-          </span>
-        </button>
-      )}
-
-      {/* Separator when both chip and selection options present */}
-      {state.chip && state.hasSelection && <div className="my-1 border-t border-border" />}
-
-      {/* Selection context: "Pseudonymisieren als..." — hidden when selection is multiple chips only */}
-      {state.hasSelection && !state.selectionSpansMultipleChipsOnly && (
+      {!state.selectionSpansMultipleChipsOnly && (
         <>
           <div className="px-3 py-1.5 text-xs font-medium text-text-tertiary">
             Pseudonymisieren als...
           </div>
-          {ANONYMIZE_TYPES.map((type) => (
+          {ANONYMIZE_TYPE_OPTIONS.map((type) => (
             <button
               key={`anon-${type.value}`}
               className="w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-surface-2"
@@ -132,14 +87,12 @@ export function EditorContextMenu({
             </button>
           ))}
 
-          {/* Separator before blocklist section */}
           <div className="my-1 border-t border-border" />
 
-          {/* Blocklist quick-add: "Zur Sperrliste hinzufügen..." (US-6c) */}
           <div className="px-3 py-1.5 text-xs font-medium text-text-tertiary">
             Zur Sperrliste hinzufügen...
           </div>
-          {BLOCKLIST_TYPES.map((type) => (
+          {BLOCKLIST_TYPE_OPTIONS.map((type) => (
             <button
               key={`bl-${type.value}`}
               className="w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-surface-2"
@@ -154,8 +107,7 @@ export function EditorContextMenu({
         </>
       )}
 
-      {/* Multi-chip selection hint (AK 12) */}
-      {state.hasSelection && state.selectionSpansMultipleChipsOnly && (
+      {state.selectionSpansMultipleChipsOnly && (
         <div className="px-3 py-2 text-xs text-text-tertiary">
           Bitte nur einen Chip auswählen, um neu zu kategorisieren.
         </div>
@@ -167,7 +119,7 @@ export function EditorContextMenu({
 /** Calculate menu position ensuring it stays within the viewport */
 function getMenuPosition(x: number, y: number): React.CSSProperties {
   const menuWidth = 220
-  const menuHeight = 500 // Increased to account for blocklist section
+  const menuHeight = 500
   const padding = 8
 
   const adjustedX =

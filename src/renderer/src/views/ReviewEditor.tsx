@@ -14,10 +14,13 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EditableSessionTitle } from '../components/review/EditableSessionTitle'
 import { SummaryPanel } from '../components/review/SummaryPanel'
 import { ReviewSidePanel } from '../components/review/ReviewSidePanel'
+import { ChipActionsContext, type ChipActions } from '../contexts/ChipActionsContext'
 import {
   batchRemovePlaceholder,
   anonymizeSelectionWithPropagation,
   addToBlocklistRetroactive,
+  addToBlocklistFromTerm,
+  changeChipTypeForEntity,
   hasChipsWithEntityId,
   extendSelectionAndExtractText,
   reconcileEntityMapWithDoc
@@ -302,32 +305,13 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
 
       event.preventDefault()
 
-      const { state, view } = editor
+      const { state } = editor
       const { selection } = state
 
-      // Check if right-clicked on a chip
-      let chipInfo: ContextMenuState['chip'] = undefined
-      const coords = view.posAtCoords({ left: event.clientX, top: event.clientY })
-
-      if (coords) {
-        const node = state.doc.nodeAt(coords.pos)
-        if (node?.type.name === 'placeholderChip') {
-          // Count all occurrences of this entityId in the document
-          const entityId = node.attrs.entityId as string
-          let count = 0
-          state.doc.descendants((n) => {
-            if (n.type.name === 'placeholderChip' && n.attrs.entityId === entityId) {
-              count++
-            }
-          })
-          chipInfo = {
-            entityId,
-            type: node.attrs.type as PlaceholderType,
-            number: node.attrs.number as number,
-            count
-          }
-        }
-      }
+      // AK 13: chip right-click is no longer surfaced — chip actions are
+      // exclusively reachable via the trailing-chevron action menu (handled
+      // inside PlaceholderChipView). The text-selection branch below stays
+      // unchanged (Postcondition 5).
 
       // Check if text is selected (non-empty selection)
       const hasSelection = !selection.empty
@@ -356,12 +340,11 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
       }
 
       // Only show menu if there's something to act on
-      if (!chipInfo && !hasSelection) return
+      if (!hasSelection) return
 
       setContextMenu({
         x: event.clientX,
         y: event.clientY,
-        chip: chipInfo,
         hasSelection,
         selectionSpansMultipleChipsOnly
       })
@@ -439,6 +422,92 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     [editor]
   )
 
+  /**
+   * Handle "Typ ändern" invoked from a chip's action menu (Issue #88, AK 11).
+   * Rewrites every chip with `entityId` under a fresh entityId of `newType`,
+   * single transaction = one undo step.
+   *
+   * If the entity was originally blocklist-sourced, the type change invalidates
+   * the SQLite row (which was scoped to the *old* type). The row is deleted +
+   * the undo-stack entry marked done, AND the rewritten chips are downgraded
+   * to `source: 'manual'` so the chip's source-icon truthfully reflects state.
+   * The user can re-add to the blocklist explicitly via the menu if desired.
+   */
+  const handleChipChangeType = useCallback(
+    (entityId: string, newType: PlaceholderType) => {
+      if (!editor) return
+
+      let blocklistSourced = false
+      for (const entry of blocklistUndoStackRef.current) {
+        if (entry.entityId === entityId && !entry.undone) {
+          blocklistSourced = true
+          entry.undone = true
+          window.api.blocklist.delete(entry.entryId)
+        }
+      }
+
+      const result = changeChipTypeForEntity(
+        editor,
+        entityId,
+        newType,
+        entityMapRef.current,
+        blocklistSourced ? 'manual' : undefined
+      )
+      if (!result) return
+
+      updateEntityMap(result.entityMap)
+      editor.commands.focus()
+    },
+    [editor, updateEntityMap]
+  )
+
+  /**
+   * Handle "Zur Sperrliste hinzufügen" invoked from a chip's action menu
+   * (Issue #88, AK 12 + Postcondition 3). Adds `original` to SQLite, then
+   * doc-wide rewrites every match (text + chips) of `term` under a fresh
+   * blocklist entityId of the chosen type.
+   *
+   * Order mirrors `handleBlocklistConfirm` (selection-flow): IPC first, then
+   * doc mutation, then track for undo/redo. With this ordering Cmd+Z during
+   * the IPC await affects only pre-existing edits — the chip mutation has
+   * not happened yet — so no SQLite orphan can be produced by a racing undo.
+   */
+  const handleChipAddToBlocklist = useCallback(
+    async (entityId: string, original: string, type: PlaceholderType) => {
+      if (!editor) return
+      const term = original.trim()
+      if (!term) return
+
+      // Mark the existing entry undone (it may have come from a prior blocklist
+      // entry of a different type — the new entry below supersedes it).
+      for (const entry of blocklistUndoStackRef.current) {
+        if (entry.entityId === entityId && !entry.undone) {
+          entry.undone = true
+          window.api.blocklist.delete(entry.entryId)
+        }
+      }
+
+      const sqlEntry = await window.api.blocklist.add(term, type)
+      const result = addToBlocklistFromTerm(editor, term, type, entityMapRef.current)
+      if (!result) {
+        // No matches in doc — clean up the SQLite row to keep state consistent.
+        window.api.blocklist.delete(sqlEntry.id)
+        return
+      }
+
+      updateEntityMap(result.entityMap)
+      blocklistUndoStackRef.current.push({
+        entryId: sqlEntry.id,
+        entityId: result.entityId,
+        term,
+        placeholderType: type,
+        undone: false
+      })
+      editor.commands.focus()
+    },
+    [editor, updateEntityMap]
+  )
+
   /** Handle blocklist confirm dialog — add to SQLite + retroactive scan */
   const handleBlocklistConfirm = useCallback(async () => {
     if (!editor || !blocklistConfirm) return
@@ -510,6 +579,25 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   )
 
   const overviewData = useAnonymizationOverview(editor, updateCounter)
+
+  const chipActions = useMemo<ChipActions>(
+    () => ({
+      onUndo: handleBatchRemove,
+      onChangeType: handleChipChangeType,
+      onAddToBlocklist: handleChipAddToBlocklist,
+      getOccurrenceCount: (entityId: string) => {
+        if (!editor) return 1
+        let count = 0
+        editor.state.doc.descendants((node) => {
+          if (node.type.name === 'placeholderChip' && node.attrs.entityId === entityId) {
+            count++
+          }
+        })
+        return count
+      }
+    }),
+    [editor, handleBatchRemove, handleChipChangeType, handleChipAddToBlocklist]
+  )
 
   if (loading) {
     return (
@@ -611,7 +699,9 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           <div className="px-6 pt-4 [&:empty]:p-0">
             <SummaryPanel sessionId={sessionId} />
           </div>
-          <EditorContent editor={editor} />
+          <ChipActionsContext.Provider value={chipActions}>
+            <EditorContent editor={editor} />
+          </ChipActionsContext.Provider>
         </div>
         <ReviewSidePanel
           isOpen={panelOpen}
@@ -627,7 +717,6 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
         <EditorContextMenu
           state={contextMenu}
           onClose={() => setContextMenu(null)}
-          onBatchRemove={handleBatchRemove}
           onAnonymize={handleAnonymize}
           onAddToBlocklist={handleAddToBlocklist}
         />

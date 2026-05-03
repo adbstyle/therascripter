@@ -1,7 +1,7 @@
 import type { Editor } from '@tiptap/core'
 import type { EditorState } from '@tiptap/pm/state'
 import type { Node as PMNode } from '@tiptap/pm/model'
-import type { EntityMap, PlaceholderType } from '../../../shared/types'
+import type { EntityMap, EntitySource, PlaceholderType } from '../../../shared/types'
 import {
   normalizeUmlaut,
   isWholeWord,
@@ -294,6 +294,150 @@ export function addToBlocklistRetroactive(
   }
 
   return { entityMap: updated, entityId }
+}
+
+/**
+ * Doc-wide blocklist application that does not require a selection. Used by the
+ * chip action menu's "Zur Sperrliste hinzufügen". Allocates a fresh blocklist
+ * entityId of `type`, then writes a single transaction that replaces every
+ * occurrence of `term` — both text matches AND existing chips whose `original`
+ * matches (case-insensitive + Umlaut + whole-word) — with chips of the new
+ * entityId. Returns null if `term` is empty/whitespace or the doc has no match.
+ */
+export function addToBlocklistFromTerm(
+  editor: Editor,
+  term: string,
+  type: PlaceholderType,
+  entityMap: EntityMap
+): BlocklistRetroactiveResult | null {
+  const trimmed = term.trim()
+  if (!trimmed) return null
+
+  const { state } = editor
+  const hits = collectIdenticalOccurrences(state, term, {
+    excludeRange: { from: -1, to: -1 },
+    overwritesChips: true
+  })
+
+  if (hits.length === 0) return null
+
+  const number = getNextNumber(entityMap, type)
+  const entityId = generateEntityId(type, number)
+
+  const replacements = hits
+    .map(({ from: f, to: t, original }) => ({ from: f, to: t, original }))
+    .sort((a, b) => b.from - a.from)
+
+  const { tr } = state
+  for (const rep of replacements) {
+    const chipNode = state.schema.nodes.placeholderChip.create({
+      entityId,
+      type,
+      number,
+      source: 'blocklist',
+      original: rep.original
+    })
+    tr.replaceWith(rep.from, rep.to, chipNode)
+  }
+
+  editor.view.dispatch(tr)
+
+  const updated = { ...entityMap }
+  updated[entityId] = {
+    original: trimmed,
+    placeholder: `[${type} ${number}]`,
+    type,
+    source: 'blocklist'
+  }
+
+  return { entityMap: updated, entityId }
+}
+
+export interface ChangeChipTypeResult {
+  entityMap: EntityMap
+  /** New entityId assigned to all rewritten chips. */
+  entityId: string
+  /** Number of chips rewritten in the transaction. */
+  rewrittenCount: number
+}
+
+/**
+ * Change the type of every chip with `entityId` to `newType`. Allocates a fresh
+ * entityId of the new type with `getNextNumber`, preserves each chip's original
+ * `source` and `original` text by default, and replaces all chips in a single
+ * transaction (one undo step). Returns null when the target type equals the
+ * current type (silent no-op, AK 11 spirit) or when no chips exist for `entityId`.
+ *
+ * Unlike `anonymizeSelectionWithPropagation`, this does NOT propagate to plain
+ * text matches — only chips that already share the entityId are rewritten.
+ *
+ * `sourceOverride` lets the caller force every rewritten chip to a single source
+ * — used when the type-change invalidates the original source semantics (e.g.
+ * a blocklist-sourced chip whose backing SQLite row no longer matches the new
+ * type, so the chips are downgraded to `'manual'`).
+ */
+export function changeChipTypeForEntity(
+  editor: Editor,
+  entityId: string,
+  newType: PlaceholderType,
+  entityMap: EntityMap,
+  sourceOverride?: EntitySource
+): ChangeChipTypeResult | null {
+  const { state } = editor
+
+  const targets: Array<{ pos: number; nodeSize: number; original: string; source: EntitySource }> =
+    []
+  let currentType: PlaceholderType | null = null
+  state.doc.descendants((node, pos) => {
+    if (node.type.name === 'placeholderChip' && node.attrs.entityId === entityId) {
+      if (currentType === null) currentType = node.attrs.type as PlaceholderType
+      targets.push({
+        pos,
+        nodeSize: node.nodeSize,
+        original: (node.attrs.original as string) ?? '',
+        source: ((node.attrs.source as EntitySource) ?? 'manual') as EntitySource
+      })
+    }
+  })
+
+  if (targets.length === 0) return null
+  if (currentType === newType) return null
+
+  const newNumber = getNextNumber(entityMap, newType)
+  const newEntityId = generateEntityId(newType, newNumber)
+
+  // Reverse order so earlier positions stay valid as we replace.
+  targets.sort((a, b) => b.pos - a.pos)
+
+  const { tr } = state
+  for (const target of targets) {
+    const chipNode = state.schema.nodes.placeholderChip.create({
+      entityId: newEntityId,
+      type: newType,
+      number: newNumber,
+      source: sourceOverride ?? target.source,
+      original: target.original
+    })
+    tr.replaceWith(target.pos, target.pos + target.nodeSize, chipNode)
+  }
+
+  editor.view.dispatch(tr)
+
+  // Representative original = earliest chip in doc order (last item after the
+  // reverse-sort above). entityMap.original is descriptive metadata only.
+  const representative = targets[targets.length - 1]
+  const representativeSource = sourceOverride ?? representative.source
+
+  const updated = { ...entityMap }
+  delete updated[entityId]
+  updated[newEntityId] = {
+    original: representative.original,
+    placeholder: `[${newType} ${newNumber}]`,
+    type: newType,
+    source: representativeSource
+  }
+
+  return { entityMap: updated, entityId: newEntityId, rewrittenCount: targets.length }
 }
 
 export interface PropagationResult {
