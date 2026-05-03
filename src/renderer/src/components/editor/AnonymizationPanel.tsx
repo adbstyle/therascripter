@@ -12,45 +12,32 @@ import type {
 
 interface AnonymizationPanelProps {
   data: AnonymizationOverviewData
-  isOpen: boolean
   onRevert: (entityId: string) => void
 }
 
+/**
+ * Pseudonymisierungs-Liste — content-only. The outer side-panel chrome
+ * (width transition, border, surface) and the tab strip with the count
+ * badge live in `ReviewSidePanel`. This component renders only the
+ * scrollable list body.
+ */
 export function AnonymizationPanel({
   data,
-  isOpen,
   onRevert
 }: AnonymizationPanelProps): React.JSX.Element {
-  return (
-    <div
-      className={`flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out ${isOpen ? 'w-[300px]' : 'w-0'}`}
-    >
-      <div className="flex h-full w-[300px] flex-col border-l border-border bg-surface-1">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-text-primary">Pseudonymisierungen</h3>
-            {data.totalChips > 0 && (
-              <span className="rounded-full bg-surface-3 px-1.5 py-0.5 text-[11px] font-medium text-text-secondary">
-                {data.totalChips}
-              </span>
-            )}
-          </div>
-        </div>
+  if (data.totalIdentities === 0) {
+    return (
+      <p className="px-3 py-8 text-center text-sm text-text-tertiary">
+        Keine Pseudonymisierungen
+      </p>
+    )
+  }
 
-        <div className="flex-1 overflow-y-auto px-3 py-3">
-          {data.totalIdentities === 0 ? (
-            <p className="py-8 text-center text-sm text-text-tertiary">
-              Keine Pseudonymisierungen
-            </p>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {data.groups.map((group) => (
-                <TypeGroupSection key={group.type} group={group} onRevert={onRevert} />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+  return (
+    <div className="flex flex-col gap-4 px-3 py-3">
+      {data.groups.map((group) => (
+        <TypeGroupSection key={group.type} group={group} onRevert={onRevert} />
+      ))}
     </div>
   )
 }
@@ -67,9 +54,7 @@ function TypeGroupSection({
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
-        <span
-          className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${chipStyle}`}
-        >
+        <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${chipStyle}`}>
           {group.label}
         </span>
       </div>
