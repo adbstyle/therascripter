@@ -7,8 +7,9 @@ import { PlaceholderChip } from '../extensions/placeholderChip'
 import { SpeakerLabel } from '../extensions/speakerLabel'
 import { Timestamp } from '../extensions/timestamp'
 import { useAutoSave } from '../hooks/useAutoSave'
+import { useSelectionToolbar } from '../hooks/useSelectionToolbar'
 import { useToast } from '../hooks/useToast'
-import { EditorContextMenu, type ContextMenuState } from '../components/editor/EditorContextMenu'
+import { SelectionToolbar } from '../components/editor/SelectionToolbar'
 import { BlocklistConfirmDialog } from '../components/editor/BlocklistConfirmDialog'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EditableSessionTitle } from '../components/review/EditableSessionTitle'
@@ -61,7 +62,6 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const [reviewAt, setReviewAt] = useState<string | null>(null)
   const [_entityMap, setEntityMap] = useState<EntityMap>({})
   const [updateCounter, setUpdateCounter] = useState(0)
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [blocklistConfirm, setBlocklistConfirm] = useState<{
     term: string
     type: PlaceholderType
@@ -70,6 +70,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const [panelOpen, setPanelOpen] = useState(false)
   const entityMapRef = useRef<EntityMap>({})
   const editorRef = useRef<Editor | null>(null)
+  const editorScrollRef = useRef<HTMLDivElement | null>(null)
   const blocklistUndoStackRef = useRef<BlocklistUndoEntry[]>([])
   const handleBatchRemoveRef = useRef<(entityId: string) => void>(() => {})
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -298,59 +299,6 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     }
   }, [editor])
 
-  /** Handle right-click in editor to show context menu */
-  const handleContextMenu = useCallback(
-    (event: React.MouseEvent) => {
-      if (!editor) return
-
-      event.preventDefault()
-
-      const { state } = editor
-      const { selection } = state
-
-      // Chip right-click is no longer surfaced — chip actions are exclusively
-      // reachable via the trailing-chevron action menu (handled inside
-      // PlaceholderChipView). The text-selection branch below stays unchanged.
-
-      // Check if text is selected (non-empty selection)
-      const hasSelection = !selection.empty
-
-      // Detect AK 12: selection spans multiple chips with no neutral text.
-      let selectionSpansMultipleChipsOnly = false
-      if (hasSelection) {
-        let chipCount = 0
-        let hasNonWhitespaceText = false
-        state.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
-          if (node.type.name === 'placeholderChip') {
-            const nodeEnd = pos + node.nodeSize
-            if (pos >= selection.from && nodeEnd <= selection.to) {
-              chipCount++
-            }
-          } else if (node.isText) {
-            const text = node.text ?? ''
-            const start = Math.max(pos, selection.from) - pos
-            const end = Math.min(pos + node.nodeSize, selection.to) - pos
-            if (text.slice(start, end).trim().length > 0) {
-              hasNonWhitespaceText = true
-            }
-          }
-        })
-        selectionSpansMultipleChipsOnly = chipCount >= 2 && !hasNonWhitespaceText
-      }
-
-      // Only show menu if there's something to act on
-      if (!hasSelection) return
-
-      setContextMenu({
-        x: event.clientX,
-        y: event.clientY,
-        hasSelection,
-        selectionSpansMultipleChipsOnly
-      })
-    },
-    [editor]
-  )
-
   /** Handle batch removal of all chips with the given entityId */
   const handleBatchRemove = useCallback(
     (entityId: string) => {
@@ -562,12 +510,12 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (showDeleteDialog || contextMenu || blocklistConfirm) return
+      if (showDeleteDialog || blocklistConfirm) return
       onBack()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onBack, showDeleteDialog, contextMenu, blocklistConfirm])
+  }, [onBack, showDeleteDialog, blocklistConfirm])
 
   const liveWordCount = useMemo(
     () => (editor && !loading ? countWords(editor.getJSON() as TipTapDocument) : null),
@@ -576,6 +524,12 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   )
 
   const overviewData = useAnonymizationOverview(editor, updateCounter)
+
+  const { state: selectionToolbar, hide: hideSelectionToolbar } = useSelectionToolbar({
+    editor,
+    enabled: !showDeleteDialog && !blocklistConfirm && !loading && !loadError,
+    containerRef: editorScrollRef
+  })
 
   const chipActions = useMemo<ChipActions>(
     () => ({
@@ -683,8 +637,8 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
       {/* Editor + Panel row */}
       <div className="flex min-h-0 flex-1">
         <div
+          ref={editorScrollRef}
           className="editor-scroll min-w-0 flex-1 overflow-y-auto"
-          onContextMenu={handleContextMenu}
           onScroll={(e) => {
             const el = e.currentTarget
             el.classList.add('is-scrolling')
@@ -709,13 +663,20 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
         />
       </div>
 
-      {/* Context menu */}
-      {contextMenu && (
-        <EditorContextMenu
-          state={contextMenu}
-          onClose={() => setContextMenu(null)}
-          onAnonymize={handleAnonymize}
-          onAddToBlocklist={handleAddToBlocklist}
+      {/* Floating toolbar that surfaces while a non-empty text selection exists */}
+      {selectionToolbar && (
+        <SelectionToolbar
+          anchorRect={selectionToolbar.anchorRect}
+          multiChipSelectionOnly={selectionToolbar.multiChipSelectionOnly}
+          onAnonymize={(type) => {
+            handleAnonymize(type)
+            hideSelectionToolbar()
+          }}
+          onAddToBlocklist={(type) => {
+            handleAddToBlocklist(type)
+            hideSelectionToolbar()
+          }}
+          onClose={hideSelectionToolbar}
         />
       )}
 
