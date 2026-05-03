@@ -8,7 +8,7 @@ import {
 } from '../../constants/editorConstants'
 
 const MAIN_MENU_WIDTH = 240
-const SUBMENU_WIDTH = 200
+const SUBMENU_WIDTH = 240
 const VIEWPORT_PADDING = 8
 const ANCHOR_GAP = 4
 
@@ -360,7 +360,7 @@ export function ChipActionMenu({
           role="menu"
           aria-label={openSub === 'changeType' ? 'Typ ändern' : 'Zur Sperrliste hinzufügen'}
           aria-orientation="vertical"
-          className={`fixed z-50 min-w-[200px] rounded-lg border border-border bg-surface-1 py-1 shadow-lg transition-opacity duration-100 ${fade}`}
+          className={`fixed z-50 min-w-[240px] rounded-lg border border-border bg-surface-1 py-1 shadow-lg transition-opacity duration-100 ${fade}`}
           style={subPos ?? { left: -9999, top: -9999 }}
         >
           {subItems.map((opt, idx) => {
@@ -370,7 +370,7 @@ export function ChipActionMenu({
                 key={opt.value}
                 role="menuitem"
                 tabIndex={-1}
-                className={`w-full px-3 py-1.5 text-left text-sm text-text-primary transition-colors ${
+                className={`flex w-full items-center px-3 py-2 text-left text-sm text-text-primary transition-colors ${
                   focused ? 'bg-surface-2' : 'hover:bg-surface-2'
                 }`}
                 onMouseEnter={() => setSubFocus(idx)}
