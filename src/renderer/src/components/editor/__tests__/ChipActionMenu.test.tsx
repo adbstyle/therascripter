@@ -75,7 +75,7 @@ describe('ChipActionMenu', () => {
 
   it('shows the original text + occurrence count in the supporting line when > 1', () => {
     setup({ count: 3 })
-    expect(screen.getByText('»Anna« · 3 Vorkommen')).toBeInTheDocument()
+    expect(screen.getByText('»Anna« · 3×')).toBeInTheDocument()
   })
 
   it('shows only the original text when count is 1', () => {

@@ -149,7 +149,7 @@ describe('PlaceholderChipView', () => {
     const user = userEvent.setup()
     setup({ occurrenceCount: 4 })
     await user.click(screen.getByRole('button', { name: /Person 1/ }))
-    expect(screen.getByText('»Anna« · 4 Vorkommen')).toBeInTheDocument()
+    expect(screen.getByText('»Anna« · 4×')).toBeInTheDocument()
   })
 
   it('right-click on chip is suppressed (no editor context menu, AK 13)', () => {

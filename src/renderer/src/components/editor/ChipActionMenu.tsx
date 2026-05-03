@@ -78,7 +78,7 @@ export function ChipActionMenu({
         key: 'undo',
         label: 'Pseudonym entfernen',
         supporting:
-          occurrenceCount > 1 ? `»${original}« · ${occurrenceCount} Vorkommen` : `»${original}«`
+          occurrenceCount > 1 ? `»${original}« · ${occurrenceCount}×` : `»${original}«`
       },
       { kind: 'submenu', key: 'changeType', label: 'Typ ändern' },
       {
