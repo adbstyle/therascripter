@@ -34,10 +34,8 @@ function formatProcessedAt(iso: string | null): string | null {
 }
 
 /**
- * Verarbeitungs-Information — content-only side-panel tab body. Stacked
- * label/value rows because the 300px panel cannot accommodate the
- * two-column layout used in the editor area before issue #86. Each model
- * shows label, version + size, id, and sha256 inline.
+ * Verarbeitungs-Information — content-only side-panel tab body. Each
+ * model shows label, version + size, id, and sha256 inline.
  *
  * Legacy sessions (processed_with_models == null) render the neutral
  * hint instead of model rows.
