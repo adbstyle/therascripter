@@ -397,8 +397,7 @@ p {
 .privacy {
   background: var(--bg-subtle);
   max-width: none !important;
-  padding-left: var(--space-lg);
-  padding-right: var(--space-lg);
+  padding: var(--space-2xl) var(--space-lg);
 }
 
 .privacy h2,
