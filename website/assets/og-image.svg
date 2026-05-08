@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="t">
+  <title id="t">Therascript – Transkription, die Ihre Praxis nicht verlässt</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f766e" />
+      <stop offset="1" stop-color="#134e4a" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)" />
+  <g transform="translate(80,90)">
+    <rect width="56" height="56" rx="14" fill="#fff" />
+    <path d="M14 22h28M28 22v22" stroke="#0f766e" stroke-width="6" stroke-linecap="round" />
+    <text x="76" y="38" font-family="-apple-system,BlinkMacSystemFont,system-ui,sans-serif" font-size="28" fill="#fff" font-weight="600">Therascript</text>
+  </g>
+  <g transform="translate(80,240)" font-family="-apple-system,BlinkMacSystemFont,system-ui,sans-serif">
+    <text font-size="64" fill="#fff" font-weight="700">Transkription, die</text>
+    <text y="76" font-size="64" fill="#fff" font-weight="700">Ihre Praxis nicht</text>
+    <text y="152" font-size="64" fill="#fff" font-weight="700">verlässt.</text>
+  </g>
+  <g transform="translate(80,520)" font-family="-apple-system,BlinkMacSystemFont,system-ui,sans-serif">
+    <text font-size="22" fill="#ccfbf1">Lokale Transkription &amp; Pseudonymisierung für Mac · Open Source</text>
+  </g>
+</svg>
