@@ -56,7 +56,7 @@ scenario_a_fresh() {
   fi
 
   green "Bereit. Mounte jetzt das DMG und ziehe TheraScript in /Applications:"
-  echo "  open ~/Downloads/Therascript-*-arm64.dmg"
+  echo "  open ~/Downloads/Therascript.dmg"
   echo
   blue "Restore danach: $0 --restore"
 }
@@ -68,7 +68,7 @@ scenario_b_upgrade() {
     mv "$APP_PATH" "$HOME/.Trash/Therascript-$(date +%Y%m%d-%H%M%S).app"
   fi
   green "Bereit. Mounte das neue DMG und ziehe es in /Applications."
-  echo "  open ~/Downloads/Therascript-*-arm64.dmg"
+  echo "  open ~/Downloads/Therascript.dmg"
 }
 
 scenario_c_models_only() {

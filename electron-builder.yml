@@ -48,6 +48,7 @@ mac:
   target:
     - target: dmg
       arch: arm64
+  artifactName: ${productName}.dmg
   category: public.app-category.medical
   identity: null
 dmg:
