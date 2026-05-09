@@ -19,16 +19,16 @@
       <text font-size="22" fill="#171717" font-weight="600">Sitzung vom 4. Mai 2026</text>
       <text y="40" font-size="15" fill="#78716c">[PERSON 1] berichtet von einer schwierigen Woche in [ORT 1].</text>
       <g transform="translate(0,80)">
-        <rect width="160" height="32" rx="16" fill="#ccfbf1" />
-        <text x="20" y="21" font-size="14" fill="#0f766e" font-weight="500">[PERSON 1]</text>
+        <rect width="160" height="32" rx="16" fill="#d6ecf5" />
+        <text x="20" y="21" font-size="14" fill="#1884b5" font-weight="500">[PERSON 1]</text>
       </g>
       <g transform="translate(176,80)">
-        <rect width="120" height="32" rx="16" fill="#ccfbf1" />
-        <text x="20" y="21" font-size="14" fill="#0f766e" font-weight="500">[ORT 1]</text>
+        <rect width="120" height="32" rx="16" fill="#d6ecf5" />
+        <text x="20" y="21" font-size="14" fill="#1884b5" font-weight="500">[ORT 1]</text>
       </g>
       <g transform="translate(312,80)">
-        <rect width="180" height="32" rx="16" fill="#ccfbf1" />
-        <text x="20" y="21" font-size="14" fill="#0f766e" font-weight="500">[DIAGNOSE 1]</text>
+        <rect width="180" height="32" rx="16" fill="#d6ecf5" />
+        <text x="20" y="21" font-size="14" fill="#1884b5" font-weight="500">[DIAGNOSE 1]</text>
       </g>
       <text y="160" font-size="15" fill="#171717">Die Sitzung verlief ruhig. [PERSON 1] sprach offen über ihre Sorgen rund um</text>
       <text y="184" font-size="15" fill="#171717">die bevorstehende Reise nach [ORT 1] und die Auswirkungen auf ihre</text>
