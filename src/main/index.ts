@@ -30,7 +30,6 @@ import {
 } from './services/AutoDeletionService'
 import { checkFileVaultOnStartup } from './services/FileVaultService'
 import { registerAppUpdateHandlers } from './ipc/app-update-handlers'
-import { registerFeedbackHandlers, sendFeedback } from './ipc/feedback-handlers'
 import {
   cleanupIncompleteUpdates,
   migrateInstalledVersions,
@@ -249,7 +248,6 @@ app.whenReady().then(() => {
   registerModelReconcileHandlers()
   registerPipelineHandlers()
   registerAppUpdateHandlers()
-  registerFeedbackHandlers()
   registerSummaryHandlers({ sessionService })
 
   setupCSP()
@@ -263,11 +261,6 @@ app.whenReady().then(() => {
   const tray = initTray()
   tray.onStop(() => stopRecordingFromTray())
   tray.onOpenSettings(() => sendToRenderer('nav:openSettings'))
-  tray.onSendFeedback(() => {
-    sendFeedback().catch((error) => {
-      console.error('[feedback] sendFeedback aus Tray fehlgeschlagen:', error)
-    })
-  })
 
   // Application Menu owns ⌘, (Einstellungen) and ⌘Q (Beenden) so the
   // shortcuts only fire while Therascript is the focused app.

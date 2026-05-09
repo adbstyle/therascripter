@@ -30,7 +30,6 @@ export class TrayService {
   private isRecording = false
   private onStopCallback: (() => void) | null = null
   private onOpenSettingsCallback: (() => void) | null = null
-  private onSendFeedbackCallback: (() => void) | null = null
 
   init(): void {
     this.idleIcon = loadTemplateIcon('TrayIconTemplate')
@@ -46,10 +45,6 @@ export class TrayService {
 
   onOpenSettings(callback: () => void): void {
     this.onOpenSettingsCallback = callback
-  }
-
-  onSendFeedback(callback: () => void): void {
-    this.onSendFeedbackCallback = callback
   }
 
   setRecordingState(recording: boolean, duration?: number): void {
@@ -97,7 +92,6 @@ export class TrayService {
     }
     this.onStopCallback = null
     this.onOpenSettingsCallback = null
-    this.onSendFeedbackCallback = null
     // Reset singleton so initTray() can re-create if needed
     trayService = null
   }
@@ -140,15 +134,6 @@ export class TrayService {
     menuItems.push({
       label: 'Fenster anzeigen',
       click: () => this.showWindow()
-    })
-
-    menuItems.push({ type: 'separator' })
-
-    // Always visible — also during recording, review, first-launch download
-    // and pending model updates.
-    menuItems.push({
-      label: 'Feedback senden…',
-      click: () => this.onSendFeedbackCallback?.()
     })
 
     menuItems.push({ type: 'separator' })

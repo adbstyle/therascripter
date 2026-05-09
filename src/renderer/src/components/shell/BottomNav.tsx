@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Files, Settings } from 'lucide-react'
+import { Check, Files, Settings } from 'lucide-react'
 import { useAppUpdate } from '../../hooks/useAppUpdate'
 import { useReconcileEvents } from '../../hooks/useReconcileEvents'
 
@@ -9,6 +9,8 @@ interface BottomNavProps {
   current: View
   onChange: (view: View) => void
 }
+
+const FEEDBACK_EMAIL = 'therascript.flatworm325@passmail.com'
 
 const ITEMS: { id: View; icon: typeof Files; label: string }[] = [
   { id: 'sessions', icon: Files, label: 'Transkriptionen' },
@@ -23,8 +25,28 @@ export default function BottomNav({ current, onChange }: BottomNavProps): React.
   })
   const [pill, setPill] = useState<{ x: number; w: number } | null>(null)
   const [appVersion, setAppVersion] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const copyResetRef = useRef<number | null>(null)
   const { status: appUpdateStatus, openReleasePage } = useAppUpdate()
   const { pendingCount: reconcilePending } = useReconcileEvents()
+
+  useEffect(
+    () => () => {
+      if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current)
+    },
+    []
+  )
+
+  const handleCopyFeedback = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(FEEDBACK_EMAIL)
+    } catch {
+      return
+    }
+    setCopied(true)
+    if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current)
+    copyResetRef.current = window.setTimeout(() => setCopied(false), 1800)
+  }
 
   useLayoutEffect(() => {
     const node = itemRefs.current[current]
@@ -105,18 +127,41 @@ export default function BottomNav({ current, onChange }: BottomNavProps): React.
         })}
       </nav>
 
-      {updateAvailable ? (
+      <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={openReleasePage}
-          className="titlebar-no-drag flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary-light/30 hover:text-primary-hover"
+          onClick={handleCopyFeedback}
+          aria-label={
+            copied
+              ? 'Feedback-Adresse in die Zwischenablage kopiert'
+              : `Feedback-Adresse ${FEEDBACK_EMAIL} in die Zwischenablage kopieren`
+          }
+          className="titlebar-no-drag inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
-          <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
-          <span>Update verfügbar</span>
+          {copied ? (
+            <>
+              <Check className="h-3 w-3 text-primary" strokeWidth={2.5} aria-hidden="true" />
+              <span className="text-primary">Adresse kopiert</span>
+            </>
+          ) : (
+            <span>
+              Feedback: <span className="underline decoration-dotted">{FEEDBACK_EMAIL}</span>
+            </span>
+          )}
         </button>
-      ) : (
-        <span className="px-2 text-xs text-text-tertiary">v{appVersion ?? '…'}</span>
-      )}
+        {updateAvailable ? (
+          <button
+            type="button"
+            onClick={openReleasePage}
+            className="titlebar-no-drag flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary-light/30 hover:text-primary-hover"
+          >
+            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
+            <span>Update verfügbar</span>
+          </button>
+        ) : (
+          <span className="px-2 text-xs text-text-tertiary">v{appVersion ?? '…'}</span>
+        )}
+      </div>
     </div>
   )
 }

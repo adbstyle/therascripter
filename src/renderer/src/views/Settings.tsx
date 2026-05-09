@@ -8,7 +8,6 @@ import ModelsSettings from '../components/settings/ModelsSettings'
 import { useTheme } from '../hooks/useTheme'
 import { useAppUpdate } from '../hooks/useAppUpdate'
 import { useModelUpdates } from '../hooks/useModelUpdates'
-import { useToast } from '../hooks/useToast'
 
 type SubPage = 'sperrliste' | 'darstellung' | 'modelle' | 'ueber'
 
@@ -24,32 +23,9 @@ const THEME_LABELS = { light: 'Hell', dark: 'Dunkel', system: 'System' } as cons
 export default function Settings(): React.JSX.Element {
   const [subpage, setSubpage] = useState<SubPage | null>(null)
   const blocklistRef = useRef<BlocklistManagerHandle>(null)
-  const toast = useToast()
-
-  const handleSendFeedback = async (): Promise<void> => {
-    try {
-      await window.api.feedback.send()
-      toast.success(
-        'Feedback-Mail vorbereitet — Inhalt wurde zusätzlich in die Zwischenablage kopiert.'
-      )
-    } catch (error) {
-      console.error('[feedback] send failed:', error)
-      toast.error('Feedback konnte nicht vorbereitet werden.')
-    }
-  }
 
   let headerAction: React.ReactNode = null
-  if (subpage === null) {
-    headerAction = (
-      <button
-        type="button"
-        className="titlebar-no-drag rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
-        onClick={handleSendFeedback}
-      >
-        Feedback senden
-      </button>
-    )
-  } else if (subpage === 'sperrliste') {
+  if (subpage === 'sperrliste') {
     headerAction = (
       <button
         type="button"

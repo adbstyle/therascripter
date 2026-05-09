@@ -241,9 +241,6 @@ const api: IpcApi = {
         ipcRenderer.removeListener('nav:openSettings', handler)
       }
     }
-  },
-  feedback: {
-    send: () => ipcRenderer.invoke('feedback:send')
   }
 }
 
