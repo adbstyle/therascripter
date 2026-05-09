@@ -21,7 +21,7 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 
 ## Systemvoraussetzungen
 
-- macOS 14+ (Sonoma oder neuer)
+- macOS 26 (Tahoe) oder neuer (ältere macOS-Versionen werden vom Pyannote-Sidecar nicht unterstützt)
 - Apple Silicon (M1–M4)
 - Mindestens 8 GB RAM
 - ~5 GB freier Speicherplatz (App + ML-Modelle, plus ~2.5 GB optional für Zusammenfassung)

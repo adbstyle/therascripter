@@ -6,7 +6,7 @@ Complete guide for setting up a local Therascript development environment from a
 
 | Requirement | Version | Install |
 |---|---|---|
-| macOS | 14+ (Sonoma) | Apple Silicon (M1-M4) required |
+| macOS | 26+ (Tahoe) | Apple Silicon (M1-M4) required; older macOS unsupported (Pyannote sidecar) |
 | Node.js | 18+ | `brew install node` |
 | npm | (bundled with Node.js) | |
 | Python | 3.10+ (3.12 recommended) | `brew install python@3.12` |

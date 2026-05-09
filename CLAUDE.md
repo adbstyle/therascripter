@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Summary
 
-Therascript is an Electron-based macOS desktop app for local therapy session transcription and anonymization. All processing happens on-device (no cloud). German + Swiss-German dialect support. Targets Apple Silicon Macs (M1-M4), macOS 14+.
+Therascript is an Electron-based macOS desktop app for local therapy session transcription and anonymization. All processing happens on-device (no cloud). German + Swiss-German dialect support. Targets Apple Silicon Macs (M1-M4), macOS 26 (Tahoe) or newer — the Pyannote sidecar's runtime needs libraries that ship only with macOS 26+, so older macOS versions are unsupported.
 
 Key docs: `docs/product/` (living product documentation — architecture, features, operations, ADRs). Historical planning docs archived in `docs/archive/`.
 
