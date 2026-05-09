@@ -183,9 +183,6 @@ beforeEach(() => {
     nav: {
       onOpenSettings: vi.fn().mockReturnValue(() => {})
     },
-    feedback: {
-      send: vi.fn().mockResolvedValue(undefined)
-    },
     modelReconcile: {
       getEvents: vi.fn().mockResolvedValue([]),
       markSeen: vi.fn().mockResolvedValue([]),

@@ -2,7 +2,7 @@
 
 Therascript is an Electron-based macOS desktop application for on-device transcription and anonymization of therapy sessions. All ML processing runs locally — no data leaves the machine.
 
-**Version:** 0.3.3 | **Platform:** macOS 14+, Apple Silicon (arm64)
+**Version:** 0.3.3 | **Platform:** macOS 26 (Tahoe) or newer, Apple Silicon (arm64)
 
 ---
 

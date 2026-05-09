@@ -82,7 +82,7 @@
               Kostenlos herunterladen
             </a>
           </div>
-          <p class="hint">Für Mac mit Apple-Silicon-Chip (M1–M4), macOS 14 oder neuer</p>
+          <p class="hint">Für Mac mit Apple-Silicon-Chip (M1–M4), macOS 26 (Tahoe) oder neuer</p>
         </div>
         <div class="hero-image">
           <img
@@ -290,7 +290,7 @@
         <h2 id="requirements-h">Systemanforderungen</h2>
         <ul class="req-list">
           <li>Mac mit Apple-Silicon-Chip (M1, M2, M3 oder M4)</li>
-          <li>macOS 14 (Sonoma) oder neuer</li>
+          <li>macOS 26 (Tahoe) oder neuer</li>
           <li>8 GB Arbeitsspeicher (RAM) oder mehr</li>
           <li>5 GB freier Festplattenspeicher</li>
         </ul>
@@ -334,9 +334,11 @@
         <details>
           <summary>Welche Mac-Modelle werden unterstützt?</summary>
           <p>
-            Therascript läuft auf Macs mit Apple-Silicon-Chip (M1, M2, M3 und M4) ab macOS 14
-            Sonoma. Intel-Macs werden nicht unterstützt, weil die Sprachmodelle stark von der
-            Neural Engine und dem einheitlichen Speicher der M-Chips profitieren.
+            Therascript läuft auf Macs mit Apple-Silicon-Chip (M1, M2, M3 und M4) ab macOS 26
+            (Tahoe). Ältere macOS-Versionen werden nicht unterstützt, weil der Pyannote-Sidecar
+            für die Sprechererkennung Systembibliotheken voraussetzt, die erst ab macOS 26
+            verfügbar sind. Intel-Macs werden ebenfalls nicht unterstützt, weil die Sprachmodelle
+            stark von der Neural Engine und dem einheitlichen Speicher der M-Chips profitieren.
           </p>
         </details>
 
