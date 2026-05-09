@@ -22,7 +22,7 @@ Alle Verarbeitung — ASR, Diarization, NER-Anonymisierung und OCR — erfolgt a
 ## Konsequenzen
 
 - **Grosse Modell-Downloads:** ~4.1 GB beim Erststart (Whisper 1.7 GB, pyannote 0.2 GB, flair NER 2.2 GB).
-- **Hohe Hardwareanforderungen:** Minimum 8 GB RAM, Apple Silicon (M1+), macOS 26 (Tahoe) oder neuer (Pyannote-Sidecar benötigt Systembibliotheken aus macOS 26+). Ältere Intel-Macs werden nicht unterstützt.
+- **Hohe Hardwareanforderungen:** Minimum 8 GB RAM, Apple Silicon (M1+), macOS 26 (Tahoe) oder neuer (in der aktuellen Build, weil die mitgelieferte `libggml-metal.0.dylib` aus dem Homebrew-`whisper-cpp` gegen das macOS-26-SDK gelinkt ist; Senken der Untergrenze ist als Issue #97 erfasst). Ältere Intel-Macs werden nicht unterstützt.
 - **Längere Verarbeitungszeit:** Lokale ML-Inferenz braucht ~21-40 Minuten für eine 60-Minuten-Sitzung (M3 8 GB), statt Sekunden bei Cloud-APIs.
 - **Sequenzielle Pipeline:** Nur ein ML-Modell gleichzeitig geladen (8 GB RAM-Constraint), was die Gesamtdauer erhöht.
 - **Kein Auto-Updater:** Electron Auto-Updater deaktiviert; Updates via manuellen DMG-Download.
