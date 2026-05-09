@@ -124,18 +124,27 @@ code {
 
 .skip-link {
   position: absolute;
-  top: -40px;
   left: var(--space-sm);
+  top: var(--space-sm);
   background: var(--accent);
   color: #fff;
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-sm);
   text-decoration: none;
   z-index: 100;
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .skip-link:focus {
-  top: var(--space-sm);
+  clip-path: none;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  white-space: normal;
 }
 
 /* === Header === */
