@@ -335,10 +335,11 @@
           <summary>Welche Mac-Modelle werden unterstützt?</summary>
           <p>
             Therascript läuft auf Macs mit Apple-Silicon-Chip (M1, M2, M3 und M4) ab macOS 26
-            (Tahoe). Ältere macOS-Versionen werden nicht unterstützt, weil der Pyannote-Sidecar
-            für die Sprechererkennung Systembibliotheken voraussetzt, die erst ab macOS 26
-            verfügbar sind. Intel-Macs werden ebenfalls nicht unterstützt, weil die Sprachmodelle
-            stark von der Neural Engine und dem einheitlichen Speicher der M-Chips profitieren.
+            (Tahoe). Ältere macOS-Versionen werden in der aktuellen Version nicht unterstützt,
+            weil die mitgelieferte Metal-GPU-Bibliothek für die Spracherkennung gegen das
+            macOS-26-SDK gebaut wurde. Wir arbeiten daran, die Untergrenze in einer kommenden
+            Version zu senken. Intel-Macs werden nicht unterstützt, weil die Sprachmodelle stark
+            von der Neural Engine und dem einheitlichen Speicher der M-Chips profitieren.
           </p>
         </details>
 

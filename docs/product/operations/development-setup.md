@@ -6,7 +6,7 @@ Complete guide for setting up a local Therascript development environment from a
 
 | Requirement | Version | Install |
 |---|---|---|
-| macOS | 26+ (Tahoe) | Apple Silicon (M1-M4) required; older macOS unsupported (Pyannote sidecar) |
+| macOS | 26+ (Tahoe) | Apple Silicon (M1-M4) required; the bundled `libggml-metal.0.dylib` (whisper.cpp Metal backend) is linked against the macOS-26 SDK — see Issue #97 |
 | Node.js | 18+ | `brew install node` |
 | npm | (bundled with Node.js) | |
 | Python | 3.10+ (3.12 recommended) | `brew install python@3.12` |

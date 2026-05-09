@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Summary
 
-Therascript is an Electron-based macOS desktop app for local therapy session transcription and anonymization. All processing happens on-device (no cloud). German + Swiss-German dialect support. Targets Apple Silicon Macs (M1-M4), macOS 26 (Tahoe) or newer — the Pyannote sidecar's runtime needs libraries that ship only with macOS 26+, so older macOS versions are unsupported.
+Therascript is an Electron-based macOS desktop app for local therapy session transcription and anonymization. All processing happens on-device (no cloud). German + Swiss-German dialect support. Targets Apple Silicon Macs (M1-M4). The currently shipped builds require macOS 26 (Tahoe) or newer because the bundled `libggml-metal.0.dylib` (whisper.cpp Metal backend, copied from the Homebrew `whisper-cpp` bottle by `scripts/setup-whisper.sh` on a macOS-26 host) is linked against the macOS-26 SDK with `minos 26.0` and references the `MTLResidencySetDescriptor` symbol. Lowering the floor is tracked as Issue #97. Pyannote is NOT the cause — the Python sidecar does not depend on `libggml-metal`.
 
 Key docs: `docs/product/` (living product documentation — architecture, features, operations, ADRs). Historical planning docs archived in `docs/archive/`.
 
