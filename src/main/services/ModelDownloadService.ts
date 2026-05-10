@@ -527,6 +527,11 @@ export async function downloadSingleModel(id: string): Promise<void> {
   // populated.
   if (existsSync(join(modelsDir, def.checkPath))) {
     recordInstalledVersion(def.id, def.sha256)
+    // Issue #103 — Auto-Activate optional models with empty slots.
+    // MUST run inside the disk-presence guard, sonst würde setActiveModel mit
+    // "nicht installiert" werfen, wenn checkPath nach erfolgreichem Download
+    // doch fehlt (z.B. tar-Extract-Edge-Case).
+    autoActivateAfterDownload(def.id)
   }
   sendProgress({ state: 'complete' })
   abortSignal = null
@@ -650,6 +655,37 @@ export function clearActiveModel(group: ModelGroup): void {
 /** Backward-Compat-Alias. */
 export function setActiveAsrModel(id: string): void {
   setActiveModel('asr', id)
+}
+
+/**
+ * Issue #103 — Auto-Activate-Hook für optionale Modelle. Mit Default = null
+ * für optionale Gruppen würde ein gerade heruntergeladenes Modell sonst
+ * sofort wieder geskippt werden, weil der aktive Slot leer ist. Diese Funktion
+ * läuft nach erfolgreichem Download und aktiviert das Modell automatisch,
+ * wenn:
+ *   - die Gruppe optional ist (OPTIONAL_GROUPS),
+ *   - der aktive Slot der Gruppe aktuell null ist,
+ *   - das Modell installiert ist (Datei-Check via setActiveModel).
+ *
+ * Required Groups laufen über FirstLaunchScreen / Reconciler — die regeln
+ * Activate-Logik selbst.
+ */
+export function autoActivateAfterDownload(modelId: string): void {
+  const def = getModelById(modelId)
+  if (!def || !def.group) return
+  const group = def.group
+  if (!OPTIONAL_GROUPS.has(group)) return
+  const currentBelief = getActiveModelIdBelief(group)
+  if (currentBelief !== null) return
+  // setActiveModel verifiziert isModelInstalled — wenn Download teilweise fehlschlug
+  // (Datei nicht da), wirft setActiveModel und der Auto-Activate ist ein No-Op
+  // statt Lautstärke. Wir loggen + swallow.
+  try {
+    setActiveModel(group, modelId)
+    console.log(`[auto-activate] ${group}: ${modelId} (slot was null)`)
+  } catch (err) {
+    console.warn(`[auto-activate] failed for ${modelId}:`, err)
+  }
 }
 
 // ─── Bootstrap reconcile (Issue #84 / Story C) ────────────────────────────────
