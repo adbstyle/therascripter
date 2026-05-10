@@ -30,6 +30,7 @@ import { serializeDocument } from '../../../shared/utils/serializeDocument'
 import { countWords } from '../../../shared/utils/countWords'
 import { useAnonymizationOverview } from '../hooks/useAnonymizationOverview'
 import type {
+  AudioStats,
   EntityMap,
   PlaceholderType,
   ProcessedModelsSnapshot,
@@ -60,6 +61,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const [sessionType, setSessionType] = useState<SessionType>('audio')
   const [provenance, setProvenance] = useState<ProcessedModelsSnapshot | null>(null)
   const [reviewAt, setReviewAt] = useState<string | null>(null)
+  const [audioStats, setAudioStats] = useState<AudioStats | null>(null)
   const [_entityMap, setEntityMap] = useState<EntityMap>({})
   const [updateCounter, setUpdateCounter] = useState(0)
   const [blocklistConfirm, setBlocklistConfirm] = useState<{
@@ -251,6 +253,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
         setEntityMap(data.entityMap)
         setProvenance(data.processedWithModels)
         setReviewAt(data.reviewAt)
+        setAudioStats(data.audioStats)
         entityMapRef.current = data.entityMap
 
         editor?.commands.setContent(data.document)
@@ -662,6 +665,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           onAddToBlocklist={handleChipAddToBlocklist}
           provenance={provenance}
           reviewAt={reviewAt}
+          audioStats={audioStats}
         />
       </div>
 

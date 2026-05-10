@@ -83,4 +83,4 @@ export type {
   CheckResult
 } from './ModelUpdate'
 
-export type { ModelSnapshot, ProcessedModelsSnapshot } from './Provenance'
+export type { ModelSnapshot, ProcessedModelsSnapshot, AudioStats } from './Provenance'

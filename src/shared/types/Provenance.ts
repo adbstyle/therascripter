@@ -30,3 +30,22 @@ export interface ProcessedModelsSnapshot {
   /** Zusammenfassung (LLM). null wenn der Step nicht geplant oder ohne aktives Modell war. */
   summarization: ModelSnapshot | null
 }
+
+/**
+ * Issue #99 — aggregated audio statistics surfaced in the Provenance panel.
+ *
+ * Every field is independently nullable: a corrupt diarization JSON or a
+ * legacy session without a stitch-map should still render the rows that ARE
+ * available, with "nicht verfügbar" for the unknown ones, instead of
+ * collapsing the whole section.
+ */
+export interface AudioStats {
+  /** Aus `transcript.metadata.stitchMap.originalDurationSec` (ADR-007); Fallback `transcript.metadata.duration` für Legacy-/Empty-Speech-Sessions. */
+  originalDurationSec: number | null
+  /** Aus `transcript.metadata.stitchMap.stitchedDurationSec`; bei Empty-Speech (`speakerCount === 0`, kein stitchMap) synthetisch 0. */
+  stitchedDurationSec: number | null
+  /** Aus `diarization.json` `speakerCount`. */
+  speakerCount: number | null
+  /** Aus `diarization.json` `metadata.model` (HF-Identifier). */
+  diarizationModel: string | null
+}
