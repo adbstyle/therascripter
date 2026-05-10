@@ -4,12 +4,7 @@ import type { ProcessedModelsSnapshot } from './Provenance'
 
 export type SessionType = 'audio' | 'pdf'
 
-export type SessionStatus =
-  | 'recording'
-  | 'queued'
-  | 'processing'
-  | 'review'
-  | 'error'
+export type SessionStatus = 'recording' | 'queued' | 'processing' | 'review' | 'error'
 
 export interface Session {
   id: string
@@ -29,6 +24,12 @@ export interface Session {
   updatedAt: string
   reviewAt: string | null
   wordCount: number | null
+  /**
+   * Total number of placeholder chips in the anonymized TipTap document
+   * (counts occurrences, not distinct identities). NULL for sessions that
+   * never reached 'review' or for legacy rows before the backfill ran.
+   */
+  anonymizationCount: number | null
   summary: string | null
   summaryModelId: string | null
   summarizedAt: string | null
@@ -70,6 +71,7 @@ export interface UpdateSessionInput {
   errorMessage?: string | null
   reviewAt?: string | null
   wordCount?: number | null
+  anonymizationCount?: number | null
   summary?: string | null
   summaryModelId?: string | null
   summarizedAt?: string | null

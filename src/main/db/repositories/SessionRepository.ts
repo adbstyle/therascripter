@@ -29,6 +29,7 @@ interface SessionRow {
   updated_at: string
   review_at: string | null
   word_count: number | null
+  anonymization_count: number | null
   summary: string | null
   summary_model_id: string | null
   summarized_at: string | null
@@ -58,9 +59,7 @@ function parseProcessedModels(
   } catch {
     // A corrupted blob shouldn't hide the session — degrade to "legacy
     // unknown" so the UI shows the neutral hint instead of crashing.
-    console.error(
-      `Corrupted processed_with_models in session ${sessionId}, treating as null`
-    )
+    console.error(`Corrupted processed_with_models in session ${sessionId}, treating as null`)
     return null
   }
 }
@@ -84,13 +83,13 @@ function rowToSession(row: SessionRow): Session {
     updatedAt: row.updated_at,
     reviewAt: row.review_at,
     wordCount: row.word_count,
+    anonymizationCount: row.anonymization_count,
     summary: row.summary,
     summaryModelId: row.summary_model_id,
     summarizedAt: row.summarized_at,
     plannedSteps: row.planned_steps ? (JSON.parse(row.planned_steps) as TaskType[]) : null,
     retryCount: row.retry_count,
-    pdfHasScannedPages:
-      row.pdf_has_scanned_pages == null ? null : row.pdf_has_scanned_pages === 1,
+    pdfHasScannedPages: row.pdf_has_scanned_pages == null ? null : row.pdf_has_scanned_pages === 1,
     processedWithModels: parseProcessedModels(row.processed_with_models, row.id)
   }
 }
@@ -194,6 +193,10 @@ export class SessionRepository {
       sets.push('word_count = ?')
       values.push(input.wordCount)
     }
+    if (input.anonymizationCount !== undefined) {
+      sets.push('anonymization_count = ?')
+      values.push(input.anonymizationCount)
+    }
     if (input.summary !== undefined) {
       sets.push('summary = ?')
       values.push(input.summary)
@@ -216,9 +219,7 @@ export class SessionRepository {
     }
     if (input.pdfHasScannedPages !== undefined) {
       sets.push('pdf_has_scanned_pages = ?')
-      values.push(
-        input.pdfHasScannedPages == null ? null : input.pdfHasScannedPages ? 1 : 0
-      )
+      values.push(input.pdfHasScannedPages == null ? null : input.pdfHasScannedPages ? 1 : 0)
     }
     if (input.processedWithModels !== undefined) {
       sets.push('processed_with_models = ?')

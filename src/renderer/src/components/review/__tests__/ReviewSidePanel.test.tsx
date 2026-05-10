@@ -38,8 +38,11 @@ function setup(overrides: Partial<Parameters<typeof ReviewSidePanel>[0]> = {}) {
       isOpen
       anonymization={emptyAnonymization}
       onRevert={vi.fn()}
+      onChangeType={vi.fn()}
+      onAddToBlocklist={vi.fn()}
       provenance={null}
       reviewAt={null}
+      audioStats={null}
       {...overrides}
     />
   )

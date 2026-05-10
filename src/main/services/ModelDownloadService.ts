@@ -4,10 +4,7 @@ import { dirname, join } from 'path'
 import { BrowserWindow } from 'electron'
 import { getDataDir } from '../db/connection'
 import { getSettings, type AppSettings } from './SettingsService'
-import {
-  deleteInstalledVersion,
-  setInstalledVersion
-} from './InstalledVersionsStore'
+import { deleteInstalledVersion, setInstalledVersion } from './InstalledVersionsStore'
 import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
 import type { ModelGroup } from '../../shared/validation/model-catalog-schemas'
 import { MODEL_DEFINITIONS, type ModelDefinition } from '../../shared/model-catalog'
@@ -527,6 +524,11 @@ export async function downloadSingleModel(id: string): Promise<void> {
   // populated.
   if (existsSync(join(modelsDir, def.checkPath))) {
     recordInstalledVersion(def.id, def.sha256)
+    // Auto-activate optional models with empty slots. MUST run inside the
+    // disk-presence guard, sonst würde setActiveModel mit "nicht installiert"
+    // werfen, wenn checkPath nach erfolgreichem Download doch fehlt (z.B.
+    // tar-Extract-Edge-Case).
+    autoActivateAfterDownload(def.id)
   }
   sendProgress({ state: 'complete' })
   abortSignal = null
@@ -652,6 +654,36 @@ export function setActiveAsrModel(id: string): void {
   setActiveModel('asr', id)
 }
 
+/**
+ * Auto-Activate-Hook für optionale Modelle. Mit Default = null für optionale
+ * Gruppen würde ein gerade heruntergeladenes Modell sonst sofort wieder geskippt
+ * werden, weil der aktive Slot leer ist. Diese Funktion läuft nach erfolgreichem
+ * Download und aktiviert das Modell automatisch, wenn:
+ *   - die Gruppe optional ist (OPTIONAL_GROUPS),
+ *   - der aktive Slot der Gruppe aktuell null ist,
+ *   - das Modell installiert ist (Datei-Check via setActiveModel).
+ *
+ * Required Groups laufen über FirstLaunchScreen / Reconciler — die regeln
+ * Activate-Logik selbst.
+ */
+export function autoActivateAfterDownload(modelId: string): void {
+  const def = getModelById(modelId)
+  if (!def || !def.group) return
+  const group = def.group
+  if (!OPTIONAL_GROUPS.has(group)) return
+  const currentBelief = getActiveModelIdBelief(group)
+  if (currentBelief !== null) return
+  // setActiveModel verifiziert isModelInstalled — wenn Download teilweise fehlschlug
+  // (Datei nicht da), wirft setActiveModel und der Auto-Activate ist ein No-Op
+  // statt Lautstärke. Wir loggen + swallow.
+  try {
+    setActiveModel(group, modelId)
+    console.log(`[auto-activate] ${group}: ${modelId} (slot was null)`)
+  } catch (err) {
+    console.warn(`[auto-activate] failed for ${modelId}:`, err)
+  }
+}
+
 // ─── Bootstrap reconcile (Issue #84 / Story C) ────────────────────────────────
 // "Disk ist die einzige Wahrheit": die App darf keinen Belief-State haben, der
 // von der beobachtbaren Realität abweichen kann. Wo sie es heute hat (Slot
@@ -670,22 +702,34 @@ const REQUIRED_GROUPS_FOR_RECONCILE: ReadonlySet<ModelGroup> = new Set([
 ])
 
 /**
- * Katalog-Default pro Gruppe — manuell synchron gehalten mit
- * `defaults.activeModels` in `SettingsService.ts`. Der Reconciler bevorzugt den
- * Default beim Auto-Activate, fällt aber auf das nächste installierte
- * Gruppenmitglied zurück, wenn der Default selbst fehlt (ASR-Variante anstelle
- * des multilingualen Default).
+ * Required-Group-Defaults — werden vom Reconciler als bevorzugtes Auto-Activate-Ziel
+ * verwendet (`pickInstalledForGroup`). Optionale Gruppen leben NICHT in dieser Map,
+ * weil ihr initialer aktiver Slot per Invariante `null` ist (siehe `defaultActiveModelFor`).
  */
-const GROUP_DEFAULTS: Record<ModelGroup, string> = {
+const REQUIRED_GROUP_DEFAULTS: Record<'asr' | 'diarization' | 'ner', string> = {
   asr: 'whisper-large-v3-turbo',
   diarization: 'pyannote-suite',
-  ner: 'flair-ner-german-large',
-  summarization: 'gemma-summarization'
+  ner: 'flair-ner-german-large'
+}
+
+/**
+ * Single source of truth für den initialen aktiven Slot pro Gruppe.
+ * - Required Groups: Catalog-Default (asr/diarization/ner).
+ * - Optional Groups: `null` — Pipeline-Step skippt zur Laufzeit, bis User
+ *   das Modell explizit herunterlädt (Auto-Activate via `downloadSingleModel`).
+ *
+ * Konsumiert von der Upgrade-Migration in `SettingsService.ts`. Die `defaults`-
+ * Konstante in SettingsService selbst hardcodet die Werte parallel — Helper kann
+ * dort wegen zirkulärer Modul-Init nicht aufgerufen werden.
+ */
+export function defaultActiveModelFor(group: ModelGroup): string | null {
+  if (OPTIONAL_GROUPS.has(group)) return null
+  return REQUIRED_GROUP_DEFAULTS[group as 'asr' | 'diarization' | 'ner']
 }
 
 function pickInstalledForGroup(group: ModelGroup): string | null {
-  const preferred = GROUP_DEFAULTS[group]
-  if (isModelInstalled(preferred)) return preferred
+  const preferred = REQUIRED_GROUP_DEFAULTS[group as 'asr' | 'diarization' | 'ner']
+  if (preferred && isModelInstalled(preferred)) return preferred
   for (const m of getModelsByGroup(group)) {
     if (isModelInstalled(m.id)) return m.id
   }

@@ -7,6 +7,8 @@ import { ReviewService } from '../ReviewService'
 import { SessionService } from '../SessionService'
 import type { TipTapDocument } from '../../../shared/types/TipTapDocument'
 import type { EntityMap } from '../../../shared/types'
+import type { TranscriptData } from '../../../shared/types/Transcript'
+import type { DiarizationData } from '../../../shared/types/Diarization'
 import { applyTestSchema } from '../../db/__tests__/test-utils'
 
 vi.mock('electron', () => ({
@@ -127,6 +129,211 @@ describe('ReviewService', () => {
 
       const data = reviewService.load(session.id)
       expect(data.entityMap).toEqual({})
+    })
+  })
+
+  describe('audioStats aggregation (Issue #99)', () => {
+    function writeJson(p: string, data: unknown): void {
+      writeFileSync(p, JSON.stringify(data), 'utf-8')
+    }
+
+    function createAudioReviewSessionWithFiles(opts: {
+      transcript?: TranscriptData
+      diarization?: DiarizationData
+    }): string {
+      const session = sessionService.createSession('Audio Test', 'audio')
+      sessionService.updateSession(session.id, { status: 'queued' })
+      sessionService.updateSession(session.id, { status: 'processing' })
+      const docPath = join(tmpDir, `${session.id}.anon.json`)
+      writeFileSync(docPath, JSON.stringify(sampleDoc), 'utf-8')
+      const update: Parameters<typeof sessionService.updateSession>[1] = {
+        status: 'review',
+        anonymizedPath: docPath
+      }
+      if (opts.transcript) {
+        const transcriptPath = join(tmpDir, `${session.id}.transcript.json`)
+        writeJson(transcriptPath, opts.transcript)
+        update.transcriptPath = transcriptPath
+      }
+      if (opts.diarization) {
+        const diarizationPath = join(tmpDir, `${session.id}.diarization.json`)
+        writeJson(diarizationPath, opts.diarization)
+        update.diarizationPath = diarizationPath
+      }
+      sessionService.updateSession(session.id, update)
+      return session.id
+    }
+
+    it('reads stitchMap + diarization when both files are present', () => {
+      const sessionId = createAudioReviewSessionWithFiles({
+        transcript: {
+          words: [],
+          segments: [],
+          metadata: {
+            model: 'whisper-cli',
+            language: 'de',
+            duration: 329,
+            stitchMap: {
+              segments: [],
+              paddingSec: 0.2,
+              stitchedDurationSec: 252,
+              originalDurationSec: 329
+            }
+          }
+        },
+        diarization: {
+          speakers: [
+            { label: 'SPEAKER_00', start: 0, end: 100 },
+            { label: 'SPEAKER_01', start: 100, end: 200 }
+          ],
+          speakerCount: 2,
+          metadata: { model: 'pyannote/speaker-diarization-community-1', duration: 329 }
+        }
+      })
+
+      const data = reviewService.load(sessionId)
+      expect(data.audioStats).toEqual({
+        originalDurationSec: 329,
+        stitchedDurationSec: 252,
+        speakerCount: 2,
+        diarizationModel: 'pyannote/speaker-diarization-community-1'
+      })
+    })
+
+    it('synthesizes stitchedDurationSec=0 for empty-speech sessions (no stitchMap, speakerCount=0)', () => {
+      const sessionId = createAudioReviewSessionWithFiles({
+        transcript: {
+          words: [],
+          segments: [],
+          metadata: { model: 'whisper-cli', language: 'de', duration: 60 }
+        },
+        diarization: {
+          speakers: [],
+          speakerCount: 0,
+          metadata: { model: 'pyannote/speaker-diarization-3.1', duration: 60 }
+        }
+      })
+
+      const data = reviewService.load(sessionId)
+      expect(data.audioStats).toEqual({
+        originalDurationSec: 60,
+        stitchedDurationSec: 0,
+        speakerCount: 0,
+        diarizationModel: 'pyannote/speaker-diarization-3.1'
+      })
+    })
+
+    it('keeps stitchedDurationSec null for legacy sessions (no stitchMap, speakerCount>0)', () => {
+      const sessionId = createAudioReviewSessionWithFiles({
+        transcript: {
+          words: [],
+          segments: [],
+          metadata: { model: 'whisper-cli', language: 'de', duration: 200 }
+        },
+        diarization: {
+          speakers: [{ label: 'SPEAKER_00', start: 0, end: 100 }],
+          speakerCount: 1,
+          metadata: { model: 'pyannote/speaker-diarization-3.1', duration: 200 }
+        }
+      })
+
+      const data = reviewService.load(sessionId)
+      expect(data.audioStats).toEqual({
+        originalDurationSec: 200,
+        stitchedDurationSec: null,
+        speakerCount: 1,
+        diarizationModel: 'pyannote/speaker-diarization-3.1'
+      })
+    })
+
+    it('returns null when both files are missing on disk', () => {
+      const sessionId = createAudioReviewSessionWithFiles({})
+      const data = reviewService.load(sessionId)
+      expect(data.audioStats).toBeNull()
+    })
+
+    it('falls through gracefully when JSON parses but is missing the metadata field', () => {
+      const session = sessionService.createSession('Shape-wrong JSON', 'audio')
+      sessionService.updateSession(session.id, { status: 'queued' })
+      sessionService.updateSession(session.id, { status: 'processing' })
+      const docPath = join(tmpDir, `${session.id}.anon.json`)
+      writeFileSync(docPath, JSON.stringify(sampleDoc), 'utf-8')
+      const transcriptPath = join(tmpDir, `${session.id}.transcript.json`)
+      const diarizationPath = join(tmpDir, `${session.id}.diarization.json`)
+      writeFileSync(transcriptPath, JSON.stringify({ words: [], segments: [] }), 'utf-8')
+      writeFileSync(diarizationPath, JSON.stringify({ speakers: [], speakerCount: 3 }), 'utf-8')
+      sessionService.updateSession(session.id, {
+        status: 'review',
+        anonymizedPath: docPath,
+        transcriptPath,
+        diarizationPath
+      })
+
+      const data = reviewService.load(session.id)
+      expect(data.audioStats).toEqual({
+        originalDurationSec: null,
+        stitchedDurationSec: null,
+        speakerCount: 3,
+        diarizationModel: null
+      })
+    })
+
+    it('does not crash on corrupt diarization JSON; transcript-derived fields still surface', () => {
+      const session = sessionService.createSession('Corrupt Diar', 'audio')
+      sessionService.updateSession(session.id, { status: 'queued' })
+      sessionService.updateSession(session.id, { status: 'processing' })
+      const docPath = join(tmpDir, `${session.id}.anon.json`)
+      writeFileSync(docPath, JSON.stringify(sampleDoc), 'utf-8')
+      const transcriptPath = join(tmpDir, `${session.id}.transcript.json`)
+      writeFileSync(
+        transcriptPath,
+        JSON.stringify({
+          words: [],
+          segments: [],
+          metadata: {
+            model: 'whisper-cli',
+            language: 'de',
+            duration: 100,
+            stitchMap: {
+              segments: [],
+              paddingSec: 0.2,
+              stitchedDurationSec: 50,
+              originalDurationSec: 100
+            }
+          }
+        }),
+        'utf-8'
+      )
+      const diarizationPath = join(tmpDir, `${session.id}.diarization.json`)
+      writeFileSync(diarizationPath, '{ this is not valid JSON', 'utf-8')
+      sessionService.updateSession(session.id, {
+        status: 'review',
+        anonymizedPath: docPath,
+        transcriptPath,
+        diarizationPath
+      })
+
+      const data = reviewService.load(session.id)
+      expect(data.audioStats).toEqual({
+        originalDurationSec: 100,
+        stitchedDurationSec: 50,
+        speakerCount: null,
+        diarizationModel: null
+      })
+    })
+
+    it('returns audioStats=null for PDF sessions', () => {
+      const session = sessionService.createSession('PDF Test', 'pdf')
+      sessionService.updateSession(session.id, { status: 'processing' })
+      const docPath = join(tmpDir, `${session.id}.anon.json`)
+      writeFileSync(docPath, JSON.stringify(sampleDoc), 'utf-8')
+      sessionService.updateSession(session.id, {
+        status: 'review',
+        anonymizedPath: docPath
+      })
+
+      const data = reviewService.load(session.id)
+      expect(data.audioStats).toBeNull()
     })
   })
 

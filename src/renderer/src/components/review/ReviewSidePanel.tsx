@@ -3,7 +3,11 @@ import { AnonymizationPanel } from '../editor/AnonymizationPanel'
 import { SecondaryTabs } from '../editor/SecondaryTabs'
 import { ProvenancePanel } from './ProvenancePanel'
 import type { AnonymizationOverviewData } from '../../hooks/useAnonymizationOverview'
-import type { ProcessedModelsSnapshot } from '../../../../shared/types'
+import type {
+  AudioStats,
+  PlaceholderType,
+  ProcessedModelsSnapshot
+} from '../../../../shared/types'
 
 type TabId = 'anonymization' | 'provenance'
 
@@ -11,8 +15,11 @@ interface ReviewSidePanelProps {
   isOpen: boolean
   anonymization: AnonymizationOverviewData
   onRevert: (entityId: string) => void
+  onChangeType: (entityId: string, newType: PlaceholderType) => void
+  onAddToBlocklist: (entityId: string, original: string, type: PlaceholderType) => void
   provenance: ProcessedModelsSnapshot | null
   reviewAt: string | null
+  audioStats: AudioStats | null
 }
 
 const ID_PREFIX = 'review-side'
@@ -21,8 +28,11 @@ export function ReviewSidePanel({
   isOpen,
   anonymization,
   onRevert,
+  onChangeType,
+  onAddToBlocklist,
   provenance,
-  reviewAt
+  reviewAt,
+  audioStats
 }: ReviewSidePanelProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<TabId>('anonymization')
 
@@ -66,7 +76,12 @@ export function ReviewSidePanel({
           hidden={activeTab !== 'anonymization'}
           className="min-h-0 flex-1 overflow-y-auto"
         >
-          <AnonymizationPanel data={anonymization} onRevert={onRevert} />
+          <AnonymizationPanel
+            data={anonymization}
+            onRevert={onRevert}
+            onChangeType={onChangeType}
+            onAddToBlocklist={onAddToBlocklist}
+          />
         </div>
         <div
           role="tabpanel"
@@ -76,7 +91,7 @@ export function ReviewSidePanel({
           hidden={activeTab !== 'provenance'}
           className="min-h-0 flex-1 overflow-y-auto"
         >
-          <ProvenancePanel data={provenance} reviewAt={reviewAt} />
+          <ProvenancePanel data={provenance} reviewAt={reviewAt} audioStats={audioStats} />
         </div>
       </div>
     </div>

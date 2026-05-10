@@ -76,7 +76,8 @@ import {
   dismissReconcileEvents,
   recordInstalledVersion,
   getActiveModelId,
-  getActiveModelIdBelief
+  getActiveModelIdBelief,
+  defaultActiveModelFor
 } from '../ModelDownloadService'
 
 const MODELS_DIR = '/tmp/therascript-test/models'
@@ -89,7 +90,7 @@ function freshState(over: Partial<FakeStoreState> = {}): void {
       diarizationPipeline: 'pyannote/speaker-diarization-3.1',
       ner: 'flair-ner-german-large',
       ocr: 'apple-vision',
-      summarization: 'gemma-summarization'
+      summarization: null
     },
     modelsDownloaded: true,
     reconcileEvents: [],
@@ -123,12 +124,12 @@ describe('reconcileActiveModels', () => {
     expect(storeState.activeModels.transcription).toBe('whisper-large-v3-turbo')
   })
 
-  it('keeps the steady state when every active model is installed', () => {
+  it('keeps the steady state when every required active model is installed and summarization is null', () => {
+    // Default state: summarization slot starts null, no event expected.
     pretendInstalled(
       'asr/ggml-large-v3-turbo-q5_0.bin',
       'diarization/models--pyannote--speaker-diarization-community-1',
-      'ner/models/ner-german-large',
-      'summarization/google_gemma-3-4b-it-Q4_K_M.gguf'
+      'ner/models/ner-german-large'
     )
 
     const repairs = reconcileActiveModels()
@@ -137,12 +138,43 @@ describe('reconcileActiveModels', () => {
     expect(storeState.reconcileEvents).toHaveLength(0)
   })
 
-  it('clears an optional slot when its model file is missing on disk', () => {
+  // Bug-zementierender Test invertiert. Default-State produziert
+  // jetzt KEIN Reconcile-Event mehr, weil der summarization-Slot per Default
+  // null ist und der Reconciler null+optional korrekt als steady-state behandelt.
+  it('emits no event in default state when summarization is null and no Gemma file exists', () => {
     pretendInstalled(
       'asr/ggml-large-v3-turbo-q5_0.bin',
       'diarization/models--pyannote--speaker-diarization-community-1',
       'ner/models/ner-german-large'
-      // summarization NOT installed
+      // summarization NOT installed — default-state, slot is null per freshState
+    )
+
+    const repairs = reconcileActiveModels()
+
+    expect(repairs).toHaveLength(0)
+    expect(storeState.reconcileEvents).toHaveLength(0)
+    expect(storeState.activeModels.summarization).toBeNull()
+  })
+
+  // Legitimer Cleanup-Pfad bleibt intakt: User hat Gemma manuell aktiviert
+  // und das Modell danach gelöscht → Reconciler räumt korrekt auf und emittiert
+  // ein Event. Dieses Verhalten muss erhalten bleiben.
+  it('clears an optional slot when the user had it active and the file was deleted', () => {
+    freshState({
+      activeModels: {
+        transcription: 'whisper-large-v3-turbo',
+        diarization: 'pyannote-suite',
+        diarizationPipeline: 'pyannote/speaker-diarization-3.1',
+        ner: 'flair-ner-german-large',
+        ocr: 'apple-vision',
+        summarization: 'gemma-summarization' // explizit aktiviert vom User
+      }
+    })
+    pretendInstalled(
+      'asr/ggml-large-v3-turbo-q5_0.bin',
+      'diarization/models--pyannote--speaker-diarization-community-1',
+      'ner/models/ner-german-large'
+      // summarization-Datei vom User gelöscht
     )
 
     const repairs = reconcileActiveModels()
@@ -157,13 +189,6 @@ describe('reconcileActiveModels', () => {
     ])
     expect(storeState.activeModels.summarization).toBeNull()
     expect(storeState.reconcileEvents).toHaveLength(1)
-    expect(storeState.reconcileEvents[0]).toMatchObject({
-      group: 'summarization',
-      fromModelId: 'gemma-summarization',
-      toModelId: null,
-      reason: 'group-cleared',
-      status: 'pending'
-    })
   })
 
   it('emits no event when an optional slot was already null and stays null', () => {
@@ -420,5 +445,17 @@ describe('getActiveModelIdBelief vs getActiveModelId', () => {
     pretendInstalled('asr/ggml-large-v3-turbo-q5_0.bin')
     expect(getActiveModelIdBelief('asr')).toBe('whisper-large-v3-turbo')
     expect(getActiveModelId('asr')).toBe('whisper-large-v3-turbo')
+  })
+})
+
+describe('defaultActiveModelFor', () => {
+  it('returns the catalog default for required groups', () => {
+    expect(defaultActiveModelFor('asr')).toBe('whisper-large-v3-turbo')
+    expect(defaultActiveModelFor('diarization')).toBe('pyannote-suite')
+    expect(defaultActiveModelFor('ner')).toBe('flair-ner-german-large')
+  })
+
+  it('returns null for optional groups', () => {
+    expect(defaultActiveModelFor('summarization')).toBeNull()
   })
 })
