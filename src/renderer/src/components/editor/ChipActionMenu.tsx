@@ -4,7 +4,11 @@ import {
   ANONYMIZE_TYPE_OPTIONS,
   BLOCKLIST_TYPE_OPTIONS
 } from '../../constants/editorConstants'
-import { ActionPopover, type ActionPopoverItem } from './ActionPopover'
+import {
+  ActionPopover,
+  type ActionPopoverCloseReason,
+  type ActionPopoverItem
+} from './ActionPopover'
 
 interface ChipActionMenuProps {
   /** Anchor rect of the chip in viewport coordinates. */
@@ -18,7 +22,7 @@ interface ChipActionMenuProps {
   onUndo: (entityId: string) => void
   onChangeType: (entityId: string, newType: PlaceholderType) => void
   onAddToBlocklist: (entityId: string, original: string, type: PlaceholderType) => void
-  onClose: () => void
+  onClose: (reason: ActionPopoverCloseReason) => void
 }
 
 export function ChipActionMenu({

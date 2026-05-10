@@ -26,6 +26,15 @@ export interface ActionPopoverSubmenuItem {
 
 export type ActionPopoverItem = ActionPopoverActionItem | ActionPopoverSubmenuItem
 
+/**
+ * Why the popover is closing. Lets the host route focus correctly:
+ *  - `'activated'` — an item was selected; the host's action handler owns
+ *    where focus lands (typically the editor) and may run async.
+ *  - `'dismissed'` — Escape, outside click, or Tab; the host should return
+ *    focus to its trigger to keep keyboard navigation continuous.
+ */
+export type ActionPopoverCloseReason = 'activated' | 'dismissed'
+
 export interface ActionPopoverProps {
   /** Anchor rect of the trigger in viewport coordinates. */
   anchorRect: DOMRect
@@ -36,7 +45,7 @@ export interface ActionPopoverProps {
   items: ActionPopoverItem[]
   /** Single callback for item activation. For submenus, `optionValue` is set. */
   onSelect: (itemKey: string, optionValue?: string) => void
-  onClose: () => void
+  onClose: (reason: ActionPopoverCloseReason) => void
 }
 
 /**
@@ -133,7 +142,7 @@ export function ActionPopover({
       const target = e.target as Node
       if (mainRef.current?.contains(target)) return
       if (subRef.current?.contains(target)) return
-      onClose()
+      onClose('dismissed')
     }
     const t = setTimeout(() => document.addEventListener('mousedown', handleClick), 0)
     return () => {
@@ -147,7 +156,7 @@ export function ActionPopover({
       if (!item || item.disabled) return
       if (item.kind === 'action') {
         onSelect(item.key)
-        onClose()
+        onClose('activated')
         return
       }
       setOpenSub(item.key)
@@ -160,7 +169,7 @@ export function ActionPopover({
     (value: string | undefined) => {
       if (!value || !openSub) return
       onSelect(openSub, value)
-      onClose()
+      onClose('activated')
     },
     [openSub, onSelect, onClose]
   )
@@ -178,7 +187,7 @@ export function ActionPopover({
           setOpenSub(null)
           return
         }
-        onClose()
+        onClose('dismissed')
         return
       }
       if (e.key === 'ArrowDown') {
@@ -217,7 +226,7 @@ export function ActionPopover({
       }
       if (e.key === 'Tab') {
         e.preventDefault()
-        onClose()
+        onClose('dismissed')
       }
     }
     document.addEventListener('keydown', handleKey)

@@ -149,6 +149,32 @@ describe('AnonymizationPanel', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
   })
 
+  it('returns focus to the trigger after Escape (dismissed close)', async () => {
+    const user = userEvent.setup()
+    setup(makeData(makeIdentity()))
+    const trigger = screen.getByRole('button', { name: /Aktionen für Person 1/ })
+    await user.click(trigger)
+    await user.keyboard('{Escape}')
+    expect(trigger).toHaveFocus()
+  })
+
+  it('does NOT refocus the trigger after activating an action (lets the editor own focus)', async () => {
+    const user = userEvent.setup()
+    const { onRevert } = setup(makeData(makeIdentity()))
+    const trigger = screen.getByRole('button', { name: /Aktionen für Person 1/ })
+    /*
+     * Park focus somewhere neutral before the action — simulates the editor
+     * having focus when the host's action handler fires editor.commands.focus().
+     * If closeMenu refocused the trigger on activation it would steal focus
+     * back from this neutral element.
+     */
+    document.body.focus()
+    await user.click(trigger)
+    await user.click(screen.getByRole('menuitem', { name: /Pseudonym entfernen/ }))
+    expect(onRevert).toHaveBeenCalledWith('person-1')
+    expect(trigger).not.toHaveFocus()
+  })
+
   it('shows variant text and per-variant source label', () => {
     const identity = makeIdentity({
       variants: [

@@ -69,9 +69,18 @@ export function PlaceholderChipView({ node, selected }: NodeViewProps): React.JS
     })
   }, [actions, entityId])
 
-  const closeMenu = useCallback(() => {
+  const closeMenu = useCallback((reason: 'activated' | 'dismissed') => {
     setMenuAnchor(null)
-    chipRef.current?.focus()
+    /*
+     * On 'dismissed' (Escape, outside click, Tab) return focus to the chip so
+     * keyboard navigation continues from where it started. On 'activated' the
+     * action handler in ReviewEditor calls editor.commands.focus() — possibly
+     * after an `await` — so we leave focus alone and let the editor own it.
+     * Refocusing the chip here would race the async path (the chip may have
+     * been removed before the IPC resolves) and would steal focus from the
+     * editor in the sync path, breaking Cmd+Z.
+     */
+    if (reason === 'dismissed') chipRef.current?.focus()
   }, [])
 
   const handleClick = useCallback(() => {

@@ -118,21 +118,17 @@ function IdentityRow({
     setMenuRect(triggerRef.current.getBoundingClientRect())
   }, [])
 
-  const closeMenu = useCallback(() => {
+  const closeMenu = useCallback((reason: 'activated' | 'dismissed') => {
     setMenuRect(null)
     /*
-     * Defer the trigger refocus to the next frame. By then React has committed
-     * any unmount/re-key triggered by an action handler (revert removes the
-     * row; type-change re-keys it; blocklist add re-keys to a new entityId).
-     * Using `isConnected` we only refocus when the trigger is still in the
-     * DOM — the Escape / outside-click case. For the action case the trigger
-     * is detached, and the handler's `editor.commands.focus()` (which ran
-     * earlier in the same call stack via `ActionPopover.activateMain`) keeps
-     * focus on the editor so Cmd+Z is armed (Postcondition #4).
+     * Only refocus the trigger on dismissal (Escape, outside click, Tab).
+     * On activation the ReviewEditor handler owns focus — it dispatches the
+     * doc mutation and calls editor.commands.focus(), possibly after an
+     * `await` for the IPC in handleChipAddToBlocklist. Refocusing here would
+     * race the async path and steal focus from the editor, leaving Cmd+Z
+     * bound to the wrong target (Postcondition #4).
      */
-    requestAnimationFrame(() => {
-      if (triggerRef.current?.isConnected) triggerRef.current.focus()
-    })
+    if (reason === 'dismissed') triggerRef.current?.focus()
   }, [])
 
   const menuOpen = menuRect !== null
