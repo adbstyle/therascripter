@@ -57,7 +57,11 @@ const defaults: AppSettings = {
     diarizationPipeline: DEFAULT_DIARIZATION_PIPELINE,
     ner: 'flair-ner-german-large',
     ocr: 'apple-vision',
-    summarization: 'gemma-summarization'
+    // Issue #103 — optionale Gruppen starten null. defaultActiveModelFor kann
+    // hier nicht direkt aufgerufen werden, weil ModelDownloadService getSettings()
+    // importiert (zirkuläre Init). Wert hardcoden + Helper konsumiert die gleiche
+    // Invariante in der Migration unten.
+    summarization: null
   },
   firstLaunchDone: false,
   consentReminderShown: false,
