@@ -6,7 +6,7 @@ import type {
   AppUpdateStatus
 } from '../../shared/types/ModelUpdate'
 import type { ReconcileEvent } from '../../shared/types/ReconcileEvent'
-import { getModelDefinitions } from './ModelDownloadService'
+import { getModelDefinitions, defaultActiveModelFor } from './ModelDownloadService'
 import {
   DIARIZATION_PIPELINES,
   DEFAULT_DIARIZATION_PIPELINE,
@@ -170,16 +170,19 @@ export function initSettings(): Store<AppSettings> {
     })
   }
 
-  // Defensiv: Bestehende electron-store-Instanzen haben kein activeModels.summarization,
-  // weil das Feld erst mit dem lokalen LLM eingeführt wurde. defaults füllt nested keys
-  // nicht nach, also Wert hier explizit setzen, falls nicht vorhanden.
+  // Issue #103 — pre-LLM-Stores haben keinen summarization-Key (Feld kam mit dem
+  // lokalen LLM). electron-store füllt nested keys nicht nach, also setzen wir
+  // den Default-Wert für die optionale Gruppe (= null) explizit. Frühere Versionen
+  // dieser Migration schrieben blind 'gemma-summarization' und triggerten dadurch
+  // ein irreführendes Reconcile-Event ("Bisher aktiv: gemma-summarization") für
+  // User, die das Modell nie heruntergeladen hatten.
   const currentSummarization = (
     store.get('activeModels') as { summarization?: string | null }
   ).summarization
   if (typeof currentSummarization !== 'string' && currentSummarization !== null) {
     store.set('activeModels', {
       ...store.get('activeModels'),
-      summarization: 'gemma-summarization'
+      summarization: defaultActiveModelFor('summarization')
     })
   }
 
