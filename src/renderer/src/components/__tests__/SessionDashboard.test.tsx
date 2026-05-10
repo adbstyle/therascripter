@@ -24,6 +24,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     updatedAt: new Date().toISOString(),
     reviewAt: null,
     wordCount: null,
+    anonymizationCount: null,
     summary: null,
     summaryModelId: null,
     summarizedAt: null,
@@ -171,7 +172,12 @@ beforeEach(() => {
     modelUpdate: mockModelUpdate,
     appUpdate: {
       getStatus: vi.fn().mockResolvedValue(null),
-      check: vi.fn().mockResolvedValue({ modelUpdates: [], appUpdate: { available: false, latestVersion: null, checkedAt: null } }),
+      check: vi
+        .fn()
+        .mockResolvedValue({
+          modelUpdates: [],
+          appUpdate: { available: false, latestVersion: null, checkedAt: null }
+        }),
       openReleasePage: vi.fn(),
       onStatus: vi.fn().mockReturnValue(() => {})
     },

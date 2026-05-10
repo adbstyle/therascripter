@@ -29,6 +29,7 @@ import {
   ensureSpotlightExclusion
 } from './services/AutoDeletionService'
 import { checkFileVaultOnStartup } from './services/FileVaultService'
+import { backfillAnonymizationCounts } from './services/AnonymizationCountBackfillService'
 import { registerAppUpdateHandlers } from './ipc/app-update-handlers'
 import {
   cleanupIncompleteUpdates,
@@ -158,6 +159,17 @@ app.whenReady().then(() => {
     )
     app.quit()
     return
+  }
+
+  // Issue #102 — back-fill anonymization counts for review sessions that
+  // reached 'review' before the column existed. One-shot, idempotent.
+  try {
+    const backfilled = backfillAnonymizationCounts(getDatabase())
+    if (backfilled > 0) {
+      console.log(`Anonymization-count backfill: updated ${backfilled} legacy session(s)`)
+    }
+  } catch (error) {
+    console.error('Anonymization-count backfill failed:', error)
   }
 
   initSettings()

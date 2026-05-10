@@ -96,21 +96,28 @@ export function SessionCard({
     if (isEmptySpeech) {
       statusContent = (
         <>
-          <Info
-            className="h-3.5 w-3.5 text-text-secondary"
-            strokeWidth={1.75}
-            aria-hidden="true"
-          />
+          <Info className="h-3.5 w-3.5 text-text-secondary" strokeWidth={1.75} aria-hidden="true" />
           <span className="text-xs font-medium text-text-secondary">
             {PIPELINE_UI_STRINGS.emptySpeechHeadline}
           </span>
         </>
       )
     } else {
+      // Issue #102 — append pseudonymization count inline after the word
+      // count when > 0. Hidden when 0 (no audit signal). Singular form for 1,
+      // plural for 2+.
+      const anonCount = session.anonymizationCount ?? 0
       statusContent =
         session.wordCount != null ? (
           <span className="text-xs text-text-tertiary">
             {session.wordCount.toLocaleString('de-CH')} Wörter
+            {anonCount > 0 && (
+              <>
+                {' · '}
+                {anonCount.toLocaleString('de-CH')}{' '}
+                {anonCount === 1 ? 'Pseudonymisierung' : 'Pseudonymisierungen'}
+              </>
+            )}
           </span>
         ) : null
     }

@@ -14,6 +14,7 @@ import { resolveCoreferences } from './coreference-resolver'
 import { buildEntityMap } from './entity-map-builder'
 import { buildTipTapDocument } from './tiptap-builder'
 import { countWords } from '../../shared/utils/countWords'
+import { countPlaceholderChips } from '../../shared/utils/countPlaceholderChips'
 import { resolvePythonSidecar } from './resolve-python'
 import { writeFileAtomic } from '../utils/file-ops'
 
@@ -66,7 +67,8 @@ export class AnonymizationService implements TaskExecutor {
       sessionService.updateSession(task.sessionId, {
         anonymizedPath,
         entityMap: {},
-        wordCount: 0
+        wordCount: 0,
+        anonymizationCount: 0
       })
       onProgress(1)
       return
@@ -123,11 +125,13 @@ export class AnonymizationService implements TaskExecutor {
     writeFileAtomic(anonymizedPath, JSON.stringify(tiptapDoc, null, 2))
 
     const wordCount = countWords(tiptapDoc)
+    const anonymizationCount = countPlaceholderChips(tiptapDoc)
 
     sessionService.updateSession(task.sessionId, {
       anonymizedPath,
       entityMap,
-      wordCount
+      wordCount,
+      anonymizationCount
     })
 
     onProgress(1)
