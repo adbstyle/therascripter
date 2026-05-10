@@ -61,12 +61,15 @@ export class ReviewService {
 }
 
 /**
- * Issue #99 — Aggregate audio stats for the Provenance panel from the
- * transcript JSON (`metadata.stitchMap`) and the diarization JSON.
+ * Aggregate audio stats for the Provenance panel from the transcript JSON
+ * (`metadata.stitchMap`) and the diarization JSON.
  *
  * Each field is aggregated independently and falls through to `null` on any
  * read or parse error so the panel can render a partial result with
- * "nicht verfügbar" placeholders rather than crashing the editor.
+ * "nicht verfügbar" placeholders rather than crashing the editor. Returns
+ * `null` when nothing useful could be derived from either source — letting
+ * the consumer distinguish "audio session with no usable metadata" (legacy
+ * hint) from "audio session with at least one readable field".
  *
  * Data-source contract:
  *  - `stitchMap` is present iff the session ran through the ADR-007 stitched
@@ -76,12 +79,13 @@ export class ReviewService {
  *    `stitchedDurationSec = 0` so AC9 ("0:00 (0 s)" / 100 % silence) holds
  *    even though the transcript writer skipped the stitch step.
  */
-function aggregateAudioStats(session: Session): AudioStats {
+function aggregateAudioStats(session: Session): AudioStats | null {
   const diarization = readDiarization(session.diarizationPath)
   const transcript = readTranscript(session.transcriptPath)
 
   const stitchMap = transcript?.metadata?.stitchMap ?? null
   const speakerCount = diarization?.speakerCount ?? null
+  const diarizationModel = diarization?.metadata?.model ?? null
 
   let originalDurationSec: number | null = null
   let stitchedDurationSec: number | null = null
@@ -104,11 +108,20 @@ function aggregateAudioStats(session: Session): AudioStats {
     }
   }
 
+  if (
+    originalDurationSec === null &&
+    stitchedDurationSec === null &&
+    speakerCount === null &&
+    diarizationModel === null
+  ) {
+    return null
+  }
+
   return {
     originalDurationSec,
     stitchedDurationSec,
     speakerCount,
-    diarizationModel: diarization?.metadata?.model ?? null
+    diarizationModel
   }
 }
 

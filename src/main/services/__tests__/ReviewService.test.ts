@@ -246,15 +246,10 @@ describe('ReviewService', () => {
       })
     })
 
-    it('falls through gracefully when both files are missing on disk', () => {
+    it('returns null when both files are missing on disk', () => {
       const sessionId = createAudioReviewSessionWithFiles({})
       const data = reviewService.load(sessionId)
-      expect(data.audioStats).toEqual({
-        originalDurationSec: null,
-        stitchedDurationSec: null,
-        speakerCount: null,
-        diarizationModel: null
-      })
+      expect(data.audioStats).toBeNull()
     })
 
     it('falls through gracefully when JSON parses but is missing the metadata field', () => {
