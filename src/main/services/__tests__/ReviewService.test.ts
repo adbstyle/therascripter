@@ -257,6 +257,32 @@ describe('ReviewService', () => {
       })
     })
 
+    it('falls through gracefully when JSON parses but is missing the metadata field', () => {
+      const session = sessionService.createSession('Shape-wrong JSON', 'audio')
+      sessionService.updateSession(session.id, { status: 'queued' })
+      sessionService.updateSession(session.id, { status: 'processing' })
+      const docPath = join(tmpDir, `${session.id}.anon.json`)
+      writeFileSync(docPath, JSON.stringify(sampleDoc), 'utf-8')
+      const transcriptPath = join(tmpDir, `${session.id}.transcript.json`)
+      const diarizationPath = join(tmpDir, `${session.id}.diarization.json`)
+      writeFileSync(transcriptPath, JSON.stringify({ words: [], segments: [] }), 'utf-8')
+      writeFileSync(diarizationPath, JSON.stringify({ speakers: [], speakerCount: 3 }), 'utf-8')
+      sessionService.updateSession(session.id, {
+        status: 'review',
+        anonymizedPath: docPath,
+        transcriptPath,
+        diarizationPath
+      })
+
+      const data = reviewService.load(session.id)
+      expect(data.audioStats).toEqual({
+        originalDurationSec: null,
+        stitchedDurationSec: null,
+        speakerCount: 3,
+        diarizationModel: null
+      })
+    })
+
     it('does not crash on corrupt diarization JSON; transcript-derived fields still surface', () => {
       const session = sessionService.createSession('Corrupt Diar', 'audio')
       sessionService.updateSession(session.id, { status: 'queued' })

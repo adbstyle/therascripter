@@ -80,7 +80,7 @@ function aggregateAudioStats(session: Session): AudioStats {
   const diarization = readDiarization(session.diarizationPath)
   const transcript = readTranscript(session.transcriptPath)
 
-  const stitchMap = transcript?.metadata.stitchMap ?? null
+  const stitchMap = transcript?.metadata?.stitchMap ?? null
   const speakerCount = diarization?.speakerCount ?? null
 
   let originalDurationSec: number | null = null
@@ -95,8 +95,9 @@ function aggregateAudioStats(session: Session): AudioStats {
     // sichtbar), and synthesize stitched=0 only when Pyannote confirmed no
     // speech (AC9). Pure legacy without that confirmation stays "nicht
     // verfügbar".
-    if (typeof transcript.metadata.duration === 'number') {
-      originalDurationSec = transcript.metadata.duration
+    const duration = transcript.metadata?.duration
+    if (typeof duration === 'number') {
+      originalDurationSec = duration
     }
     if (speakerCount === 0) {
       stitchedDurationSec = 0
@@ -107,7 +108,7 @@ function aggregateAudioStats(session: Session): AudioStats {
     originalDurationSec,
     stitchedDurationSec,
     speakerCount,
-    diarizationModel: diarization?.metadata.model ?? null
+    diarizationModel: diarization?.metadata?.model ?? null
   }
 }
 
