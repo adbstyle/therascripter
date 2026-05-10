@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" role="img" aria-labelledby="hero-title">
+  <title id="hero-title">Platzhalter: Therascript Review-Editor mit Pseudonymisierungs-Chips</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f5f5f4" />
+      <stop offset="1" stop-color="#e7e5e4" />
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#bg)" />
+  <g transform="translate(80,80)">
+    <rect width="1440" height="840" rx="16" fill="#ffffff" stroke="#d6d3d1" stroke-width="2" />
+    <rect width="1440" height="56" rx="16" fill="#fafaf9" />
+    <rect y="40" width="1440" height="16" fill="#fafaf9" />
+    <circle cx="28" cy="28" r="8" fill="#ef4444" />
+    <circle cx="56" cy="28" r="8" fill="#f59e0b" />
+    <circle cx="84" cy="28" r="8" fill="#10b981" />
+    <text x="720" y="34" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,system-ui,sans-serif" font-size="14" fill="#78716c">Therascript – Review</text>
+    <g transform="translate(48,120)" font-family="-apple-system,BlinkMacSystemFont,system-ui,sans-serif">
+      <text font-size="22" fill="#171717" font-weight="600">Sitzung vom 4. Mai 2026</text>
+      <text y="40" font-size="15" fill="#78716c">[PERSON 1] berichtet von einer schwierigen Woche in [ORT 1].</text>
+      <g transform="translate(0,80)">
+        <rect width="160" height="32" rx="16" fill="#d6ecf5" />
+        <text x="20" y="21" font-size="14" fill="#1884b5" font-weight="500">[PERSON 1]</text>
+      </g>
+      <g transform="translate(176,80)">
+        <rect width="120" height="32" rx="16" fill="#d6ecf5" />
+        <text x="20" y="21" font-size="14" fill="#1884b5" font-weight="500">[ORT 1]</text>
+      </g>
+      <g transform="translate(312,80)">
+        <rect width="180" height="32" rx="16" fill="#d6ecf5" />
+        <text x="20" y="21" font-size="14" fill="#1884b5" font-weight="500">[DIAGNOSE 1]</text>
+      </g>
+      <text y="160" font-size="15" fill="#171717">Die Sitzung verlief ruhig. [PERSON 1] sprach offen über ihre Sorgen rund um</text>
+      <text y="184" font-size="15" fill="#171717">die bevorstehende Reise nach [ORT 1] und die Auswirkungen auf ihre</text>
+      <text y="208" font-size="15" fill="#171717">[DIAGNOSE 1]-bedingte Erschöpfung.</text>
+      <text y="260" font-size="15" fill="#78716c">— Hier folgt der pseudonymisierte Transkripttext —</text>
+    </g>
+    <text x="720" y="780" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,system-ui,sans-serif" font-size="13" fill="#a8a29e">Platzhalter – wird durch echten Screenshot ersetzt</text>
+  </g>
+</svg>

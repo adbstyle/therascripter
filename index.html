@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="de-CH">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>TheraScript – Therapie-Sitzungen lokal transkribieren | macOS</title>
+    <meta
+      name="description"
+      content="Mac-App für Therapie-Sitzungen: Transkription auf Hochdeutsch und Schweizerdeutsch, automatische Pseudonymisierung. Kostenlos, Open Source, läuft offline."
+    />
+    <meta name="theme-color" content="#1884b5" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+    <link rel="canonical" href="https://adbstyle.github.io/therascripter/" />
+    <link rel="preconnect" href="https://github.com" crossorigin />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="de_CH" />
+    <meta property="og:title" content="TheraScript – Lokale Transkription für Therapie-Sitzungen" />
+    <meta
+      property="og:description"
+      content="Hochdeutsch und Schweizerdeutsch verstehen, Daten pseudonymisieren – alles lokal auf Ihrem Mac. Kostenlos, Open Source."
+    />
+    <meta property="og:image" content="https://adbstyle.github.io/therascripter/assets/og-image.png?v=3" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:url" content="https://adbstyle.github.io/therascripter/" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Zum Inhalt springen</a>
+
+    <header class="site-header">
+      <a class="brand" href="#" aria-label="TheraScript Startseite">
+        <img
+          class="brand-mark"
+          src="assets/logo.svg"
+          width="28"
+          height="28"
+          alt=""
+          aria-hidden="true"
+        />
+        <span>TheraScript</span>
+      </a>
+      <a class="nav-link" href="https://github.com/adbstyle/therascripter" rel="noopener">
+        Auf GitHub ansehen
+      </a>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-h">
+        <div class="hero-content">
+          <h1 id="hero-h">Transkription, die Ihre Praxis nicht verlässt.</h1>
+          <p class="lede">
+            TheraScript transkribiert und pseudonymisiert Therapie-Sitzungen direkt auf Ihrem Mac
+            – ohne Cloud, ohne Account.
+          </p>
+          <div class="cta-group">
+            <a
+              class="btn btn-primary"
+              href="https://github.com/adbstyle/therascripter/releases/latest/download/Therascript.dmg"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 3v14m-6-6 6 6 6-6" />
+                <path d="M5 21h14" />
+              </svg>
+              Kostenlos herunterladen
+            </a>
+          </div>
+          <p class="hint">Für Mac mit Apple-Silicon-Chip, macOS 26 (Tahoe) oder neuer</p>
+        </div>
+        <div class="hero-image">
+          <img
+            src="assets/hero.svg"
+            alt="Bildschirmfoto des TheraScript Review-Editors: Sitzungstext mit als Chips dargestellten Pseudonymisierungs-Begriffen wie [PERSON 1], [ORT 1] und [DIAGNOSE 1]."
+            width="1600"
+            height="1000"
+            fetchpriority="high"
+          />
+        </div>
+      </section>
+
+      <section class="benefits" aria-labelledby="benefits-h">
+        <h2 id="benefits-h">Warum TheraScript</h2>
+        <div class="benefits-grid">
+          <article class="benefit-card">
+            <h3>Daten bleiben auf Ihrem Mac</h3>
+            <p>
+              Keine Cloud, kein Online-Konto, keine Drittdienste. TheraScript funktioniert
+              vollständig offline.
+            </p>
+          </article>
+          <article class="benefit-card">
+            <h3>Versteht Hochdeutsch und Schweizerdeutsch</h3>
+            <p>
+              Hochdeutsch wird sehr gut transkribiert. Schweizerdeutsch funktioniert ordentlich –
+              gelegentliche Korrekturen sind nötig.
+            </p>
+          </article>
+          <article class="benefit-card">
+            <h3>Namen automatisch unkenntlich machen</h3>
+            <p>
+              Personen, Orte und Diagnosen werden im Transkript durch Platzhalter ersetzt. Eigene
+              Begriffe lassen sich ergänzen.
+            </p>
+          </article>
+          <article class="benefit-card">
+            <h3>Kostenlos und quelloffen</h3>
+            <p>
+              TheraScript ist Open Source unter MIT-Lizenz. Code und Releases liegen öffentlich
+              auf GitHub.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="features" aria-labelledby="features-h">
+        <h2 id="features-h">So funktioniert TheraScript</h2>
+
+        <article class="feature feature-left">
+          <div class="feature-text">
+            <h3>Aufnahme starten</h3>
+            <p>
+              Ein Klick startet die Aufzeichnung. Der Mikrofon-Pegel ist sichtbar, nach zwei
+              Stunden stoppt sie automatisch.
+            </p>
+          </div>
+          <div class="feature-image">
+            <img
+              src="assets/screenshot-recording.svg"
+              alt="Aufnahme-Ansicht mit grossem roten Aufnahmeknopf, Timer 00:14:32, sichtbarem Mikrofon-Pegelbalken und dem Hinweis ‚Auto-Stopp nach 2 Stunden‘."
+              width="1200"
+              height="800"
+              loading="lazy"
+            />
+          </div>
+        </article>
+
+        <article class="feature feature-right">
+          <div class="feature-text">
+            <h3>Transkript prüfen</h3>
+            <p>
+              Pseudonymisierte Begriffe lassen sich per Klick anpassen oder ergänzen.
+            </p>
+          </div>
+          <div class="feature-image">
+            <img
+              src="assets/screenshot-review.svg"
+              alt="Review-Editor mit fliessendem Sitzungstext, in dem Namen und Orte als anklickbare Chips dargestellt sind."
+              width="1200"
+              height="800"
+              loading="lazy"
+            />
+          </div>
+        </article>
+
+        <article class="feature feature-left">
+          <div class="feature-text">
+            <h3>Sitzungen verwalten</h3>
+            <p>
+              Alle Aufnahmen chronologisch sortiert. Sitzungen werden nach 30 Tagen automatisch
+              gelöscht.
+            </p>
+          </div>
+          <div class="feature-image">
+            <img
+              src="assets/screenshot-sessions.svg"
+              alt="Liste aller Sitzungen, jeweils mit Datum, Dauer, Status und einem ‚Öffnen‘-Knopf. Einzelne Einträge zeigen die verbleibende Zeit bis zur automatischen Löschung."
+              width="1200"
+              height="800"
+              loading="lazy"
+            />
+          </div>
+        </article>
+
+        <article class="feature feature-right">
+          <div class="feature-text">
+            <h3>Eigene Begriffe pflegen</h3>
+            <p>
+              Personen, Orte, Diagnosen oder Praxis-spezifische Begriffe zur Sperrliste
+              hinzufügen.
+            </p>
+          </div>
+          <div class="feature-image">
+            <img
+              src="assets/screenshot-blocklist.svg"
+              alt="Sperrlisten-Verwaltung in den Einstellungen mit gruppierten Einträgen für Personen, Orte und Diagnosen."
+              width="1200"
+              height="800"
+              loading="lazy"
+            />
+          </div>
+        </article>
+
+        <article class="feature feature-left">
+          <div class="feature-text">
+            <h3>Sprachmodelle wählen</h3>
+            <p>
+              Standardmodell oder optional ein Schweizerdeutsch-spezialisiertes Modell.
+            </p>
+          </div>
+          <div class="feature-image">
+            <img
+              src="assets/screenshot-models.svg"
+              alt="Modell-Auswahl mit drei Karten: aktivem Whisper-Standardmodell, optionalem Schweizerdeutsch-Modell und einem optionalen Zusammenfassungs-Modell."
+              width="1200"
+              height="800"
+              loading="lazy"
+            />
+          </div>
+        </article>
+
+        <div class="cta-group cta-center">
+          <a
+            class="btn btn-primary"
+            href="https://github.com/adbstyle/therascripter/releases/latest/download/Therascript.dmg"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 3v14m-6-6 6 6 6-6" />
+              <path d="M5 21h14" />
+            </svg>
+            Kostenlos herunterladen
+          </a>
+        </div>
+      </section>
+
+      <section class="privacy" aria-labelledby="privacy-h">
+        <h2 id="privacy-h">Daten bleiben in Ihrer Hand</h2>
+        <div class="privacy-grid">
+          <article>
+            <h3>Automatische Löschung nach 30 Tagen</h3>
+            <p>
+              Sitzungen werden 30 Tage nach Erstellung automatisch gelöscht. Was Sie für die
+              kantonale Aufbewahrungspflicht behalten müssen, exportieren Sie vorher als
+              verschlüsselte Datei.
+            </p>
+          </article>
+          <article>
+            <h3>Keine Verbindung nach aussen</h3>
+            <p>
+              TheraScript verbindet sich nicht mit dem Internet. Keine Cloud, keine Telemetrie,
+              kein Konto.
+            </p>
+          </article>
+          <article>
+            <h3>Hinweis auf Festplattenverschlüsselung</h3>
+            <p>
+              Beim ersten Start prüft TheraScript, ob FileVault aktiviert ist – Apples
+              Festplattenverschlüsselung. Falls nicht, erscheint ein Hinweis.
+            </p>
+          </article>
+          <article>
+            <h3>Was bedeutet Pseudonymisierung?</h3>
+            <p>
+              Im Transkript werden echte Namen durch Platzhalter wie [PERSON 1] oder [ORT 1]
+              ersetzt. Die Zuordnung zwischen Platzhalter und Original bleibt lokal auf Ihrem Mac
+              gespeichert – Sie können jederzeit nachschauen, wer mit [PERSON 1] gemeint war.
+              Andere sehen nur die Platzhalter.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="requirements" aria-labelledby="requirements-h">
+        <h2 id="requirements-h">Systemanforderungen</h2>
+        <ul class="req-list">
+          <li>Mac mit Apple-Silicon-Chip</li>
+          <li>macOS 26 (Tahoe) oder neuer</li>
+          <li>8 GB Arbeitsspeicher (RAM) oder mehr</li>
+          <li>5 GB freier Festplattenspeicher</li>
+        </ul>
+      </section>
+
+      <section class="faq" aria-labelledby="faq-h">
+        <h2 id="faq-h">Häufige Fragen</h2>
+
+        <details>
+          <summary>Wo werden meine Daten gespeichert?</summary>
+          <p>
+            Sämtliche Audio-, Transkript- und PDF-Daten werden ausschliesslich lokal auf Ihrem
+            Mac gespeichert (Standardpfad: <code>~/.therascript/</code>). TheraScript stellt im
+            Produktivbetrieb keine ausgehenden Internet-Verbindungen her. Sie können das selbst
+            verifizieren, indem Sie die Internetverbindung trennen – die App funktioniert
+            weiterhin.
+          </p>
+        </details>
+
+        <details>
+          <summary>Wie kann ich Sitzungen vor der automatischen Löschung exportieren?</summary>
+          <p>
+            Im Review-Editor lässt sich der pseudonymisierte Transkripttext mit einem Klick in
+            die Zwischenablage kopieren. Damit können Sie Inhalte in Ihre bestehende
+            Praxis-Software oder ein verschlüsseltes Dokument übernehmen, bevor die Sitzung nach
+            30 Tagen automatisch entfernt wird.
+          </p>
+        </details>
+
+        <details>
+          <summary>Welche Sprachmodelle nutzt TheraScript?</summary>
+          <p>
+            Für die Transkription kommt standardmässig Whisper Large V3 Turbo zum Einsatz – ein
+            multilinguales Modell, das Hochdeutsch sehr gut versteht. Optional lässt sich ein
+            zusätzliches, auf Schweizerdeutsch spezialisiertes Modell aktivieren. Für die
+            Pseudonymisierung wird ein deutsches Erkennungsmodell von flair verwendet. Alle
+            Modelle laufen lokal.
+          </p>
+        </details>
+
+        <details>
+          <summary>Welche Mac-Modelle werden unterstützt?</summary>
+          <p>
+            TheraScript läuft auf Macs mit Apple-Silicon-Chip ab macOS 26 (Tahoe). Ältere
+            macOS-Versionen werden in der aktuellen Version nicht unterstützt, weil die
+            mitgelieferte Metal-GPU-Bibliothek für die Spracherkennung gegen das macOS-26-SDK
+            gebaut wurde. Wir arbeiten daran, die Untergrenze in einer kommenden Version zu
+            senken. Intel-Macs werden nicht unterstützt, weil die Sprachmodelle stark von der
+            Neural Engine und dem einheitlichen Speicher der Apple-Silicon-Chips profitieren.
+          </p>
+        </details>
+
+        <details>
+          <summary>Gibt es eine kostenpflichtige Version oder ein Abo?</summary>
+          <p>
+            Nein. TheraScript ist vollständig kostenlos und Open Source unter der MIT-Lizenz. Es
+            gibt keine Bezahl-Version, keine In-App-Käufe und kein Abo-Modell.
+          </p>
+        </details>
+
+        <details>
+          <summary>Ist TheraScript Open Source?</summary>
+          <p>
+            Ja. Der vollständige Quellcode ist unter
+            <a href="https://github.com/adbstyle/therascripter" rel="noopener"
+              >github.com/adbstyle/therascripter</a
+            >
+            einsehbar und kann unabhängig überprüft, kompiliert oder angepasst werden.
+          </p>
+        </details>
+
+        <details>
+          <summary>Wie erhalte ich Updates?</summary>
+          <p>
+            Neue Versionen werden als Release auf GitHub veröffentlicht. Sie können entweder die
+            Release-Seite des Projekts besuchen oder die DMG-Datei der jeweils neuesten Version
+            erneut herunterladen und über die bestehende Installation legen. Lokale Daten bleiben
+            erhalten.
+          </p>
+        </details>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-content">
+        <p>TheraScript ist Open Source unter MIT-Lizenz.</p>
+        <nav aria-label="Footer">
+          <a href="https://github.com/adbstyle/therascripter" rel="noopener">Quellcode auf GitHub</a>
+          <a href="mailto:therascript.flatworm325@passmail.com">Kontakt</a>
+          <a href="impressum.html">Impressum</a>
+          <a href="impressum.html#datenschutz">Datenschutz</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
