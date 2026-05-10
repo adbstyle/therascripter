@@ -57,10 +57,10 @@ const defaults: AppSettings = {
     diarizationPipeline: DEFAULT_DIARIZATION_PIPELINE,
     ner: 'flair-ner-german-large',
     ocr: 'apple-vision',
-    // Issue #103 — optionale Gruppen starten null. defaultActiveModelFor kann
-    // hier nicht direkt aufgerufen werden, weil ModelDownloadService getSettings()
-    // importiert (zirkuläre Init). Wert hardcoden + Helper konsumiert die gleiche
-    // Invariante in der Migration unten.
+    // Optionale Gruppen starten null. defaultActiveModelFor kann hier nicht
+    // direkt aufgerufen werden, weil ModelDownloadService getSettings() importiert
+    // (zirkuläre Init). Wert hardcoden + Helper konsumiert die gleiche Invariante
+    // in der Migration unten.
     summarization: null
   },
   firstLaunchDone: false,
@@ -170,12 +170,12 @@ export function initSettings(): Store<AppSettings> {
     })
   }
 
-  // Issue #103 — pre-LLM-Stores haben keinen summarization-Key (Feld kam mit dem
-  // lokalen LLM). electron-store füllt nested keys nicht nach, also setzen wir
-  // den Default-Wert für die optionale Gruppe (= null) explizit. Frühere Versionen
-  // dieser Migration schrieben blind 'gemma-summarization' und triggerten dadurch
-  // ein irreführendes Reconcile-Event ("Bisher aktiv: gemma-summarization") für
-  // User, die das Modell nie heruntergeladen hatten.
+  // Pre-LLM-Stores haben keinen summarization-Key (Feld kam mit dem lokalen LLM).
+  // electron-store füllt nested keys nicht nach, also setzen wir den Default-Wert
+  // für die optionale Gruppe (= null) explizit. Eine frühere Version dieser
+  // Migration schrieb blind 'gemma-summarization' und triggerte dadurch ein
+  // irreführendes Reconcile-Event ("Bisher aktiv: gemma-summarization") für User,
+  // die das Modell nie heruntergeladen hatten.
   const currentSummarization = (store.get('activeModels') as { summarization?: string | null })
     .summarization
   if (typeof currentSummarization !== 'string' && currentSummarization !== null) {

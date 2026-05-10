@@ -84,7 +84,7 @@ function freshState(over: Partial<FakeStoreState> = {}): void {
   installedFiles = new Set([GEMMA_FILE])
 }
 
-describe('autoActivateAfterDownload (Issue #103)', () => {
+describe('autoActivateAfterDownload', () => {
   beforeEach(() => {
     freshState()
     vi.clearAllMocks()

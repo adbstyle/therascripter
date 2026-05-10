@@ -125,7 +125,7 @@ describe('reconcileActiveModels', () => {
   })
 
   it('keeps the steady state when every required active model is installed and summarization is null', () => {
-    // Default state per Issue #103: summarization slot starts null, no event expected.
+    // Default state: summarization slot starts null, no event expected.
     pretendInstalled(
       'asr/ggml-large-v3-turbo-q5_0.bin',
       'diarization/models--pyannote--speaker-diarization-community-1',
@@ -138,7 +138,7 @@ describe('reconcileActiveModels', () => {
     expect(storeState.reconcileEvents).toHaveLength(0)
   })
 
-  // Issue #103 — bug-zementierender Test invertiert. Default-State produziert
+  // Bug-zementierender Test invertiert. Default-State produziert
   // jetzt KEIN Reconcile-Event mehr, weil der summarization-Slot per Default
   // null ist und der Reconciler null+optional korrekt als steady-state behandelt.
   it('emits no event in default state when summarization is null and no Gemma file exists', () => {
@@ -158,7 +158,7 @@ describe('reconcileActiveModels', () => {
 
   // Legitimer Cleanup-Pfad bleibt intakt: User hat Gemma manuell aktiviert
   // und das Modell danach gelöscht → Reconciler räumt korrekt auf und emittiert
-  // ein Event. Dieses Verhalten muss NACH dem Issue #103-Fix erhalten bleiben.
+  // ein Event. Dieses Verhalten muss erhalten bleiben.
   it('clears an optional slot when the user had it active and the file was deleted', () => {
     freshState({
       activeModels: {

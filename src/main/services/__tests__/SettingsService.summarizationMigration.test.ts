@@ -85,7 +85,7 @@ function getStoreState(): FakeStoreState {
   return (globalThis as unknown as { __settingsStoreState: FakeStoreState }).__settingsStoreState
 }
 
-describe('summarization upgrade migration (Issue #103)', () => {
+describe('summarization upgrade migration', () => {
   beforeEach(() => {
     _resetSettingsForTests()
     vi.clearAllMocks()

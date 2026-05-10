@@ -524,10 +524,10 @@ export async function downloadSingleModel(id: string): Promise<void> {
   // populated.
   if (existsSync(join(modelsDir, def.checkPath))) {
     recordInstalledVersion(def.id, def.sha256)
-    // Issue #103 — Auto-Activate optional models with empty slots.
-    // MUST run inside the disk-presence guard, sonst würde setActiveModel mit
-    // "nicht installiert" werfen, wenn checkPath nach erfolgreichem Download
-    // doch fehlt (z.B. tar-Extract-Edge-Case).
+    // Auto-activate optional models with empty slots. MUST run inside the
+    // disk-presence guard, sonst würde setActiveModel mit "nicht installiert"
+    // werfen, wenn checkPath nach erfolgreichem Download doch fehlt (z.B.
+    // tar-Extract-Edge-Case).
     autoActivateAfterDownload(def.id)
   }
   sendProgress({ state: 'complete' })
@@ -655,11 +655,10 @@ export function setActiveAsrModel(id: string): void {
 }
 
 /**
- * Issue #103 — Auto-Activate-Hook für optionale Modelle. Mit Default = null
- * für optionale Gruppen würde ein gerade heruntergeladenes Modell sonst
- * sofort wieder geskippt werden, weil der aktive Slot leer ist. Diese Funktion
- * läuft nach erfolgreichem Download und aktiviert das Modell automatisch,
- * wenn:
+ * Auto-Activate-Hook für optionale Modelle. Mit Default = null für optionale
+ * Gruppen würde ein gerade heruntergeladenes Modell sonst sofort wieder geskippt
+ * werden, weil der aktive Slot leer ist. Diese Funktion läuft nach erfolgreichem
+ * Download und aktiviert das Modell automatisch, wenn:
  *   - die Gruppe optional ist (OPTIONAL_GROUPS),
  *   - der aktive Slot der Gruppe aktuell null ist,
  *   - das Modell installiert ist (Datei-Check via setActiveModel).
