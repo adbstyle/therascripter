@@ -75,14 +75,14 @@ describe('AnonymizationPanel', () => {
 
   it('shows a direct revert button and a separate "more actions" menu trigger', () => {
     setup(makeData(makeIdentity()))
-    const revert = screen.getByRole('button', { name: /Pseudonym Person 1 entfernen/ })
+    const revert = screen.getByRole('button', { name: /Pseudonym Person 1 rückgängig machen/ })
     const trigger = screen.getByRole('button', { name: /Weitere Aktionen für Person 1/ })
     expect(revert).toBeInTheDocument()
     expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('opens a 2-item menu (Typ ändern, Sperrliste) without "Pseudonym entfernen"', async () => {
+  it('opens a 2-item menu (Typ ändern, Sperrliste) without the revert item', async () => {
     const user = userEvent.setup()
     setup(makeData(makeIdentity()))
     await user.click(screen.getByRole('button', { name: /Weitere Aktionen für Person 1/ }))
@@ -91,20 +91,20 @@ describe('AnonymizationPanel', () => {
     expect(items).toHaveLength(2)
     expect(items[0]).toHaveTextContent('Typ ändern')
     expect(items[1]).toHaveTextContent('Zur Sperrliste hinzufügen')
-    expect(within(menu).queryByText('Pseudonym entfernen')).toBeNull()
+    expect(within(menu).queryByText('Pseudonym rückgängig machen')).toBeNull()
   })
 
   it('calls onRevert with the entityId when the inline revert button is clicked', async () => {
     const user = userEvent.setup()
     const { onRevert } = setup(makeData(makeIdentity()))
-    await user.click(screen.getByRole('button', { name: /Pseudonym Person 1 entfernen/ }))
+    await user.click(screen.getByRole('button', { name: /Pseudonym Person 1 rückgängig machen/ }))
     expect(onRevert).toHaveBeenCalledWith('person-1')
   })
 
   it('the inline revert button does not open the popover', async () => {
     const user = userEvent.setup()
     setup(makeData(makeIdentity()))
-    await user.click(screen.getByRole('button', { name: /Pseudonym Person 1 entfernen/ }))
+    await user.click(screen.getByRole('button', { name: /Pseudonym Person 1 rückgängig machen/ }))
     expect(screen.queryByRole('menu')).toBeNull()
   })
 

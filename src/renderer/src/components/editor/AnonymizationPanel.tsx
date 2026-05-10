@@ -156,11 +156,11 @@ function IdentityRow({
             type="button"
             className="flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:bg-surface-2 focus-visible:text-text-primary focus-visible:outline-none"
             onClick={() => onRevert(identity.entityId)}
-            aria-label={`Pseudonym ${displayLabel} entfernen`}
+            aria-label={`Pseudonym ${displayLabel} rückgängig machen`}
             title={
               identity.totalCount > 1
-                ? `Pseudonym entfernen (${identity.totalCount} Vorkommen)`
-                : 'Pseudonym entfernen'
+                ? `Pseudonym rückgängig machen (${identity.totalCount} Vorkommen)`
+                : 'Pseudonym rückgängig machen'
             }
           >
             <Undo2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />

@@ -24,7 +24,7 @@ interface ChipActionMenuProps {
   onAddToBlocklist: (entityId: string, original: string, type: PlaceholderType) => void
   onClose: (reason: ActionPopoverCloseReason) => void
   /**
-   * When false, omit the "Pseudonym entfernen" item — used by the sidebar
+   * When false, omit the "Pseudonym rückgängig machen" item — used by the sidebar
    * IdentityRow which exposes revert as a direct button on the card so the
    * most common action is one click away. Defaults to true to preserve the
    * in-editor chip-menu behaviour, where revert lives in the popover.
@@ -54,7 +54,7 @@ export function ChipActionMenu({
       list.push({
         kind: 'action',
         key: 'undo',
-        label: 'Pseudonym entfernen',
+        label: 'Pseudonym rückgängig machen',
         supporting:
           occurrenceCount > 1 ? `»${original}« · ${occurrenceCount}×` : `»${original}«`
       })
