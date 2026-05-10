@@ -9,6 +9,7 @@ interface SetupOpts {
   count?: number
   type?: PlaceholderType
   number?: number
+  showUndoItem?: boolean
 }
 
 function setup(opts: SetupOpts = {}) {
@@ -31,6 +32,7 @@ function setup(opts: SetupOpts = {}) {
       onChangeType={onChangeType}
       onAddToBlocklist={onAddToBlocklist}
       onClose={onClose}
+      showUndoItem={opts.showUndoItem}
     />
   )
 
@@ -197,6 +199,16 @@ describe('ChipActionMenu', () => {
     const { onUndo } = setup()
     await user.keyboard('{Enter}')
     expect(onUndo).toHaveBeenCalledWith('person-1')
+  })
+
+  it('omits "Pseudonym entfernen" when showUndoItem={false} (sidebar mode)', () => {
+    setup({ showUndoItem: false })
+    const menu = screen.getByRole('menu', { name: /Aktionen für PERSON 1/i })
+    const items = within(menu).getAllByRole('menuitem')
+    expect(items).toHaveLength(2)
+    expect(items[0]).toHaveTextContent('Typ ändern')
+    expect(items[1]).toHaveTextContent('Zur Sperrliste hinzufügen')
+    expect(within(menu).queryByText('Pseudonym entfernen')).toBeNull()
   })
 
   it('ArrowDown skips disabled "Zur Sperrliste" item when source=blocklist', async () => {

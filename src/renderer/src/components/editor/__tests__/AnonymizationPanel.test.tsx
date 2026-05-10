@@ -73,33 +73,45 @@ describe('AnonymizationPanel', () => {
     expect(screen.getByText('Keine Pseudonymisierungen')).toBeInTheDocument()
   })
 
-  it('shows an action-menu trigger per identity, labeled with the placeholder', () => {
+  it('shows a direct revert button and a separate "more actions" menu trigger', () => {
     setup(makeData(makeIdentity()))
-    const trigger = screen.getByRole('button', { name: /Aktionen für Person 1/ })
+    const revert = screen.getByRole('button', { name: /Pseudonym Person 1 entfernen/ })
+    const trigger = screen.getByRole('button', { name: /Weitere Aktionen für Person 1/ })
+    expect(revert).toBeInTheDocument()
     expect(trigger).toHaveAttribute('aria-haspopup', 'menu')
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('opens the action menu when the trigger is clicked', async () => {
+  it('opens a 2-item menu (Typ ändern, Sperrliste) without "Pseudonym entfernen"', async () => {
     const user = userEvent.setup()
     setup(makeData(makeIdentity()))
-    await user.click(screen.getByRole('button', { name: /Aktionen für Person 1/ }))
-    expect(screen.getByRole('menu', { name: /Aktionen für PERSON 1/i })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /Pseudonym entfernen/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Weitere Aktionen für Person 1/ }))
+    const menu = screen.getByRole('menu', { name: /Aktionen für PERSON 1/i })
+    const items = within(menu).getAllByRole('menuitem')
+    expect(items).toHaveLength(2)
+    expect(items[0]).toHaveTextContent('Typ ändern')
+    expect(items[1]).toHaveTextContent('Zur Sperrliste hinzufügen')
+    expect(within(menu).queryByText('Pseudonym entfernen')).toBeNull()
   })
 
-  it('calls onRevert with the entityId when "Pseudonym entfernen" is activated', async () => {
+  it('calls onRevert with the entityId when the inline revert button is clicked', async () => {
     const user = userEvent.setup()
     const { onRevert } = setup(makeData(makeIdentity()))
-    await user.click(screen.getByRole('button', { name: /Aktionen für Person 1/ }))
-    await user.click(screen.getByRole('menuitem', { name: /Pseudonym entfernen/ }))
+    await user.click(screen.getByRole('button', { name: /Pseudonym Person 1 entfernen/ }))
     expect(onRevert).toHaveBeenCalledWith('person-1')
+  })
+
+  it('the inline revert button does not open the popover', async () => {
+    const user = userEvent.setup()
+    setup(makeData(makeIdentity()))
+    await user.click(screen.getByRole('button', { name: /Pseudonym Person 1 entfernen/ }))
+    expect(screen.queryByRole('menu')).toBeNull()
   })
 
   it('calls onChangeType with the new type when a "Typ ändern" option is picked', async () => {
     const user = userEvent.setup()
     const { onChangeType } = setup(makeData(makeIdentity()))
-    await user.click(screen.getByRole('button', { name: /Aktionen für Person 1/ }))
+    await user.click(screen.getByRole('button', { name: /Weitere Aktionen für Person 1/ }))
     await user.click(screen.getByRole('menuitem', { name: /Typ ändern/ }))
     await user.click(screen.getByRole('menuitem', { name: /^Ort$/ }))
     expect(onChangeType).toHaveBeenCalledWith('person-1', 'ORT')
@@ -117,7 +129,7 @@ describe('AnonymizationPanel', () => {
     })
     const { onAddToBlocklist } = setup(makeData(identity))
 
-    await user.click(screen.getByRole('button', { name: /Aktionen für Person 1/ }))
+    await user.click(screen.getByRole('button', { name: /Weitere Aktionen für Person 1/ }))
     await user.click(screen.getByRole('menuitem', { name: /Zur Sperrliste hinzufügen/ }))
     await user.click(screen.getByRole('menuitem', { name: /^Person$/ }))
 
@@ -135,7 +147,7 @@ describe('AnonymizationPanel', () => {
     })
     setup(makeData(identity))
 
-    await user.click(screen.getByRole('button', { name: /Aktionen für Person 1/ }))
+    await user.click(screen.getByRole('button', { name: /Weitere Aktionen für Person 1/ }))
     const item = screen.getByRole('menuitem', { name: /Zur Sperrliste hinzufügen/ })
     expect(item).toHaveAttribute('aria-disabled', 'true')
     expect(within(item).getByText('Bereits in Sperrliste')).toBeInTheDocument()
@@ -144,7 +156,7 @@ describe('AnonymizationPanel', () => {
   it('reflects the menu open state on the trigger via aria-expanded', async () => {
     const user = userEvent.setup()
     setup(makeData(makeIdentity()))
-    const trigger = screen.getByRole('button', { name: /Aktionen für Person 1/ })
+    const trigger = screen.getByRole('button', { name: /Weitere Aktionen für Person 1/ })
     await user.click(trigger)
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
   })
@@ -152,7 +164,7 @@ describe('AnonymizationPanel', () => {
   it('returns focus to the trigger after Escape (dismissed close)', async () => {
     const user = userEvent.setup()
     setup(makeData(makeIdentity()))
-    const trigger = screen.getByRole('button', { name: /Aktionen für Person 1/ })
+    const trigger = screen.getByRole('button', { name: /Weitere Aktionen für Person 1/ })
     await user.click(trigger)
     await user.keyboard('{Escape}')
     expect(trigger).toHaveFocus()
@@ -160,8 +172,8 @@ describe('AnonymizationPanel', () => {
 
   it('does NOT refocus the trigger after activating an action (lets the editor own focus)', async () => {
     const user = userEvent.setup()
-    const { onRevert } = setup(makeData(makeIdentity()))
-    const trigger = screen.getByRole('button', { name: /Aktionen für Person 1/ })
+    const { onChangeType } = setup(makeData(makeIdentity()))
+    const trigger = screen.getByRole('button', { name: /Weitere Aktionen für Person 1/ })
     /*
      * Park focus somewhere neutral before the action — simulates the editor
      * having focus when the host's action handler fires editor.commands.focus().
@@ -170,8 +182,9 @@ describe('AnonymizationPanel', () => {
      */
     document.body.focus()
     await user.click(trigger)
-    await user.click(screen.getByRole('menuitem', { name: /Pseudonym entfernen/ }))
-    expect(onRevert).toHaveBeenCalledWith('person-1')
+    await user.click(screen.getByRole('menuitem', { name: /Typ ändern/ }))
+    await user.click(screen.getByRole('menuitem', { name: /^Ort$/ }))
+    expect(onChangeType).toHaveBeenCalledWith('person-1', 'ORT')
     expect(trigger).not.toHaveFocus()
   })
 

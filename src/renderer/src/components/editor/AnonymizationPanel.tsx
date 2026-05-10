@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { MoreHorizontal } from 'lucide-react'
+import { MoreHorizontal, Undo2 } from 'lucide-react'
 import type { EntitySource, PlaceholderType } from '../../../../shared/types'
 import {
   CHIP_STYLES,
@@ -139,18 +139,33 @@ function IdentityRow({
         <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${chipStyle}`}>
           {displayLabel}
         </span>
-        <button
-          ref={triggerRef}
-          type="button"
-          className="flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:bg-surface-2 focus-visible:text-text-primary focus-visible:outline-none"
-          onClick={openMenu}
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          aria-label={`Aktionen für ${displayLabel}`}
-          title={`Aktionen für ${displayLabel}`}
-        >
-          <MoreHorizontal className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            className="flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:bg-surface-2 focus-visible:text-text-primary focus-visible:outline-none"
+            onClick={() => onRevert(identity.entityId)}
+            aria-label={`Pseudonym ${displayLabel} entfernen`}
+            title={
+              identity.totalCount > 1
+                ? `Pseudonym entfernen (${identity.totalCount} Vorkommen)`
+                : 'Pseudonym entfernen'
+            }
+          >
+            <Undo2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+          </button>
+          <button
+            ref={triggerRef}
+            type="button"
+            className="flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:bg-surface-2 focus-visible:text-text-primary focus-visible:outline-none"
+            onClick={openMenu}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            aria-label={`Weitere Aktionen für ${displayLabel}`}
+            title={`Weitere Aktionen für ${displayLabel}`}
+          >
+            <MoreHorizontal className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+          </button>
+        </div>
       </div>
       <div className="mt-1.5 flex flex-col gap-1">
         {identity.variants.map((variant) => (
@@ -170,6 +185,7 @@ function IdentityRow({
           onChangeType={onChangeType}
           onAddToBlocklist={onAddToBlocklist}
           onClose={closeMenu}
+          showUndoItem={false}
         />
       )}
     </div>
