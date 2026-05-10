@@ -141,6 +141,18 @@ function IdentityRow({
         </span>
         <div className="flex items-center gap-0.5">
           <button
+            ref={triggerRef}
+            type="button"
+            className="flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:bg-surface-2 focus-visible:text-text-primary focus-visible:outline-none"
+            onClick={openMenu}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            aria-label={`Weitere Aktionen für ${displayLabel}`}
+            title={`Weitere Aktionen für ${displayLabel}`}
+          >
+            <MoreHorizontal className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+          </button>
+          <button
             type="button"
             className="flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:bg-surface-2 focus-visible:text-text-primary focus-visible:outline-none"
             onClick={() => onRevert(identity.entityId)}
@@ -152,18 +164,6 @@ function IdentityRow({
             }
           >
             <Undo2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          </button>
-          <button
-            ref={triggerRef}
-            type="button"
-            className="flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:bg-surface-2 focus-visible:text-text-primary focus-visible:outline-none"
-            onClick={openMenu}
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            aria-label={`Weitere Aktionen für ${displayLabel}`}
-            title={`Weitere Aktionen für ${displayLabel}`}
-          >
-            <MoreHorizontal className="h-4 w-4" strokeWidth={1.75} aria-hidden />
           </button>
         </div>
       </div>
