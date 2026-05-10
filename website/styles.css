@@ -454,10 +454,10 @@ p {
 }
 
 .req-list li {
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-md);
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-size: 1rem;
 }
 
