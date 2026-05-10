@@ -103,9 +103,8 @@ export function SessionCard({
         </>
       )
     } else {
-      // Issue #102 — append pseudonymization count inline after the word
-      // count when > 0. Hidden when 0 (no audit signal). Singular form for 1,
-      // plural for 2+.
+      // Append pseudonymization count inline after the word count when > 0.
+      // Hidden when 0 (no audit signal). Singular form for 1, plural for 2+.
       const anonCount = session.anonymizationCount ?? 0
       statusContent =
         session.wordCount != null ? (

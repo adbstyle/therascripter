@@ -1,10 +1,6 @@
 import { formatBytes } from '../../utils/formatBytes'
 import { formatHms, formatSilenceWithShare } from '../../utils/formatAudioStats'
-import type {
-  AudioStats,
-  ModelSnapshot,
-  ProcessedModelsSnapshot
-} from '../../../../shared/types'
+import type { AudioStats, ModelSnapshot, ProcessedModelsSnapshot } from '../../../../shared/types'
 
 interface Props {
   data: ProcessedModelsSnapshot | null
@@ -80,17 +76,15 @@ function Row({ label, value }: { label: string; value: string }): React.JSX.Elem
 }
 
 /**
- * Issue #99 — Audio statistics derived from `transcript.metadata.stitchMap`
- * and the diarization JSON. Renders above the model snapshots so the user
- * sees the concrete pipeline input before the models that processed it.
+ * Audio statistics derived from `transcript.metadata.stitchMap` and the
+ * diarization JSON. Renders above the model snapshots so the user sees the
+ * concrete pipeline input before the models that processed it.
  */
 function AudioSection({ stats }: { stats: AudioStats }): React.JSX.Element {
   const { originalDurationSec, stitchedDurationSec, speakerCount, diarizationModel } = stats
 
-  const originalValue =
-    originalDurationSec != null ? formatHms(originalDurationSec) : UNAVAILABLE
-  const speechValue =
-    stitchedDurationSec != null ? formatHms(stitchedDurationSec) : UNAVAILABLE
+  const originalValue = originalDurationSec != null ? formatHms(originalDurationSec) : UNAVAILABLE
+  const speechValue = stitchedDurationSec != null ? formatHms(stitchedDurationSec) : UNAVAILABLE
 
   let silenceValue = UNAVAILABLE
   if (originalDurationSec != null && stitchedDurationSec != null) {
@@ -104,10 +98,7 @@ function AudioSection({ stats }: { stats: AudioStats }): React.JSX.Element {
       <Row label="Sprache" value={speechValue} />
       <Row label="Stille" value={silenceValue} />
       <SpeakerCountRow count={speakerCount} />
-      <Row
-        label="Sprecher-Pipeline"
-        value={diarizationModel ?? UNAVAILABLE}
-      />
+      <Row label="Sprecher-Pipeline" value={diarizationModel ?? UNAVAILABLE} />
     </div>
   )
 }

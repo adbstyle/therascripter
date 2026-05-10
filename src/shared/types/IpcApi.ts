@@ -106,9 +106,9 @@ export interface ReviewData {
    */
   reviewAt: string | null
   /**
-   * Issue #99 — aggregated from `transcript.metadata.stitchMap` and the
-   * diarization JSON. NULL for PDF sessions and for any audio session whose
-   * data sources are completely unreadable.
+   * Aggregated from `transcript.metadata.stitchMap` and the diarization JSON.
+   * NULL for PDF sessions and for any audio session whose data sources are
+   * completely unreadable.
    */
   audioStats: AudioStats | null
 }

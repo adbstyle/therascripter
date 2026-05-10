@@ -9,10 +9,10 @@ interface LegacyRow {
 }
 
 /**
- * Issue #102 — back-fills `anonymization_count` for review sessions that
- * reached 'review' before the column existed. Idempotent: only touches rows
- * where the count is still NULL. Failures on individual files are logged and
- * skipped so a single corrupt anonymized doc cannot block app startup.
+ * Back-fills `anonymization_count` for review sessions that reached 'review'
+ * before the column existed. Idempotent: only touches rows where the count is
+ * still NULL. Failures on individual files are logged and skipped so a single
+ * corrupt anonymized doc cannot block app startup.
  */
 export function backfillAnonymizationCounts(db: Database.Database): number {
   const rows = db

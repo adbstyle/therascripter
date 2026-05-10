@@ -1,5 +1,5 @@
 /**
- * Format helpers for the Audio section of the Provenance panel (Issue #99).
+ * Format helpers for the Audio section of the Provenance panel.
  *
  * Durations render as `xh ym zs` (hours/minutes only when non-zero on the
  * leading side). Avoids the `mm:ss` clock format because the Provenance panel

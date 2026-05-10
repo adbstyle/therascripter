@@ -161,8 +161,8 @@ app.whenReady().then(() => {
     return
   }
 
-  // Issue #102 — back-fill anonymization counts for review sessions that
-  // reached 'review' before the column existed. One-shot, idempotent.
+  // Back-fill anonymization counts for review sessions that reached 'review'
+  // before the column existed. One-shot, idempotent.
   try {
     const backfilled = backfillAnonymizationCounts(getDatabase())
     if (backfilled > 0) {

@@ -25,9 +25,9 @@ export interface Session {
   reviewAt: string | null
   wordCount: number | null
   /**
-   * Issue #102 — total number of placeholder chips in the anonymized TipTap
-   * document (counts occurrences, not distinct identities). NULL for sessions
-   * that never reached 'review' or for legacy rows before the backfill ran.
+   * Total number of placeholder chips in the anonymized TipTap document
+   * (counts occurrences, not distinct identities). NULL for sessions that
+   * never reached 'review' or for legacy rows before the backfill ran.
    */
   anonymizationCount: number | null
   summary: string | null

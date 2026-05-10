@@ -32,7 +32,7 @@ export interface ProcessedModelsSnapshot {
 }
 
 /**
- * Issue #99 — aggregated audio statistics surfaced in the Provenance panel.
+ * Aggregated audio statistics surfaced in the Provenance panel.
  *
  * Every field is independently nullable: a corrupt diarization JSON or a
  * legacy session without a stitch-map should still render the rows that ARE
