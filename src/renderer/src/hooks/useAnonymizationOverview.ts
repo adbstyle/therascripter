@@ -16,6 +16,13 @@ export interface AnonymizedIdentity {
   placeholder: string
   variants: OriginalVariant[]
   totalCount: number
+  /**
+   * Longest variant by character length, ties broken by document order.
+   * Used as the term when adding the identity to the Sperrliste — matches the
+   * canonical-name choice in `coreference-resolver.ts` and minimises false
+   * positives in the doc-wide retroactive scan.
+   */
+  canonicalVariant: OriginalVariant
 }
 
 export interface EntityTypeGroup {
@@ -88,13 +95,21 @@ export function useAnonymizationOverview(
         variants.push({ text, count, source })
       }
 
+      let canonicalVariant = variants[0]
+      for (let i = 1; i < variants.length; i++) {
+        if (variants[i].text.length > canonicalVariant.text.length) {
+          canonicalVariant = variants[i]
+        }
+      }
+
       const identity: AnonymizedIdentity = {
         entityId: entry.entityId,
         type: entry.type,
         number: entry.number,
         placeholder: `[${entry.type} ${entry.number}]`,
         variants,
-        totalCount: variants.reduce((sum, v) => sum + v.count, 0)
+        totalCount: variants.reduce((sum, v) => sum + v.count, 0),
+        canonicalVariant
       }
 
       const existing = groupMap.get(entry.type)

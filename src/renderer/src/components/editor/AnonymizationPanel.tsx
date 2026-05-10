@@ -1,3 +1,6 @@
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { MoreHorizontal } from 'lucide-react'
+import type { EntitySource, PlaceholderType } from '../../../../shared/types'
 import {
   CHIP_STYLES,
   SOURCE_LABELS,
@@ -9,10 +12,13 @@ import type {
   AnonymizedIdentity,
   OriginalVariant
 } from '../../hooks/useAnonymizationOverview'
+import { ChipActionMenu } from './ChipActionMenu'
 
 interface AnonymizationPanelProps {
   data: AnonymizationOverviewData
   onRevert: (entityId: string) => void
+  onChangeType: (entityId: string, newType: PlaceholderType) => void
+  onAddToBlocklist: (entityId: string, original: string, type: PlaceholderType) => void
 }
 
 /**
@@ -23,7 +29,9 @@ interface AnonymizationPanelProps {
  */
 export function AnonymizationPanel({
   data,
-  onRevert
+  onRevert,
+  onChangeType,
+  onAddToBlocklist
 }: AnonymizationPanelProps): React.JSX.Element {
   if (data.totalIdentities === 0) {
     return (
@@ -36,7 +44,13 @@ export function AnonymizationPanel({
   return (
     <div className="flex flex-col gap-4 px-3 py-3">
       {data.groups.map((group) => (
-        <TypeGroupSection key={group.type} group={group} onRevert={onRevert} />
+        <TypeGroupSection
+          key={group.type}
+          group={group}
+          onRevert={onRevert}
+          onChangeType={onChangeType}
+          onAddToBlocklist={onAddToBlocklist}
+        />
       ))}
     </div>
   )
@@ -44,10 +58,14 @@ export function AnonymizationPanel({
 
 function TypeGroupSection({
   group,
-  onRevert
+  onRevert,
+  onChangeType,
+  onAddToBlocklist
 }: {
   group: EntityTypeGroup
   onRevert: (entityId: string) => void
+  onChangeType: (entityId: string, newType: PlaceholderType) => void
+  onAddToBlocklist: (entityId: string, original: string, type: PlaceholderType) => void
 }): React.JSX.Element {
   const chipStyle = CHIP_STYLES[group.type] ?? CHIP_STYLES.SONSTIGES
 
@@ -60,7 +78,13 @@ function TypeGroupSection({
       </div>
       <div className="flex flex-col gap-2">
         {group.identities.map((identity) => (
-          <IdentityRow key={identity.entityId} identity={identity} onRevert={onRevert} />
+          <IdentityRow
+            key={identity.entityId}
+            identity={identity}
+            onRevert={onRevert}
+            onChangeType={onChangeType}
+            onAddToBlocklist={onAddToBlocklist}
+          />
         ))}
       </div>
     </div>
@@ -69,13 +93,49 @@ function TypeGroupSection({
 
 function IdentityRow({
   identity,
-  onRevert
+  onRevert,
+  onChangeType,
+  onAddToBlocklist
 }: {
   identity: AnonymizedIdentity
   onRevert: (entityId: string) => void
+  onChangeType: (entityId: string, newType: PlaceholderType) => void
+  onAddToBlocklist: (entityId: string, original: string, type: PlaceholderType) => void
 }): React.JSX.Element {
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const [menuRect, setMenuRect] = useState<DOMRect | null>(null)
   const chipStyle = CHIP_STYLES[identity.type] ?? CHIP_STYLES.SONSTIGES
   const displayLabel = formatPlaceholderLabel(identity.type, identity.number)
+
+  const isBlocklistSourced = useMemo(
+    () => identity.variants.some((v) => v.source === 'blocklist'),
+    [identity.variants]
+  )
+  const entitySource: EntitySource = isBlocklistSourced ? 'blocklist' : 'ner'
+
+  const openMenu = useCallback(() => {
+    if (!triggerRef.current) return
+    setMenuRect(triggerRef.current.getBoundingClientRect())
+  }, [])
+
+  const closeMenu = useCallback(() => {
+    setMenuRect(null)
+    /*
+     * Defer the trigger refocus to the next frame. By then React has committed
+     * any unmount/re-key triggered by an action handler (revert removes the
+     * row; type-change re-keys it; blocklist add re-keys to a new entityId).
+     * Using `isConnected` we only refocus when the trigger is still in the
+     * DOM — the Escape / outside-click case. For the action case the trigger
+     * is detached, and the handler's `editor.commands.focus()` (which ran
+     * earlier in the same call stack via `ActionPopover.activateMain`) keeps
+     * focus on the editor so Cmd+Z is armed (Postcondition #4).
+     */
+    requestAnimationFrame(() => {
+      if (triggerRef.current?.isConnected) triggerRef.current.focus()
+    })
+  }, [])
+
+  const menuOpen = menuRect !== null
 
   return (
     <div className="rounded-lg border border-border bg-surface-0 px-3 py-2">
@@ -84,12 +144,16 @@ function IdentityRow({
           {displayLabel}
         </span>
         <button
-          className="flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary"
-          onClick={() => onRevert(identity.entityId)}
-          title={`${displayLabel} rückgängig machen (${identity.totalCount} Vorkommen)`}
-          aria-label={`${displayLabel} rückgängig machen`}
+          ref={triggerRef}
+          type="button"
+          className="flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:bg-surface-2 focus-visible:text-text-primary focus-visible:outline-none"
+          onClick={openMenu}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-label={`Aktionen für ${displayLabel}`}
+          title={`Aktionen für ${displayLabel}`}
         >
-          &#8617;
+          <MoreHorizontal className="h-4 w-4" strokeWidth={1.75} aria-hidden />
         </button>
       </div>
       <div className="mt-1.5 flex flex-col gap-1">
@@ -97,6 +161,21 @@ function IdentityRow({
           <VariantRow key={`${variant.source}::${variant.text}`} variant={variant} />
         ))}
       </div>
+      {menuRect && (
+        <ChipActionMenu
+          anchorRect={menuRect}
+          entityId={identity.entityId}
+          entityType={identity.type}
+          entityNumber={identity.number}
+          entitySource={entitySource}
+          original={identity.canonicalVariant.text}
+          occurrenceCount={identity.totalCount}
+          onUndo={onRevert}
+          onChangeType={onChangeType}
+          onAddToBlocklist={onAddToBlocklist}
+          onClose={closeMenu}
+        />
+      )}
     </div>
   )
 }

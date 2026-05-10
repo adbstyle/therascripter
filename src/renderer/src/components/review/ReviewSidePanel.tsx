@@ -3,7 +3,7 @@ import { AnonymizationPanel } from '../editor/AnonymizationPanel'
 import { SecondaryTabs } from '../editor/SecondaryTabs'
 import { ProvenancePanel } from './ProvenancePanel'
 import type { AnonymizationOverviewData } from '../../hooks/useAnonymizationOverview'
-import type { ProcessedModelsSnapshot } from '../../../../shared/types'
+import type { PlaceholderType, ProcessedModelsSnapshot } from '../../../../shared/types'
 
 type TabId = 'anonymization' | 'provenance'
 
@@ -11,6 +11,8 @@ interface ReviewSidePanelProps {
   isOpen: boolean
   anonymization: AnonymizationOverviewData
   onRevert: (entityId: string) => void
+  onChangeType: (entityId: string, newType: PlaceholderType) => void
+  onAddToBlocklist: (entityId: string, original: string, type: PlaceholderType) => void
   provenance: ProcessedModelsSnapshot | null
   reviewAt: string | null
 }
@@ -21,6 +23,8 @@ export function ReviewSidePanel({
   isOpen,
   anonymization,
   onRevert,
+  onChangeType,
+  onAddToBlocklist,
   provenance,
   reviewAt
 }: ReviewSidePanelProps): React.JSX.Element {
@@ -66,7 +70,12 @@ export function ReviewSidePanel({
           hidden={activeTab !== 'anonymization'}
           className="min-h-0 flex-1 overflow-y-auto"
         >
-          <AnonymizationPanel data={anonymization} onRevert={onRevert} />
+          <AnonymizationPanel
+            data={anonymization}
+            onRevert={onRevert}
+            onChangeType={onChangeType}
+            onAddToBlocklist={onAddToBlocklist}
+          />
         </div>
         <div
           role="tabpanel"

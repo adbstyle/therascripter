@@ -658,6 +658,8 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
           isOpen={panelOpen}
           anonymization={overviewData}
           onRevert={handleBatchRemove}
+          onChangeType={handleChipChangeType}
+          onAddToBlocklist={handleChipAddToBlocklist}
           provenance={provenance}
           reviewAt={reviewAt}
         />
