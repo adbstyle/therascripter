@@ -443,6 +443,7 @@ p {
 
 .requirements {
   max-width: var(--container-narrow) !important;
+  padding-top: var(--space-2xl);
 }
 
 .req-list {
