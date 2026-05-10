@@ -505,10 +505,12 @@ Files modified:
   - If `len(records) < 50`: exit with code 2 and a stderr message.
   - Build feature matrix `X` (n_samples × ~140) and label vector `y`.
   - Split 80/20 stratified — but only if both classes have ≥5 samples, else skip split (use full training set, report no holdout metrics).
-  - Train `LogisticRegression(class_weight='balanced', max_iter=500, C=1.0)`.
-  - On holdout (if available): compute accuracy, precision, recall, F1 per class.
+  - Train `LogisticRegression(solver='liblinear', penalty='l2', class_weight='balanced', max_iter=1000, C=1.0, random_state=42)`. **Solver-Wahl:** `liblinear` ist für binäre Klassifikation auf sparse Hashing-Features bei kleinem N (50–10k) der robusteste Solver — konvergiert deterministisch ohne Tuning, im Gegensatz zum sklearn-Default `lbfgs`, der bei N<100 gelegentlich nicht konvergiert. `saga` wäre overkill und braucht grosse N.
+  - **C-Tuning ab N ≥ 100:** Mini-CV-Grid `C ∈ {0.1, 0.5, 1.0, 2.0}` mit `GridSearchCV(cv=3, scoring='f1')`. Bei `liblinear` + ~140 dim in <1 s durch, macht den Cold-Start gegen Surface-Hash-Kollisionen robuster. Bei N < 100 fix `C=1.0`. Best-`C` in `metadata.json` mitschreiben.
+  - **Probability-Kalibrierung ab N ≥ 200:** `CalibratedClassifierCV(clf, method='sigmoid', cv=3)` drumherum. Begründung: Der Threshold-Slider (Aus/Vorsichtig/Standard/Aggressiv) braucht semantisch konsistente `predict_proba` — `class_weight='balanced'` zieht die rohen Probas bei kleinem N. Unter N=200 ist die rohe LogReg-Kalibrierung gut genug, der Wrapper würde wegen kleiner CV-Folds nur Rauschen einführen.
+  - On holdout (if available): compute accuracy, precision, recall, F1 per class **plus Threshold-Cutoffs für die 4 Sensitivitätsstufen**. Cutoff-Semantik: `keep_proba < cutoff` ⇒ Entity wird gedroppt. Höherer Cutoff ⇒ mehr Drops ⇒ aggressiver. Cutoffs werden auf die `keep`-Probas der **Negativ-Klasse** (echte Drops im Holdout) gemappt, sodass die Slider-Stufen modellspezifisch konsistent sind: `aggressive` = 75. Perzentil der Negativ-Probas (droppt ~75 % der echten Negativen + alles darunter), `default` = 50. Perzentil, `conservative` = 25. Perzentil, `off` = 0.0. Bei fehlendem Holdout oder Negativ-Klasse <5 Samples: hartkodierte Fallbacks `{off: 0.0, conservative: 0.3, default: 0.5, aggressive: 0.7}` (matchen die heutige `THRESHOLD_MAP` in `ner_service.py`).
   - Dump via `joblib.dump(clf, output_path)`.
-  - Write metadata JSON: `{ version, schemaVersion, trainedAt, sampleCount, classCounts, holdoutMetrics }` where `schemaVersion` is `FEATURE_SCHEMA_VERSION` imported from `correction_features`. This is the field `ner_service.py` reads at load time (Task 7 Step 2) to decide whether the pickle is still compatible.
+  - Write metadata JSON: `{ version, schemaVersion, trainedAt, sampleCount, classCounts, holdoutMetrics, thresholdCutoffs, bestC, calibrated }` where `schemaVersion` is `FEATURE_SCHEMA_VERSION` imported from `correction_features`. This is the field `ner_service.py` reads at load time (Task 7 Step 2) to decide whether the pickle is still compatible. `thresholdCutoffs` is the dict consumed by the inference path to map `thresholdMode` → cutoff probability.
   - Final stdout JSON report with metrics for the main process to persist.
 
 - [ ] **Step 3: Smoke-test with synthetic data**
@@ -618,7 +620,7 @@ Files modified:
           score = float(personal_clf.predict_proba([features])[0, 1])
 
       if score is not None:
-          threshold = THRESHOLD_MAP[args.threshold_mode]
+          threshold = threshold_map[args.threshold_mode]
           if score < threshold:
               continue  # dropped by personal classifier
 
@@ -634,15 +636,25 @@ Files modified:
       output_entities.append(ent_dict)
   ```
 
-  Threshold map:
+  Threshold map — **bevorzugt aus `<output-dir>/correction-classifier-v1.metadata.json` `thresholdCutoffs` lesen** (vom Trainer pro Modell auf der Holdout-Negativ-Verteilung kalibriert, siehe Task 6 Step 2). Fallback (kein Metadata-File, fehlender Key, oder File älter als das Pickle):
 
   ```python
-  THRESHOLD_MAP = {
+  THRESHOLD_MAP_FALLBACK = {
       'off':          0.0,   # keep everything (equivalent to no classifier)
       'conservative': 0.3,   # rarely drop — only very confident rejections
       'default':      0.5,
       'aggressive':   0.7,   # drop aggressively — only keep very confident entities
   }
+
+  threshold_map = THRESHOLD_MAP_FALLBACK
+  metadata_path = personal_model_path.with_suffix('.metadata.json')
+  if metadata_path.exists():
+      try:
+          metadata = json.loads(metadata_path.read_text())
+          if isinstance(metadata.get('thresholdCutoffs'), dict):
+              threshold_map = {**THRESHOLD_MAP_FALLBACK, **metadata['thresholdCutoffs']}
+      except Exception as e:
+          print(f'[WARN] threshold metadata read failed, using fallback: {e}', file=sys.stderr)
   ```
 
 - [ ] **Step 4: Propagate score to TipTap chip attrs**
