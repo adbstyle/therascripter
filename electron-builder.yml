@@ -44,6 +44,7 @@ extraResources:
     to: ml_sidecar/torchcodec_shim.py
 npmRebuild: false
 afterPack: build-scripts/afterPack.js
+afterAllArtifactBuild: build-scripts/finalize-dmg.js
 mac:
   target:
     - target: dmg
@@ -57,7 +58,7 @@ dmg:
   iconTextSize: 12
   window:
     width: 540
-    height: 380
+    height: 440
   title: ${productName} ${version}
   contents:
     - x: 140
