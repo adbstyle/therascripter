@@ -29,8 +29,21 @@ beforeEach(() => {
 function makeIdentity(overrides: Partial<AnonymizedIdentity> = {}): AnonymizedIdentity {
   const variants = overrides.variants ?? [{ text: 'Anna', count: 1, source: 'ner' as const }]
   let canonicalVariant = variants[0]
+  let canonicalNonBlocklistVariant: AnonymizedIdentity['canonicalNonBlocklistVariant'] =
+    variants[0].source !== 'blocklist' ? variants[0] : null
+  let allVariantsBlocklisted = variants[0].source === 'blocklist'
   for (let i = 1; i < variants.length; i++) {
-    if (variants[i].text.length > canonicalVariant.text.length) canonicalVariant = variants[i]
+    const v = variants[i]
+    if (v.text.length > canonicalVariant.text.length) canonicalVariant = v
+    if (v.source !== 'blocklist') {
+      allVariantsBlocklisted = false
+      if (
+        canonicalNonBlocklistVariant === null ||
+        v.text.length > canonicalNonBlocklistVariant.text.length
+      ) {
+        canonicalNonBlocklistVariant = v
+      }
+    }
   }
   return {
     entityId: 'person-1',
@@ -40,6 +53,8 @@ function makeIdentity(overrides: Partial<AnonymizedIdentity> = {}): AnonymizedId
     variants,
     totalCount: variants.reduce((sum, v) => sum + v.count, 0),
     canonicalVariant,
+    canonicalNonBlocklistVariant,
+    allVariantsBlocklisted,
     ...overrides
   }
 }
@@ -136,7 +151,24 @@ describe('AnonymizationPanel', () => {
     expect(onAddToBlocklist).toHaveBeenCalledWith('person-1', 'Hans Müller', 'PERSON')
   })
 
-  it('disables "Zur Sperrliste hinzufügen" when any variant comes from the blocklist (AC6)', async () => {
+  it('disables "Zur Sperrliste hinzufügen" only when ALL variants are blocklisted (AC6)', async () => {
+    const user = userEvent.setup()
+    const identity = makeIdentity({
+      variants: [
+        { text: 'Müller', count: 1, source: 'blocklist' },
+        { text: 'Hans Müller', count: 2, source: 'blocklist' }
+      ],
+      totalCount: 3
+    })
+    setup(makeData(identity))
+
+    await user.click(screen.getByRole('button', { name: /Weitere Aktionen für Person 1/ }))
+    const item = screen.getByRole('menuitem', { name: /Zur Sperrliste hinzufügen/ })
+    expect(item).toHaveAttribute('aria-disabled', 'true')
+    expect(within(item).getByText('Bereits in Sperrliste')).toBeInTheDocument()
+  })
+
+  it('keeps "Zur Sperrliste hinzufügen" enabled for a mixed-source identity', async () => {
     const user = userEvent.setup()
     const identity = makeIdentity({
       variants: [
@@ -149,8 +181,28 @@ describe('AnonymizationPanel', () => {
 
     await user.click(screen.getByRole('button', { name: /Weitere Aktionen für Person 1/ }))
     const item = screen.getByRole('menuitem', { name: /Zur Sperrliste hinzufügen/ })
-    expect(item).toHaveAttribute('aria-disabled', 'true')
-    expect(within(item).getByText('Bereits in Sperrliste')).toBeInTheDocument()
+    expect(item).not.toHaveAttribute('aria-disabled', 'true')
+    expect(within(item).queryByText('Bereits in Sperrliste')).toBeNull()
+  })
+
+  it('uses the non-blocklist canonical variant when adding a mixed-source identity', async () => {
+    const user = userEvent.setup()
+    const identity = makeIdentity({
+      variants: [
+        { text: 'Müller', count: 1, source: 'ner' },
+        { text: 'Hans Müller', count: 2, source: 'blocklist' }
+      ],
+      totalCount: 3
+    })
+    const { onAddToBlocklist } = setup(makeData(identity))
+
+    await user.click(screen.getByRole('button', { name: /Weitere Aktionen für Person 1/ }))
+    await user.click(screen.getByRole('menuitem', { name: /Zur Sperrliste hinzufügen/ }))
+    await user.click(screen.getByRole('menuitem', { name: /^Person$/ }))
+
+    // Müller is the only non-blocklist variant — used as the term so we don't
+    // duplicate the existing "Hans Müller" Sperrliste row.
+    expect(onAddToBlocklist).toHaveBeenCalledWith('person-1', 'Müller', 'PERSON')
   })
 
   it('reflects the menu open state on the trigger via aria-expanded', async () => {

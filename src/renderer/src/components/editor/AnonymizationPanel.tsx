@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { MoreHorizontal, Undo2 } from 'lucide-react'
 import type { EntitySource, PlaceholderType } from '../../../../shared/types'
 import {
@@ -107,11 +107,16 @@ function IdentityRow({
   const chipStyle = CHIP_STYLES[identity.type] ?? CHIP_STYLES.SONSTIGES
   const displayLabel = formatPlaceholderLabel(identity.type, identity.number)
 
-  const isBlocklistSourced = useMemo(
-    () => identity.variants.some((v) => v.source === 'blocklist'),
-    [identity.variants]
-  )
-  const entitySource: EntitySource = isBlocklistSourced ? 'blocklist' : 'ner'
+  /*
+   * Disable "Zur Sperrliste hinzufügen" only when EVERY variant is already
+   * blocklisted. A mixed-source identity (one variant NER, one blocklist) must
+   * stay enabled so the user can promote the still-NER variants — the
+   * canonical-add term then comes from `canonicalNonBlocklistVariant`, which
+   * also avoids creating a duplicate Sperrliste row for the blocklisted text.
+   */
+  const entitySource: EntitySource = identity.allVariantsBlocklisted ? 'blocklist' : 'ner'
+  const addToBlocklistTerm =
+    identity.canonicalNonBlocklistVariant?.text ?? identity.canonicalVariant.text
 
   const openMenu = useCallback(() => {
     if (!triggerRef.current) return
@@ -179,7 +184,7 @@ function IdentityRow({
           entityType={identity.type}
           entityNumber={identity.number}
           entitySource={entitySource}
-          original={identity.canonicalVariant.text}
+          original={addToBlocklistTerm}
           occurrenceCount={identity.totalCount}
           onUndo={onRevert}
           onChangeType={onChangeType}
