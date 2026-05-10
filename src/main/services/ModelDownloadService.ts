@@ -670,22 +670,34 @@ const REQUIRED_GROUPS_FOR_RECONCILE: ReadonlySet<ModelGroup> = new Set([
 ])
 
 /**
- * Katalog-Default pro Gruppe — manuell synchron gehalten mit
- * `defaults.activeModels` in `SettingsService.ts`. Der Reconciler bevorzugt den
- * Default beim Auto-Activate, fällt aber auf das nächste installierte
- * Gruppenmitglied zurück, wenn der Default selbst fehlt (ASR-Variante anstelle
- * des multilingualen Default).
+ * Required-Group-Defaults — werden vom Reconciler als bevorzugtes Auto-Activate-Ziel
+ * verwendet (`pickInstalledForGroup`). Optionale Gruppen leben NICHT in dieser Map,
+ * weil ihr initialer aktiver Slot per Invariante `null` ist (siehe `defaultActiveModelFor`).
  */
-const GROUP_DEFAULTS: Record<ModelGroup, string> = {
+const REQUIRED_GROUP_DEFAULTS: Record<'asr' | 'diarization' | 'ner', string> = {
   asr: 'whisper-large-v3-turbo',
   diarization: 'pyannote-suite',
-  ner: 'flair-ner-german-large',
-  summarization: 'gemma-summarization'
+  ner: 'flair-ner-german-large'
+}
+
+/**
+ * Single source of truth für den initialen aktiven Slot pro Gruppe.
+ * - Required Groups: Catalog-Default (asr/diarization/ner).
+ * - Optional Groups: `null` — Pipeline-Step skippt zur Laufzeit, bis User
+ *   das Modell explizit herunterlädt (Auto-Activate via `downloadSingleModel`).
+ *
+ * Konsumiert von der Upgrade-Migration in `SettingsService.ts`. Die `defaults`-
+ * Konstante in SettingsService selbst hardcodet die Werte parallel — Helper kann
+ * dort wegen zirkulärer Modul-Init nicht aufgerufen werden.
+ */
+export function defaultActiveModelFor(group: ModelGroup): string | null {
+  if (OPTIONAL_GROUPS.has(group)) return null
+  return REQUIRED_GROUP_DEFAULTS[group as 'asr' | 'diarization' | 'ner']
 }
 
 function pickInstalledForGroup(group: ModelGroup): string | null {
-  const preferred = GROUP_DEFAULTS[group]
-  if (isModelInstalled(preferred)) return preferred
+  const preferred = REQUIRED_GROUP_DEFAULTS[group as 'asr' | 'diarization' | 'ner']
+  if (preferred && isModelInstalled(preferred)) return preferred
   for (const m of getModelsByGroup(group)) {
     if (isModelInstalled(m.id)) return m.id
   }

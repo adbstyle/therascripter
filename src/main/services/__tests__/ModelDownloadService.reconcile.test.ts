@@ -76,7 +76,8 @@ import {
   dismissReconcileEvents,
   recordInstalledVersion,
   getActiveModelId,
-  getActiveModelIdBelief
+  getActiveModelIdBelief,
+  defaultActiveModelFor
 } from '../ModelDownloadService'
 
 const MODELS_DIR = '/tmp/therascript-test/models'
@@ -420,5 +421,17 @@ describe('getActiveModelIdBelief vs getActiveModelId', () => {
     pretendInstalled('asr/ggml-large-v3-turbo-q5_0.bin')
     expect(getActiveModelIdBelief('asr')).toBe('whisper-large-v3-turbo')
     expect(getActiveModelId('asr')).toBe('whisper-large-v3-turbo')
+  })
+})
+
+describe('defaultActiveModelFor', () => {
+  it('returns the catalog default for required groups', () => {
+    expect(defaultActiveModelFor('asr')).toBe('whisper-large-v3-turbo')
+    expect(defaultActiveModelFor('diarization')).toBe('pyannote-suite')
+    expect(defaultActiveModelFor('ner')).toBe('flair-ner-german-large')
+  })
+
+  it('returns null for optional groups', () => {
+    expect(defaultActiveModelFor('summarization')).toBeNull()
   })
 })
