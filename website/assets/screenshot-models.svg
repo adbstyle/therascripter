@@ -14,20 +14,20 @@
       <text y="30" font-size="14" fill="#78716c">Wählen Sie das aktive Modell. Mehrere können installiert sein.</text>
     </g>
     <g transform="translate(40,150)" font-family="-apple-system,system-ui,sans-serif">
-      <rect width="1000" height="100" rx="12" fill="#f0fdfa" stroke="#0f766e" stroke-width="2" />
-      <circle cx="36" cy="50" r="10" fill="#0f766e" />
+      <rect width="1000" height="100" rx="12" fill="#eaf6fb" stroke="#1884b5" stroke-width="2" />
+      <circle cx="36" cy="50" r="10" fill="#1884b5" />
       <circle cx="36" cy="50" r="4" fill="#fff" />
       <text x="64" y="36" font-size="16" fill="#171717" font-weight="600">Whisper Large V3 Turbo (Q5_0)</text>
       <text x="64" y="58" font-size="13" fill="#78716c">Standard · multilingual · 1.7 GB · installiert</text>
-      <rect x="850" y="32" width="120" height="32" rx="8" fill="none" stroke="#0f766e" stroke-width="1.5" />
-      <text x="910" y="52" text-anchor="middle" font-size="13" fill="#0f766e" font-weight="500">Aktiv</text>
+      <rect x="850" y="32" width="120" height="32" rx="8" fill="none" stroke="#1884b5" stroke-width="1.5" />
+      <text x="910" y="52" text-anchor="middle" font-size="13" fill="#1884b5" font-weight="500">Aktiv</text>
     </g>
     <g transform="translate(40,270)" font-family="-apple-system,system-ui,sans-serif">
       <rect width="1000" height="100" rx="12" fill="#fafaf9" stroke="#e7e5e4" stroke-width="1.5" />
       <circle cx="36" cy="50" r="10" fill="none" stroke="#a8a29e" stroke-width="2" />
       <text x="64" y="36" font-size="16" fill="#171717" font-weight="600">Schweizerdeutsch Fine-Tune</text>
       <text x="64" y="58" font-size="13" fill="#78716c">Optional · de-CH · 1.9 GB · installiert</text>
-      <rect x="850" y="32" width="120" height="32" rx="8" fill="#0f766e" />
+      <rect x="850" y="32" width="120" height="32" rx="8" fill="#1884b5" />
       <text x="910" y="52" text-anchor="middle" font-size="13" fill="#fff" font-weight="500">Aktivieren</text>
     </g>
     <g transform="translate(40,390)" font-family="-apple-system,system-ui,sans-serif">
@@ -35,8 +35,8 @@
       <circle cx="36" cy="50" r="10" fill="none" stroke="#a8a29e" stroke-width="2" />
       <text x="64" y="36" font-size="16" fill="#171717" font-weight="600">Gemma 3 4B Instruct (Q4_K_M)</text>
       <text x="64" y="58" font-size="13" fill="#78716c">Optional · Zusammenfassung · 2.5 GB · nicht installiert</text>
-      <rect x="850" y="32" width="120" height="32" rx="8" fill="none" stroke="#0f766e" stroke-width="1.5" />
-      <text x="910" y="52" text-anchor="middle" font-size="13" fill="#0f766e" font-weight="500">Laden</text>
+      <rect x="850" y="32" width="120" height="32" rx="8" fill="none" stroke="#1884b5" stroke-width="1.5" />
+      <text x="910" y="52" text-anchor="middle" font-size="13" fill="#1884b5" font-weight="500">Laden</text>
     </g>
     <text x="540" y="640" text-anchor="middle" font-family="-apple-system,system-ui,sans-serif" font-size="12" fill="#a8a29e">Platzhalter – wird durch echten Screenshot ersetzt</text>
   </g>
