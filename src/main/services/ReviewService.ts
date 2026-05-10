@@ -5,6 +5,7 @@ import type { EntityMap } from '../../shared/types'
 import type { ReviewData } from '../../shared/types/IpcApi'
 import type { TipTapDocument } from '../../shared/types/TipTapDocument'
 import { countWords } from '../../shared/utils/countWords'
+import { countPlaceholderChips } from '../../shared/utils/countPlaceholderChips'
 
 export type { ReviewData }
 
@@ -49,8 +50,9 @@ export class ReviewService {
     // Write TipTap document to filesystem
     writeFileSync(session.anonymizedPath, JSON.stringify(document, null, 2), 'utf-8')
 
-    // Update entity map and word count in database
+    // Update entity map, word count, and anonymization count in database
     const wordCount = countWords(document)
-    this.sessionService.updateSession(sessionId, { entityMap, wordCount })
+    const anonymizationCount = countPlaceholderChips(document)
+    this.sessionService.updateSession(sessionId, { entityMap, wordCount, anonymizationCount })
   }
 }

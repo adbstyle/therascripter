@@ -27,6 +27,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     updatedAt: '',
     reviewAt: null,
     wordCount: null,
+    anonymizationCount: null,
     summary: null,
     summaryModelId: null,
     summarizedAt: null,

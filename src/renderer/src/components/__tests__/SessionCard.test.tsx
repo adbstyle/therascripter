@@ -27,6 +27,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     updatedAt: '2026-04-29T12:00:00Z',
     reviewAt: null,
     wordCount: 4287,
+    anonymizationCount: null,
     summary: null,
     summaryModelId: null,
     summarizedAt: null,
@@ -55,6 +56,66 @@ describe('SessionCard — review state', () => {
     // de-CH locale formats 4287 with a thin-space or apostrophe-like grouping.
     // Match flexibly on the prefix + suffix; the grouping char is locale-impl-specific.
     expect(screen.getByText(/4.{0,3}287 Wörter/)).toBeInTheDocument()
+  })
+
+  it('appends singular Pseudonymisierung when anonymizationCount === 1', () => {
+    render(
+      <SessionCard
+        session={makeSession({ wordCount: 100, anonymizationCount: 1 })}
+        onDelete={vi.fn()}
+      />
+    )
+    expect(screen.getByText(/100 Wörter · 1 Pseudonymisierung$/)).toBeInTheDocument()
+  })
+
+  it('appends plural Pseudonymisierungen when anonymizationCount >= 2', () => {
+    render(
+      <SessionCard
+        session={makeSession({ wordCount: 289, anonymizationCount: 22 })}
+        onDelete={vi.fn()}
+      />
+    )
+    expect(screen.getByText(/289 Wörter · 22 Pseudonymisierungen$/)).toBeInTheDocument()
+  })
+
+  it('omits Pseudonymisierungen when anonymizationCount === 0', () => {
+    render(
+      <SessionCard
+        session={makeSession({ wordCount: 50, anonymizationCount: 0 })}
+        onDelete={vi.fn()}
+      />
+    )
+    expect(screen.queryByText(/Pseudonymisierung/)).toBeNull()
+  })
+
+  it('omits Pseudonymisierungen when anonymizationCount is null (legacy, pre-backfill)', () => {
+    render(
+      <SessionCard
+        session={makeSession({ wordCount: 50, anonymizationCount: null })}
+        onDelete={vi.fn()}
+      />
+    )
+    expect(screen.queryByText(/Pseudonymisierung/)).toBeNull()
+  })
+
+  it('does not show Pseudonymisierungen on non-review status', () => {
+    render(
+      <SessionCard
+        session={makeSession({ status: 'queued', wordCount: 100, anonymizationCount: 5 })}
+        onDelete={vi.fn()}
+      />
+    )
+    expect(screen.queryByText(/Pseudonymisierung/)).toBeNull()
+  })
+
+  it('does not show Pseudonymisierungen on empty-speech (wordCount === 0) sessions', () => {
+    render(
+      <SessionCard
+        session={makeSession({ wordCount: 0, anonymizationCount: 0 })}
+        onDelete={vi.fn()}
+      />
+    )
+    expect(screen.queryByText(/Pseudonymisierung/)).toBeNull()
   })
 })
 
