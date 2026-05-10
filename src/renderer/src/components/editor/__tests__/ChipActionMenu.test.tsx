@@ -9,6 +9,7 @@ interface SetupOpts {
   count?: number
   type?: PlaceholderType
   number?: number
+  showUndoItem?: boolean
 }
 
 function setup(opts: SetupOpts = {}) {
@@ -31,6 +32,7 @@ function setup(opts: SetupOpts = {}) {
       onChangeType={onChangeType}
       onAddToBlocklist={onAddToBlocklist}
       onClose={onClose}
+      showUndoItem={opts.showUndoItem}
     />
   )
 
@@ -66,7 +68,7 @@ describe('ChipActionMenu', () => {
 
     const items = within(menu).getAllByRole('menuitem')
     expect(items).toHaveLength(3)
-    expect(items[0]).toHaveTextContent('Pseudonym entfernen')
+    expect(items[0]).toHaveTextContent('Pseudonym rückgängig machen')
     expect(items[1]).toHaveTextContent('Typ ändern')
     expect(items[1]).toHaveAttribute('aria-haspopup', 'menu')
     expect(items[2]).toHaveTextContent('Zur Sperrliste hinzufügen')
@@ -91,10 +93,10 @@ describe('ChipActionMenu', () => {
     expect(within(item).getByText('Bereits in Sperrliste')).toBeInTheDocument()
   })
 
-  it('clicking "Pseudonym entfernen" calls onUndo with entityId and closes', async () => {
+  it('clicking "Pseudonym rückgängig machen" calls onUndo with entityId and closes', async () => {
     const user = userEvent.setup()
     const { onUndo, onClose } = setup()
-    await user.click(screen.getByRole('menuitem', { name: /Pseudonym entfernen/ }))
+    await user.click(screen.getByRole('menuitem', { name: /Pseudonym rückgängig machen/ }))
     expect(onUndo).toHaveBeenCalledWith('person-1')
     expect(onClose).toHaveBeenCalled()
   })
@@ -187,22 +189,32 @@ describe('ChipActionMenu', () => {
   it('ArrowRight on focused submenu trigger opens its submenu', async () => {
     const user = userEvent.setup()
     setup()
-    // mainFocus starts at 0 → "Pseudonym entfernen". Move down to "Typ ändern".
+    // mainFocus starts at 0 → "Pseudonym rückgängig machen". Move down to "Typ ändern".
     await user.keyboard('{ArrowDown}{ArrowRight}')
     expect(screen.getByRole('menu', { name: /Typ ändern/i })).toBeInTheDocument()
   })
 
-  it('ArrowDown then Enter on first item activates "Pseudonym entfernen"', async () => {
+  it('ArrowDown then Enter on first item activates "Pseudonym rückgängig machen"', async () => {
     const user = userEvent.setup()
     const { onUndo } = setup()
     await user.keyboard('{Enter}')
     expect(onUndo).toHaveBeenCalledWith('person-1')
   })
 
+  it('omits "Pseudonym rückgängig machen" when showUndoItem={false} (sidebar mode)', () => {
+    setup({ showUndoItem: false })
+    const menu = screen.getByRole('menu', { name: /Aktionen für PERSON 1/i })
+    const items = within(menu).getAllByRole('menuitem')
+    expect(items).toHaveLength(2)
+    expect(items[0]).toHaveTextContent('Typ ändern')
+    expect(items[1]).toHaveTextContent('Zur Sperrliste hinzufügen')
+    expect(within(menu).queryByText('Pseudonym rückgängig machen')).toBeNull()
+  })
+
   it('ArrowDown skips disabled "Zur Sperrliste" item when source=blocklist', async () => {
     const user = userEvent.setup()
     const { onUndo } = setup({ source: 'blocklist', type: 'PERSON' })
-    // mainFocus starts at 0 (Pseudonym entfernen). Two ArrowDowns: first → 1 (Typ
+    // mainFocus starts at 0 (Pseudonym rückgängig machen). Two ArrowDowns: first → 1 (Typ
     // ändern), second skips idx 2 (disabled Sperrliste) and wraps back to 0.
     // Enter on idx 0 fires onUndo.
     await user.keyboard('{ArrowDown}{ArrowDown}{Enter}')

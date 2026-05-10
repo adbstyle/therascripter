@@ -4,7 +4,11 @@ import {
   ANONYMIZE_TYPE_OPTIONS,
   BLOCKLIST_TYPE_OPTIONS
 } from '../../constants/editorConstants'
-import { ActionPopover, type ActionPopoverItem } from './ActionPopover'
+import {
+  ActionPopover,
+  type ActionPopoverCloseReason,
+  type ActionPopoverItem
+} from './ActionPopover'
 
 interface ChipActionMenuProps {
   /** Anchor rect of the chip in viewport coordinates. */
@@ -18,7 +22,14 @@ interface ChipActionMenuProps {
   onUndo: (entityId: string) => void
   onChangeType: (entityId: string, newType: PlaceholderType) => void
   onAddToBlocklist: (entityId: string, original: string, type: PlaceholderType) => void
-  onClose: () => void
+  onClose: (reason: ActionPopoverCloseReason) => void
+  /**
+   * When false, omit the "Pseudonym rückgängig machen" item — used by the sidebar
+   * IdentityRow which exposes revert as a direct button on the card so the
+   * most common action is one click away. Defaults to true to preserve the
+   * in-editor chip-menu behaviour, where revert lives in the popover.
+   */
+  showUndoItem?: boolean
 }
 
 export function ChipActionMenu({
@@ -32,38 +43,40 @@ export function ChipActionMenu({
   onUndo,
   onChangeType,
   onAddToBlocklist,
-  onClose
+  onClose,
+  showUndoItem = true
 }: ChipActionMenuProps): React.JSX.Element {
   const isBlocklisted = entitySource === 'blocklist'
 
-  const items = useMemo<ActionPopoverItem[]>(
-    () => [
-      {
+  const items = useMemo<ActionPopoverItem[]>(() => {
+    const list: ActionPopoverItem[] = []
+    if (showUndoItem) {
+      list.push({
         kind: 'action',
         key: 'undo',
-        label: 'Pseudonym entfernen',
+        label: 'Pseudonym rückgängig machen',
         supporting:
           occurrenceCount > 1 ? `»${original}« · ${occurrenceCount}×` : `»${original}«`
-      },
-      {
-        kind: 'submenu',
-        key: 'changeType',
-        label: 'Typ ändern',
-        // Current type is excluded — picking it would be a no-op, and would
-        // expose a side-effect-before-validation path in the caller.
-        options: ANONYMIZE_TYPE_OPTIONS.filter((opt) => opt.value !== entityType)
-      },
-      {
-        kind: 'submenu',
-        key: 'blocklist',
-        label: 'Zur Sperrliste hinzufügen',
-        options: BLOCKLIST_TYPE_OPTIONS,
-        disabled: isBlocklisted,
-        disabledHint: 'Bereits in Sperrliste'
-      }
-    ],
-    [original, occurrenceCount, entityType, isBlocklisted]
-  )
+      })
+    }
+    list.push({
+      kind: 'submenu',
+      key: 'changeType',
+      label: 'Typ ändern',
+      // Current type is excluded — picking it would be a no-op, and would
+      // expose a side-effect-before-validation path in the caller.
+      options: ANONYMIZE_TYPE_OPTIONS.filter((opt) => opt.value !== entityType)
+    })
+    list.push({
+      kind: 'submenu',
+      key: 'blocklist',
+      label: 'Zur Sperrliste hinzufügen',
+      options: BLOCKLIST_TYPE_OPTIONS,
+      disabled: isBlocklisted,
+      disabledHint: 'Bereits in Sperrliste'
+    })
+    return list
+  }, [original, occurrenceCount, entityType, isBlocklisted, showUndoItem])
 
   const handleSelect = useCallback(
     (itemKey: string, optionValue?: string) => {

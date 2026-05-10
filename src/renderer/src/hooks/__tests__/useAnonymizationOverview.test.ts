@@ -130,6 +130,72 @@ describe('useAnonymizationOverview', () => {
     expect(result.current.groups[0].type).toBe('PERSON')
   })
 
+  it('attaches the longest variant as canonicalVariant', () => {
+    const editor = createMockEditor([
+      { entityId: 'p1', type: 'PERSON', number: 1, source: 'ner', original: 'Müller' },
+      { entityId: 'p1', type: 'PERSON', number: 1, source: 'ner', original: 'Hans Müller' },
+      { entityId: 'p1', type: 'PERSON', number: 1, source: 'ner', original: 'Hans' }
+    ])
+    const { result } = renderHook(() => useAnonymizationOverview(editor, 0))
+
+    const identity = result.current.groups[0].identities[0]
+    expect(identity.canonicalVariant.text).toBe('Hans Müller')
+  })
+
+  it('canonicalVariant for a single-variant identity is that variant', () => {
+    const editor = createMockEditor([
+      { entityId: 'p1', type: 'PERSON', number: 1, source: 'ner', original: 'Anna' }
+    ])
+    const { result } = renderHook(() => useAnonymizationOverview(editor, 0))
+
+    const identity = result.current.groups[0].identities[0]
+    expect(identity.canonicalVariant).toEqual({ text: 'Anna', count: 1, source: 'ner' })
+  })
+
+  it('marks pure-NER identity as not allVariantsBlocklisted', () => {
+    const editor = createMockEditor([
+      { entityId: 'p1', type: 'PERSON', number: 1, source: 'ner', original: 'Anna' },
+      { entityId: 'p1', type: 'PERSON', number: 1, source: 'ner', original: 'Anna Müller' }
+    ])
+    const { result } = renderHook(() => useAnonymizationOverview(editor, 0))
+
+    const identity = result.current.groups[0].identities[0]
+    expect(identity.allVariantsBlocklisted).toBe(false)
+    expect(identity.canonicalNonBlocklistVariant?.text).toBe('Anna Müller')
+  })
+
+  it('marks pure-blocklist identity as allVariantsBlocklisted', () => {
+    const editor = createMockEditor([
+      { entityId: 'p1', type: 'PERSON', number: 1, source: 'blocklist', original: 'Anna' },
+      {
+        entityId: 'p1',
+        type: 'PERSON',
+        number: 1,
+        source: 'blocklist',
+        original: 'Anna Müller'
+      }
+    ])
+    const { result } = renderHook(() => useAnonymizationOverview(editor, 0))
+
+    const identity = result.current.groups[0].identities[0]
+    expect(identity.allVariantsBlocklisted).toBe(true)
+    expect(identity.canonicalNonBlocklistVariant).toBeNull()
+  })
+
+  it('mixed-source: canonicalVariant picks longest overall, canonicalNonBlocklistVariant skips blocklist', () => {
+    const editor = createMockEditor([
+      { entityId: 'p1', type: 'PERSON', number: 1, source: 'ner', original: 'Müller' },
+      { entityId: 'p1', type: 'PERSON', number: 1, source: 'blocklist', original: 'Hans Müller' },
+      { entityId: 'p1', type: 'PERSON', number: 1, source: 'ner', original: 'Hans' }
+    ])
+    const { result } = renderHook(() => useAnonymizationOverview(editor, 0))
+
+    const identity = result.current.groups[0].identities[0]
+    expect(identity.allVariantsBlocklisted).toBe(false)
+    expect(identity.canonicalVariant.text).toBe('Hans Müller')
+    expect(identity.canonicalNonBlocklistVariant?.text).toBe('Müller')
+  })
+
   it('recomputes when updateCounter changes', () => {
     const chips = [
       { entityId: 'p1', type: 'PERSON' as PlaceholderType, number: 1, source: 'ner' as EntitySource, original: 'Max' }

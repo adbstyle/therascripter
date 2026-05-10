@@ -4,7 +4,11 @@ import {
   ANONYMIZE_TYPE_OPTIONS,
   BLOCKLIST_TYPE_OPTIONS
 } from '../../constants/editorConstants'
-import { ActionPopover, type ActionPopoverItem } from './ActionPopover'
+import {
+  ActionPopover,
+  type ActionPopoverCloseReason,
+  type ActionPopoverItem
+} from './ActionPopover'
 
 interface SelectionToolbarProps {
   /** Bounding rect of the user's text selection in viewport coordinates. */
@@ -17,7 +21,7 @@ interface SelectionToolbarProps {
   multiChipSelectionOnly: boolean
   onAnonymize: (type: PlaceholderType) => void
   onAddToBlocklist: (type: PlaceholderType) => void
-  onClose: () => void
+  onClose: (reason: ActionPopoverCloseReason) => void
 }
 
 /**

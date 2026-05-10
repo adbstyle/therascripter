@@ -16,6 +16,27 @@ export interface AnonymizedIdentity {
   placeholder: string
   variants: OriginalVariant[]
   totalCount: number
+  /**
+   * Longest variant by character length, ties broken by document order.
+   * Used as the term when adding the identity to the Sperrliste — matches the
+   * canonical-name choice in `coreference-resolver.ts` and minimises false
+   * positives in the doc-wide retroactive scan.
+   */
+  canonicalVariant: OriginalVariant
+  /**
+   * True only when every variant of the identity is blocklist-sourced.
+   * Drives the AC6 "Zur Sperrliste hinzufügen"-disable rule: a mixed-source
+   * identity (one variant NER, another blocklist) should still allow the user
+   * to promote the still-NER variant to the Sperrliste.
+   */
+  allVariantsBlocklisted: boolean
+  /**
+   * Same picking rule as `canonicalVariant` but restricted to non-blocklist
+   * sources. `null` when every variant is already blocklisted. Used by the
+   * sidebar add-to-Sperrliste flow so the term we add never duplicates an
+   * existing Sperrliste row.
+   */
+  canonicalNonBlocklistVariant: OriginalVariant | null
 }
 
 export interface EntityTypeGroup {
@@ -88,13 +109,34 @@ export function useAnonymizationOverview(
         variants.push({ text, count, source })
       }
 
+      let canonicalVariant = variants[0]
+      let canonicalNonBlocklistVariant: OriginalVariant | null =
+        variants[0].source !== 'blocklist' ? variants[0] : null
+      let allVariantsBlocklisted = variants[0].source === 'blocklist'
+      for (let i = 1; i < variants.length; i++) {
+        const v = variants[i]
+        if (v.text.length > canonicalVariant.text.length) canonicalVariant = v
+        if (v.source !== 'blocklist') {
+          allVariantsBlocklisted = false
+          if (
+            canonicalNonBlocklistVariant === null ||
+            v.text.length > canonicalNonBlocklistVariant.text.length
+          ) {
+            canonicalNonBlocklistVariant = v
+          }
+        }
+      }
+
       const identity: AnonymizedIdentity = {
         entityId: entry.entityId,
         type: entry.type,
         number: entry.number,
         placeholder: `[${entry.type} ${entry.number}]`,
         variants,
-        totalCount: variants.reduce((sum, v) => sum + v.count, 0)
+        totalCount: variants.reduce((sum, v) => sum + v.count, 0),
+        canonicalVariant,
+        canonicalNonBlocklistVariant,
+        allVariantsBlocklisted
       }
 
       const existing = groupMap.get(entry.type)
