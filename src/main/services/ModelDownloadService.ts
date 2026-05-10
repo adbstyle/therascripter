@@ -4,10 +4,7 @@ import { dirname, join } from 'path'
 import { BrowserWindow } from 'electron'
 import { getDataDir } from '../db/connection'
 import { getSettings, type AppSettings } from './SettingsService'
-import {
-  deleteInstalledVersion,
-  setInstalledVersion
-} from './InstalledVersionsStore'
+import { deleteInstalledVersion, setInstalledVersion } from './InstalledVersionsStore'
 import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
 import type { ModelGroup } from '../../shared/validation/model-catalog-schemas'
 import { MODEL_DEFINITIONS, type ModelDefinition } from '../../shared/model-catalog'

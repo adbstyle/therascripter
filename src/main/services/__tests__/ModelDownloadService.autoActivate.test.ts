@@ -20,10 +20,7 @@ interface FakeStoreState {
   }
   modelsDownloaded: boolean
   reconcileEvents: unknown[]
-  installedModelVersions: Record<
-    string,
-    { version: string; sha256: string; installedAt: string }
-  >
+  installedModelVersions: Record<string, { version: string; sha256: string; installedAt: string }>
 }
 
 vi.mock('../SettingsService', () => {

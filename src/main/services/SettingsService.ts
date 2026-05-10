@@ -176,9 +176,8 @@ export function initSettings(): Store<AppSettings> {
   // dieser Migration schrieben blind 'gemma-summarization' und triggerten dadurch
   // ein irreführendes Reconcile-Event ("Bisher aktiv: gemma-summarization") für
   // User, die das Modell nie heruntergeladen hatten.
-  const currentSummarization = (
-    store.get('activeModels') as { summarization?: string | null }
-  ).summarization
+  const currentSummarization = (store.get('activeModels') as { summarization?: string | null })
+    .summarization
   if (typeof currentSummarization !== 'string' && currentSummarization !== null) {
     store.set('activeModels', {
       ...store.get('activeModels'),
