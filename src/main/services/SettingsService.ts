@@ -6,7 +6,7 @@ import type {
   AppUpdateStatus
 } from '../../shared/types/ModelUpdate'
 import type { ReconcileEvent } from '../../shared/types/ReconcileEvent'
-import { getModelDefinitions } from './ModelDownloadService'
+import { getModelDefinitions, defaultActiveModelFor } from './ModelDownloadService'
 import {
   DIARIZATION_PIPELINES,
   DEFAULT_DIARIZATION_PIPELINE,
@@ -57,7 +57,11 @@ const defaults: AppSettings = {
     diarizationPipeline: DEFAULT_DIARIZATION_PIPELINE,
     ner: 'flair-ner-german-large',
     ocr: 'apple-vision',
-    summarization: 'gemma-summarization'
+    // Optionale Gruppen starten null. defaultActiveModelFor kann hier nicht
+    // direkt aufgerufen werden, weil ModelDownloadService getSettings() importiert
+    // (zirkuläre Init). Wert hardcoden + Helper konsumiert die gleiche Invariante
+    // in der Migration unten.
+    summarization: null
   },
   firstLaunchDone: false,
   consentReminderShown: false,
@@ -166,16 +170,18 @@ export function initSettings(): Store<AppSettings> {
     })
   }
 
-  // Defensiv: Bestehende electron-store-Instanzen haben kein activeModels.summarization,
-  // weil das Feld erst mit dem lokalen LLM eingeführt wurde. defaults füllt nested keys
-  // nicht nach, also Wert hier explizit setzen, falls nicht vorhanden.
-  const currentSummarization = (
-    store.get('activeModels') as { summarization?: string | null }
-  ).summarization
+  // Pre-LLM-Stores haben keinen summarization-Key (Feld kam mit dem lokalen LLM).
+  // electron-store füllt nested keys nicht nach, also setzen wir den Default-Wert
+  // für die optionale Gruppe (= null) explizit. Eine frühere Version dieser
+  // Migration schrieb blind 'gemma-summarization' und triggerte dadurch ein
+  // irreführendes Reconcile-Event ("Bisher aktiv: gemma-summarization") für User,
+  // die das Modell nie heruntergeladen hatten.
+  const currentSummarization = (store.get('activeModels') as { summarization?: string | null })
+    .summarization
   if (typeof currentSummarization !== 'string' && currentSummarization !== null) {
     store.set('activeModels', {
       ...store.get('activeModels'),
-      summarization: 'gemma-summarization'
+      summarization: defaultActiveModelFor('summarization')
     })
   }
 
