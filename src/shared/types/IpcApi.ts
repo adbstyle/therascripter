@@ -5,7 +5,7 @@ import type { EntityMap, PlaceholderType } from './EntityMap'
 import type { TipTapDocument } from './TipTapDocument'
 import type { PendingModelUpdate, AppUpdateStatus, CheckResult } from './ModelUpdate'
 import type { ReconcileEvent } from './ReconcileEvent'
-import type { ProcessedModelsSnapshot } from './Provenance'
+import type { ProcessedModelsSnapshot, AudioStats } from './Provenance'
 import type {
   ModelCatalogEntry,
   ModelGroup,
@@ -105,6 +105,12 @@ export interface ReviewData {
    * practice; the panel falls back to omitting the timestamp.
    */
   reviewAt: string | null
+  /**
+   * Issue #99 — aggregated from `transcript.metadata.stitchMap` and the
+   * diarization JSON. NULL for PDF sessions and for any audio session whose
+   * data sources are completely unreadable.
+   */
+  audioStats: AudioStats | null
 }
 
 export interface ReviewApi {

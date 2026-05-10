@@ -42,6 +42,7 @@ function setup(overrides: Partial<Parameters<typeof ReviewSidePanel>[0]> = {}) {
       onAddToBlocklist={vi.fn()}
       provenance={null}
       reviewAt={null}
+      audioStats={null}
       {...overrides}
     />
   )

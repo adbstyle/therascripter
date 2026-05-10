@@ -3,7 +3,11 @@ import { AnonymizationPanel } from '../editor/AnonymizationPanel'
 import { SecondaryTabs } from '../editor/SecondaryTabs'
 import { ProvenancePanel } from './ProvenancePanel'
 import type { AnonymizationOverviewData } from '../../hooks/useAnonymizationOverview'
-import type { PlaceholderType, ProcessedModelsSnapshot } from '../../../../shared/types'
+import type {
+  AudioStats,
+  PlaceholderType,
+  ProcessedModelsSnapshot
+} from '../../../../shared/types'
 
 type TabId = 'anonymization' | 'provenance'
 
@@ -15,6 +19,7 @@ interface ReviewSidePanelProps {
   onAddToBlocklist: (entityId: string, original: string, type: PlaceholderType) => void
   provenance: ProcessedModelsSnapshot | null
   reviewAt: string | null
+  audioStats: AudioStats | null
 }
 
 const ID_PREFIX = 'review-side'
@@ -26,7 +31,8 @@ export function ReviewSidePanel({
   onChangeType,
   onAddToBlocklist,
   provenance,
-  reviewAt
+  reviewAt,
+  audioStats
 }: ReviewSidePanelProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<TabId>('anonymization')
 
@@ -85,7 +91,7 @@ export function ReviewSidePanel({
           hidden={activeTab !== 'provenance'}
           className="min-h-0 flex-1 overflow-y-auto"
         >
-          <ProvenancePanel data={provenance} reviewAt={reviewAt} />
+          <ProvenancePanel data={provenance} reviewAt={reviewAt} audioStats={audioStats} />
         </div>
       </div>
     </div>
