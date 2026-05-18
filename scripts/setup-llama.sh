@@ -3,8 +3,22 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-BIN_DIR="$REPO_ROOT/resources/bin"
-LIB_DIR="$REPO_ROOT/resources/lib"
+# Bundle layout rationale: see docs/plans/ggml-abi-split.md. whisper.cpp and
+# llama.cpp link against incompatible ggml generations, so each toolchain
+# lives in its own self-contained dir; LC_RPATH=@loader_path/../lib in both
+# binaries resolves to the tool-specific lib/ sibling.
+BIN_DIR="$REPO_ROOT/resources/llama/bin"
+LIB_DIR="$REPO_ROOT/resources/llama/lib"
+
+# Migrations-Cleanup: remove the previous shared layout if upgrading from
+# before docs/plans/ggml-abi-split.md. Only deletes llama's share of
+# resources/lib (libllama*, libmtmd*, libggml*) and the old llama-cli binary
+# — never touches whisper's bundle, ffmpeg, or vision-ocr.
+rm -f \
+  "$REPO_ROOT/resources/bin/llama-cli" \
+  "$REPO_ROOT/resources/lib/"libllama*.dylib \
+  "$REPO_ROOT/resources/lib/"libmtmd*.dylib \
+  "$REPO_ROOT/resources/lib/"libggml*.dylib 2>/dev/null || true
 
 # Gemma 4 E4B Q4_K_M GGUF was not yet published when this feature shipped — see
 # CLAUDE.md ("Gemma 4 E4B GGUF source"). Fallback: Gemma 3 4B Instruct Q4_K_M.
@@ -48,6 +62,25 @@ have_libggml=$(ls -1 "$LIB_DIR/"libggml*.dylib 2>/dev/null | wc -l | tr -d ' ')
 if [ "$have_libllama" -eq 0 ] || [ "$have_libggml" -eq 0 ]; then
   echo "FATAL: required dylibs missing in $LIB_DIR (libllama=$have_libllama libggml=$have_libggml)" >&2
   echo "  Check 'brew --prefix llama.cpp' and 'brew --prefix ggml' layouts." >&2
+  exit 1
+fi
+
+# Rewrite absolute /opt/homebrew/opt/ggml/lib paths in llama-cli to @rpath,
+# so the bundled lib/ in this tool's directory is used at runtime on end-user
+# machines (where Homebrew may not exist at this prefix). MUST run before the
+# codesign step below — install_name_tool invalidates the Mach-O signature.
+echo '==> Rewriting llama-cli ggml install names to @rpath'
+install_name_tool -change \
+  /opt/homebrew/opt/ggml/lib/libggml.0.dylib \
+  @rpath/libggml.0.dylib \
+  "$BIN_DIR/llama-cli"
+install_name_tool -change \
+  /opt/homebrew/opt/ggml/lib/libggml-base.0.dylib \
+  @rpath/libggml-base.0.dylib \
+  "$BIN_DIR/llama-cli"
+if otool -L "$BIN_DIR/llama-cli" | grep -q '/opt/homebrew'; then
+  echo 'FATAL: llama-cli still references /opt/homebrew/... after install_name_tool' >&2
+  otool -L "$BIN_DIR/llama-cli" >&2
   exit 1
 fi
 

@@ -4,9 +4,14 @@
 # Installs pre-built whisper-cpp via Homebrew (no C++ toolchain needed).
 #
 # Produces:
-#   resources/bin/whisper-cli
-#   resources/lib/libwhisper.*.dylib + libggml-*.dylib
+#   resources/whisper/bin/whisper-cli
+#   resources/whisper/lib/libwhisper.*.dylib + libggml-*.dylib
 #   ~/.therascript/models/asr/ggml-large-v3-turbo-q5_0.bin (optional, with --model)
+#
+# Bundle layout rationale: whisper.cpp and llama.cpp link against incompatible
+# ggml generations (see docs/plans/ggml-abi-split.md). The two toolchains live
+# in separate self-contained directories — each binary's built-in
+# LC_RPATH=@loader_path/../lib resolves to the tool-specific lib/ sibling.
 #
 # Usage:
 #   ./scripts/setup-whisper.sh          # binary + dylibs only
@@ -16,9 +21,18 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-BIN_DIR="$PROJECT_ROOT/resources/bin"
-LIB_DIR="$PROJECT_ROOT/resources/lib"
+BIN_DIR="$PROJECT_ROOT/resources/whisper/bin"
+LIB_DIR="$PROJECT_ROOT/resources/whisper/lib"
 MODEL_DIR="$HOME/.therascript/models/asr"
+
+# Migrations-Cleanup: remove the previous shared layout if a developer is
+# upgrading from before docs/plans/ggml-abi-split.md. Only deletes whisper's
+# share of resources/lib (libwhisper.* + libggml*) and the old whisper-cli
+# binary — never touches the llama bundle, ffmpeg, or vision-ocr.
+rm -f \
+  "$PROJECT_ROOT/resources/bin/whisper-cli" \
+  "$PROJECT_ROOT/resources/lib/"libwhisper.*.dylib \
+  "$PROJECT_ROOT/resources/lib/"libggml*.dylib 2>/dev/null || true
 MODEL_FILE="ggml-large-v3-turbo-q5_0.bin"
 MODEL_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$MODEL_FILE"
 

@@ -150,7 +150,7 @@ describe('buildWhisperArgs', () => {
 // processing — whisper-cli rejects on the missing model/audio first).
 describe('whisper-cli flag compatibility', () => {
   const repoRoot = join(__dirname, '..', '..', '..', '..')
-  const BINARY = join(repoRoot, 'resources', 'bin', 'whisper-cli')
+  const BINARY = join(repoRoot, 'resources', 'whisper', 'bin', 'whisper-cli')
 
   it.skipIf(!existsSync(BINARY))('does not produce "unknown argument" errors with our arg list', () => {
     // Use deliberately bogus paths — whisper-cli will exit early because the

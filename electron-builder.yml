@@ -20,14 +20,22 @@ files:
   - '!#/**/*'
   - '!docs/**/*'
 extraResources:
-  - from: resources/bin
-    to: bin
+  # whisper.cpp and llama.cpp link against incompatible ggml generations, so
+  # each toolchain ships as its own self-contained bundle. Each binary's
+  # LC_RPATH=@loader_path/../lib resolves to its tool-specific lib/ sibling.
+  # See docs/plans/ggml-abi-split.md.
+  - from: resources/whisper
+    to: whisper
     filter:
       - '**/*'
-  - from: resources/lib
-    to: lib
+  - from: resources/llama
+    to: llama
     filter:
       - '**/*'
+  - from: resources/bin/ffmpeg
+    to: bin/ffmpeg
+  - from: resources/bin/vision-ocr
+    to: bin/vision-ocr
   - from: resources/icons
     to: icons
     filter:

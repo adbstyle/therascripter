@@ -81,9 +81,9 @@ function extractWhisperErrorLines(stderr: string): string[] {
 export class WhisperService implements TaskExecutor {
   private getBinaryPath(): string {
     if (app.isPackaged) {
-      return join(process.resourcesPath, 'bin', 'whisper-cli')
+      return join(process.resourcesPath, 'whisper', 'bin', 'whisper-cli')
     }
-    return join(app.getAppPath(), 'resources', 'bin', 'whisper-cli')
+    return join(app.getAppPath(), 'resources', 'whisper', 'bin', 'whisper-cli')
   }
 
   private getModelPath(): string {

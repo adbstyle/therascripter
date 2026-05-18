@@ -41,6 +41,8 @@ coverage/
 .whisper-build/
 resources/bin/
 resources/lib/
+resources/whisper/
+resources/llama/
 
 # Python sidecar virtual environment, standalone build, and cache
 python_sidecar/venv/
