@@ -88,6 +88,41 @@ for lib in "${DYLIBS[@]}"; do
 done
 echo "Libraries: $LIB_DIR/ ($(ls "$LIB_DIR" | wc -l | tr -d ' ') files)"
 
+# ── 3a. Make bundle self-contained ──────────────────────────────────────────
+# whisper-cpp's bundled dylibs ship with absolute LC_ID install names pointing
+# into Homebrew's prefix (e.g. /opt/homebrew/opt/whisper-cpp/libexec/lib/…).
+# whisper-cli's inter-dylib refs are already @rpath, so the bundle works on a
+# Homebrew-equipped Mac — but on an end-user Mac dyld dedup behaviour around
+# absolute LC_IDs can bite. Rewrite every Mach-O so the bundle is fully
+# location-independent. Must run before codesign re-sign below; install_name_tool
+# invalidates the Mach-O signature.
+
+echo "Rewriting absolute /opt/homebrew references to @rpath"
+rewrite_macho() {
+  local macho="$1"
+  local kind="$2" # "dylib" or "binary"
+  if [ "$kind" = 'dylib' ]; then
+    install_name_tool -id "@rpath/$(basename "$macho")" "$macho"
+  fi
+  otool -L "$macho" | awk '$1 ~ /^\/opt\/homebrew/ {print $1}' | while read -r dep; do
+    install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$macho"
+  done
+}
+rewrite_macho "$BIN_DIR/whisper-cli" binary
+for dylib in "$LIB_DIR/"*.dylib; do
+  rewrite_macho "$dylib" dylib
+done
+if otool -L "$BIN_DIR/whisper-cli" "$LIB_DIR/"*.dylib | grep '/opt/homebrew'; then
+  echo "FATAL: bundle still references /opt/homebrew after rewrite" >&2
+  exit 1
+fi
+
+# Re-sign every Mach-O ad-hoc (install_name_tool invalidated the signature).
+codesign --force --sign - "$BIN_DIR/whisper-cli"
+for dylib in "$LIB_DIR/"*.dylib; do
+  codesign --force --sign - "$dylib"
+done
+
 # ── 4. Verify binary works ──────────────────────────────────────────────────
 
 if "$BIN_DIR/whisper-cli" --help &>/dev/null; then

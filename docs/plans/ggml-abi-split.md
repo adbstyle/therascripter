@@ -248,11 +248,62 @@ Wartung.
    > auf eine gemeinsame `resources/lib/` zurückgehen — siehe
    > `docs/plans/ggml-abi-split.md`.
 
-11. **Optional, niedrige Prio:** `scripts/verify-bundles.sh` als CI-Smoke:
-   - prüft `otool -L resources/whisper/bin/whisper-cli` enthält keine absoluten
-     `/opt/homebrew/...`-Pfade,
-   - prüft `otool -L resources/llama/bin/llama-cli` ebenso,
-   - prüft `@rpath/libggml.0.dylib` resolved auf eine Datei innerhalb des
-     gleichen Bundles (z. B. via `DYLD_PRINT_LIBRARIES=1 ... --version 2>&1 |
-     grep libggml`).
+11. `scripts/verify-bundles.sh` — implementiert. Läuft als pre-package-Smoke,
+    prüft beide Bundles via `otool -L`: zero `/opt/homebrew`-Refs in jeglichem
+    Mach-O, alle Plugins + libssl/libcrypto/libomp vorhanden. Failed-Exit
+    blockt einen DMG-Build der auf Endnutzer-Macs nicht laden würde.
+
+---
+
+## Erweiterung (Phase 6 — nach Code-Review)
+
+Der erste Wurf des Plans hat nur die `llama-cli`-Binary auf `@rpath` umgeschrieben.
+Code-Review (PR #111) hat aufgedeckt, dass die bundled **dylibs selbst** noch
+absolute `/opt/homebrew`-Refs hatten, plus dass ggml 0.10+ Backend-Plugins zur
+Laufzeit dlopen't. Erweiterungen:
+
+### Comprehensive `rewrite_macho` Helper
+
+Statt zwei hardcoded `install_name_tool -change`-Aufrufe für `libggml.0` und
+`libggml-base.0`: eine Funktion in beiden Setup-Skripten, die `otool -L` parst
+und JEDE absolute `/opt/homebrew`-Dep auf `@rpath/<basename>` umschreibt
+(plus LC_ID der dylibs auf `@rpath/<basename>` für dyld-Dedup-Konsistenz).
+Iteriert über `$LIB_DIR/*.dylib` und `$LIB_DIR/*.so` (Backend-Plugins).
+
+### Transitive Dependencies bundlen
+
+`libllama-common.0.dylib` → `libssl.3.dylib` + `libcrypto.3.dylib`
+(macOS hat kein system-libssl mehr seit 10.15).
+`libggml-cpu-apple_m*.so` → `libomp.dylib`.
+Beide aus `$(brew --prefix openssl@3)/lib/` bzw. `$(brew --prefix libomp)/lib/`
+ins llama-Bundle kopiert + via `rewrite_macho` portabilisiert.
+
+### ggml Backend-Plugin Architektur
+
+ggml 0.10+ lädt Backend-Implementierungen (Metal/BLAS/CPU-Varianten pro
+Apple-Silicon-Generation) nicht statisch via `LC_LOAD_DYLIB`, sondern via
+`dlopen` zur Laufzeit. `otool -L` sieht das nicht — empirisch entdeckt via
+`DYLD_PRINT_LIBRARIES=1 ./llama-cli --version`. Die `.so` files in
+`$(brew --prefix ggml)/libexec/` (NICHT `/lib/`) werden ins llama-Bundle
+mitkopiert.
+
+`libggml.0.dylib` enthält einen **hardcoded fallback** Suchpfad
+`/opt/homebrew/Cellar/ggml/<ver>/libexec` als Konstante. Versuche, diesen
+String via Binary-Patch auf `@loader_path` zu rewriten, schlugen fehl: ggml
+ruft `std::filesystem::exists()` vor `dlopen`, behandelt `@loader_path` als
+literalen Dirname (Fehlerstring `%s: search path %s does not exist`).
+**Lösung:** Beim Spawnen von `llama-cli` setzt `LlamaSummarizer.ts` die env
+var `GGML_BACKEND_PATH=<bundle>/lib`. Auf Endnutzer-Macs (kein
+`/opt/homebrew/...`) fällt ggml auf diesen Pfad zurück und findet unsere
+Plugins. Auf Dev-Macs werden beide Pfade gefunden — harmlos.
+
+### Empirische Validation auf Dev-Mac begrenzt
+
+Vollständige Portabilitäts-Validierung erfordert einen Clean Mac ohne
+Homebrew (oder Docker-macos-VM). Auf einem Dev-Mac mit installiertem
+Homebrew lädt ggml's hardcoded Pfad immer noch sichtbare `/opt/homebrew`-
+Plugins — das ist erwartet und kein Bug. `verify-bundles.sh` deckt die
+strukturelle Korrektheit ab (kein Mach-O referenziert `/opt/homebrew`).
+Endgültiger Funktionsbeweis bleibt der DMG-Smoke auf einem zweiten Mac
+(Test-plan-Item).
 

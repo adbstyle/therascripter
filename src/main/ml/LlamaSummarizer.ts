@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { writeFile, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, resolve as resolvePath, relative } from 'node:path'
+import { join, resolve as resolvePath, relative, dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { buildSummarizationPrompt } from './summarization-prompt'
 import { SUMMARIZATION_JSON_SCHEMA, SummarizationOutputSchema } from './summarization-schema'
@@ -176,7 +176,19 @@ export class LlamaSummarizer {
 
   private spawn(args: string[], signal: AbortSignal): Promise<string> {
     return new Promise((resolve, reject) => {
-      const child = spawn(this.deps.getBinaryPath(), args, { stdio: ['ignore', 'pipe', 'pipe'] })
+      // ggml dlopens its backend plugins (Metal/BLAS/CPU) at runtime. libggml
+      // contains a hardcoded fallback /opt/homebrew/Cellar/... search path
+      // that only exists on the build host. On end-user Macs without Homebrew
+      // the hardcoded path fails filesystem::exists() and ggml falls back to
+      // $GGML_BACKEND_PATH — which we point at the bundle's lib/ where
+      // setup-llama.sh placed libggml-*.so + libomp.dylib. On dev machines
+      // both paths exist; ggml may load from either, which is harmless.
+      const binaryPath = this.deps.getBinaryPath()
+      const libDir = join(dirname(binaryPath), '..', 'lib')
+      const child = spawn(binaryPath, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, GGML_BACKEND_PATH: libDir }
+      })
       let stdout = ''
       let stderr = ''
 

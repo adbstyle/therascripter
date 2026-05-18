@@ -53,6 +53,42 @@ fi
 # Fallback: some older formulas ship libggml in the llama.cpp prefix.
 cp "$BREW_PREFIX/lib/"libggml*.dylib "$LIB_DIR/" 2>/dev/null || true
 
+# libllama-common transitively links libssl + libcrypto from Homebrew's
+# openssl@3 — macOS no longer ships system OpenSSL, so we MUST bundle them.
+# Without this the DMG fails on end-user Macs without Homebrew at the
+# expected prefix.
+echo '==> Copying OpenSSL dylibs (transitive dep of libllama-common)'
+OPENSSL_PREFIX="$(brew --prefix openssl@3 2>/dev/null || true)"
+if [ -z "$OPENSSL_PREFIX" ] || [ ! -d "$OPENSSL_PREFIX/lib" ]; then
+  echo 'FATAL: openssl@3 not found via Homebrew. Run: brew install openssl@3' >&2
+  exit 1
+fi
+cp "$OPENSSL_PREFIX/lib/libssl.3.dylib" "$LIB_DIR/"
+cp "$OPENSSL_PREFIX/lib/libcrypto.3.dylib" "$LIB_DIR/"
+
+# ggml 0.10+ uses a plugin architecture: backend implementations (Metal, BLAS,
+# CPU variants) live as separate libggml-*.so files that libggml dlopens at
+# runtime. libggml has a hardcoded fallback path
+# (/opt/homebrew/Cellar/ggml/<ver>/libexec) AND respects $GGML_BACKEND_PATH —
+# we bundle the .so files into resources/llama/lib/ and the main process sets
+# GGML_BACKEND_PATH=<lib_dir> when spawning llama-cli (see LlamaSummarizer.ts).
+echo '==> Copying ggml backend plugins (.so) for Apple Silicon'
+if [ -z "$GGML_PREFIX" ] || [ ! -d "$GGML_PREFIX/libexec" ]; then
+  echo 'FATAL: ggml libexec dir not found — backend plugins missing' >&2
+  exit 1
+fi
+cp "$GGML_PREFIX/libexec/"libggml-*.so "$LIB_DIR/"
+
+# libggml-cpu-apple_m*.so transitively links libomp (OpenMP runtime). macOS
+# doesn't ship system OpenMP, so bundle it alongside the backends.
+echo '==> Copying OpenMP runtime (transitive dep of CPU backend plugins)'
+LIBOMP_PREFIX="$(brew --prefix libomp 2>/dev/null || true)"
+if [ -z "$LIBOMP_PREFIX" ] || [ ! -d "$LIBOMP_PREFIX/lib" ]; then
+  echo 'FATAL: libomp not found via Homebrew. Run: brew install libomp' >&2
+  exit 1
+fi
+cp "$LIBOMP_PREFIX/lib/libomp.dylib" "$LIB_DIR/"
+
 # Sanity check: the copy commands above use `|| true` to be tolerant of layout
 # variations across Homebrew versions. Without this guard a successful run
 # could leave $LIB_DIR empty and the bug would only surface at runtime as a
@@ -65,29 +101,41 @@ if [ "$have_libllama" -eq 0 ] || [ "$have_libggml" -eq 0 ]; then
   exit 1
 fi
 
-# Rewrite absolute /opt/homebrew/opt/ggml/lib paths in llama-cli to @rpath,
-# so the bundled lib/ in this tool's directory is used at runtime on end-user
-# machines (where Homebrew may not exist at this prefix). MUST run before the
-# codesign step below — install_name_tool invalidates the Mach-O signature.
-echo '==> Rewriting llama-cli ggml install names to @rpath'
-install_name_tool -change \
-  /opt/homebrew/opt/ggml/lib/libggml.0.dylib \
-  @rpath/libggml.0.dylib \
-  "$BIN_DIR/llama-cli"
-install_name_tool -change \
-  /opt/homebrew/opt/ggml/lib/libggml-base.0.dylib \
-  @rpath/libggml-base.0.dylib \
-  "$BIN_DIR/llama-cli"
-if otool -L "$BIN_DIR/llama-cli" | grep -q '/opt/homebrew'; then
-  echo 'FATAL: llama-cli still references /opt/homebrew/... after install_name_tool' >&2
-  otool -L "$BIN_DIR/llama-cli" >&2
+# Make the bundle self-contained: every Mach-O (binary + every dylib) must
+# resolve its dependencies via @rpath, not via absolute /opt/homebrew/...
+# paths. Without this the DMG only works on Macs where Homebrew is installed
+# at exactly the expected prefix. MUST run before the codesign step below —
+# install_name_tool invalidates the Mach-O signature.
+echo '==> Rewriting absolute /opt/homebrew dependencies to @rpath'
+rewrite_macho() {
+  local macho="$1"
+  local kind="$2" # "dylib" or "binary"
+  # Rewrite the dylib's own install name (LC_ID) so dyld dedups consistently
+  # regardless of how the file was loaded.
+  if [ "$kind" = 'dylib' ]; then
+    install_name_tool -id "@rpath/$(basename "$macho")" "$macho"
+  fi
+  # Rewrite every absolute /opt/homebrew dependency (covers both
+  # /opt/homebrew/opt/<formula>/lib/... and /opt/homebrew/Cellar/<formula>/<ver>/lib/...).
+  otool -L "$macho" | awk '$1 ~ /^\/opt\/homebrew/ {print $1}' | while read -r dep; do
+    install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$macho"
+  done
+}
+rewrite_macho "$BIN_DIR/llama-cli" binary
+for macho in "$LIB_DIR/"*.dylib "$LIB_DIR/"*.so; do
+  [ -f "$macho" ] && rewrite_macho "$macho" dylib
+done
+
+echo '==> Verifying bundle is self-contained (zero /opt/homebrew references)'
+if otool -L "$BIN_DIR/llama-cli" "$LIB_DIR/"*.dylib "$LIB_DIR/"*.so | grep '/opt/homebrew'; then
+  echo 'FATAL: bundle still references /opt/homebrew after rewrite — DMG would not work on Macs without Homebrew' >&2
   exit 1
 fi
 
-echo '==> Re-signing binary with ad-hoc signature'
+echo '==> Re-signing all Mach-Os with ad-hoc signature'
 codesign --force --sign - "$BIN_DIR/llama-cli"
-for dylib in "$LIB_DIR/"libllama*.dylib "$LIB_DIR/"libmtmd*.dylib "$LIB_DIR/"libggml*.dylib; do
-  [ -f "$dylib" ] && codesign --force --sign - "$dylib"
+for macho in "$LIB_DIR/"*.dylib "$LIB_DIR/"*.so; do
+  [ -f "$macho" ] && codesign --force --sign - "$macho"
 done
 
 echo '==> Verifying binary'
