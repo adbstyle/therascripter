@@ -144,10 +144,31 @@ describe('ProcessWatchdog', () => {
     watchdog.stop()
   })
 
-  it('skips polling for in-process task types (extraction)', () => {
+  it('monitors extraction (pdf.js can hang — abortable() settles the executor)', () => {
+    // Bewusste Verhaltensänderung: extraction war IN_PROCESS-geskippt und
+    // ein hängendes pdf.js wedgede die Queue permanent. Seit dem
+    // abortable()-Umbau im PDFExtractionExecutor wird der Stall erkannt.
     const onStall = vi.fn()
     const watchdog = new ProcessWatchdog({
       taskType: 'extraction',
+      onStall
+    })
+
+    watchdog.start()
+
+    vi.advanceTimersByTime(600_000)
+
+    expect(onStall).toHaveBeenCalledTimes(1)
+
+    watchdog.stop()
+  })
+
+  it('still skips polling for the synchronous alignment executor', () => {
+    // alignment ist rein synchroner CPU-Code — ein Timeout könnte ihn weder
+    // erkennen (keine Awaits) noch unterbrechen. Watchdog bleibt no-op.
+    const onStall = vi.fn()
+    const watchdog = new ProcessWatchdog({
+      taskType: 'alignment',
       onStall
     })
 
