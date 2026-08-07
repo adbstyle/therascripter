@@ -57,9 +57,7 @@ describe('extractFirstJSONObject', () => {
 
   it('respects JSON string semantics — braces inside strings do not close the object', () => {
     const tricky = 'noise {"title":"a {nested} b","summary":"with } char"} more noise'
-    expect(extractFirstJSONObject(tricky)).toBe(
-      '{"title":"a {nested} b","summary":"with } char"}'
-    )
+    expect(extractFirstJSONObject(tricky)).toBe('{"title":"a {nested} b","summary":"with } char"}')
   })
 
   it('handles escaped quotes inside strings', () => {
@@ -112,9 +110,9 @@ describe('parseLlamaOutput', () => {
   })
 
   it('throws when title is too short (defense-in-depth — grammar should prevent this)', () => {
-    expect(() =>
-      parseLlamaOutput('{"title":"AB","summary":"' + 'a'.repeat(50) + '"}')
-    ).toThrow(/passt nicht zum Schema/)
+    expect(() => parseLlamaOutput('{"title":"AB","summary":"' + 'a'.repeat(50) + '"}')).toThrow(
+      /passt nicht zum Schema/
+    )
   })
 })
 

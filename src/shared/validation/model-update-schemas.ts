@@ -11,7 +11,10 @@ export const ManifestModelSchema = z.object({
 
 export const ManifestSchema = z.object({
   generatedAt: z.string().min(1),
-  latestAppVersion: z.string().regex(/^\d+\.\d+\.\d+$/).optional(),
+  latestAppVersion: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+$/)
+    .optional(),
   models: z.array(ManifestModelSchema).min(1)
 })
 

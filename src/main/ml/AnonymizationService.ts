@@ -191,9 +191,7 @@ export class AnonymizationService implements TaskExecutor {
       throw new Error('Verarbeitung reagiert nicht mehr')
     }
     if (result.timedOut) {
-      throw new Error(
-        `NER-Verarbeitung abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`
-      )
+      throw new Error(`NER-Verarbeitung abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`)
     }
     if (result.code !== 0) {
       const errorLines = result.stderr
@@ -205,8 +203,7 @@ export class AnonymizationService implements TaskExecutor {
             line.includes('error') ||
             line.includes('failed')
         )
-      const errorDetail =
-        errorLines.length > 0 ? errorLines.join('; ') : result.stderr.slice(-500)
+      const errorDetail = errorLines.length > 0 ? errorLines.join('; ') : result.stderr.slice(-500)
       throw new Error(`NER Fehler (Exit Code ${result.code}): ${errorDetail}`)
     }
 

@@ -611,11 +611,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
       <header className="titlebar-drag flex items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="flex min-w-0 items-center gap-3">
           {sessionType === 'audio' ? (
-            <Mic
-              className="h-5 w-5 shrink-0 text-text-tertiary"
-              strokeWidth={1.75}
-              aria-hidden
-            />
+            <Mic className="h-5 w-5 shrink-0 text-text-tertiary" strokeWidth={1.75} aria-hidden />
           ) : (
             <FileText
               className="h-5 w-5 shrink-0 text-text-tertiary"

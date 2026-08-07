@@ -15,7 +15,11 @@ import { writeFileAtomic } from '../utils/file-ops'
 const SPEAKER_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
 export class AlignmentService implements TaskExecutor {
-  async execute(task: Task, onProgress: (progress: number) => void, _signal?: AbortSignal): Promise<void> {
+  async execute(
+    task: Task,
+    onProgress: (progress: number) => void,
+    _signal?: AbortSignal
+  ): Promise<void> {
     const db = getDatabase()
     const sessionService = new SessionService(db)
     const session = sessionService.getSession(task.sessionId)

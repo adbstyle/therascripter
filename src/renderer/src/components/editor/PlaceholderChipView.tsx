@@ -129,9 +129,7 @@ export function PlaceholderChipView({ node, selected }: NodeViewProps): React.JS
   const stateLayers =
     'relative isolate before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:bg-current before:opacity-0 before:transition-opacity hover:before:opacity-[0.08] focus-visible:before:opacity-10 active:before:opacity-10 active:scale-[0.98]'
 
-  const selectedClasses = selected
-    ? 'before:opacity-[0.12] ring-2 ring-primary ring-offset-1'
-    : ''
+  const selectedClasses = selected ? 'before:opacity-[0.12] ring-2 ring-primary ring-offset-1' : ''
 
   const menuOpen = menuAnchor !== null
 
@@ -154,11 +152,7 @@ export function PlaceholderChipView({ node, selected }: NodeViewProps): React.JS
         onKeyDown={handleKeyDown}
         onContextMenu={handleContextMenu}
       >
-        <sourceInfo.icon
-          className="relative h-3.5 w-3.5 shrink-0"
-          strokeWidth={1.75}
-          aria-hidden
-        />
+        <sourceInfo.icon className="relative h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden />
         <span className="relative">{label}</span>
         <ChevronDown
           className="relative h-3.5 w-3.5 shrink-0 opacity-60"

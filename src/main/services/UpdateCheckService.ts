@@ -12,7 +12,11 @@ import {
 } from '../../shared/validation/model-update-schemas'
 import { sendToRenderer } from '../utils/ipc-helpers'
 import type { ModelDownloadStatus } from '../../shared/types/IpcApi'
-import type { PendingModelUpdate, AppUpdateStatus, CheckResult } from '../../shared/types/ModelUpdate'
+import type {
+  PendingModelUpdate,
+  AppUpdateStatus,
+  CheckResult
+} from '../../shared/types/ModelUpdate'
 import { getTaskQueue } from './TaskQueueService'
 import { z } from 'zod'
 
@@ -214,8 +218,7 @@ export async function checkForUpdates(): Promise<CheckResult> {
     // ── App update check ──
     const currentVersion = app.getVersion()
     const latestVersion = manifest.latestAppVersion ?? null
-    const available =
-      latestVersion !== null && isNewerVersion(currentVersion, latestVersion)
+    const available = latestVersion !== null && isNewerVersion(currentVersion, latestVersion)
     const checkedAt = new Date().toISOString()
 
     const appUpdate: AppUpdateStatus = { available, latestVersion, checkedAt }

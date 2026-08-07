@@ -21,8 +21,8 @@ export default function UpdateBanner({
       <div className="flex items-center gap-2 text-sm text-info-text">
         <span>&#8635;</span>
         <span>
-          Modell-Update verfügbar ({count} {count === 1 ? 'Modell' : 'Modelle'},{' '}
-          ~{formatBytes(totalBytes)})
+          Modell-Update verfügbar ({count} {count === 1 ? 'Modell' : 'Modelle'}, ~
+          {formatBytes(totalBytes)})
         </span>
       </div>
       <div className="flex items-center gap-2">

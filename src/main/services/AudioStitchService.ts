@@ -109,7 +109,8 @@ export async function stitchPcmSegments(
   // Byte-Ranges berechnen: round() auf Sample-Ebene hält die Offsets
   // automatisch frame-aligned (2 Bytes pro Sample, mono).
   const ranges = stitchMap.segments.map((seg) => {
-    const startByte = WAV_HEADER_SIZE + Math.round(seg.originalStart * SAMPLE_RATE) * BYTES_PER_SAMPLE
+    const startByte =
+      WAV_HEADER_SIZE + Math.round(seg.originalStart * SAMPLE_RATE) * BYTES_PER_SAMPLE
     const endByte = WAV_HEADER_SIZE + Math.round(seg.originalEnd * SAMPLE_RATE) * BYTES_PER_SAMPLE
     const clampedStart = Math.min(Math.max(WAV_HEADER_SIZE, startByte), srcSize)
     const clampedEnd = Math.min(Math.max(clampedStart, endByte), srcSize)

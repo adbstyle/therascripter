@@ -41,7 +41,7 @@ beforeEach(() => {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('InstalledVersionsStore — Issue #84 Story D', () => {
-  it('getInstalledVersions returns only the active channel\'s entries', () => {
+  it("getInstalledVersions returns only the active channel's entries", () => {
     mockGet.mockReturnValue({
       'prod:whisper-large-v3-turbo': sampleEntry(SHA('a')),
       'staging:whisper-large-v3-turbo': sampleEntry(SHA('b')),
@@ -79,7 +79,7 @@ describe('InstalledVersionsStore — Issue #84 Story D', () => {
     )
   })
 
-  it('deleteInstalledVersion removes only the active channel\'s entry', () => {
+  it("deleteInstalledVersion removes only the active channel's entry", () => {
     mockGet.mockReturnValue({
       'prod:flair-ner-german-large': sampleEntry(SHA('a')),
       'staging:flair-ner-german-large': sampleEntry(SHA('b'))

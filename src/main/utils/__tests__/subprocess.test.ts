@@ -140,9 +140,9 @@ describe('runSubprocess', () => {
   })
 
   it('rejects when the binary does not exist', async () => {
-    await expect(
-      runSubprocess({ bin: '/nonexistent/binary-xyz', args: [] })
-    ).rejects.toThrow(/nonexistent/)
+    await expect(runSubprocess({ bin: '/nonexistent/binary-xyz', args: [] })).rejects.toThrow(
+      /nonexistent/
+    )
   })
 
   it('rejects when the binary does not exist even with nice wrapping', async () => {

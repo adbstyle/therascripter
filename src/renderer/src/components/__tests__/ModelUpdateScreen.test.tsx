@@ -36,13 +36,7 @@ describe('ModelUpdateScreen — pre-download exits (Story G)', () => {
     const user = userEvent.setup()
     const onComplete = vi.fn()
     const onLater = vi.fn()
-    render(
-      <ModelUpdateScreen
-        updates={[update]}
-        onComplete={onComplete}
-        onLater={onLater}
-      />
-    )
+    render(<ModelUpdateScreen updates={[update]} onComplete={onComplete} onLater={onLater} />)
 
     await user.click(screen.getByRole('button', { name: /^Später$/i }))
 
@@ -59,13 +53,7 @@ describe('ModelUpdateScreen — pre-download exits (Story G)', () => {
     const user = userEvent.setup()
     const onComplete = vi.fn()
     const onLater = vi.fn()
-    render(
-      <ModelUpdateScreen
-        updates={[update]}
-        onComplete={onComplete}
-        onLater={onLater}
-      />
-    )
+    render(<ModelUpdateScreen updates={[update]} onComplete={onComplete} onLater={onLater} />)
 
     await user.click(screen.getByRole('button', { name: /Diese Version überspringen/i }))
 
@@ -77,9 +65,7 @@ describe('ModelUpdateScreen — pre-download exits (Story G)', () => {
 
   it('"Update starten" begins the download', async () => {
     const user = userEvent.setup()
-    render(
-      <ModelUpdateScreen updates={[update]} onComplete={vi.fn()} onLater={vi.fn()} />
-    )
+    render(<ModelUpdateScreen updates={[update]} onComplete={vi.fn()} onLater={vi.fn()} />)
 
     await user.click(screen.getByRole('button', { name: /Update starten/i }))
 

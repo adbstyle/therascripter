@@ -69,9 +69,7 @@ export interface SummarizeResult {
 export function parseLlamaOutput(raw: string): SummarizeResult {
   const json = extractFirstJSONObject(raw)
   if (json === null) {
-    throw new Error(
-      `LLM-Output enthält kein JSON-Objekt. Rohtext: ${raw.slice(0, 200)}`
-    )
+    throw new Error(`LLM-Output enthält kein JSON-Objekt. Rohtext: ${raw.slice(0, 200)}`)
   }
 
   let parsed: unknown

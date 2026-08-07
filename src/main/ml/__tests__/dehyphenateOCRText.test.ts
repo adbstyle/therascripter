@@ -34,8 +34,6 @@ describe('dehyphenateOCRText', () => {
   })
 
   it('handles text without any hyphens', () => {
-    expect(dehyphenateOCRText('Normaler Text ohne Trennung')).toBe(
-      'Normaler Text ohne Trennung'
-    )
+    expect(dehyphenateOCRText('Normaler Text ohne Trennung')).toBe('Normaler Text ohne Trennung')
   })
 })

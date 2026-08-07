@@ -144,8 +144,7 @@ export class WhisperService implements TaskExecutor {
     // Estimate original audio duration from WAV header (same heuristic as PyannoteSidecar)
     const audioStats = statSync(session.audioPath)
     const WAV_HEADER_SIZE = 44
-    const audioDurationEstimate =
-      Math.max(0, audioStats.size - WAV_HEADER_SIZE) / (48000 * 2) // 48kHz 16-bit mono
+    const audioDurationEstimate = Math.max(0, audioStats.size - WAV_HEADER_SIZE) / (48000 * 2) // 48kHz 16-bit mono
 
     // Empty-speech short-circuit: if Pyannote found no speech, skip the whole
     // stitch+whisper round-trip and write an empty transcript. AlignmentService

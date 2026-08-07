@@ -64,7 +64,11 @@ export class VisionOCRService implements TaskExecutor {
     )
   }
 
-  async execute(task: Task, onProgress: (progress: number) => void, signal?: AbortSignal): Promise<void> {
+  async execute(
+    task: Task,
+    onProgress: (progress: number) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
     const db = getDatabase()
     const sessionService = new SessionService(db)
     const session = sessionService.getSession(task.sessionId)

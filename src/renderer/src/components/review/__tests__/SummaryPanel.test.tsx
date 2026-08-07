@@ -101,15 +101,12 @@ describe('SummaryPanel', () => {
   it('refetches when the background summarization completes (Review-Ungating)', async () => {
     // Editor kann offen sein, bevor die Summary existiert — beim
     // task:completed der Summarization muss der Panel-Inhalt nachladen.
-    const get = vi
-      .fn()
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        title: 'Titel',
-        text: 'Späte Zusammenfassung.',
-        modelId: 'gemma-summarization',
-        summarizedAt: '2026-04-24T10:00:00Z'
-      })
+    const get = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({
+      title: 'Titel',
+      text: 'Späte Zusammenfassung.',
+      modelId: 'gemma-summarization',
+      summarizedAt: '2026-04-24T10:00:00Z'
+    })
     ;(globalThis as unknown as { window: { api: unknown } }).window.api = makeApi({ get })
     const { container } = render(<SummaryPanel sessionId="abc" />)
     await waitFor(() => expect(get).toHaveBeenCalledTimes(1))

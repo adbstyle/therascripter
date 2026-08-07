@@ -16,7 +16,11 @@ import { openPdfDocument } from '../utils/pdfjs-loader'
 const TEXT_PAGE_THRESHOLD = 50
 
 export class PDFExtractionExecutor implements TaskExecutor {
-  async execute(task: Task, onProgress: (progress: number) => void, signal?: AbortSignal): Promise<void> {
+  async execute(
+    task: Task,
+    onProgress: (progress: number) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
     const db = getDatabase()
     const sessionService = new SessionService(db)
     const session = sessionService.getSession(task.sessionId)

@@ -165,9 +165,17 @@ export default function ModelUpdateScreen({
                       {isCompleted ? (
                         <Check className="h-4 w-4 text-success" strokeWidth={2.5} aria-hidden />
                       ) : isCurrent ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-primary" strokeWidth={2} aria-hidden />
+                        <Loader2
+                          className="h-4 w-4 animate-spin text-primary"
+                          strokeWidth={2}
+                          aria-hidden
+                        />
                       ) : (
-                        <Circle className="h-4 w-4 text-text-tertiary" strokeWidth={1.5} aria-hidden />
+                        <Circle
+                          className="h-4 w-4 text-text-tertiary"
+                          strokeWidth={1.5}
+                          aria-hidden
+                        />
                       )}
                       {update.label}
                     </span>
@@ -222,8 +230,8 @@ export default function ModelUpdateScreen({
             </p>
             <p className="mb-3 text-sm text-error-text">{status.error}</p>
             <p className="mb-3 text-xs text-text-tertiary">
-              Bestehende Modelle sind unverändert. Das Update wird beim nächsten Start
-              erneut versucht.
+              Bestehende Modelle sind unverändert. Das Update wird beim nächsten Start erneut
+              versucht.
             </p>
             <button
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"

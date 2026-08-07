@@ -327,7 +327,9 @@ export class TaskQueueService {
             status: 'error',
             errorMessage: 'Verarbeitung wurde unerwartet abgebrochen.'
           })
-          console.log(`[TaskQueue] Recovered orphaned session ${session.id} (was ${session.status})`)
+          console.log(
+            `[TaskQueue] Recovered orphaned session ${session.id} (was ${session.status})`
+          )
           recovered++
         } catch (err) {
           console.error(`[TaskQueue] Failed to recover orphaned session ${session.id}:`, err)
@@ -643,10 +645,7 @@ export class TaskQueueService {
         errorMessage
       })
     } catch (err) {
-      console.error(
-        `[TaskQueue] Failed to set session ${task.sessionId} to error state:`,
-        err
-      )
+      console.error(`[TaskQueue] Failed to set session ${task.sessionId} to error state:`, err)
     }
 
     // Notify renderer
@@ -682,7 +681,6 @@ export class TaskQueueService {
       this.recoveryTimer = null
     }
   }
-
 }
 
 // Singleton

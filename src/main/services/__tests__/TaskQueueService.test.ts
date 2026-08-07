@@ -311,9 +311,9 @@ describe('TaskQueueService', () => {
       releaseSummarization?.()
       await new Promise((resolve) => setTimeout(resolve, 100))
       expect(sessionRepo.findById(sessionId)?.status).toBe('review')
-      expect(
-        queue.getSessionTasks(sessionId).find((t) => t.type === 'summarization')?.status
-      ).toBe('completed')
+      expect(queue.getSessionTasks(sessionId).find((t) => t.type === 'summarization')?.status).toBe(
+        'completed'
+      )
     })
 
     it('sets session to review after all tasks complete', async () => {

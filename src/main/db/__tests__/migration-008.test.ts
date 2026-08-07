@@ -27,13 +27,7 @@ describe('migration 008 — reset summarization parse errors', () => {
     db.prepare(
       `INSERT INTO sessions (id, title, type, status, anonymized_path, error_message, created_at, updated_at)
        VALUES (?, ?, 'audio', ?, ?, ?, datetime('now'), datetime('now'))`
-    ).run(
-      input.id,
-      input.title,
-      input.status,
-      input.anonymizedPath,
-      input.errorMessage
-    )
+    ).run(input.id, input.title, input.status, input.anonymizedPath, input.errorMessage)
   }
 
   // Migration 008 has already run via applyTestSchema. To test its effect we

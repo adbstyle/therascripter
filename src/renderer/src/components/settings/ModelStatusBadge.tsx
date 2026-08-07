@@ -16,10 +16,7 @@ import type { LucideIcon } from 'lucide-react'
  */
 export type ModelStatus = 'active' | 'installed' | 'missing' | 'inconsistent'
 
-export function deriveModelStatus(entry: {
-  isActive: boolean
-  isInstalled: boolean
-}): ModelStatus {
+export function deriveModelStatus(entry: { isActive: boolean; isInstalled: boolean }): ModelStatus {
   if (entry.isActive && !entry.isInstalled) return 'inconsistent'
   if (entry.isActive) return 'active'
   if (entry.isInstalled) return 'installed'
@@ -87,11 +84,7 @@ export default function ModelStatusBadge({ status }: Props): React.JSX.Element {
       aria-label={style.description}
       className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${style.pillClassName}`}
     >
-      <style.Icon
-        className={`h-3 w-3 ${style.iconClassName}`}
-        strokeWidth={2}
-        aria-hidden="true"
-      />
+      <style.Icon className={`h-3 w-3 ${style.iconClassName}`} strokeWidth={2} aria-hidden="true" />
       {style.label}
     </span>
   )

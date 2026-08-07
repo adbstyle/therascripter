@@ -13,9 +13,7 @@ vi.mock('electron', () => ({
     isPackaged: true
   },
   BrowserWindow: {
-    getAllWindows: vi.fn(() => [
-      { webContents: { reload: mockReloadFn, send: mockSendFn } }
-    ])
+    getAllWindows: vi.fn(() => [{ webContents: { reload: mockReloadFn, send: mockSendFn } }])
   }
 }))
 
@@ -412,19 +410,17 @@ describe('dismissManifestVersions', () => {
   })
 
   it('appends entries and de-duplicates', () => {
-    mockSettingsStore.get.mockReturnValue([
-      manifestEntryKey('a', '1'.repeat(64))
-    ])
+    mockSettingsStore.get.mockReturnValue([manifestEntryKey('a', '1'.repeat(64))])
 
     dismissManifestVersions([
       { id: 'a', sha256: '1'.repeat(64) }, // duplicate
       { id: 'b', sha256: '2'.repeat(64) }
     ])
 
-    expect(mockSettingsStore.set).toHaveBeenCalledWith(
-      'dismissedManifestVersions',
-      [manifestEntryKey('a', '1'.repeat(64)), manifestEntryKey('b', '2'.repeat(64))]
-    )
+    expect(mockSettingsStore.set).toHaveBeenCalledWith('dismissedManifestVersions', [
+      manifestEntryKey('a', '1'.repeat(64)),
+      manifestEntryKey('b', '2'.repeat(64))
+    ])
   })
 
   it('initializes the list when the existing value is not an array', () => {

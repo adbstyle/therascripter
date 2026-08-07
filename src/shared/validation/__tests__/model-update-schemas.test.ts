@@ -92,7 +92,7 @@ describe('ManifestSchema', () => {
   })
 
   it('rejects non-object input', () => {
-    expect(() => ManifestSchema.parse('{"models":[]}' )).toThrow()
+    expect(() => ManifestSchema.parse('{"models":[]}')).toThrow()
     expect(() => ManifestSchema.parse(null)).toThrow()
     expect(() => ManifestSchema.parse(42)).toThrow()
   })

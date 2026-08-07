@@ -1,11 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { MoreHorizontal, Undo2 } from 'lucide-react'
 import type { EntitySource, PlaceholderType } from '../../../../shared/types'
-import {
-  CHIP_STYLES,
-  SOURCE_LABELS,
-  formatPlaceholderLabel
-} from '../../constants/editorConstants'
+import { CHIP_STYLES, SOURCE_LABELS, formatPlaceholderLabel } from '../../constants/editorConstants'
 import type {
   AnonymizationOverviewData,
   EntityTypeGroup,
@@ -35,9 +31,7 @@ export function AnonymizationPanel({
 }: AnonymizationPanelProps): React.JSX.Element {
   if (data.totalIdentities === 0) {
     return (
-      <p className="px-3 py-8 text-center text-sm text-text-tertiary">
-        Keine Pseudonymisierungen
-      </p>
+      <p className="px-3 py-8 text-center text-sm text-text-tertiary">Keine Pseudonymisierungen</p>
     )
   }
 

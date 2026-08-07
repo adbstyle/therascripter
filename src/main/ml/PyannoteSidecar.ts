@@ -28,7 +28,11 @@ export class PyannoteSidecar implements TaskExecutor {
     return join(getDataDir(), 'models', 'diarization')
   }
 
-  async execute(task: Task, onProgress: (progress: number) => void, signal?: AbortSignal): Promise<void> {
+  async execute(
+    task: Task,
+    onProgress: (progress: number) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
     const { bin, args: prefixArgs } = this.getCommand()
 
     if (!existsSync(bin)) {

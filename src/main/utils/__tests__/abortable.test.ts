@@ -7,9 +7,7 @@ describe('abortable', () => {
   })
 
   it('passes through rejections', async () => {
-    await expect(abortable(Promise.reject(new Error('inner')), undefined)).rejects.toThrow(
-      'inner'
-    )
+    await expect(abortable(Promise.reject(new Error('inner')), undefined)).rejects.toThrow('inner')
   })
 
   it('rejects immediately when the signal is already aborted', async () => {

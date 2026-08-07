@@ -152,20 +152,27 @@ describe('whisper-cli flag compatibility', () => {
   const repoRoot = join(__dirname, '..', '..', '..', '..')
   const BINARY = join(repoRoot, 'resources', 'whisper', 'bin', 'whisper-cli')
 
-  it.skipIf(!existsSync(BINARY))('does not produce "unknown argument" errors with our arg list', () => {
-    // Use deliberately bogus paths — whisper-cli will exit early because the
-    // model or audio file is missing, but it must do so AFTER successfully
-    // parsing every flag.
-    const result = spawnSync(BINARY, buildWhisperArgs('/nonexistent.bin', '/nonexistent.wav', 1), {
-      encoding: 'utf-8',
-      timeout: 10_000
-    })
-    const combined = (result.stderr ?? '') + (result.stdout ?? '')
-    const unknownArg = combined.match(/unknown argument:\s*(\S+)/i)
-    if (unknownArg) {
-      throw new Error(
-        `whisper-cli rejected flag "${unknownArg[1]}". Update buildWhisperArgs() to use a supported flag.`
+  it.skipIf(!existsSync(BINARY))(
+    'does not produce "unknown argument" errors with our arg list',
+    () => {
+      // Use deliberately bogus paths — whisper-cli will exit early because the
+      // model or audio file is missing, but it must do so AFTER successfully
+      // parsing every flag.
+      const result = spawnSync(
+        BINARY,
+        buildWhisperArgs('/nonexistent.bin', '/nonexistent.wav', 1),
+        {
+          encoding: 'utf-8',
+          timeout: 10_000
+        }
       )
+      const combined = (result.stderr ?? '') + (result.stdout ?? '')
+      const unknownArg = combined.match(/unknown argument:\s*(\S+)/i)
+      if (unknownArg) {
+        throw new Error(
+          `whisper-cli rejected flag "${unknownArg[1]}". Update buildWhisperArgs() to use a supported flag.`
+        )
+      }
     }
-  })
+  )
 })

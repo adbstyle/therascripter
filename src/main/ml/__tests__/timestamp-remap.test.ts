@@ -45,7 +45,7 @@ describe('remapStitchedTimestamp', () => {
     expect(remapStitchedTimestamp(35, fixture)).toBe(90)
   })
 
-  it("returns first segment start for negative stitched timestamps (defensive)", () => {
+  it('returns first segment start for negative stitched timestamps (defensive)', () => {
     expect(remapStitchedTimestamp(-1, fixture)).toBe(10)
   })
 
