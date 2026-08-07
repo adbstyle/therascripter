@@ -122,9 +122,7 @@ function SettingsHome({ onSelect }: HomeProps): React.JSX.Element {
         if (cancelled) return
         const categories = new Set(entries.map((e) => e.placeholderType)).size
         setBlocklist({ entries: entries.length, categories })
-        const activeLabels = [...asr, ...dia, ...ner]
-          .filter((m) => m.isActive)
-          .map((m) => m.label)
+        const activeLabels = [...asr, ...dia, ...ner].filter((m) => m.isActive).map((m) => m.label)
         setModelLabels(activeLabels)
         setAppVersion(info.version)
       })

@@ -11,10 +11,14 @@ describe('buildSummarizationPrompt', () => {
     expect(prompt).toContain('Schlafstörungen')
   })
 
-  it('truncates input exceeding 120k characters to fit model context', () => {
+  it('truncates input to what actually fits the -c 8192 context window', () => {
+    // 120k Zeichen (~30-40k Tokens) gegen ein 8192er-Kontextfenster hieß:
+    // der Großteil der Prompt-Eval-Zeit war bezahlt, aber wirkungslos.
+    // 24k Zeichen ≈ 6k Tokens + Instruction + 400 Output-Tokens < 8192.
     const long = 'a'.repeat(200_000)
     const prompt = buildSummarizationPrompt(long)
-    expect(prompt.length).toBeLessThan(150_000)
+    expect(prompt.length).toBeLessThan(26_000)
+    expect(prompt).toContain('[... gekürzt ...]')
   })
 
   it('preserves placeholder chips inside the anonymized text verbatim', () => {

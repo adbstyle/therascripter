@@ -67,6 +67,46 @@ describe('TaskQueueService', () => {
     db.close()
   })
 
+  describe('shutdown', () => {
+    it('aborts the running executor, waits for settle, and resets the task to pending', async () => {
+      // Executor, der bis zum Abort hängt — simuliert einen laufenden
+      // ML-Subprozess beim App-Quit.
+      const hangingExecutor: TaskExecutor = {
+        execute(_task, _onProgress, signal) {
+          return new Promise((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+          })
+        }
+      }
+      queue.registerExecutor('diarization', hangingExecutor)
+      queue.enqueuePipeline(sessionId, 'audio')
+
+      // Warten bis der Task läuft
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(queue.isProcessing()).toBe(true)
+
+      await queue.shutdown(2_000)
+
+      expect(queue.isProcessing()).toBe(false)
+
+      // Shutdown-Abort ist KEIN Fehler: der Task muss auf pending zurück,
+      // damit der Boot-Recovery ihn fortsetzt — nicht auf failed (das würde
+      // dem User nach jedem Quit einen Retry-Button zeigen).
+      const tasks = queue.getSessionTasks(sessionId)
+      const diarization = tasks.find((t) => t.type === 'diarization')
+      expect(diarization?.status).toBe('pending')
+
+      const session = sessionRepo.findById(sessionId)
+      expect(session?.status).not.toBe('error')
+    })
+
+    it('resolves quickly when nothing is running', async () => {
+      const start = Date.now()
+      await queue.shutdown(2_000)
+      expect(Date.now() - start).toBeLessThan(500)
+    })
+  })
+
   describe('enqueuePipeline', () => {
     it('enqueues audio pipeline tasks in correct order', () => {
       const tasks = queue.enqueuePipeline(sessionId, 'audio')
@@ -114,6 +154,41 @@ describe('TaskQueueService', () => {
     })
   })
 
+  describe('recoverOrphanedSessions', () => {
+    it('marks processing sessions without pending/running tasks as error', () => {
+      // Orphan-Szenario: Session hängt in 'processing', aber alle Tasks sind
+      // terminal (z. B. Crash zwischen Task-Abschluss und Status-Update).
+      // Die beforeEach-Session bekommt Tasks, damit nur der Orphan zählt.
+      queue.enqueuePipeline(sessionId, 'audio')
+      const orphan = sessionRepo.create({ title: 'Orphan', type: 'audio', status: 'processing' })
+
+      const recovered = queue.recoverOrphanedSessions()
+
+      expect(recovered).toBe(1)
+      const session = sessionRepo.findById(orphan.id)
+      expect(session?.status).toBe('error')
+      expect(session?.errorMessage).toContain('unerwartet abgebrochen')
+    })
+
+    it('leaves sessions with pending tasks and non-pipeline statuses alone', () => {
+      // sessionId (beforeEach) ist 'processing' — bekommt pending Tasks
+      queue.enqueuePipeline(sessionId, 'audio')
+      const reviewSession = sessionRepo.create({ title: 'Done', type: 'audio', status: 'review' })
+      const recordingSession = sessionRepo.create({
+        title: 'Live',
+        type: 'audio',
+        status: 'recording'
+      })
+
+      const recovered = queue.recoverOrphanedSessions()
+
+      expect(recovered).toBe(0)
+      expect(sessionRepo.findById(sessionId)?.status).toBe('processing')
+      expect(sessionRepo.findById(reviewSession.id)?.status).toBe('review')
+      expect(sessionRepo.findById(recordingSession.id)?.status).toBe('recording')
+    })
+  })
+
   describe('recoverStuckTasks', () => {
     it('resets running tasks to pending', () => {
       const tasks = queue.enqueuePipeline(sessionId, 'audio')
@@ -127,6 +202,52 @@ describe('TaskQueueService', () => {
       expect(count).toBe(1)
       const recovered = taskRepo.findById(tasks[0].id)
       expect(recovered?.status).toBe('pending')
+    })
+
+    it('poisons a task after 2 boot recoveries instead of crash-looping forever', () => {
+      // Hard-Crash-Szenario (z. B. nativer OOM in pyannote): der identische
+      // Task wird sonst bei jedem Boot erneut auf pending gesetzt und crasht
+      // die App in einer Endlosschleife.
+      const tasks = queue.enqueuePipeline(sessionId, 'audio')
+      const taskId = tasks[0].id
+
+      // Boot-Recovery 1 und 2: Task darf zurück auf pending
+      for (let boot = 1; boot <= 2; boot++) {
+        taskRepo.update(taskId, { status: 'running', startedAt: new Date().toISOString() })
+        queue.recoverStuckTasks()
+        expect(taskRepo.findById(taskId)?.status).toBe('pending')
+      }
+
+      // Boot-Recovery 3: Poison — Task failed, Session error mit Meldung
+      taskRepo.update(taskId, { status: 'running', startedAt: new Date().toISOString() })
+      queue.recoverStuckTasks()
+
+      const poisoned = taskRepo.findById(taskId)
+      expect(poisoned?.status).toBe('failed')
+      expect(poisoned?.error).toContain('mehrfach')
+
+      const session = sessionRepo.findById(sessionId)
+      expect(session?.status).toBe('error')
+      expect(session?.errorMessage).toContain('mehrfach')
+    })
+
+    it('does not count a clean shutdown reset as a recovery attempt', async () => {
+      // shutdown() setzt den laufenden Task selbst auf pending zurück —
+      // beim nächsten Boot ist er nicht 'running' und darf nicht Richtung
+      // Poison-Schwelle zählen.
+      const hangingExecutor: TaskExecutor = {
+        execute(_task, _onProgress, signal) {
+          return new Promise((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+          })
+        }
+      }
+      queue.registerExecutor('diarization', hangingExecutor)
+      const tasks = queue.enqueuePipeline(sessionId, 'audio')
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      await queue.shutdown(2_000)
+
+      expect(taskRepo.findById(tasks[0].id)?.attempts).toBe(0)
     })
   })
 
@@ -184,6 +305,50 @@ describe('TaskQueueService', () => {
         expect(task.progress).toBe(1)
         expect(task.completedAt).toBeTruthy()
       }
+    })
+
+    it('reaches review as soon as anonymization completes — summarization runs in background', async () => {
+      // Review-Ungating: der Editor braucht nur das anonymisierte Dokument.
+      // Vorher wartete der User 30–120 s auf die llama-Summary, bevor die
+      // Session den Review-Editor öffnete.
+      const instantExecutor: TaskExecutor = {
+        async execute(_task, onProgress) {
+          onProgress(1)
+        }
+      }
+      let releaseSummarization: (() => void) | undefined
+      const slowSummarization: TaskExecutor = {
+        execute() {
+          return new Promise<void>((resolve) => {
+            releaseSummarization = resolve
+          })
+        }
+      }
+
+      queue.registerExecutor('transcription', instantExecutor)
+      queue.registerExecutor('diarization', instantExecutor)
+      queue.registerExecutor('alignment', instantExecutor)
+      queue.registerExecutor('anonymization', instantExecutor)
+      queue.registerExecutor('summarization', slowSummarization)
+
+      queue.enqueuePipeline(sessionId, 'audio')
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      // Summarization läuft noch — Session muss trotzdem schon review sein
+      expect(sessionRepo.findById(sessionId)?.status).toBe('review')
+      const summarizationTask = queue
+        .getSessionTasks(sessionId)
+        .find((t) => t.type === 'summarization')
+      expect(summarizationTask?.status).toBe('running')
+
+      // Summarization abschließen — Status bleibt review (kein
+      // review→review-Transition-Fehler)
+      releaseSummarization?.()
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(sessionRepo.findById(sessionId)?.status).toBe('review')
+      expect(queue.getSessionTasks(sessionId).find((t) => t.type === 'summarization')?.status).toBe(
+        'completed'
+      )
     })
 
     it('sets session to review after all tasks complete', async () => {

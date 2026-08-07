@@ -35,6 +35,6 @@ export function buildPDFTranscript(
   }
 
   const transcriptPath = sessionService.generateTranscriptPath(sessionId)
-  writeFileAtomic(transcriptPath, JSON.stringify(transcriptData, null, 2))
+  writeFileAtomic(transcriptPath, JSON.stringify(transcriptData))
   return transcriptPath
 }

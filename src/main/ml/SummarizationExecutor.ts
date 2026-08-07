@@ -17,7 +17,11 @@ export interface SummarizationExecutorDeps {
 export class SummarizationExecutor implements TaskExecutor {
   constructor(private readonly deps: SummarizationExecutorDeps) {}
 
-  async execute(task: Task, _onProgress: (progress: number) => void, signal?: AbortSignal): Promise<void> {
+  async execute(
+    task: Task,
+    _onProgress: (progress: number) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
     if (!this.deps.isModelInstalled()) {
       this.deps.logger.info(
         `Summarization skipped for session ${task.sessionId}: model not installed`

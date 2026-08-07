@@ -217,6 +217,60 @@ describe('AudioFileService', () => {
     })
   })
 
+  describe('repairWavAfterCrash', () => {
+    it('fixes the stale WAV header from the actual file size', () => {
+      // Crash-Szenario: Chunks wurden synchron in die WAV geschrieben, aber
+      // finalizeWavFile lief nie — der Header behauptet dataSize=0.
+      service.initWavFile('crash-session')
+      const samples = makeToneSamples(48000) // 1 s
+      service.appendChunk('crash-session', samples.buffer as ArrayBuffer)
+      // Neuer Service simuliert App-Neustart (in-memory Maps leer)
+      const freshService = new AudioFileService()
+
+      const result = freshService.repairWavAfterCrash('crash-session')
+
+      expect(result?.durationSeconds).toBeCloseTo(1.0, 1)
+      const content = readFileSync(join(AUDIO_DIR, 'crash-session.wav'))
+      expect(content.readUInt32LE(40)).toBe(48000 * 2)
+    })
+
+    it('does NOT append the recovery dump when the WAV exists (would duplicate audio)', () => {
+      // Der Recovery-Dump enthält dieselben Chunks, die bereits synchron in
+      // die Haupt-WAV geschrieben wurden — Anhängen würde bis zu 60 s Audio
+      // duplizieren. Er wird stattdessen verworfen.
+      service.initWavFile('crash-session')
+      const samples = makeToneSamples(48000)
+      service.appendChunk('crash-session', samples.buffer as ArrayBuffer)
+      // Recovery-Dump von Hand erzeugen (dumpRecoveryBuffer ist privat und
+      // zeitgesteuert): gleiche PCM-Daten wie in der WAV
+      const { writeFileSync: wfs } = require('fs') // eslint-disable-line @typescript-eslint/no-require-imports
+      const recoveryPath = join(RECOVERY_DIR, 'crash-session.pcm')
+      wfs(recoveryPath, Buffer.from(float32ToInt16(samples).buffer))
+
+      const freshService = new AudioFileService()
+      const result = freshService.repairWavAfterCrash('crash-session')
+
+      expect(result?.durationSeconds).toBeCloseTo(1.0, 1) // NICHT 2.0
+      expect(existsSync(recoveryPath)).toBe(false) // Dump verworfen
+    })
+
+    it('rebuilds the WAV from the recovery dump when the WAV is missing', () => {
+      const samples = makeToneSamples(48000)
+      const { writeFileSync: wfs } = require('fs') // eslint-disable-line @typescript-eslint/no-require-imports
+      wfs(join(RECOVERY_DIR, 'lost-session.pcm'), Buffer.from(float32ToInt16(samples).buffer))
+
+      const freshService = new AudioFileService()
+      const result = freshService.repairWavAfterCrash('lost-session')
+
+      expect(result?.durationSeconds).toBeCloseTo(1.0, 1)
+      expect(existsSync(join(AUDIO_DIR, 'lost-session.wav'))).toBe(true)
+    })
+
+    it('returns null when neither WAV nor recovery dump exist', () => {
+      expect(service.repairWavAfterCrash('ghost-session')).toBeNull()
+    })
+  })
+
   describe('cleanup', () => {
     it('releases file descriptor without error', () => {
       service.initWavFile('test-session')

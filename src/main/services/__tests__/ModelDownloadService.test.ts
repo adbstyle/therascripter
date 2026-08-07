@@ -71,10 +71,7 @@ describe('ModelDownloadService catalog helpers', () => {
 
   it('getRequiredModels returns pyannote-suite and flair', () => {
     const required = getRequiredModels()
-    expect(required.map((m) => m.id).sort()).toEqual([
-      'flair-ner-german-large',
-      'pyannote-suite'
-    ])
+    expect(required.map((m) => m.id).sort()).toEqual(['flair-ner-german-large', 'pyannote-suite'])
   })
 
   it('getModelById returns definition or null', () => {
@@ -94,18 +91,13 @@ describe('ModelDownloadService catalog helpers', () => {
 
   it('getModelsToLoadOnFirstLaunch falls back gracefully on unknown ASR id', () => {
     const loaded = getModelsToLoadOnFirstLaunch('nonexistent')
-    expect(loaded.map((m) => m.id).sort()).toEqual([
-      'flair-ner-german-large',
-      'pyannote-suite'
-    ])
+    expect(loaded.map((m) => m.id).sort()).toEqual(['flair-ner-german-large', 'pyannote-suite'])
   })
 })
 
 describe('downloadSingleModel', () => {
   it('throws when model id is unknown', async () => {
-    await expect(downloadSingleModel('does-not-exist')).rejects.toThrow(
-      /unbekanntes Modell/i
-    )
+    await expect(downloadSingleModel('does-not-exist')).rejects.toThrow(/unbekanntes Modell/i)
   })
 
   it('throws when model is required (pyannote-suite)', async () => {
@@ -113,9 +105,7 @@ describe('downloadSingleModel', () => {
   })
 
   it('throws when model is required (flair)', async () => {
-    await expect(downloadSingleModel('flair-ner-german-large')).rejects.toThrow(
-      /Pflicht-Modell/i
-    )
+    await expect(downloadSingleModel('flair-ner-german-large')).rejects.toThrow(/Pflicht-Modell/i)
   })
 
   // Issue #84 follow-up — required-group dirs (asr/diarization/ner) are
@@ -132,10 +122,9 @@ describe('downloadSingleModel', () => {
 
     await downloadSingleModel('gemma-summarization')
 
-    expect(mockMkdirSync).toHaveBeenCalledWith(
-      expect.stringContaining('/models/summarization'),
-      { recursive: true }
-    )
+    expect(mockMkdirSync).toHaveBeenCalledWith(expect.stringContaining('/models/summarization'), {
+      recursive: true
+    })
     // Order: mkdirSync ran before downloadFile.
     const mkdirInvocation = mockMkdirSync.mock.invocationCallOrder[0]
     const downloadInvocation = mockDownloadFile.mock.invocationCallOrder[0]
@@ -158,9 +147,7 @@ describe('deleteModel', () => {
 
   it('throws when attempting to delete the active asr model', async () => {
     // Mock returns activeModels.transcription = 'whisper-large-v3-turbo'
-    await expect(deleteModel('whisper-large-v3-turbo')).rejects.toThrow(
-      /als ASR-Modell aktiv/i
-    )
+    await expect(deleteModel('whisper-large-v3-turbo')).rejects.toThrow(/als ASR-Modell aktiv/i)
   })
 })
 
@@ -177,8 +164,6 @@ describe('setActiveAsrModel', () => {
 
   it('throws when model is not installed', () => {
     // Swiss-German is in the catalog but not on disk (existsSync mocked to false)
-    expect(() => setActiveAsrModel('whisper-large-v3-turbo-swiss')).toThrow(
-      /nicht installiert/i
-    )
+    expect(() => setActiveAsrModel('whisper-large-v3-turbo-swiss')).toThrow(/nicht installiert/i)
   })
 })

@@ -20,8 +20,10 @@ const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
   // processing → processing is legitimate (advancing through tasks while keeping the same status)
   processing: ['processing', 'review', 'error'],
   review: ['error'],
-  // From error, retry pushes back to queued (re-enters the queue) or recording for re-record
-  error: ['recording', 'queued']
+  // From error, retry pushes back to queued (re-enters the queue) or recording
+  // for re-record. error → error ist erlaubt, damit ein zweiter Fehler die
+  // aktualisierte errorMessage schreiben kann (sonst divergieren DB und UI).
+  error: ['recording', 'queued', 'error']
 }
 
 export class SessionService {

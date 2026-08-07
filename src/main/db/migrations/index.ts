@@ -13,6 +13,16 @@ import statusReductionPlannedStepsRetry from './012-status-reduction-planned-ste
 import pdfHasScannedPages from './013-pdf-has-scanned-pages.sql?raw'
 import processedWithModels from './014-processed-with-models.sql?raw'
 import addAnonymizationCount from './015-add-anonymization-count.sql?raw'
+import taskAttempts from './016-task-attempts.sql?raw'
+
+// REGEL für Table-Rebuild-Migrationen (CREATE new → DROP old → RENAME):
+// Der Migration-Runner läuft mit PRAGMA foreign_keys = ON. Ein
+// `DROP TABLE sessions` feuert dann ON DELETE CASCADE auf task_queue und
+// löscht ALLE Task-Zeilen — Migration 012 hat so die komplette Task-Historie
+// der Bestandsnutzer beim Upgrade gewiped. Table-Rebuilds MÜSSEN deshalb
+// `PRAGMA defer_foreign_keys = ON;` als erste Zeile enthalten (gilt bis zum
+// Ende der umgebenden Transaktion und unterdrückt die Cascade während des
+// Rebuilds). Einfache ALTER TABLE ADD COLUMN sind nicht betroffen.
 
 export interface Migration {
   version: number
@@ -34,5 +44,6 @@ export const migrations: Migration[] = [
   { version: 12, sql: statusReductionPlannedStepsRetry },
   { version: 13, sql: pdfHasScannedPages },
   { version: 14, sql: processedWithModels },
-  { version: 15, sql: addAnonymizationCount }
+  { version: 15, sql: addAnonymizationCount },
+  { version: 16, sql: taskAttempts }
 ]

@@ -198,7 +198,13 @@ describe('useAnonymizationOverview', () => {
 
   it('recomputes when updateCounter changes', () => {
     const chips = [
-      { entityId: 'p1', type: 'PERSON' as PlaceholderType, number: 1, source: 'ner' as EntitySource, original: 'Max' }
+      {
+        entityId: 'p1',
+        type: 'PERSON' as PlaceholderType,
+        number: 1,
+        source: 'ner' as EntitySource,
+        original: 'Max'
+      }
     ]
     const editor = createMockEditor(chips)
     const { result, rerender } = renderHook(

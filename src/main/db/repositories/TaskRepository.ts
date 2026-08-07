@@ -18,6 +18,7 @@ interface TaskRow {
   created_at: string
   started_at: string | null
   completed_at: string | null
+  attempts: number
 }
 
 function rowToTask(row: TaskRow): Task {
@@ -30,7 +31,8 @@ function rowToTask(row: TaskRow): Task {
     error: row.error,
     createdAt: row.created_at,
     startedAt: row.started_at,
-    completedAt: row.completed_at
+    completedAt: row.completed_at,
+    attempts: row.attempts ?? 0
   }
 }
 
@@ -104,6 +106,10 @@ export class TaskRepository {
     if (input.completedAt !== undefined) {
       sets.push('completed_at = ?')
       values.push(input.completedAt)
+    }
+    if (input.attempts !== undefined) {
+      sets.push('attempts = ?')
+      values.push(input.attempts)
     }
 
     if (sets.length === 0) return this.findById(id)

@@ -29,6 +29,20 @@ describe('buildLlamaArgs', () => {
     expect(args).toContain('200')
     expect(args).toContain('--no-display-prompt')
   })
+
+  it('sets an explicit context size matching MAX_INPUT_CHARS', () => {
+    // Ohne -c nutzt llama-cli seinen 4096-Default: von den früheren 120k
+    // Prompt-Zeichen wurde der Großteil still truncated/context-geshiftet —
+    // bezahlte Prompt-Eval-Zeit ohne Wirkung auf die Summary.
+    const args = buildLlamaArgs({
+      modelPath: '/models/gemma.gguf',
+      promptFilePath: '/tmp/prompt.txt',
+      maxTokens: 200
+    })
+    const cIdx = args.indexOf('-c')
+    expect(cIdx).toBeGreaterThanOrEqual(0)
+    expect(args[cIdx + 1]).toBe('8192')
+  })
 })
 
 describe('extractFirstJSONObject', () => {
@@ -43,9 +57,7 @@ describe('extractFirstJSONObject', () => {
 
   it('respects JSON string semantics — braces inside strings do not close the object', () => {
     const tricky = 'noise {"title":"a {nested} b","summary":"with } char"} more noise'
-    expect(extractFirstJSONObject(tricky)).toBe(
-      '{"title":"a {nested} b","summary":"with } char"}'
-    )
+    expect(extractFirstJSONObject(tricky)).toBe('{"title":"a {nested} b","summary":"with } char"}')
   })
 
   it('handles escaped quotes inside strings', () => {
@@ -98,9 +110,9 @@ describe('parseLlamaOutput', () => {
   })
 
   it('throws when title is too short (defense-in-depth — grammar should prevent this)', () => {
-    expect(() =>
-      parseLlamaOutput('{"title":"AB","summary":"' + 'a'.repeat(50) + '"}')
-    ).toThrow(/passt nicht zum Schema/)
+    expect(() => parseLlamaOutput('{"title":"AB","summary":"' + 'a'.repeat(50) + '"}')).toThrow(
+      /passt nicht zum Schema/
+    )
   })
 })
 

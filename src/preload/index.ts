@@ -17,10 +17,7 @@ import {
   QueuePositionsDataSchema
 } from '../shared/validation/task-schemas'
 import type { PendingModelUpdate, AppUpdateStatus } from '../shared/types/ModelUpdate'
-import type {
-  ModelGroup,
-  DiarizationPipeline
-} from '../shared/validation/model-catalog-schemas'
+import type { ModelGroup, DiarizationPipeline } from '../shared/validation/model-catalog-schemas'
 
 const api: IpcApi = {
   sessions: {
@@ -158,8 +155,7 @@ const api: IpcApi = {
     delete: (id: string) => ipcRenderer.invoke('modelCatalog:delete', { id }),
     setActive: (group: ModelGroup, id: string) =>
       ipcRenderer.invoke('modelCatalog:setActive', { group, id }),
-    clearActive: (group: ModelGroup) =>
-      ipcRenderer.invoke('modelCatalog:clearActive', { group }),
+    clearActive: (group: ModelGroup) => ipcRenderer.invoke('modelCatalog:clearActive', { group }),
     cancelDownload: () => ipcRenderer.invoke('modelCatalog:cancelDownload')
   },
   pipeline: {

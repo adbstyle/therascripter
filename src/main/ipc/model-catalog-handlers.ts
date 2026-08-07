@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { z } from 'zod'
+import { validateIpc } from '../utils/ipc-helpers'
 import {
   abortModelDownload,
   clearActiveModel,
@@ -43,17 +43,9 @@ function buildCatalogEntries(group: ModelGroup): ModelCatalogEntry[] {
   }))
 }
 
-function validate<T>(schema: z.ZodType<T>, payload: unknown, channel: string): T {
-  const parsed = schema.safeParse(payload)
-  if (!parsed.success) {
-    throw new Error(`IPC ${channel}: ungültige Argumente: ${parsed.error.message}`)
-  }
-  return parsed.data
-}
-
 export function registerModelCatalogHandlers(): void {
   ipcMain.handle('modelCatalog:list', (_event, payload: unknown) => {
-    const { group } = validate(ListModelsPayloadSchema, payload, 'modelCatalog:list')
+    const { group } = validateIpc(ListModelsPayloadSchema, payload, 'modelCatalog:list')
     return buildCatalogEntries(group)
   })
 
@@ -61,21 +53,21 @@ export function registerModelCatalogHandlers(): void {
   ipcMain.handle('modelCatalog:listAsr', () => buildCatalogEntries('asr'))
 
   ipcMain.handle('modelCatalog:download', async (_event, payload: unknown) => {
-    const { id } = validate(ModelIdPayloadSchema, payload, 'modelCatalog:download')
+    const { id } = validateIpc(ModelIdPayloadSchema, payload, 'modelCatalog:download')
     await downloadSingleModel(id)
     const def = getModelById(id)
     return buildCatalogEntries(def?.group ?? 'asr')
   })
 
   ipcMain.handle('modelCatalog:delete', async (_event, payload: unknown) => {
-    const { id } = validate(ModelIdPayloadSchema, payload, 'modelCatalog:delete')
+    const { id } = validateIpc(ModelIdPayloadSchema, payload, 'modelCatalog:delete')
     const groupBefore = getModelById(id)?.group ?? 'asr'
     await deleteModel(id)
     return buildCatalogEntries(groupBefore)
   })
 
   ipcMain.handle('modelCatalog:setActive', (_event, payload: unknown) => {
-    const { group, id } = validate(
+    const { group, id } = validateIpc(
       SetActiveModelPayloadSchema,
       payload,
       'modelCatalog:setActive'
@@ -85,7 +77,7 @@ export function registerModelCatalogHandlers(): void {
   })
 
   ipcMain.handle('modelCatalog:clearActive', (_event, payload: unknown) => {
-    const { group } = validate(
+    const { group } = validateIpc(
       ClearActiveModelPayloadSchema,
       payload,
       'modelCatalog:clearActive'

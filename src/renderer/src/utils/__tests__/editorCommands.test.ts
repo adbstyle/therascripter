@@ -9,10 +9,7 @@ import {
   changeChipTypeForEntity
 } from '../editorCommands'
 import type { EntityMap } from '../../../../shared/types'
-import {
-  createTestEditor,
-  type TestEditorHandle
-} from '../../../../test-support/createTestEditor'
+import { createTestEditor, type TestEditorHandle } from '../../../../test-support/createTestEditor'
 
 describe('getNextNumber', () => {
   it('returns 1 for empty entityMap', () => {

@@ -73,8 +73,8 @@ export default function DiarizationPipelineSection(): React.JSX.Element {
   return (
     <div className="space-y-3">
       <p className="text-sm text-text-secondary">
-        Das pyannote-Paket enthält zwei Pipelines. Wähle, welche für neue Transkriptionen
-        verwendet werden soll.
+        Das pyannote-Paket enthält zwei Pipelines. Wähle, welche für neue Transkriptionen verwendet
+        werden soll.
       </p>
 
       <div className="space-y-3">

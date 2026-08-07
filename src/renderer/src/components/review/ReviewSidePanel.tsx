@@ -3,11 +3,7 @@ import { AnonymizationPanel } from '../editor/AnonymizationPanel'
 import { SecondaryTabs } from '../editor/SecondaryTabs'
 import { ProvenancePanel } from './ProvenancePanel'
 import type { AnonymizationOverviewData } from '../../hooks/useAnonymizationOverview'
-import type {
-  AudioStats,
-  PlaceholderType,
-  ProcessedModelsSnapshot
-} from '../../../../shared/types'
+import type { AudioStats, PlaceholderType, ProcessedModelsSnapshot } from '../../../../shared/types'
 
 type TabId = 'anonymization' | 'provenance'
 

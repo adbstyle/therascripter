@@ -128,6 +128,27 @@ describe('TaskQueueService — enqueue + plannedSteps invariant', () => {
       const planned = sessionRepo.findById(session.id)?.plannedSteps ?? []
       expect(tasks).toEqual(planned)
     })
+
+    it('rolls back all writes when enqueue fails mid-loop (transactional)', () => {
+      // Ein Crash/Throw mitten im Task-Insert hinterließ vorher eine
+      // Partial-Pipeline (z. B. nur diarization+transcription) — die lief
+      // dann bis 'review' durch, OHNE Anonymisierung.
+      const session = sessionRepo.create({ title: 'T', type: 'audio', status: 'queued' })
+      const repo = (queue as unknown as { repository: TaskRepository }).repository
+      const originalCreate = repo.create.bind(repo)
+      let calls = 0
+      vi.spyOn(repo, 'create').mockImplementation((input) => {
+        calls++
+        if (calls === 2) throw new Error('db error mid-enqueue')
+        return originalCreate(input)
+      })
+
+      expect(() => queue.enqueuePipeline(session.id, 'audio')).toThrow('db error mid-enqueue')
+
+      // Alles-oder-nichts: keine Task-Zeilen UND kein gefrorener Plan
+      expect(taskRepo.findBySession(session.id)).toHaveLength(0)
+      expect(sessionRepo.findById(session.id)?.plannedSteps ?? null).toBeNull()
+    })
   })
 
   describe('retrySession', () => {

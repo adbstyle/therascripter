@@ -168,15 +168,15 @@ export default function ModelCard({
 
           {showChips && (
             <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {model.languages?.map((lang) => <Chip key={lang}>{formatLanguage(lang)}</Chip>)}
+              {model.languages?.map((lang) => (
+                <Chip key={lang}>{formatLanguage(lang)}</Chip>
+              ))}
               <Chip>{formatModelSize(model.sizeBytes)}</Chip>
             </div>
           )}
 
           {model.description && (
-            <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-              {model.description}
-            </p>
+            <p className="mt-2 text-sm leading-relaxed text-text-secondary">{model.description}</p>
           )}
         </div>
 
@@ -214,10 +214,7 @@ export default function ModelCard({
             aria-valuemin={0}
             aria-valuemax={100}
           >
-            <div
-              className="h-full bg-primary transition-all"
-              style={{ width: `${progress}%` }}
-            />
+            <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
           </div>
           <p className="mt-1 text-xs text-text-tertiary">Lädt herunter … {progress}%</p>
         </div>

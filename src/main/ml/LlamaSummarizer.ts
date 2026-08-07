@@ -1,10 +1,14 @@
-import { spawn } from 'node:child_process'
 import { writeFile, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, resolve as resolvePath, relative } from 'node:path'
+import { join, resolve as resolvePath, relative, dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { buildSummarizationPrompt } from './summarization-prompt'
 import { SUMMARIZATION_JSON_SCHEMA, SummarizationOutputSchema } from './summarization-schema'
+import { runSubprocess } from '../utils/subprocess'
+
+// Unter der 600-s-Watchdog-Wall (STALL_THRESHOLDS.summarization), damit ein
+// Stall hier als sauberer Graceful-Skip endet statt als Watchdog-Abort.
+const LLAMA_TIMEOUT_MS = 540_000
 
 export interface LlamaArgsInput {
   modelPath: string
@@ -28,6 +32,10 @@ export function buildLlamaArgs(input: LlamaArgsInput): string[] {
     // after one assistant response. Without this, llama-cli b8920+ either
     // skips the chat template (raw -p mode) or hangs interactively.
     '-st',
+    // Explizite Context-Größe passend zu MAX_INPUT_CHARS (summarization-
+    // prompt.ts) — ohne -c nutzt llama-cli 4096 und truncated still.
+    '-c',
+    '8192',
     '-n',
     String(input.maxTokens),
     '--temp',
@@ -61,9 +69,7 @@ export interface SummarizeResult {
 export function parseLlamaOutput(raw: string): SummarizeResult {
   const json = extractFirstJSONObject(raw)
   if (json === null) {
-    throw new Error(
-      `LLM-Output enthält kein JSON-Objekt. Rohtext: ${raw.slice(0, 200)}`
-    )
+    throw new Error(`LLM-Output enthält kein JSON-Objekt. Rohtext: ${raw.slice(0, 200)}`)
   }
 
   let parsed: unknown
@@ -174,30 +180,40 @@ export class LlamaSummarizer {
     }
   }
 
-  private spawn(args: string[], signal: AbortSignal): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const child = spawn(this.deps.getBinaryPath(), args, { stdio: ['ignore', 'pipe', 'pipe'] })
-      let stdout = ''
-      let stderr = ''
+  private async spawn(args: string[], signal: AbortSignal): Promise<string> {
+    // ggml dlopens its backend plugins (Metal/BLAS/CPU) at runtime. libggml
+    // contains a hardcoded fallback /opt/homebrew/Cellar/... search path
+    // that only exists on the build host. On end-user Macs without Homebrew
+    // the hardcoded path fails filesystem::exists() and ggml falls back to
+    // $GGML_BACKEND_PATH — which we point at the bundle's lib/ where
+    // setup-llama.sh placed libggml-*.so + libomp.dylib. On dev machines
+    // both paths exist; ggml may load from either, which is harmless.
+    const binaryPath = this.deps.getBinaryPath()
+    const libDir = join(dirname(binaryPath), '..', 'lib')
 
-      const abort = (): void => {
-        child.kill('SIGTERM')
-        reject(new Error('Summarization aborted'))
-      }
-      signal.addEventListener('abort', abort, { once: true })
-
-      child.stdout.on('data', (chunk) => {
-        stdout += chunk.toString()
-      })
-      child.stderr.on('data', (chunk) => {
-        stderr += chunk.toString()
-      })
-      child.on('error', reject)
-      child.on('close', (code) => {
-        signal.removeEventListener('abort', abort)
-        if (code === 0) resolve(stdout)
-        else reject(new Error(`llama-cli exited with code ${code}: ${stderr.slice(-500)}`))
-      })
+    const result = await runSubprocess({
+      bin: binaryPath,
+      args,
+      signal,
+      // Erstmals ein echter Timeout: vorher war die einzige Grenze der
+      // ProcessWatchdog (600 s Wall ohne Heartbeat, da summarize() keine
+      // Progress-Callbacks liefert). Knapp darunter, damit der Fehler hier
+      // sauber als Skip landet statt als Watchdog-Abort.
+      timeoutMs: LLAMA_TIMEOUT_MS,
+      env: { GGML_BACKEND_PATH: libDir }
     })
+
+    if (result.aborted) {
+      throw new Error('Summarization aborted')
+    }
+    if (result.timedOut) {
+      throw new Error(
+        `llama-cli Timeout nach ${Math.round(LLAMA_TIMEOUT_MS / 1000)}s — Zusammenfassung übersprungen`
+      )
+    }
+    if (result.code !== 0) {
+      throw new Error(`llama-cli exited with code ${result.code}: ${result.stderr.slice(-500)}`)
+    }
+    return result.stdout
   }
 }

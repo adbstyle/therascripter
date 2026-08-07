@@ -1,4 +1,3 @@
-import { spawn } from 'child_process'
 import { existsSync, readFileSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { cpus } from 'os'
@@ -14,6 +13,7 @@ import type {
 import type { TaskExecutor, ExecutorRuntime } from '../services/task-executors'
 import { SessionService } from '../services/SessionService'
 import { getDatabase } from '../db/connection'
+import { runSubprocess } from '../utils/subprocess'
 import { getSettings } from '../services/SettingsService'
 import { getActiveModelPath } from '../services/ModelDownloadService'
 import { writeFileAtomic } from '../utils/file-ops'
@@ -81,9 +81,9 @@ function extractWhisperErrorLines(stderr: string): string[] {
 export class WhisperService implements TaskExecutor {
   private getBinaryPath(): string {
     if (app.isPackaged) {
-      return join(process.resourcesPath, 'bin', 'whisper-cli')
+      return join(process.resourcesPath, 'whisper', 'bin', 'whisper-cli')
     }
-    return join(app.getAppPath(), 'resources', 'bin', 'whisper-cli')
+    return join(app.getAppPath(), 'resources', 'whisper', 'bin', 'whisper-cli')
   }
 
   private getModelPath(): string {
@@ -144,8 +144,7 @@ export class WhisperService implements TaskExecutor {
     // Estimate original audio duration from WAV header (same heuristic as PyannoteSidecar)
     const audioStats = statSync(session.audioPath)
     const WAV_HEADER_SIZE = 44
-    const audioDurationEstimate =
-      Math.max(0, audioStats.size - WAV_HEADER_SIZE) / (48000 * 2) // 48kHz 16-bit mono
+    const audioDurationEstimate = Math.max(0, audioStats.size - WAV_HEADER_SIZE) / (48000 * 2) // 48kHz 16-bit mono
 
     // Empty-speech short-circuit: if Pyannote found no speech, skip the whole
     // stitch+whisper round-trip and write an empty transcript. AlignmentService
@@ -166,7 +165,7 @@ export class WhisperService implements TaskExecutor {
         }
       }
       const transcriptPath = sessionService.generateTranscriptPath(task.sessionId)
-      writeFileAtomic(transcriptPath, JSON.stringify(emptyTranscript, null, 2))
+      writeFileAtomic(transcriptPath, JSON.stringify(emptyTranscript))
       sessionService.updateSession(task.sessionId, { transcriptPath })
       onProgress(1)
       return
@@ -174,7 +173,7 @@ export class WhisperService implements TaskExecutor {
 
     // Important: declare stitched BEFORE the try so the finally block can clean
     // up even if stitchSpeechSegments throws after partial-write of the stitched
-    // WAV (e.g. ffmpeg crash mid-encode). Initialize as undefined; assign inside
+    // WAV (e.g. Stitch-Abbruch mid-copy). Initialize as undefined; assign inside
     // the try.
     let stitched: StitchedAudio | undefined
 
@@ -219,7 +218,7 @@ export class WhisperService implements TaskExecutor {
       )
 
       const transcriptPath = sessionService.generateTranscriptPath(task.sessionId)
-      writeFileAtomic(transcriptPath, JSON.stringify(transcript, null, 2))
+      writeFileAtomic(transcriptPath, JSON.stringify(transcript))
       sessionService.updateSession(task.sessionId, { transcriptPath })
     } finally {
       // Clean up stitched WAV (best-effort). `stitched` may still be undefined
@@ -232,7 +231,7 @@ export class WhisperService implements TaskExecutor {
     }
   }
 
-  private runWhisper(
+  private async runWhisper(
     binaryPath: string,
     modelPath: string,
     audioPath: string,
@@ -240,131 +239,88 @@ export class WhisperService implements TaskExecutor {
     onProgress: (progress: number) => void,
     signal?: AbortSignal
   ): Promise<WhisperJsonOutput> {
-    return new Promise((resolve, reject) => {
-      // whisper.cpp writes JSON to {audioPath}.json when using -ojf
-      const threadCount = Math.min(8, Math.max(1, cpus().length))
-      const args = buildWhisperArgs(modelPath, audioPath, threadCount)
+    // whisper.cpp writes JSON to {audioPath}.json when using -ojf
+    const threadCount = Math.min(8, Math.max(1, cpus().length))
+    const args = buildWhisperArgs(modelPath, audioPath, threadCount)
+    const jsonPath = audioPath + '.json'
 
-      // QoS: nice -n 10 (NFR-23) — spawn via nice
-      // stdout is ignored — whisper.cpp writes JSON to file (-ojf), not stdout.
-      // Piping stdout without reading it causes a deadlock when the pipe buffer fills.
-      const proc = spawn('nice', ['-n', '10', binaryPath, ...args], {
-        stdio: ['ignore', 'ignore', 'pipe']
-      })
-
-      let stderr = ''
-      let settled = false
-      let killTimer: ReturnType<typeof setTimeout> | null = null
-      const timeout = setTimeout(() => {
-        signal?.removeEventListener('abort', onAbort)
-        proc.kill('SIGTERM')
-        settled = true
-        reject(
-          new Error(`Transkription abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`)
-        )
-      }, timeoutMs)
-
-      // Watchdog abort: SIGTERM → 5s grace → SIGKILL
-      const onAbort = (): void => {
-        clearTimeout(timeout)
-        proc.kill('SIGTERM')
-        killTimer = setTimeout(() => {
-          try {
-            proc.kill('SIGKILL')
-          } catch {
-            /* already dead */
+    let result
+    try {
+      // stdout is ignored — whisper.cpp writes JSON to file (-ojf), not
+      // stdout. Piping stdout without reading it causes a deadlock when the
+      // pipe buffer fills.
+      result = await runSubprocess({
+        bin: binaryPath,
+        args,
+        nice: 10, // QoS (NFR-23)
+        timeoutMs,
+        signal,
+        stdout: 'ignore',
+        onStderrLine: (line) => {
+          const match = PROGRESS_REGEX.exec(line)
+          if (match) {
+            onProgress(parseInt(match[1], 10) / 100)
           }
-        }, 5_000)
-        settled = true
-        reject(new Error('Verarbeitung reagiert nicht mehr'))
+        }
+      })
+    } catch (error) {
+      throw new Error(
+        `whisper-cli konnte nicht gestartet werden: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+
+    // finally räumt die whisper-JSON (enthält das volle Transkript — PHI!)
+    // auf ALLEN Pfaden weg: Erfolg, Timeout, Abort und Fehler. Vorher blieb
+    // sie auf Timeout/Abort/Fehler liegen.
+    try {
+      if (result.aborted) {
+        throw new Error('Verarbeitung reagiert nicht mehr')
       }
-      signal?.addEventListener('abort', onAbort, { once: true })
+      if (result.timedOut) {
+        throw new Error(`Transkription abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`)
+      }
 
-      proc.stderr?.on('data', (data: Buffer) => {
-        const chunk = data.toString()
-        stderr += chunk
+      const stderrErrors = extractWhisperErrorLines(result.stderr)
+      const stderrSummary =
+        stderrErrors.length > 0 ? stderrErrors.join('; ') : result.stderr.slice(-500).trim()
 
-        // Parse progress from stderr
-        const match = PROGRESS_REGEX.exec(chunk)
-        if (match) {
-          const pct = parseInt(match[1], 10)
-          onProgress(pct / 100)
-        }
-      })
+      if (result.code !== 0) {
+        throw new Error(
+          `whisper-cli Fehler (Exit Code ${result.code}): ${stderrSummary || '(keine stderr-Ausgabe)'}`
+        )
+      }
 
-      proc.on('error', (error) => {
-        clearTimeout(timeout)
-        if (killTimer) clearTimeout(killTimer)
-        signal?.removeEventListener('abort', onAbort)
-        if (!settled) {
-          settled = true
-          reject(new Error(`whisper-cli konnte nicht gestartet werden: ${error.message}`))
-        }
-      })
+      // whisper-cli exits 0 even when fatal argument errors are printed to
+      // stderr (e.g. unknown flag → prints help → exits 0). Surface those
+      // explicitly instead of letting the generic "no JSON output" path
+      // mask the real cause.
+      if (stderrErrors.length > 0) {
+        throw new Error(
+          `whisper-cli meldete einen Fehler trotz Exit-Code 0: ${stderrErrors.join('; ')}`
+        )
+      }
 
-      proc.on('close', (code) => {
-        clearTimeout(timeout)
-        if (killTimer) clearTimeout(killTimer)
-        signal?.removeEventListener('abort', onAbort)
+      if (!existsSync(jsonPath)) {
+        throw new Error(
+          `whisper-cli hat keine JSON-Ausgabe erzeugt${stderrSummary ? ` — stderr: ${stderrSummary}` : ''}`
+        )
+      }
 
-        if (settled) return
-
-        const stderrErrors = extractWhisperErrorLines(stderr)
-        const stderrSummary =
-          stderrErrors.length > 0 ? stderrErrors.join('; ') : stderr.slice(-500).trim()
-
-        if (code !== 0) {
-          reject(
-            new Error(
-              `whisper-cli Fehler (Exit Code ${code}): ${stderrSummary || '(keine stderr-Ausgabe)'}`
-            )
-          )
-          return
-        }
-
-        // whisper-cli exits 0 even when fatal argument errors are printed to
-        // stderr (e.g. unknown flag → prints help → exits 0). Surface those
-        // explicitly instead of letting the generic "no JSON output" path
-        // mask the real cause.
-        if (stderrErrors.length > 0) {
-          reject(
-            new Error(`whisper-cli meldete einen Fehler trotz Exit-Code 0: ${stderrErrors.join('; ')}`)
-          )
-          return
-        }
-
-        // whisper.cpp writes output to {audioPath}.json
-        const jsonPath = audioPath + '.json'
-        if (!existsSync(jsonPath)) {
-          reject(
-            new Error(
-              `whisper-cli hat keine JSON-Ausgabe erzeugt${stderrSummary ? ` — stderr: ${stderrSummary}` : ''}`
-            )
-          )
-          return
-        }
-
-        try {
-          const jsonContent = readFileSync(jsonPath, 'utf-8')
-          const output = JSON.parse(jsonContent) as WhisperJsonOutput
-
-          resolve(output)
-
-          // Clean up the temporary JSON file created by whisper.cpp (after resolve)
-          try {
-            unlinkSync(jsonPath)
-          } catch {
-            /* cleanup failure is non-fatal */
-          }
-        } catch (error) {
-          reject(
-            new Error(
-              `JSON-Ausgabe konnte nicht gelesen werden: ${error instanceof Error ? error.message : String(error)}`
-            )
-          )
-        }
-      })
-    })
+      try {
+        const jsonContent = readFileSync(jsonPath, 'utf-8')
+        return JSON.parse(jsonContent) as WhisperJsonOutput
+      } catch (error) {
+        throw new Error(
+          `JSON-Ausgabe konnte nicht gelesen werden: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
+    } finally {
+      try {
+        unlinkSync(jsonPath)
+      } catch {
+        /* cleanup failure is non-fatal */
+      }
+    }
   }
 
   private processOutput(output: WhisperJsonOutput): TranscriptData {

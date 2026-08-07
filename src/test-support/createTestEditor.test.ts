@@ -51,11 +51,7 @@ describe('createTestEditor', () => {
     expect(handle.getChips()).toHaveLength(1)
     const { editor } = handle
     const chipPos = handle.getChips()[0].pos
-    const tr = editor.state.tr.replaceWith(
-      chipPos,
-      chipPos + 1,
-      editor.state.schema.text('Anna')
-    )
+    const tr = editor.state.tr.replaceWith(chipPos, chipPos + 1, editor.state.schema.text('Anna'))
     editor.view.dispatch(tr)
     expect(handle.getChips()).toHaveLength(0)
     expect(editor.state.doc.textContent).toBe('Anna')

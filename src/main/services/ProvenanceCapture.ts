@@ -1,11 +1,7 @@
 import { getActiveModelId, getModelById } from './ModelDownloadService'
 import { getInstalledVersion } from './InstalledVersionsStore'
 import type { ModelGroup } from '../../shared/validation/model-catalog-schemas'
-import type {
-  ModelSnapshot,
-  ProcessedModelsSnapshot,
-  TaskType
-} from '../../shared/types'
+import type { ModelSnapshot, ProcessedModelsSnapshot, TaskType } from '../../shared/types'
 
 /**
  * Issue #84 / Story I — captures the active models per pipeline group at the
@@ -47,9 +43,7 @@ function snapshotGroup(group: ModelGroup): ModelSnapshot | null {
  * pipeline steps and intentionally have no snapshot — those tools ship
  * with the app binary and their identity is the app version.
  */
-export function captureProcessedModels(
-  plannedSteps: TaskType[]
-): ProcessedModelsSnapshot {
+export function captureProcessedModels(plannedSteps: TaskType[]): ProcessedModelsSnapshot {
   const planned = new Set(plannedSteps)
   return {
     capturedAt: new Date().toISOString(),

@@ -7,6 +7,7 @@ interface Props {
 
 export function SummaryPanel({ sessionId }: Props): React.JSX.Element | null {
   const [text, setText] = useState<string | null>(null)
+  const [refetchCounter, setRefetchCounter] = useState(0)
   const originalRef = useRef<string>('')
 
   useEffect(() => {
@@ -32,6 +33,16 @@ export function SummaryPanel({ sessionId }: Props): React.JSX.Element | null {
     return (): void => {
       cancelled = true
     }
+  }, [sessionId, refetchCounter])
+
+  // Review-Ungating: der Editor kann offen sein, während die Summarization
+  // im Hintergrund noch läuft — bei ihrem task:completed nachladen.
+  useEffect(() => {
+    return window.api.tasks.onCompleted((data) => {
+      if (data.sessionId === sessionId && data.taskType === 'summarization') {
+        setRefetchCounter((c) => c + 1)
+      }
+    })
   }, [sessionId])
 
   if (text === null) return null

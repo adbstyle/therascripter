@@ -113,6 +113,22 @@ describe('SessionRepository', () => {
       expect(all[0].id).toBe(s2.id)
       expect(all[1].id).toBe(s1.id)
     })
+
+    it('is a list projection — entityMap and processedWithModels stay null', () => {
+      // Kein Consumer der Liste (Dashboard, Queue-Positionen, Recovery,
+      // Auto-Deletion) liest diese Blobs; der JSON-Parse pro Row + der
+      // IPC-Payload skalierten mit der Library-Größe. Detail-Reads
+      // (findById via review:load) liefern sie weiterhin.
+      const session = repo.create({ title: 'T', type: 'audio' })
+      repo.update(session.id, {
+        entityMap: {
+          e1: { original: 'Meier', placeholder: '[PERSON 1]', type: 'PERSON', source: 'ner' }
+        }
+      })
+
+      expect(repo.findById(session.id)?.entityMap?.e1?.original).toBe('Meier')
+      expect(repo.findAll()[0].entityMap).toBeNull()
+    })
   })
 
   describe('update', () => {

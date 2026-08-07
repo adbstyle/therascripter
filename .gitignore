@@ -41,6 +41,8 @@ coverage/
 .whisper-build/
 resources/bin/
 resources/lib/
+resources/whisper/
+resources/llama/
 
 # Python sidecar virtual environment, standalone build, and cache
 python_sidecar/venv/
@@ -56,3 +58,4 @@ manifest.json
 !figma-plugin/manifest.json
 r2-upload/
 python_sidecar/build/
+.playwright-mcp/

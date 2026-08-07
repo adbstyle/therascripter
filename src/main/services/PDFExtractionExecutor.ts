@@ -1,19 +1,26 @@
 import { existsSync, readFileSync } from 'fs'
-import { createRequire } from 'module'
-import { dirname, join } from 'path'
+import { join } from 'path'
 import type { Task } from '../../shared/types'
+import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
+import type { TextContent } from 'pdfjs-dist/types/src/display/api'
 import type { ExtractionResult, PageData } from '../../shared/types/PDFTypes'
 import type { TaskExecutor } from './task-executors'
 import { SessionService } from './SessionService'
 import { getDatabase, getDataDir } from '../db/connection'
 import { buildPDFTranscript } from '../utils/pdf-transcript-builder'
 import { writeFileAtomic } from '../utils/file-ops'
+import { abortable } from '../utils/abortable'
+import { openPdfDocument } from '../utils/pdfjs-loader'
 
 /** Minimum characters on a page to consider it a text page (not scanned) */
 const TEXT_PAGE_THRESHOLD = 50
 
 export class PDFExtractionExecutor implements TaskExecutor {
-  async execute(task: Task, onProgress: (progress: number) => void, _signal?: AbortSignal): Promise<void> {
+  async execute(
+    task: Task,
+    onProgress: (progress: number) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
     const db = getDatabase()
     const sessionService = new SessionService(db)
     const session = sessionService.getSession(task.sessionId)
@@ -27,19 +34,14 @@ export class PDFExtractionExecutor implements TaskExecutor {
 
     onProgress(0.05)
 
-    // Load pdfjs-dist (dynamic import for ESM compatibility)
-    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
-
-    // Resolve standard font data path for correct text extraction
-    const require = createRequire(import.meta.url)
-    const pdfjsDir = dirname(require.resolve('pdfjs-dist/package.json'))
-    const standardFontDataUrl = join(pdfjsDir, 'standard_fonts') + '/'
-
     const data = new Uint8Array(readFileSync(session.pdfPath))
 
-    let doc
+    // abortable(): ein in pdf.js hängender Await settlet trotzdem, wenn der
+    // Watchdog abbricht — sonst wedged ein pathologisches PDF die
+    // Single-Slot-Queue permanent (einziger Ausweg war App-Quit).
+    let doc: PDFDocumentProxy
     try {
-      doc = await pdfjs.getDocument({ data, standardFontDataUrl, useSystemFonts: false }).promise
+      doc = await abortable<PDFDocumentProxy>(openPdfDocument(data), signal)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.includes('password') || msg.includes('encrypted')) {
@@ -59,8 +61,11 @@ export class PDFExtractionExecutor implements TaskExecutor {
     const pages: PageData[] = []
 
     for (let i = 1; i <= totalPages; i++) {
-      const page = await doc.getPage(i)
-      const textContent = await page.getTextContent()
+      if (signal?.aborted) {
+        throw new Error('Verarbeitung abgebrochen')
+      }
+      const page = await abortable<PDFPageProxy>(doc.getPage(i), signal)
+      const textContent = await abortable<TextContent>(page.getTextContent(), signal)
 
       const text = textContent.items
         .map((item) => ('str' in item ? item.str : ''))
@@ -82,17 +87,20 @@ export class PDFExtractionExecutor implements TaskExecutor {
 
     // Save extraction result
     const pdfMetadata = await doc.getMetadata().catch(() => null)
+    // pdfjs typt info nur als Object — Title/Author sind dokumentierte,
+    // optionale PDF-Info-Dictionary-Felder.
+    const info = pdfMetadata?.info as { Title?: string; Author?: string } | undefined
     const extractionResult: ExtractionResult = {
       pages,
       metadata: {
         totalPages,
-        title: pdfMetadata?.info?.Title ?? undefined,
-        author: pdfMetadata?.info?.Author ?? undefined
+        title: info?.Title ?? undefined,
+        author: info?.Author ?? undefined
       }
     }
 
     const extractedPath = join(getDataDir(), 'extracted', `${task.sessionId}.json`)
-    writeFileAtomic(extractedPath, JSON.stringify(extractionResult, null, 2))
+    writeFileAtomic(extractedPath, JSON.stringify(extractionResult))
 
     // Always write a transcript from extracted text — guarantees the
     // anonymization step has a transcriptPath to read even when the

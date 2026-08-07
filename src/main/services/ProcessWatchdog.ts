@@ -8,6 +8,10 @@ const POLL_INTERVAL_MS = 15_000
 const STALL_THRESHOLDS: Partial<Record<TaskType, number>> = {
   anonymization: 120_000,
   ocr: 60_000,
+  // pdf.js läuft in-process; onProgress feuert pro Seite. Eine einzelne
+  // Seite, die >2 min hängt, ist pathologisch — Abort settlet den Executor
+  // über abortable() (PDFExtractionExecutor), sonst wedged die Queue.
+  extraction: 120_000,
   // LlamaSummarizer reports no fine-grained progress — onProgress is never called
   // during inference, so the watchdog only sees the initial heartbeat. Cold-start
   // of a 4B Q4_K_M GGUF on a loaded box can take ~30–60s; long anonymized inputs
@@ -16,8 +20,12 @@ const STALL_THRESHOLDS: Partial<Record<TaskType, number>> = {
   summarization: 600_000
 }
 
-// In-process executors — watchdog is a no-op for these
-const IN_PROCESS_TASKS: TaskType[] = ['alignment', 'extraction']
+// In-process executors — watchdog is a no-op for these.
+// alignment ist rein synchroner CPU-Code (Millisekunden, keine Awaits):
+// er kann weder hängen noch von einem Timeout unterbrochen werden — ein
+// Watchdog wäre wirkungslos. extraction (pdf.js, async) wird seit dem
+// abortable()-Umbau ÜBERWACHT (siehe STALL_THRESHOLDS).
+const IN_PROCESS_TASKS: TaskType[] = ['alignment']
 
 export interface WatchdogConfig {
   taskType: TaskType

@@ -29,21 +29,13 @@ describe('Pipeline order (single source of truth)', () => {
   })
 
   it('PDF_PIPELINE is unchanged (extraction → ocr → anonymization → summarization)', () => {
-    expect([...PDF_PIPELINE]).toEqual([
-      'extraction',
-      'ocr',
-      'anonymization',
-      'summarization'
-    ])
+    expect([...PDF_PIPELINE]).toEqual(['extraction', 'ocr', 'anonymization', 'summarization'])
   })
 })
 
 describe('Pipeline-order single-source-of-truth assertions', () => {
   it('TaskQueueService imports from shared/constants/pipeline (no local duplicate)', () => {
-    const src = readFileSync(
-      join(ROOT, 'src/main/services/TaskQueueService.ts'),
-      'utf-8'
-    )
+    const src = readFileSync(join(ROOT, 'src/main/services/TaskQueueService.ts'), 'utf-8')
     expect(src).toContain("from '../../shared/constants/pipeline'")
     expect(src).not.toMatch(/^const AUDIO_PIPELINE\s*:/m)
   })
@@ -55,16 +47,11 @@ describe('Pipeline-order single-source-of-truth assertions', () => {
     // pipeline order itself is therefore not imported here.
     // The CLAUDE.md "no local duplicate" rule still applies though — no
     // hardcoded list of pipeline steps in this file.
-    const src = readFileSync(
-      join(ROOT, 'src/renderer/src/components/SessionCard.tsx'),
-      'utf-8'
-    )
+    const src = readFileSync(join(ROOT, 'src/renderer/src/components/SessionCard.tsx'), 'utf-8')
     expect(src).not.toMatch(/^const AUDIO_PIPELINE_STEPS\s*[:=]/m)
     expect(src).not.toMatch(/^const PDF_PIPELINE_STEPS\s*[:=]/m)
     // Local pipeline arrays would look like one of these patterns:
-    expect(src).not.toMatch(
-      /\['diarization',\s*'transcription',\s*'alignment',\s*'anonymization'/
-    )
+    expect(src).not.toMatch(/\['diarization',\s*'transcription',\s*'alignment',\s*'anonymization'/)
     expect(src).not.toMatch(/\['extraction',\s*'ocr',\s*'anonymization'/)
   })
 })

@@ -27,19 +27,15 @@ describe('migration 008 — reset summarization parse errors', () => {
     db.prepare(
       `INSERT INTO sessions (id, title, type, status, anonymized_path, error_message, created_at, updated_at)
        VALUES (?, ?, 'audio', ?, ?, ?, datetime('now'), datetime('now'))`
-    ).run(
-      input.id,
-      input.title,
-      input.status,
-      input.anonymizedPath,
-      input.errorMessage
-    )
+    ).run(input.id, input.title, input.status, input.anonymizedPath, input.errorMessage)
   }
 
   // Migration 008 has already run via applyTestSchema. To test its effect we
   // insert AFTER, then re-run the migration SQL via direct exec.
   const rerunMigration008 = (): void => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fs = require('fs') as typeof import('fs')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require('path') as typeof import('path')
     const sql = fs.readFileSync(
       path.join(__dirname, '..', 'migrations', '008-reset-summarization-parse-errors.sql'),

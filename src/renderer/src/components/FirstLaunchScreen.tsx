@@ -113,13 +113,7 @@ export default function FirstLaunchScreen({
             <p className="mb-6 text-sm text-text-secondary">
               Zum Start werden die Standard-ML-Modelle heruntergeladen
               {modelInfo && modelInfo.models.length > 0 && (
-                <>
-                  {' '}(
-                  {formatBytes(
-                    modelInfo.models.reduce((sum, m) => sum + m.sizeBytes, 0)
-                  )}
-                  )
-                </>
+                <> ({formatBytes(modelInfo.models.reduce((sum, m) => sum + m.sizeBytes, 0))})</>
               )}
               . Weitere oder alternative Modelle können Sie jederzeit unter Einstellungen &rarr;
               Modelle hinzufügen.
@@ -152,9 +146,17 @@ export default function FirstLaunchScreen({
                       {isCompleted ? (
                         <Check className="h-4 w-4 text-success" strokeWidth={2.5} aria-hidden />
                       ) : isCurrent ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-primary" strokeWidth={2} aria-hidden />
+                        <Loader2
+                          className="h-4 w-4 animate-spin text-primary"
+                          strokeWidth={2}
+                          aria-hidden
+                        />
                       ) : (
-                        <Circle className="h-4 w-4 text-text-tertiary" strokeWidth={1.5} aria-hidden />
+                        <Circle
+                          className="h-4 w-4 text-text-tertiary"
+                          strokeWidth={1.5}
+                          aria-hidden
+                        />
                       )}
                       {model.label}
                     </span>

@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  formatHms,
-  formatSilenceWithShare,
-  formatPercentDeCh
-} from '../formatAudioStats'
+import { formatHms, formatSilenceWithShare, formatPercentDeCh } from '../formatAudioStats'
 
 describe('formatHms', () => {
   it('renders seconds-only when under a minute', () => {
