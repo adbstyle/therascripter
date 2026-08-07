@@ -27,7 +27,6 @@ import {
   reconcileEntityMapWithDoc
 } from '../utils/editorCommands'
 import { serializeDocument } from '../../../shared/utils/serializeDocument'
-import { countWords } from '../../../shared/utils/countWords'
 import { useAnonymizationOverview } from '../hooks/useAnonymizationOverview'
 import type {
   AudioStats,
@@ -64,6 +63,15 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const [audioStats, setAudioStats] = useState<AudioStats | null>(null)
   const [_entityMap, setEntityMap] = useState<EntityMap>({})
   const [updateCounter, setUpdateCounter] = useState(0)
+  const updateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Debounce-Timer beim Unmount aufräumen (letzter Tick würde sonst auf
+  // einem unmounted Component setState aufrufen)
+  useEffect(() => {
+    return () => {
+      if (updateDebounceRef.current !== null) clearTimeout(updateDebounceRef.current)
+    }
+  }, [])
   const [blocklistConfirm, setBlocklistConfirm] = useState<{
     term: string
     type: PlaceholderType
@@ -232,7 +240,13 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
       }
     },
     onUpdate: () => {
-      setUpdateCounter((c) => c + 1)
+      // Debounced: updateCounter treibt Wortzählung + Anonymisierungs-
+      // Übersicht (voller Doc-Walk) — pro Tastendruck ausgeführt machte das
+      // Tippen in langen Transkripten spürbar zäh. Der Autosave hängt
+      // ebenfalls am Counter und debounct selbst nochmals (2 s); der
+      // Unmount-Flush liest direkt aus dem Editor und verliert nichts.
+      if (updateDebounceRef.current !== null) clearTimeout(updateDebounceRef.current)
+      updateDebounceRef.current = setTimeout(() => setUpdateCounter((c) => c + 1), 250)
     }
   })
 
@@ -520,11 +534,27 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     return () => window.removeEventListener('keydown', onKey)
   }, [onBack, showDeleteDialog, blocklistConfirm])
 
-  const liveWordCount = useMemo(
-    () => (editor && !loading ? countWords(editor.getJSON() as TipTapDocument) : null),
+  // Direkt über den ProseMirror-Doc statt countWords(editor.getJSON()):
+  // getJSON() serialisierte das GESAMTE Transkript pro Neuberechnung —
+  // der Doc-Walk zählt ohne die JSON-Zwischenkopie (Semantik identisch zu
+  // shared/utils/countWords: Text-Wörter + placeholderChips).
+  const liveWordCount = useMemo(() => {
+    if (!editor || loading) return null
+    let count = 0
+    editor.state.doc.descendants((node) => {
+      if (node.isText) {
+        count += (node.text ?? '')
+          .trim()
+          .split(/\s+/)
+          .filter((t) => t.length > 0).length
+      } else if (node.type.name === 'placeholderChip') {
+        count += 1
+      }
+      return true
+    })
+    return count
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [updateCounter, loading, editor]
-  )
+  }, [updateCounter, loading, editor])
 
   const overviewData = useAnonymizationOverview(editor, updateCounter)
 
