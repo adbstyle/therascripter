@@ -572,14 +572,37 @@ export class TaskQueueService {
   }
 
   private handleTaskCompletion(task: Task): void {
+    const session = this.sessionService.getSession(task.sessionId)
+
+    // Review-Ungating: die Session erreicht 'review', sobald die
+    // Anonymisierung abgeschlossen ist — der Editor lädt nur das
+    // anonymisierte Dokument. Die optionale Summarization läuft danach im
+    // Hintergrund weiter; ihr task:completed-Event triggert den
+    // Renderer-Refetch, der die fertige Summary nachlädt. Der User spart
+    // die volle llama-Inferenzzeit (30–120 s) bis zum Editor.
+    // retryCount-Reset (DR-7) passiert hier — review ist erreicht.
+    if (task.type === 'anonymization' && session?.status === 'processing') {
+      try {
+        this.sessionService.updateSession(task.sessionId, {
+          status: 'review',
+          retryCount: 0
+        })
+      } catch (err) {
+        console.error(`[TaskQueue] Failed to transition session ${task.sessionId} to review:`, err)
+      }
+      return
+    }
+
     const remainingTasks = this.repository.findBySession(task.sessionId)
     const pendingOrRunning = remainingTasks.filter(
       (t) => t.status === 'pending' || t.status === 'running'
     )
 
-    if (pendingOrRunning.length === 0) {
-      // All tasks done — set final status. Reset retryCount on successful review
-      // (DR-7: counter resets when the session reaches review).
+    // Fallback für Pipelines ohne Anonymisierungs-Step (defensiv — aktuell
+    // enthalten beide Pipelines anonymization). Guard auf 'processing'
+    // verhindert die ungültige review→review-Transition, wenn die
+    // Hintergrund-Summarization nach dem Ungating abschließt.
+    if (pendingOrRunning.length === 0 && session?.status === 'processing') {
       try {
         this.sessionService.updateSession(task.sessionId, {
           status: 'review',
@@ -594,6 +617,19 @@ export class TaskQueueService {
   }
 
   private handleTaskFailure(task: Task, errorMessage: string): void {
+    // Summarization-Invariante (CLAUDE.md): Fehler dieses Steps dürfen NIE
+    // die Session erroren — die Session ist beim Ungating bereits in
+    // 'review', ein review→error würde das fertig anonymisierte Transkript
+    // hinter einem Retry-Button verstecken. Summary bleibt einfach NULL.
+    // (Der Executor failt ohnehin soft; hierher gelangt nur der
+    // Watchdog-/Poison-Pfad.)
+    if (task.type === 'summarization') {
+      console.warn(
+        `[TaskQueue] Summarization für Session ${task.sessionId} fehlgeschlagen (${errorMessage}) — Session bleibt in review, Summary bleibt leer`
+      )
+      return
+    }
+
     // Cancel remaining pending tasks for this session
     const cancelled = this.repository.cancelPendingForSession(task.sessionId)
     if (cancelled > 0) {

@@ -272,6 +272,50 @@ describe('TaskQueueService', () => {
       }
     })
 
+    it('reaches review as soon as anonymization completes — summarization runs in background', async () => {
+      // Review-Ungating: der Editor braucht nur das anonymisierte Dokument.
+      // Vorher wartete der User 30–120 s auf die llama-Summary, bevor die
+      // Session den Review-Editor öffnete.
+      const instantExecutor: TaskExecutor = {
+        async execute(_task, onProgress) {
+          onProgress(1)
+        }
+      }
+      let releaseSummarization: (() => void) | undefined
+      const slowSummarization: TaskExecutor = {
+        execute() {
+          return new Promise<void>((resolve) => {
+            releaseSummarization = resolve
+          })
+        }
+      }
+
+      queue.registerExecutor('transcription', instantExecutor)
+      queue.registerExecutor('diarization', instantExecutor)
+      queue.registerExecutor('alignment', instantExecutor)
+      queue.registerExecutor('anonymization', instantExecutor)
+      queue.registerExecutor('summarization', slowSummarization)
+
+      queue.enqueuePipeline(sessionId, 'audio')
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      // Summarization läuft noch — Session muss trotzdem schon review sein
+      expect(sessionRepo.findById(sessionId)?.status).toBe('review')
+      const summarizationTask = queue
+        .getSessionTasks(sessionId)
+        .find((t) => t.type === 'summarization')
+      expect(summarizationTask?.status).toBe('running')
+
+      // Summarization abschließen — Status bleibt review (kein
+      // review→review-Transition-Fehler)
+      releaseSummarization?.()
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(sessionRepo.findById(sessionId)?.status).toBe('review')
+      expect(
+        queue.getSessionTasks(sessionId).find((t) => t.type === 'summarization')?.status
+      ).toBe('completed')
+    })
+
     it('sets session to review after all tasks complete', async () => {
       const instantExecutor: TaskExecutor = {
         async execute(_task, onProgress) {
