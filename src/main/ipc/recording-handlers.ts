@@ -1,4 +1,4 @@
-import { ipcMain, Notification, powerSaveBlocker } from 'electron'
+import { dialog, ipcMain, Notification, powerSaveBlocker } from 'electron'
 import { getDatabase } from '../db/connection'
 import { SessionService } from '../services/SessionService'
 import { AudioFileService } from '../services/AudioFileService'
@@ -236,4 +236,76 @@ export function checkForRecovery(): Array<{ sessionId: string; title: string }> 
   }
 
   return stuckRecordings
+}
+
+/**
+ * Recovery für Sessions, die durch einen App-Crash im 'recording'-Status
+ * hängen geblieben sind (cleanupRecordingOnQuit lief nie). Vorher wurden
+ * diese Sessions NIE recovered — recoverOrphanedSessions betrachtet nur
+ * queued/processing, und die 60-s-Recovery-Dumps wurden geschrieben, aber
+ * nie gelesen. Läuft nach Window-Erstellung (Dialog braucht Kontext).
+ */
+export async function recoverCrashedRecordings(): Promise<void> {
+  let stuck: Array<{ sessionId: string; title: string }>
+  try {
+    stuck = checkForRecovery()
+  } catch (err) {
+    console.error('[Recovery] checkForRecovery fehlgeschlagen:', err)
+    return
+  }
+
+  const service = new SessionService(getDatabase())
+
+  for (const { sessionId, title } of stuck) {
+    let repaired: { durationSeconds: number } | null = null
+    try {
+      repaired = audioFileService.repairWavAfterCrash(sessionId)
+    } catch (err) {
+      console.error(`[Recovery] WAV-Reparatur für Session ${sessionId} fehlgeschlagen:`, err)
+    }
+
+    // Nichts (oder <1 s) wiederherstellbar → still auf error
+    if (!repaired || repaired.durationSeconds < 1) {
+      try {
+        service.updateSession(sessionId, {
+          status: 'error',
+          errorMessage: 'Aufnahme wurde durch einen Absturz unterbrochen'
+        })
+      } catch (err) {
+        console.error(`[Recovery] Status-Update für Session ${sessionId} fehlgeschlagen:`, err)
+      }
+      continue
+    }
+
+    const minutes = Math.floor(repaired.durationSeconds / 60)
+    const seconds = Math.round(repaired.durationSeconds % 60)
+    const durationLabel = minutes > 0 ? `${minutes} min ${seconds} s` : `${seconds} s`
+
+    const { response } = await dialog.showMessageBox({
+      type: 'question',
+      title: 'Aufnahme wiederherstellen',
+      message: `Die Aufnahme «${title}» wurde durch einen Absturz unterbrochen.`,
+      detail: `${durationLabel} Audio konnten wiederhergestellt werden. Soll die Aufnahme jetzt verarbeitet werden?`,
+      buttons: ['Wiederherstellen und verarbeiten', 'Verwerfen'],
+      defaultId: 0,
+      cancelId: 1
+    })
+
+    try {
+      if (response === 0) {
+        service.updateSession(sessionId, { status: 'queued' })
+        getTaskQueue().enqueuePipeline(sessionId, 'audio')
+        console.log(
+          `[Recovery] Session ${sessionId} wiederhergestellt (${durationLabel}) und eingereiht`
+        )
+      } else {
+        service.updateSession(sessionId, {
+          status: 'error',
+          errorMessage: 'Aufnahme wurde durch einen Absturz unterbrochen'
+        })
+      }
+    } catch (err) {
+      console.error(`[Recovery] Verarbeitung für Session ${sessionId} fehlgeschlagen:`, err)
+    }
+  }
 }

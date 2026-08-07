@@ -7,7 +7,8 @@ import { registerSessionHandlers } from './ipc/session-handlers'
 import {
   registerRecordingHandlers,
   cleanupRecordingOnQuit,
-  stopRecordingFromTray
+  stopRecordingFromTray,
+  recoverCrashedRecordings
 } from './ipc/recording-handlers'
 import { registerSettingsHandlers } from './ipc/settings-handlers'
 import { registerTaskHandlers } from './ipc/task-handlers'
@@ -299,6 +300,13 @@ app.whenReady().then(() => {
   setupCSP()
   createWindow()
   checkFileVaultOnStartup()
+
+  // Crash-Recovery für Aufnahmen: Sessions, die im 'recording'-Status hängen
+  // geblieben sind (App-Crash während Aufnahme), reparieren + Dialog anbieten.
+  // Fire-and-forget: darf den Startup nicht blockieren.
+  void recoverCrashedRecordings().catch((err) =>
+    console.error('[Recovery] recoverCrashedRecordings fehlgeschlagen:', err)
+  )
 
   // Migrate existing model installations to version tracking (one-time, idempotent)
   migrateInstalledVersions()
