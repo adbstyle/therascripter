@@ -39,7 +39,9 @@ describe('migration 008 — reset summarization parse errors', () => {
   // Migration 008 has already run via applyTestSchema. To test its effect we
   // insert AFTER, then re-run the migration SQL via direct exec.
   const rerunMigration008 = (): void => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fs = require('fs') as typeof import('fs')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require('path') as typeof import('path')
     const sql = fs.readFileSync(
       path.join(__dirname, '..', 'migrations', '008-reset-summarization-parse-errors.sql'),

@@ -71,6 +71,91 @@ check_no_homebrew_refs 'llama bundle' \
   "$LLAMA_LIB/"*.dylib \
   "$LLAMA_LIB/"*.so
 
+# Duplicate-variant guard: Homebrew ships each dylib under three names; only
+# the single-major install names (lib*.N.dylib) are ever loaded. setup-llama.sh
+# prunes the rest — fail if a re-run regressed that (~16 MB dead weight).
+dupes=$(ls "$LLAMA_LIB"/lib{llama,llama-common,mtmd,ggml,ggml-base}.dylib \
+  "$LLAMA_LIB"/lib*.*.*.*.dylib 2>/dev/null || true)
+if [ -n "$dupes" ]; then
+  echo "FAIL [llama]: unreferenced dylib name variants present (re-run setup-llama.sh):" >&2
+  echo "$dupes" >&2
+  FAIL=1
+else
+  echo "ok   [llama]: no duplicate dylib name variants"
+fi
+
+# Every @rpath reference in the llama bundle must resolve to a shipped file.
+unresolved="$(
+  for macho in "$LLAMA_BIN" "$LLAMA_LIB"/*.dylib "$LLAMA_LIB"/*.so; do
+    otool -L "$macho" 2>/dev/null | awk -v self="$(basename "$macho")" \
+      '$1 ~ /^@rpath\// { sub(/^@rpath\//, "", $1); if ($1 != self) print $1 }'
+  done | sort -u | while read -r dep; do
+    if [ ! -f "$LLAMA_LIB/$dep" ]; then echo "$dep"; fi
+  done
+)"
+if [ -n "$unresolved" ]; then
+  echo "FAIL [llama]: @rpath references without a bundled file:" >&2
+  echo "$unresolved" >&2
+  FAIL=1
+else
+  echo "ok   [llama]: all @rpath references resolve inside the bundle"
+fi
+
+echo ""
+echo "=== python sidecar ==="
+SIDECAR="$REPO_ROOT/python_sidecar/standalone"
+if [ -d "$SIDECAR" ]; then
+  SP="$SIDECAR/lib/python3.12/site-packages"
+  check_file_present 'torch_shm_manager' "$SP/torch/bin/torch_shm_manager"
+  for pruned in "$SP/torch/include" "$SP/pip" "$SP/setuptools"; do
+    if [ -d "$pruned" ]; then
+      echo "FAIL [sidecar]: build-time-only dir shipped: $pruned (re-run build-sidecar.sh)" >&2
+      FAIL=1
+    fi
+  done
+  pyc_dirs=$(find "$SIDECAR" -type d -name '__pycache__' -print -quit)
+  if [ -n "$pyc_dirs" ]; then
+    echo "FAIL [sidecar]: __pycache__ present (unpruned build): $pyc_dirs" >&2
+    FAIL=1
+  else
+    echo "ok   [sidecar]: pruned (no __pycache__, no torch/include, no pip/setuptools)"
+  fi
+else
+  echo "skip [sidecar]: $SIDECAR not built"
+fi
+
+# asar hygiene: only meaningful after `npm run package`. The old blacklist
+# leaked swift_cli/.build (271 MB), website/ and the .env (R2 credentials!)
+# into the shipped archive — never again.
+echo ""
+echo "=== app.asar (if packaged) ==="
+ASAR="$REPO_ROOT/dist/mac-arm64/Therascript.app/Contents/Resources/app.asar"
+if [ -f "$ASAR" ]; then
+  asar_list="$(npx --yes @electron/asar list "$ASAR" 2>/dev/null)"
+  ASAR_FAIL=0
+  # Herestrings statt `echo | grep -q`: grep -q beendet beim ersten Match und
+  # schickt echo unter pipefail ein SIGPIPE — der Check würde flaky failen.
+  for forbidden in '/swift_cli' '/.env' '/website' '/src' '/node_modules/lucide-react' '/node_modules/@tiptap' '/node_modules/@napi-rs'; do
+    if grep -q "^$forbidden" <<<"$asar_list"; then
+      echo "FAIL [asar]: forbidden path in app.asar: $forbidden" >&2
+      ASAR_FAIL=1
+    fi
+  done
+  for required in '/out/main/index.js' '/package.json' '/node_modules/better-sqlite3' '/node_modules/pdfjs-dist' '/node_modules/zod'; do
+    if ! grep -q "^$required" <<<"$asar_list"; then
+      echo "FAIL [asar]: required path missing from app.asar: $required" >&2
+      ASAR_FAIL=1
+    fi
+  done
+  if [ $ASAR_FAIL -eq 0 ]; then
+    echo "ok   [asar]: no leaked paths, all runtime deps present"
+  else
+    FAIL=1
+  fi
+else
+  echo "skip [asar]: not packaged yet"
+fi
+
 echo ""
 if [ $FAIL -ne 0 ]; then
   echo "VERIFY FAILED — DMG would not work on Macs without Homebrew at /opt/homebrew." >&2

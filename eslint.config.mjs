@@ -4,7 +4,23 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default tseslint.config(
-  { ignores: ['out', 'dist', 'node_modules', '*.config.*'] },
+  {
+    ignores: [
+      'out',
+      'dist',
+      'node_modules',
+      '*.config.*',
+      // Nicht-App-Code: Python-Umgebungen, Build-Scratch, Standalone-Tools
+      'python_sidecar',
+      'build',
+      'build-scripts',
+      'figma-plugin',
+      'swift_cli',
+      'website',
+      'r2-upload',
+      '.playwright-mcp'
+    ]
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

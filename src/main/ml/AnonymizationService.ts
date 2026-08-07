@@ -159,7 +159,9 @@ export class AnonymizationService implements TaskExecutor {
         env: {
           ...process.env,
           OMP_NUM_THREADS: '4',
-          MKL_NUM_THREADS: '4'
+          MKL_NUM_THREADS: '4',
+          // Kein pyc-Nachschreiben ins signierte Bundle — siehe PyannoteSidecar.
+          PYTHONDONTWRITEBYTECODE: '1'
         }
       })
 

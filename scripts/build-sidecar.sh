@@ -16,6 +16,11 @@
 #   scripts/build-sidecar.sh --clean  # remove existing standalone dir first
 set -euo pipefail
 
+# Kein pyc-Nachschreiben: der Prune-Step entfernt alle __pycache__-Dirs, und
+# der Verify-Step darunter importiert torch/pyannote/flair — ohne diese Var
+# würde Python dabei ~100 MB Bytecode-Caches ins Bundle zurückschreiben.
+export PYTHONDONTWRITEBYTECODE=1
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 SIDECAR_DIR="$PROJECT_ROOT/python_sidecar"
@@ -58,7 +63,7 @@ fi
 
 # --- 1. Install standalone Python via uv ---
 echo ""
-echo "=== Step 1/5: Installing standalone Python $PYTHON_VERSION ==="
+echo "=== Step 1/6: Installing standalone Python $PYTHON_VERSION ==="
 
 # uv creates a versioned subdirectory like cpython-3.12.12-macos-aarch64-none/
 # We install to a temp location, then move the inner directory to standalone/
@@ -101,7 +106,7 @@ fi
 
 # --- 3. Install ML dependencies ---
 echo ""
-echo "=== Step 2/5: Installing ML dependencies ==="
+echo "=== Step 2/6: Installing ML dependencies ==="
 echo "This will take several minutes (downloading ~1 GB of packages)..."
 
 uv pip install \
@@ -113,7 +118,7 @@ echo "Dependencies installed."
 
 # --- 4. Install torchcodec shim via sitecustomize ---
 echo ""
-echo "=== Step 3/5: Installing torchcodec shim ==="
+echo "=== Step 3/6: Installing torchcodec shim ==="
 
 SITE_PACKAGES=$("$PYTHON_BIN" -c "import site; print(site.getsitepackages()[0])")
 echo "site-packages: $SITE_PACKAGES"
@@ -154,9 +159,49 @@ SITECUSTOMIZE_EOF
 
 echo "sitecustomize.py installed."
 
-# --- 5. Ad-hoc codesign all native binaries ---
+# --- 5. Prune build-time-only weight (~230 MB) ---
 echo ""
-echo "=== Step 4/5: Code-signing native binaries ==="
+echo "=== Step 4/6: Pruning build-time-only files ==="
+
+SITE_PACKAGES_DIR="$STANDALONE_DIR/lib/python${PYTHON_VERSION}/site-packages"
+
+# Bytecode caches (~116 MB): the sidecar spawns set PYTHONDONTWRITEBYTECODE=1,
+# so these would never be regenerated inside the signed app bundle anyway.
+# Cost: ~+1 s per cold `import torch` (measured 0.72 s → 1.63 s) — accepted
+# trade-off against shipping 116 MB to every user.
+find "$STANDALONE_DIR" -type d -name '__pycache__' -prune -exec rm -rf {} +
+
+# C++ headers + build helpers — only needed to COMPILE torch extensions,
+# never at runtime (~65 MB).
+# NOTE: torch/bin/torch_shm_manager must stay — torch's _initExtension()
+# raises at import time if it is missing. NOTE: torch/testing must stay —
+# `import torch` loads torch.testing itself.
+rm -rf "$SITE_PACKAGES_DIR/torch/include"
+find "$SITE_PACKAGES_DIR/torch/bin" -type f ! -name 'torch_shm_manager' -delete 2>/dev/null || true
+
+# Package test suites (~27 MB). Only dirs named exactly test/tests, so
+# torch/testing (a runtime module) is untouched.
+find "$SITE_PACKAGES_DIR" -type d \( -name 'tests' -o -name 'test' \) -prune -exec rm -rf {} +
+
+# Installer tooling — nothing pip-installs at runtime, and neither flair nor
+# pyannote import pkg_resources at import time (verified; the verify step
+# below re-checks on every build).
+rm -rf "$SITE_PACKAGES_DIR/pip" "$SITE_PACKAGES_DIR"/pip-*.dist-info
+rm -rf "$SITE_PACKAGES_DIR/setuptools" "$SITE_PACKAGES_DIR"/setuptools-*.dist-info
+rm -rf "$SITE_PACKAGES_DIR/wheel" "$SITE_PACKAGES_DIR"/wheel-*.dist-info
+rm -rf "$SITE_PACKAGES_DIR/pkg_resources"
+
+# CPython C headers — extension building only.
+rm -rf "$STANDALONE_DIR/include"
+
+# Runtime dist-infos (~9 MB) are deliberately KEPT: several packages resolve
+# their version via importlib.metadata at runtime.
+
+echo "Pruned. Current size: $(du -sh "$STANDALONE_DIR" | cut -f1)"
+
+# --- 6. Ad-hoc codesign all native binaries ---
+echo ""
+echo "=== Step 5/6: Code-signing native binaries ==="
 
 SIGN_COUNT=0
 SIGN_FAIL=0
@@ -173,9 +218,10 @@ codesign --sign - --force --no-strict "$PYTHON_BIN" 2>/dev/null && SIGN_COUNT=$(
 
 echo "Signed $SIGN_COUNT native binaries ($SIGN_FAIL failed — non-critical)."
 
-# --- 6. Verify ---
+# --- 7. Verify (runs AFTER pruning — guards the prune list against
+# import-time breakage, e.g. a future dep that needs pkg_resources) ---
 echo ""
-echo "=== Step 5/5: Verifying build ==="
+echo "=== Step 6/6: Verifying build ==="
 
 VERIFY_FAILED=false
 

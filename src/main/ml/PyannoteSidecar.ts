@@ -113,7 +113,11 @@ export class PyannoteSidecar implements TaskExecutor {
           ...process.env,
           // Prevent PyTorch from using all cores
           OMP_NUM_THREADS: '4',
-          MKL_NUM_THREADS: '4'
+          MKL_NUM_THREADS: '4',
+          // Der Standalone-Sidecar shippt ohne __pycache__ (build-sidecar.sh
+          // Prune-Step). Python darf die pyc-Caches nicht ins ad-hoc-signierte
+          // App-Bundle nachschreiben — das würde das Resource-Seal brechen.
+          PYTHONDONTWRITEBYTECODE: '1'
         }
       })
 
