@@ -13,9 +13,7 @@ vi.mock('electron', () => ({
     isPackaged: true
   },
   BrowserWindow: {
-    getAllWindows: vi.fn(() => [
-      { webContents: { reload: mockReloadFn, send: mockSendFn } }
-    ])
+    getAllWindows: vi.fn(() => [{ webContents: { reload: mockReloadFn, send: mockSendFn } }])
   }
 }))
 
@@ -24,6 +22,17 @@ const mockMkdirSync = vi.fn()
 const mockReaddirSync = vi.fn().mockReturnValue([])
 const mockRenameSync = vi.fn()
 const mockRmSync = vi.fn()
+// Default: reichlich Platz (Disk-Precheck-Tests überschreiben das)
+const mockStatfsSync = vi.fn().mockReturnValue({ bavail: 1_000_000_000, bsize: 4096 })
+
+const mockQueueShutdown = vi.fn().mockResolvedValue(undefined)
+const mockQueueStart = vi.fn()
+vi.mock('../TaskQueueService', () => ({
+  getTaskQueue: vi.fn(() => ({
+    shutdown: mockQueueShutdown,
+    start: mockQueueStart
+  }))
+}))
 
 vi.mock('fs', () => {
   const fsMock = {
@@ -31,7 +40,8 @@ vi.mock('fs', () => {
     mkdirSync: (...a: unknown[]) => mockMkdirSync(...a),
     readdirSync: (...a: unknown[]) => mockReaddirSync(...a),
     renameSync: (...a: unknown[]) => mockRenameSync(...a),
-    rmSync: (...a: unknown[]) => mockRmSync(...a)
+    rmSync: (...a: unknown[]) => mockRmSync(...a),
+    statfsSync: (...a: unknown[]) => mockStatfsSync(...a)
   }
   return { ...fsMock, default: fsMock }
 })
@@ -400,19 +410,17 @@ describe('dismissManifestVersions', () => {
   })
 
   it('appends entries and de-duplicates', () => {
-    mockSettingsStore.get.mockReturnValue([
-      manifestEntryKey('a', '1'.repeat(64))
-    ])
+    mockSettingsStore.get.mockReturnValue([manifestEntryKey('a', '1'.repeat(64))])
 
     dismissManifestVersions([
       { id: 'a', sha256: '1'.repeat(64) }, // duplicate
       { id: 'b', sha256: '2'.repeat(64) }
     ])
 
-    expect(mockSettingsStore.set).toHaveBeenCalledWith(
-      'dismissedManifestVersions',
-      [manifestEntryKey('a', '1'.repeat(64)), manifestEntryKey('b', '2'.repeat(64))]
-    )
+    expect(mockSettingsStore.set).toHaveBeenCalledWith('dismissedManifestVersions', [
+      manifestEntryKey('a', '1'.repeat(64)),
+      manifestEntryKey('b', '2'.repeat(64))
+    ])
   })
 
   it('initializes the list when the existing value is not an array', () => {
@@ -736,6 +744,55 @@ describe('executeUpdates', () => {
     mockExistsSync.mockReturnValue(true)
     mockDownloadFile.mockResolvedValue({ success: true })
     mockVerifyFileSha256.mockResolvedValue(true)
+  })
+
+  it('pausiert die TaskQueue vor dem Swap und startet sie danach wieder', async () => {
+    // Ohne Quiescence kann renameSync das ASR-Modell unter einem laufenden
+    // whisper-Prozess wegtauschen (Queue resumed recovered Tasks direkt
+    // nach dem Relaunch, während executeUpdates noch swappt).
+    mockSettingsStore.get.mockImplementation((key: string) => {
+      if (key === 'pendingModelUpdates') return [pendingUpdate]
+      if (key === 'installedModelVersions') return {}
+      return null
+    })
+
+    await executeUpdates()
+
+    expect(mockQueueShutdown).toHaveBeenCalled()
+    expect(mockQueueShutdown.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRenameSync.mock.invocationCallOrder[0]
+    )
+    expect(mockQueueStart).toHaveBeenCalled()
+  })
+
+  it('startet die TaskQueue auch nach einem Download-Fehler wieder', async () => {
+    mockSettingsStore.get.mockImplementation((key: string) => {
+      if (key === 'pendingModelUpdates') return [pendingUpdate]
+      if (key === 'installedModelVersions') return {}
+      return null
+    })
+    mockDownloadFile.mockResolvedValue({ success: false, error: 'HTTP 500' })
+
+    await executeUpdates()
+
+    expect(mockQueueStart).toHaveBeenCalled()
+  })
+
+  it('bricht ohne Download ab, wenn der freie Speicherplatz nicht reicht', async () => {
+    mockSettingsStore.get.mockImplementation((key: string) => {
+      if (key === 'pendingModelUpdates') return [pendingUpdate]
+      if (key === 'installedModelVersions') return {}
+      return null
+    })
+    mockStatfsSync.mockReturnValueOnce({ bavail: 0, bsize: 4096 })
+
+    await executeUpdates()
+
+    expect(mockDownloadFile).not.toHaveBeenCalled()
+    expect(mockSendFn).toHaveBeenCalledWith(
+      'modelUpdate:downloadError',
+      expect.stringContaining('Speicherplatz')
+    )
   })
 
   it('downloads, verifies, backs up, swaps, and records version for flat file', async () => {

@@ -1,4 +1,3 @@
-import { spawn } from 'child_process'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
@@ -6,6 +5,7 @@ import type { Task, TranscriptData } from '../../shared/types'
 import type { NerServiceOutput } from '../../shared/types/NerTypes'
 import type { TaskExecutor } from '../services/task-executors'
 import { SessionService } from '../services/SessionService'
+import { runSubprocess } from '../utils/subprocess'
 import { BlocklistRepository } from '../db/repositories/BlocklistRepository'
 import { getDatabase, getDataDir } from '../db/connection'
 import { runRegexEngine } from './regex-patterns'
@@ -63,7 +63,7 @@ export class AnonymizationService implements TaskExecutor {
       }
       const emptyDoc = { type: 'doc', content: [{ type: 'paragraph' }] }
       const anonymizedPath = sessionService.generateAnonymizedPath(task.sessionId)
-      writeFileAtomic(anonymizedPath, JSON.stringify(emptyDoc, null, 2))
+      writeFileAtomic(anonymizedPath, JSON.stringify(emptyDoc))
       sessionService.updateSession(task.sessionId, {
         anonymizedPath,
         entityMap: {},
@@ -122,7 +122,7 @@ export class AnonymizationService implements TaskExecutor {
 
     // 10. Save results
     const anonymizedPath = sessionService.generateAnonymizedPath(task.sessionId)
-    writeFileAtomic(anonymizedPath, JSON.stringify(tiptapDoc, null, 2))
+    writeFileAtomic(anonymizedPath, JSON.stringify(tiptapDoc))
 
     const wordCount = countWords(tiptapDoc)
     const anonymizationCount = countPlaceholderChips(tiptapDoc)
@@ -137,129 +137,83 @@ export class AnonymizationService implements TaskExecutor {
     onProgress(1)
   }
 
-  private runNerSidecar(
+  private async runNerSidecar(
     transcriptPath: string,
     onProgress: (progress: number) => void,
     signal?: AbortSignal
   ): Promise<NerServiceOutput['entities']> {
-    return new Promise((resolve, reject) => {
-      const { bin, args: prefixArgs } = this.getCommand()
+    const { bin, args: prefixArgs } = this.getCommand()
 
-      if (!existsSync(bin)) {
-        reject(new Error(`NER-Binary nicht gefunden: ${bin}. Bitte prüfen Sie die Installation.`))
-        return
-      }
+    if (!existsSync(bin)) {
+      throw new Error(`NER-Binary nicht gefunden: ${bin}. Bitte prüfen Sie die Installation.`)
+    }
 
-      const modelDir = this.getModelDir()
-      const args = [...prefixArgs, '--transcript', transcriptPath, '--model-dir', modelDir]
+    const modelDir = this.getModelDir()
+    const args = [...prefixArgs, '--transcript', transcriptPath, '--model-dir', modelDir]
 
-      // QoS: nice -n 10 (NFR-23)
-      const proc = spawn('nice', ['-n', '10', bin, ...args], {
-        stdio: ['ignore', 'pipe', 'pipe'],
+    // Timeout: 5 minutes should be plenty for NER (<30s typically)
+    const timeoutMs = 300_000
+
+    let result
+    try {
+      result = await runSubprocess({
+        bin,
+        args,
+        nice: 10, // QoS (NFR-23)
+        timeoutMs,
+        signal,
         env: {
-          ...process.env,
           OMP_NUM_THREADS: '4',
-          MKL_NUM_THREADS: '4'
-        }
-      })
-
-      let stdout = ''
-      let stderr = ''
-      let settled = false
-      let killTimer: ReturnType<typeof setTimeout> | null = null
-
-      // Timeout: 5 minutes should be plenty for NER (<30s typically)
-      const timeoutMs = 300_000
-      const timeout = setTimeout(() => {
-        signal?.removeEventListener('abort', onAbort)
-        proc.kill('SIGTERM')
-        settled = true
-        reject(
-          new Error(`NER-Verarbeitung abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`)
-        )
-      }, timeoutMs)
-
-      // Watchdog abort: SIGTERM → 5s grace → SIGKILL
-      const onAbort = (): void => {
-        clearTimeout(timeout)
-        proc.kill('SIGTERM')
-        killTimer = setTimeout(() => {
-          try {
-            proc.kill('SIGKILL')
-          } catch {
-            /* already dead */
+          MKL_NUM_THREADS: '4',
+          // Kein pyc-Nachschreiben ins signierte Bundle — siehe PyannoteSidecar.
+          PYTHONDONTWRITEBYTECODE: '1'
+        },
+        onStderrLine: (line) => {
+          const match = PROGRESS_REGEX.exec(line)
+          if (match) {
+            onProgress(parseInt(match[1], 10) / 100)
           }
-        }, 5_000)
-        settled = true
-        reject(new Error('Verarbeitung reagiert nicht mehr'))
-      }
-      signal?.addEventListener('abort', onAbort, { once: true })
-
-      proc.stdout?.on('data', (data: Buffer) => {
-        stdout += data.toString()
-      })
-
-      proc.stderr?.on('data', (data: Buffer) => {
-        const chunk = data.toString()
-        stderr += chunk
-
-        const match = PROGRESS_REGEX.exec(chunk)
-        if (match) {
-          const pct = parseInt(match[1], 10)
-          onProgress(pct / 100)
         }
       })
-
-      proc.on('error', (error) => {
-        clearTimeout(timeout)
-        if (killTimer) clearTimeout(killTimer)
-        signal?.removeEventListener('abort', onAbort)
-        if (settled) return
-        settled = true
-        if (error.message.includes('ENOENT')) {
-          const msg = app.isPackaged
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (message.includes('ENOENT')) {
+        throw new Error(
+          app.isPackaged
             ? `NER-Binary nicht ausführbar: ${bin}. Bitte prüfen Sie die Installation.`
             : 'Python 3 nicht gefunden. Bitte installieren Sie Python 3.10+ oder führen Sie scripts/setup-ner.sh aus.'
-          reject(new Error(msg))
-        } else {
-          reject(new Error(`NER konnte nicht gestartet werden: ${error.message}`))
-        }
-      })
+        )
+      }
+      throw new Error(`NER konnte nicht gestartet werden: ${message}`)
+    }
 
-      proc.on('close', (code) => {
-        clearTimeout(timeout)
-        if (killTimer) clearTimeout(killTimer)
-        signal?.removeEventListener('abort', onAbort)
+    if (result.aborted) {
+      throw new Error('Verarbeitung reagiert nicht mehr')
+    }
+    if (result.timedOut) {
+      throw new Error(`NER-Verarbeitung abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`)
+    }
+    if (result.code !== 0) {
+      const errorLines = result.stderr
+        .split('\n')
+        .filter(
+          (line) =>
+            line.startsWith('Fehler:') ||
+            line.includes('Error') ||
+            line.includes('error') ||
+            line.includes('failed')
+        )
+      const errorDetail = errorLines.length > 0 ? errorLines.join('; ') : result.stderr.slice(-500)
+      throw new Error(`NER Fehler (Exit Code ${result.code}): ${errorDetail}`)
+    }
 
-        if (settled) return
-
-        if (code !== 0) {
-          const errorLines = stderr
-            .split('\n')
-            .filter(
-              (line) =>
-                line.startsWith('Fehler:') ||
-                line.includes('Error') ||
-                line.includes('error') ||
-                line.includes('failed')
-            )
-          const errorDetail = errorLines.length > 0 ? errorLines.join('; ') : stderr.slice(-500)
-          reject(new Error(`NER Fehler (Exit Code ${code}): ${errorDetail}`))
-          return
-        }
-
-        // Parse JSON output
-        try {
-          const result = JSON.parse(stdout) as NerServiceOutput
-          resolve(result.entities)
-        } catch (parseError) {
-          reject(
-            new Error(
-              `NER-Ausgabe konnte nicht verarbeitet werden: ${parseError instanceof Error ? parseError.message : String(parseError)}`
-            )
-          )
-        }
-      })
-    })
+    try {
+      const parsed = JSON.parse(result.stdout) as NerServiceOutput
+      return parsed.entities
+    } catch (parseError) {
+      throw new Error(
+        `NER-Ausgabe konnte nicht verarbeitet werden: ${parseError instanceof Error ? parseError.message : String(parseError)}`
+      )
+    }
   }
 }

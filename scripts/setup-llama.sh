@@ -89,6 +89,21 @@ if [ -z "$LIBOMP_PREFIX" ] || [ ! -d "$LIBOMP_PREFIX/lib" ]; then
 fi
 cp "$LIBOMP_PREFIX/lib/libomp.dylib" "$LIB_DIR/"
 
+# Prune duplicate dylib name variants: Homebrew ships each library under three
+# names (bare libfoo.dylib, libfoo.N.dylib, libfoo.N.M.P.dylib) — two of them
+# as symlinks that `cp` above resolves into physical copies (~16 MB dead
+# weight, tripled again after install_name_tool+codesign diverge the bytes).
+# dyld resolves ONLY the install names recorded in the Mach-Os, and those are
+# all single-major (@rpath/libllama.0.dylib, …) — verified by the @rpath
+# resolution check further down, which fails the build if this prune ever
+# removes a name some Mach-O actually references.
+echo '==> Pruning unreferenced dylib name variants'
+find "$LIB_DIR" -name 'lib*.*.*.*.dylib' -delete
+for lib in "$LIB_DIR"/libllama.dylib "$LIB_DIR"/libllama-common.dylib \
+  "$LIB_DIR"/libmtmd.dylib "$LIB_DIR"/libggml.dylib "$LIB_DIR"/libggml-base.dylib; do
+  if [ -f "$lib" ]; then rm "$lib"; fi
+done
+
 # Sanity check: the copy commands above use `|| true` to be tolerant of layout
 # variations across Homebrew versions. Without this guard a successful run
 # could leave $LIB_DIR empty and the bug would only surface at runtime as a
@@ -107,20 +122,8 @@ fi
 # at exactly the expected prefix. MUST run before the codesign step below —
 # install_name_tool invalidates the Mach-O signature.
 echo '==> Rewriting absolute /opt/homebrew dependencies to @rpath'
-rewrite_macho() {
-  local macho="$1"
-  local kind="$2" # "dylib" or "binary"
-  # Rewrite the dylib's own install name (LC_ID) so dyld dedups consistently
-  # regardless of how the file was loaded.
-  if [ "$kind" = 'dylib' ]; then
-    install_name_tool -id "@rpath/$(basename "$macho")" "$macho"
-  fi
-  # Rewrite every absolute /opt/homebrew dependency (covers both
-  # /opt/homebrew/opt/<formula>/lib/... and /opt/homebrew/Cellar/<formula>/<ver>/lib/...).
-  otool -L "$macho" | awk '$1 ~ /^\/opt\/homebrew/ {print $1}' | while read -r dep; do
-    install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$macho"
-  done
-}
+# shellcheck source=lib/rewrite-macho.sh
+source "$SCRIPT_DIR/lib/rewrite-macho.sh"
 rewrite_macho "$BIN_DIR/llama-cli" binary
 for macho in "$LIB_DIR/"*.dylib "$LIB_DIR/"*.so; do
   [ -f "$macho" ] && rewrite_macho "$macho" dylib
@@ -129,6 +132,24 @@ done
 echo '==> Verifying bundle is self-contained (zero /opt/homebrew references)'
 if otool -L "$BIN_DIR/llama-cli" "$LIB_DIR/"*.dylib "$LIB_DIR/"*.so | grep '/opt/homebrew'; then
   echo 'FATAL: bundle still references /opt/homebrew after rewrite — DMG would not work on Macs without Homebrew' >&2
+  exit 1
+fi
+
+# Every @rpath install-name reference in the bundle must resolve to a file we
+# actually ship. Guards the variant-prune above against a future Homebrew
+# major bump (e.g. libllama.1.dylib) silently changing which names are loaded.
+echo '==> Verifying every @rpath reference resolves inside the bundle'
+unresolved="$(
+  for macho in "$BIN_DIR/llama-cli" "$LIB_DIR"/*.dylib "$LIB_DIR"/*.so; do
+    otool -L "$macho" | awk -v self="$(basename "$macho")" \
+      '$1 ~ /^@rpath\// { sub(/^@rpath\//, "", $1); if ($1 != self) print $1 }'
+  done | sort -u | while read -r dep; do
+    if [ ! -f "$LIB_DIR/$dep" ]; then echo "$dep"; fi
+  done
+)"
+if [ -n "$unresolved" ]; then
+  echo 'FATAL: @rpath references without a bundled file — dyld would crash at runtime:' >&2
+  echo "$unresolved" >&2
   exit 1
 fi
 

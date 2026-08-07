@@ -3,22 +3,17 @@ productName: Therascript
 directories:
   buildResources: build
   output: dist
+# Whitelist statt Blacklist: NUR der electron-vite-Output und package.json
+# gehören ins app.asar (Production-node_modules sammelt electron-builder
+# separat über den Dependency-Graph ein). Die frühere Blacklist hat u. a.
+# swift_cli/.build (271 MB Build-Cache), website/, .claude/ und die .env
+# (R2-Credentials!) ins ausgelieferte Archiv geleakt.
 files:
-  - '!**/.vscode/*'
-  - '!src/*'
-  - '!tests/*'
-  - '!electron.vite.config.*'
-  - '!{.eslintrc,.eslintignore,.prettierrc,.prettierignore,eslint.config.*}'
-  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
-  - '!{vitest.config.*}'
-  - '!{*.md,LICENSE}'
-  - '!python_sidecar/**/*'
-  - '!r2-upload/**/*'
-  - '!scripts/**/*'
-  - '!resources/**/*'
-  - '!build-scripts/**/*'
-  - '!#/**/*'
-  - '!docs/**/*'
+  - out/**/*
+  - package.json
+  # Optionale pdfjs-dist-Dep für Node-Canvas-Rendering (25 MB nativ) — wir
+  # nutzen nur getTextContent(), nie Rasterung.
+  - '!node_modules/@napi-rs/**'
 extraResources:
   # whisper.cpp and llama.cpp link against incompatible ggml generations, so
   # each toolchain ships as its own self-contained bundle. Each binary's
@@ -32,8 +27,6 @@ extraResources:
     to: llama
     filter:
       - '**/*'
-  - from: resources/bin/ffmpeg
-    to: bin/ffmpeg
   - from: resources/bin/vision-ocr
     to: bin/vision-ocr
   - from: resources/icons

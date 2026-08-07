@@ -89,11 +89,7 @@ describe('UpdateBanner', () => {
 
   it('renders both restart and dismiss buttons', () => {
     render(
-      <UpdateBanner
-        updates={[makeUpdate('test', 1000)]}
-        onRestart={vi.fn()}
-        onDismiss={vi.fn()}
-      />
+      <UpdateBanner updates={[makeUpdate('test', 1000)]} onRestart={vi.fn()} onDismiss={vi.fn()} />
     )
     expect(screen.getByRole('button', { name: /neu starten/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /ausblenden/i })).toBeInTheDocument()

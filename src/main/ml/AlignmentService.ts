@@ -15,7 +15,11 @@ import { writeFileAtomic } from '../utils/file-ops'
 const SPEAKER_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
 export class AlignmentService implements TaskExecutor {
-  async execute(task: Task, onProgress: (progress: number) => void, _signal?: AbortSignal): Promise<void> {
+  async execute(
+    task: Task,
+    onProgress: (progress: number) => void,
+    _signal?: AbortSignal
+  ): Promise<void> {
     const db = getDatabase()
     const sessionService = new SessionService(db)
     const session = sessionService.getSession(task.sessionId)
@@ -57,7 +61,7 @@ export class AlignmentService implements TaskExecutor {
         }
       }
       const alignedTranscriptPath = sessionService.generateAlignedTranscriptPath(task.sessionId)
-      writeFileAtomic(alignedTranscriptPath, JSON.stringify(emptyAligned, null, 2))
+      writeFileAtomic(alignedTranscriptPath, JSON.stringify(emptyAligned))
       sessionService.updateSession(task.sessionId, { alignedTranscriptPath })
       onProgress(1)
       return
@@ -89,7 +93,7 @@ export class AlignmentService implements TaskExecutor {
 
     // Write aligned transcript to a separate file (preserves raw ASR transcript)
     const alignedTranscriptPath = sessionService.generateAlignedTranscriptPath(task.sessionId)
-    writeFileAtomic(alignedTranscriptPath, JSON.stringify(updatedTranscript, null, 2))
+    writeFileAtomic(alignedTranscriptPath, JSON.stringify(updatedTranscript))
 
     sessionService.updateSession(task.sessionId, { alignedTranscriptPath })
 

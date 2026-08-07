@@ -109,12 +109,7 @@ describe('ChipActionMenu', () => {
     const submenu = screen.getByRole('menu', { name: /Typ ändern/i })
     const subItems = within(submenu).getAllByRole('menuitem')
     expect(subItems).toHaveLength(4)
-    expect(subItems.map((b) => b.textContent)).toEqual([
-      'Ort',
-      'Datum',
-      'Kontakt',
-      'Organisation'
-    ])
+    expect(subItems.map((b) => b.textContent)).toEqual(['Ort', 'Datum', 'Kontakt', 'Organisation'])
   })
 
   it('"Typ ändern" submenu omits the current type (ORGANISATION → 4 options)', async () => {
@@ -125,12 +120,7 @@ describe('ChipActionMenu', () => {
     const subItems = within(screen.getByRole('menu', { name: /Typ ändern/i })).getAllByRole(
       'menuitem'
     )
-    expect(subItems.map((b) => b.textContent)).toEqual([
-      'Person',
-      'Ort',
-      'Datum',
-      'Kontakt'
-    ])
+    expect(subItems.map((b) => b.textContent)).toEqual(['Person', 'Ort', 'Datum', 'Kontakt'])
   })
 
   it('clicking a "Typ ändern" submenu item calls onChangeType + onClose', async () => {

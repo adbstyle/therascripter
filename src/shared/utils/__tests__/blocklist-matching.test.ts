@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  normalizeUmlaut,
-  isWholeWord,
-  normalizeWithPositionMap
-} from '../blocklist-matching'
+import { normalizeUmlaut, isWholeWord, normalizeWithPositionMap } from '../blocklist-matching'
 
 describe('normalizeUmlaut', () => {
   it('normalizes all German special characters', () => {

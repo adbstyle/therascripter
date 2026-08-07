@@ -1,8 +1,5 @@
 import { Info } from 'lucide-react'
-import type {
-  ReconcileEvent,
-  ReconcileReason
-} from '../../../../shared/types/ReconcileEvent'
+import type { ReconcileEvent, ReconcileReason } from '../../../../shared/types/ReconcileEvent'
 import type { ModelGroup } from '../../../../shared/validation/model-catalog-schemas'
 
 interface Props {
@@ -58,17 +55,13 @@ export default function ReconcileEventsBanner({ events, onDismiss }: Props): Rea
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-text-primary">Automatische Anpassung</h3>
           <p className="mt-1 text-sm text-text-secondary">
-            Beim Start der App wurden Inkonsistenzen zwischen aktiver
-            Modell-Auswahl und tatsächlich installierten Dateien gefunden und
-            korrigiert.
+            Beim Start der App wurden Inkonsistenzen zwischen aktiver Modell-Auswahl und tatsächlich
+            installierten Dateien gefunden und korrigiert.
           </p>
 
           <ul className="mt-3 space-y-2 text-sm">
             {events.map((e) => (
-              <li
-                key={e.id}
-                className="rounded-md border border-border bg-surface-0 p-3"
-              >
+              <li key={e.id} className="rounded-md border border-border bg-surface-0 p-3">
                 <p className="font-medium text-text-primary">{GROUP_LABEL[e.group]}</p>
                 <dl className="mt-1.5 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 text-text-secondary">
                   <dt>Bisher aktiv:</dt>

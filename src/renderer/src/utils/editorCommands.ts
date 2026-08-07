@@ -560,10 +560,7 @@ export function anonymizeSelectionWithPropagation(
  * the reconstructed `original` may differ from the canonical term for one
  * render frame. Auto-save fires AFTER `cb`, so persisted state is canonical.
  */
-export function reconcileEntityMapWithDoc(
-  doc: PMNode,
-  currentMap: EntityMap
-): EntityMap | null {
+export function reconcileEntityMapWithDoc(doc: PMNode, currentMap: EntityMap): EntityMap | null {
   const present = new Set<string>()
   const result: EntityMap = { ...currentMap }
   let added = 0

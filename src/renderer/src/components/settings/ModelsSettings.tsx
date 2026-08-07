@@ -107,9 +107,7 @@ export default function ModelsSettings(): React.JSX.Element {
     try {
       await window.api.modelCatalog.delete(model.id)
       await reload()
-      toast.success(
-        `"${model.label}" gelöscht — ${formatBytes(model.sizeBytes)} freigegeben.`
-      )
+      toast.success(`"${model.label}" gelöscht — ${formatBytes(model.sizeBytes)} freigegeben.`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     }
@@ -162,8 +160,7 @@ export default function ModelsSettings(): React.JSX.Element {
         <div>
           <h2 className="mb-1 text-lg font-semibold">Spracherkennung</h2>
           <p className="text-sm text-text-secondary">
-            Wandelt Audio in Text um. Ein Modellwechsel wirkt sich nur auf neue
-            Transkriptionen aus.
+            Wandelt Audio in Text um. Ein Modellwechsel wirkt sich nur auf neue Transkriptionen aus.
           </p>
         </div>
 
@@ -217,10 +214,9 @@ export default function ModelsSettings(): React.JSX.Element {
         <div>
           <h2 className="mb-1 text-lg font-semibold">Pseudonymisierung</h2>
           <p className="text-sm text-text-secondary">
-            Erkennt Personen, Orte und andere sensible Entitäten und ersetzt sie durch
-            typisierte Platzhalter (z.&nbsp;B. [PERSON&nbsp;1]). DSGVO-rechtlich
-            Pseudonymisierung — die Originale bleiben lokal und werden nach 30&nbsp;Tagen
-            automatisch gelöscht.
+            Erkennt Personen, Orte und andere sensible Entitäten und ersetzt sie durch typisierte
+            Platzhalter (z.&nbsp;B. [PERSON&nbsp;1]). DSGVO-rechtlich Pseudonymisierung — die
+            Originale bleiben lokal und werden nach 30&nbsp;Tagen automatisch gelöscht.
           </p>
         </div>
 
@@ -247,8 +243,8 @@ export default function ModelsSettings(): React.JSX.Element {
         <div>
           <h2 className="mb-1 text-lg font-semibold">Zusammenfassung (optional)</h2>
           <p className="text-sm text-text-secondary">
-            Lokales Sprachmodell für 2-Satz-Zusammenfassungen am Ende der Verarbeitung.
-            Ohne installiertes Modell wird der Schritt geräuschlos übersprungen.
+            Lokales Sprachmodell für 2-Satz-Zusammenfassungen am Ende der Verarbeitung. Ohne
+            installiertes Modell wird der Schritt geräuschlos übersprungen.
           </p>
         </div>
 

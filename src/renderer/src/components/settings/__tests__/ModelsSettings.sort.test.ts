@@ -2,10 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { sortByStatus } from '../ModelsSettings'
 import type { ModelCatalogEntry } from '../../../../../shared/validation/model-catalog-schemas'
 
-function entry(
-  id: string,
-  status: { isActive: boolean; isInstalled: boolean }
-): ModelCatalogEntry {
+function entry(id: string, status: { isActive: boolean; isInstalled: boolean }): ModelCatalogEntry {
   return {
     id,
     label: id,

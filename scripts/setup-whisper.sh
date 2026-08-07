@@ -98,16 +98,8 @@ echo "Libraries: $LIB_DIR/ ($(ls "$LIB_DIR" | wc -l | tr -d ' ') files)"
 # invalidates the Mach-O signature.
 
 echo "Rewriting absolute /opt/homebrew references to @rpath"
-rewrite_macho() {
-  local macho="$1"
-  local kind="$2" # "dylib" or "binary"
-  if [ "$kind" = 'dylib' ]; then
-    install_name_tool -id "@rpath/$(basename "$macho")" "$macho"
-  fi
-  otool -L "$macho" | awk '$1 ~ /^\/opt\/homebrew/ {print $1}' | while read -r dep; do
-    install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$macho"
-  done
-}
+# shellcheck source=lib/rewrite-macho.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/rewrite-macho.sh"
 rewrite_macho "$BIN_DIR/whisper-cli" binary
 for dylib in "$LIB_DIR/"*.dylib; do
   rewrite_macho "$dylib" dylib

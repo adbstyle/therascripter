@@ -108,11 +108,7 @@ export default function BottomNav({ current, onChange }: BottomNavProps): React.
                 key={`icon-${item.id}-${isActive}`}
                 className="bottom-nav-icon relative inline-flex"
               >
-                <Icon
-                  className="h-4 w-4"
-                  strokeWidth={isActive ? 2 : 1.75}
-                  aria-hidden="true"
-                />
+                <Icon className="h-4 w-4" strokeWidth={isActive ? 2 : 1.75} aria-hidden="true" />
                 {showReconcileDot && (
                   <span
                     aria-label="Automatische Anpassung — Hinweis in Modelle"

@@ -40,7 +40,9 @@ describe('ProvenancePanel', () => {
   })
 
   it('renders model rows with label, version and size', () => {
-    render(<ProvenancePanel data={fullSnapshot} reviewAt="2026-04-15T14:32:00Z" audioStats={null} />)
+    render(
+      <ProvenancePanel data={fullSnapshot} reviewAt="2026-04-15T14:32:00Z" audioStats={null} />
+    )
 
     expect(screen.getByText('Whisper Large V3 Turbo')).toBeInTheDocument()
     expect(screen.getByText(/Version 2026-04-01/)).toBeInTheDocument()
@@ -92,19 +94,13 @@ describe('ProvenancePanel — Audio section (Issue #99)', () => {
     expect(within(row('Stille')).getByText('1m 17s · 23.4 %')).toBeInTheDocument()
     expect(within(row('Sprecher')).getByText('2')).toBeInTheDocument()
     expect(
-      within(row('Sprecher-Pipeline')).getByText(
-        'pyannote/speaker-diarization-community-1'
-      )
+      within(row('Sprecher-Pipeline')).getByText('pyannote/speaker-diarization-community-1')
     ).toBeInTheDocument()
   })
 
   it('renders the "einzelner Sprecher erkannt" hint when speakerCount === 1 (AC5)', () => {
     render(
-      <ProvenancePanel
-        data={null}
-        reviewAt={null}
-        audioStats={{ ...fullStats, speakerCount: 1 }}
-      />
+      <ProvenancePanel data={null} reviewAt={null} audioStats={{ ...fullStats, speakerCount: 1 }} />
     )
     expect(screen.getByText('einzelner Sprecher erkannt')).toBeInTheDocument()
   })

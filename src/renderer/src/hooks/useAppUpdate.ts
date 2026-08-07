@@ -14,7 +14,10 @@ export function useAppUpdate(): UseAppUpdateResult {
 
   useEffect(() => {
     // Populate from cached value immediately (no network)
-    window.api.appUpdate.getStatus().then(setStatus).catch(() => {})
+    window.api.appUpdate
+      .getStatus()
+      .then(setStatus)
+      .catch(() => {})
     // Listen for push updates from main process
     const unsub = window.api.appUpdate.onStatus(setStatus)
     return unsub

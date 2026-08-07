@@ -4,6 +4,7 @@ import {
   existsSync,
   openSync,
   readFileSync,
+  statSync,
   unlinkSync,
   writeFileSync,
   writeSync
@@ -137,6 +138,59 @@ export class AudioFileService {
 
     const durationSeconds = pcmData.length / (SAMPLE_RATE * NUM_CHANNELS * (BITS_PER_SAMPLE / 8))
     return { durationSeconds }
+  }
+
+  /**
+   * Reparatur nach App-Crash während einer Aufnahme (finalizeWavFile lief
+   * nie, in-memory State ist weg):
+   *
+   * - WAV existiert: Chunks wurden bereits synchron geschrieben und sind
+   *   vollständig auf der Platte — nur der Header behauptet noch dataSize=0.
+   *   Header aus der tatsächlichen Dateigröße fixen. Der Recovery-Dump wird
+   *   VERWORFEN, nicht angehängt: er enthält dieselben Chunks wie die WAV —
+   *   Anhängen würde bis zu 60 s Audio duplizieren (Bug im nie verdrahteten
+   *   Vorgänger recoverSession()).
+   * - WAV fehlt: aus dem Recovery-Dump (letzte ≤60 s PCM) eine WAV bauen.
+   * - Beides fehlt: null (nichts wiederherstellbar).
+   */
+  repairWavAfterCrash(sessionId: string): { durationSeconds: number } | null {
+    const wavPath = this.getWavPath(sessionId)
+    const recoveryPath = this.getRecoveryPath(sessionId)
+
+    if (existsSync(wavPath)) {
+      const fileSize = statSync(wavPath).size
+      const dataSize = Math.max(0, fileSize - WAV_HEADER_SIZE)
+      if (dataSize > 0) {
+        const header = createWavHeader(dataSize)
+        const headerFd = openSync(wavPath, 'r+')
+        try {
+          writeSync(headerFd, header, 0, WAV_HEADER_SIZE, 0)
+        } finally {
+          closeSync(headerFd)
+        }
+      }
+      this.deleteRecoveryFile(sessionId)
+      if (dataSize === 0) return null
+      return {
+        durationSeconds: dataSize / (SAMPLE_RATE * NUM_CHANNELS * (BITS_PER_SAMPLE / 8))
+      }
+    }
+
+    if (existsSync(recoveryPath)) {
+      const pcmData = readFileSync(recoveryPath)
+      if (pcmData.length === 0) {
+        this.deleteRecoveryFile(sessionId)
+        return null
+      }
+      const header = createWavHeader(pcmData.length)
+      writeFileSync(wavPath, Buffer.concat([header, pcmData]))
+      this.deleteRecoveryFile(sessionId)
+      return {
+        durationSeconds: pcmData.length / (SAMPLE_RATE * NUM_CHANNELS * (BITS_PER_SAMPLE / 8))
+      }
+    }
+
+    return null
   }
 
   private dumpRecoveryBuffer(sessionId: string): void {

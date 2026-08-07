@@ -56,6 +56,9 @@ export class TaskQueueService {
   private repository: TaskRepository
   private sessionService: SessionService
   private executors: Map<TaskType, TaskExecutor>
+  /** Max. Crash-Recoveries pro Task, bevor er als Poison-Task failed (016). */
+  private static readonly MAX_BOOT_RECOVERY_ATTEMPTS = 2
+
   private processing = false
   private shouldStop = false
   private recoveryTimer: ReturnType<typeof setInterval> | null = null
@@ -64,7 +67,7 @@ export class TaskQueueService {
   // signal the executor to stop cleanly. See DR-6 in plans/2026-04-29-pipeline-progress-ui-issue-80.md.
   private runningController: { sessionId: string; controller: AbortController } | null = null
 
-  constructor(db: Database.Database) {
+  constructor(private readonly db: Database.Database) {
     this.repository = new TaskRepository(db)
     this.sessionService = new SessionService(db)
     this.executors = createStubExecutors()
@@ -94,12 +97,18 @@ export class TaskQueueService {
     // group for this run so the Review-Editor can show provenance later.
     // Done together with plannedSteps so both states are consistent.
     const processedWithModels = captureProcessedModels(plannedSteps)
-    this.sessionService.updateSession(sessionId, { plannedSteps, processedWithModels })
 
-    const tasks: Task[] = []
-    for (const type of plannedSteps) {
-      tasks.push(this.repository.create({ sessionId, type }))
-    }
+    // Transaktional: ein Throw mitten im Task-Insert hinterließ vorher eine
+    // Partial-Pipeline (z. B. nur diarization+transcription), die bis
+    // 'review' durchlief — ohne Anonymisierung.
+    const tasks = this.db.transaction(() => {
+      this.sessionService.updateSession(sessionId, { plannedSteps, processedWithModels })
+      const created: Task[] = []
+      for (const type of plannedSteps) {
+        created.push(this.repository.create({ sessionId, type }))
+      }
+      return created
+    })()
 
     console.log(
       `[TaskQueue] Enqueued ${plannedSteps.length} tasks for session ${sessionId} (${sessionType}) — ${plannedSteps.join(',')}`
@@ -174,35 +183,40 @@ export class TaskQueueService {
     const pipeline = session.plannedSteps ?? computePlannedSteps(session)
     const resumeIndex = this.findResumeIndex(session, pipeline)
 
-    // Remove all non-completed task rows (failed + cancelled)
-    const deleted = this.repository.deleteNonCompletedForSession(sessionId)
-    if (deleted > 0) {
-      console.log(`[TaskQueue] Deleted ${deleted} non-completed tasks for session ${sessionId}`)
-    }
-
-    // Create pending tasks for remaining pipeline steps
-    const remainingSteps = pipeline.slice(resumeIndex)
-    for (const type of remainingSteps) {
-      this.repository.create({ sessionId, type })
-    }
-
-    // Transition session: error → queued. The first task's start will then push
-    // queued → processing automatically (see executeTask). errorMessage is cleared
-    // so the renderer doesn't surface stale state from the failed run while the
-    // retry is in flight. Issue #80 DR-7: increment retryCount so the UI can
-    // surface the 3-stage support hint after repeated failures.
     // Issue #84 Story I — re-capture provenance: the user may have switched
     // the active model between runs; the relevant snapshot is what actually
     // produces the next attempt, not the previous failed one.
     const processedWithModels = captureProcessedModels(pipeline)
+    const remainingSteps = pipeline.slice(resumeIndex)
 
-    this.sessionService.updateSession(sessionId, {
-      status: 'queued',
-      errorMessage: null,
-      retryCount: (session.retryCount ?? 0) + 1,
-      plannedSteps: pipeline,
-      processedWithModels
-    })
+    // Transaktional wie enqueuePipeline: delete + create + Status-Update
+    // sind alles-oder-nichts, sonst kann ein Crash mid-retry eine Session
+    // in 'error' mit halb neu erzeugten Tasks hinterlassen.
+    this.db.transaction(() => {
+      // Remove all non-completed task rows (failed + cancelled)
+      const deleted = this.repository.deleteNonCompletedForSession(sessionId)
+      if (deleted > 0) {
+        console.log(`[TaskQueue] Deleted ${deleted} non-completed tasks for session ${sessionId}`)
+      }
+
+      // Create pending tasks for remaining pipeline steps
+      for (const type of remainingSteps) {
+        this.repository.create({ sessionId, type })
+      }
+
+      // Transition session: error → queued. The first task's start will then push
+      // queued → processing automatically (see executeTask). errorMessage is cleared
+      // so the renderer doesn't surface stale state from the failed run while the
+      // retry is in flight. Issue #80 DR-7: increment retryCount so the UI can
+      // surface the 3-stage support hint after repeated failures.
+      this.sessionService.updateSession(sessionId, {
+        status: 'queued',
+        errorMessage: null,
+        retryCount: (session.retryCount ?? 0) + 1,
+        plannedSteps: pipeline,
+        processedWithModels
+      })
+    })()
 
     console.log(
       `[TaskQueue] Retrying session ${sessionId} from step ${remainingSteps[0]} ` +
@@ -256,7 +270,40 @@ export class TaskQueueService {
   }
 
   recoverStuckTasks(): number {
-    return this.repository.resetRunningToPending()
+    // Boot-Recovery mit Poison-Erkennung: ein Task, der bereits
+    // MAX_BOOT_RECOVERY_ATTEMPTS mal nach einem Crash zurückgesetzt wurde
+    // und WIEDER als 'running' vorgefunden wird, crasht die App
+    // reproduzierbar (z. B. nativer OOM) — erneutes pending würde eine
+    // endlose Crash-Schleife erzeugen. Sauberer Shutdown zählt nicht:
+    // shutdown() setzt selbst auf pending zurück, ohne attempts zu erhöhen.
+    const running = this.repository.findRunning()
+    for (const task of running) {
+      const attempts = task.attempts + 1
+      if (attempts > TaskQueueService.MAX_BOOT_RECOVERY_ATTEMPTS) {
+        const message =
+          'Dieser Verarbeitungsschritt ist mehrfach unerwartet abgebrochen. ' +
+          'Bitte versuchen Sie es mit "Erneut versuchen" — tritt der Fehler erneut auf, ' +
+          'starten Sie die App neu oder kontaktieren Sie den Support.'
+        this.repository.update(task.id, {
+          status: 'failed',
+          error: message,
+          completedAt: new Date().toISOString(),
+          attempts
+        })
+        this.handleTaskFailure(task, message)
+        console.warn(
+          `[TaskQueue] Task ${task.type} für Session ${task.sessionId} nach ${attempts} Boot-Recoveries poisoned`
+        )
+      } else {
+        this.repository.update(task.id, {
+          status: 'pending',
+          startedAt: null,
+          progress: 0,
+          attempts
+        })
+      }
+    }
+    return running.length
   }
 
   /** Find sessions stuck in a processing state with no pending/running tasks and mark as error */
@@ -280,7 +327,9 @@ export class TaskQueueService {
             status: 'error',
             errorMessage: 'Verarbeitung wurde unerwartet abgebrochen.'
           })
-          console.log(`[TaskQueue] Recovered orphaned session ${session.id} (was ${session.status})`)
+          console.log(
+            `[TaskQueue] Recovered orphaned session ${session.id} (was ${session.status})`
+          )
           recovered++
         } catch (err) {
           console.error(`[TaskQueue] Failed to recover orphaned session ${session.id}:`, err)
@@ -300,6 +349,23 @@ export class TaskQueueService {
   stop(): void {
     this.shouldStop = true
     this.stopPeriodicRecovery()
+  }
+
+  /**
+   * Geordneter Shutdown für before-quit: stoppt die Queue, abortet den
+   * laufenden Executor (killt damit den ML-Subprozess über runSubprocess)
+   * und wartet bounded, bis processNext gesettelt hat — erst danach darf
+   * die DB geschlossen werden. Vorher überlebten whisper/python/llama den
+   * App-Exit und der Executor schrieb in eine bereits geschlossene DB.
+   */
+  async shutdown(timeoutMs = 8_000): Promise<void> {
+    this.shouldStop = true
+    this.stopPeriodicRecovery()
+    this.runningController?.controller.abort()
+    const deadline = Date.now() + timeoutMs
+    while (this.processing && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
   }
 
   isProcessing(): boolean {
@@ -440,6 +506,25 @@ export class TaskQueueService {
         taskType: task.type
       })
     } catch (error) {
+      // Shutdown-Abort ist kein Fehler: Task zurück auf pending, damit der
+      // nächste Start ihn nahtlos fortsetzt. failed + session:error würde
+      // dem User nach jedem Quit-mit-laufendem-Task einen Retry zeigen.
+      if (this.shouldStop && controller.signal.aborted) {
+        try {
+          this.repository.update(task.id, {
+            status: 'pending',
+            progress: 0,
+            startedAt: null
+          })
+        } catch (resetErr) {
+          console.error('[TaskQueue] Shutdown-Reset des Tasks fehlgeschlagen:', resetErr)
+        }
+        console.log(
+          `[TaskQueue] Task ${task.type} für Session ${task.sessionId} beim Shutdown auf pending zurückgesetzt`
+        )
+        return
+      }
+
       const errorMessage = controller.signal.aborted
         ? 'Verarbeitung reagiert nicht mehr'
         : error instanceof Error
@@ -489,14 +574,37 @@ export class TaskQueueService {
   }
 
   private handleTaskCompletion(task: Task): void {
+    const session = this.sessionService.getSession(task.sessionId)
+
+    // Review-Ungating: die Session erreicht 'review', sobald die
+    // Anonymisierung abgeschlossen ist — der Editor lädt nur das
+    // anonymisierte Dokument. Die optionale Summarization läuft danach im
+    // Hintergrund weiter; ihr task:completed-Event triggert den
+    // Renderer-Refetch, der die fertige Summary nachlädt. Der User spart
+    // die volle llama-Inferenzzeit (30–120 s) bis zum Editor.
+    // retryCount-Reset (DR-7) passiert hier — review ist erreicht.
+    if (task.type === 'anonymization' && session?.status === 'processing') {
+      try {
+        this.sessionService.updateSession(task.sessionId, {
+          status: 'review',
+          retryCount: 0
+        })
+      } catch (err) {
+        console.error(`[TaskQueue] Failed to transition session ${task.sessionId} to review:`, err)
+      }
+      return
+    }
+
     const remainingTasks = this.repository.findBySession(task.sessionId)
     const pendingOrRunning = remainingTasks.filter(
       (t) => t.status === 'pending' || t.status === 'running'
     )
 
-    if (pendingOrRunning.length === 0) {
-      // All tasks done — set final status. Reset retryCount on successful review
-      // (DR-7: counter resets when the session reaches review).
+    // Fallback für Pipelines ohne Anonymisierungs-Step (defensiv — aktuell
+    // enthalten beide Pipelines anonymization). Guard auf 'processing'
+    // verhindert die ungültige review→review-Transition, wenn die
+    // Hintergrund-Summarization nach dem Ungating abschließt.
+    if (pendingOrRunning.length === 0 && session?.status === 'processing') {
       try {
         this.sessionService.updateSession(task.sessionId, {
           status: 'review',
@@ -511,6 +619,19 @@ export class TaskQueueService {
   }
 
   private handleTaskFailure(task: Task, errorMessage: string): void {
+    // Summarization-Invariante (CLAUDE.md): Fehler dieses Steps dürfen NIE
+    // die Session erroren — die Session ist beim Ungating bereits in
+    // 'review', ein review→error würde das fertig anonymisierte Transkript
+    // hinter einem Retry-Button verstecken. Summary bleibt einfach NULL.
+    // (Der Executor failt ohnehin soft; hierher gelangt nur der
+    // Watchdog-/Poison-Pfad.)
+    if (task.type === 'summarization') {
+      console.warn(
+        `[TaskQueue] Summarization für Session ${task.sessionId} fehlgeschlagen (${errorMessage}) — Session bleibt in review, Summary bleibt leer`
+      )
+      return
+    }
+
     // Cancel remaining pending tasks for this session
     const cancelled = this.repository.cancelPendingForSession(task.sessionId)
     if (cancelled > 0) {
@@ -524,10 +645,7 @@ export class TaskQueueService {
         errorMessage
       })
     } catch (err) {
-      console.error(
-        `[TaskQueue] Failed to set session ${task.sessionId} to error state:`,
-        err
-      )
+      console.error(`[TaskQueue] Failed to set session ${task.sessionId} to error state:`, err)
     }
 
     // Notify renderer
@@ -563,7 +681,6 @@ export class TaskQueueService {
       this.recoveryTimer = null
     }
   }
-
 }
 
 // Singleton

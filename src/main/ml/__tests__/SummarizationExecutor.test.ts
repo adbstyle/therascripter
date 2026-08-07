@@ -29,7 +29,8 @@ const makeDeps = (
   },
   sessionService: {
     getAnonymizedPlainText:
-      over.sessionService?.getAnonymizedPlainText ?? vi.fn().mockReturnValue('Der Patient war müde.'),
+      over.sessionService?.getAnonymizedPlainText ??
+      vi.fn().mockReturnValue('Der Patient war müde.'),
     saveGeneratedSummary: over.sessionService?.saveGeneratedSummary ?? vi.fn()
   },
   isModelInstalled: over.isModelInstalled ?? ((): boolean => true),

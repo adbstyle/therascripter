@@ -2,10 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { useRef } from 'react'
 import { useSelectionToolbar } from '../useSelectionToolbar'
-import {
-  createTestEditor,
-  type TestEditorHandle
-} from '../../../../test-support/createTestEditor'
+import { createTestEditor, type TestEditorHandle } from '../../../../test-support/createTestEditor'
 
 const TRIGGER_DELAY_MS = 150
 

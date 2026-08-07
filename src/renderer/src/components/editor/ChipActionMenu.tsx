@@ -1,9 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import type { PlaceholderType, EntitySource } from '../../../../shared/types'
-import {
-  ANONYMIZE_TYPE_OPTIONS,
-  BLOCKLIST_TYPE_OPTIONS
-} from '../../constants/editorConstants'
+import { ANONYMIZE_TYPE_OPTIONS, BLOCKLIST_TYPE_OPTIONS } from '../../constants/editorConstants'
 import {
   ActionPopover,
   type ActionPopoverCloseReason,
@@ -55,8 +52,7 @@ export function ChipActionMenu({
         kind: 'action',
         key: 'undo',
         label: 'Pseudonym rückgängig machen',
-        supporting:
-          occurrenceCount > 1 ? `»${original}« · ${occurrenceCount}×` : `»${original}«`
+        supporting: occurrenceCount > 1 ? `»${original}« · ${occurrenceCount}×` : `»${original}«`
       })
     }
     list.push({

@@ -113,6 +113,22 @@ describe('SessionService', () => {
       expect(updated?.status).toBe('queued')
     })
 
+    it('allows error → error (second failure must not lose the new errorMessage)', () => {
+      // handleTaskFailure setzt status:'error' + errorMessage in EINEM Update.
+      // War die Session schon in error (z. B. zweiter fehlgeschlagener Task
+      // derselben Pipeline), warf die Transition-Validierung — die neue
+      // Fehlermeldung ging verloren, DB und UI divergierten.
+      const session = service.createSession('Test', 'audio')
+      service.updateSession(session.id, { status: 'error', errorMessage: 'Erster Fehler' })
+      const updated = service.updateSession(session.id, {
+        status: 'error',
+        errorMessage: 'Zweiter Fehler'
+      })
+
+      expect(updated?.status).toBe('error')
+      expect(updated?.errorMessage).toBe('Zweiter Fehler')
+    })
+
     it('rejects invalid transition recording → review', () => {
       const session = service.createSession('Test', 'audio')
 

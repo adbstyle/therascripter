@@ -116,9 +116,7 @@ export function ActionPopover({
     const subW = subRect.width || POPOVER_WIDTH
     const subH = subRect.height || 200
 
-    const triggerEl = mainRef.current.querySelector<HTMLElement>(
-      `[data-menu-key="${openSub}"]`
-    )
+    const triggerEl = mainRef.current.querySelector<HTMLElement>(`[data-menu-key="${openSub}"]`)
     const triggerRect = triggerEl?.getBoundingClientRect()
     const idealTop = triggerRect ? triggerRect.top : mainRect.top
 

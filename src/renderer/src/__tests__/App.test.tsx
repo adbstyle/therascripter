@@ -98,7 +98,12 @@ beforeEach(() => {
     modelUpdate: mockModelUpdate,
     appUpdate: {
       getStatus: vi.fn().mockResolvedValue(null),
-      check: vi.fn().mockResolvedValue({ modelUpdates: [], appUpdate: { available: false, latestVersion: null, checkedAt: null } }),
+      check: vi
+        .fn()
+        .mockResolvedValue({
+          modelUpdates: [],
+          appUpdate: { available: false, latestVersion: null, checkedAt: null }
+        }),
       openReleasePage: vi.fn(),
       onStatus: vi.fn().mockReturnValue(() => {})
     },

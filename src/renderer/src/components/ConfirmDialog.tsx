@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { DialogShell } from './DialogShell'
 
 interface ConfirmDialogProps {
   title: string
@@ -23,64 +24,47 @@ export function ConfirmDialog({
 
   useEffect(() => {
     cancelRef.current?.focus()
-
-    function handleKeyDown(e: KeyboardEvent): void {
-      if (e.key === 'Escape') onCancel()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onCancel])
+  }, [])
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      onClick={onCancel}
-    >
-      <div
-        className="mx-4 w-full max-w-md rounded-xl bg-surface-1 p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="mb-2 text-base font-semibold text-text-primary">{title}</h3>
-        <p className="mb-4 text-sm text-text-secondary">{message}</p>
+    <DialogShell ariaLabel={title} onDismiss={onCancel}>
+      <h3 className="mb-2 text-base font-semibold text-text-primary">{title}</h3>
+      <p className="mb-4 text-sm text-text-secondary">{message}</p>
 
-        {details && details.length > 0 && (
-          <div className="mb-4">
-            <p className="mb-1 text-xs font-medium text-text-tertiary">Gelöscht werden:</p>
-            <ul className="list-inside list-disc text-xs text-text-tertiary">
-              {details.map((detail) => (
-                <li key={detail}>{detail}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <p className="mb-4 text-xs text-text-tertiary">
-          Diese Aktion kann nicht rückgängig gemacht werden.
-        </p>
-
-        <div className="flex justify-end gap-2">
-          <button
-            ref={cancelRef}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-2"
-            onClick={onCancel}
-          >
-            Abbrechen
-          </button>
-          <button
-            className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${
-              destructive
-                ? 'bg-recording hover:bg-recording-hover'
-                : 'bg-primary hover:bg-primary-hover'
-            }`}
-            onClick={onConfirm}
-          >
-            {confirmLabel}
-          </button>
+      {details && details.length > 0 && (
+        <div className="mb-4">
+          <p className="mb-1 text-xs font-medium text-text-tertiary">Gelöscht werden:</p>
+          <ul className="list-inside list-disc text-xs text-text-tertiary">
+            {details.map((detail) => (
+              <li key={detail}>{detail}</li>
+            ))}
+          </ul>
         </div>
+      )}
+
+      <p className="mb-4 text-xs text-text-tertiary">
+        Diese Aktion kann nicht rückgängig gemacht werden.
+      </p>
+
+      <div className="flex justify-end gap-2">
+        <button
+          ref={cancelRef}
+          className="rounded-lg px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-2"
+          onClick={onCancel}
+        >
+          Abbrechen
+        </button>
+        <button
+          className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${
+            destructive
+              ? 'bg-recording hover:bg-recording-hover'
+              : 'bg-primary hover:bg-primary-hover'
+          }`}
+          onClick={onConfirm}
+        >
+          {confirmLabel}
+        </button>
       </div>
-    </div>
+    </DialogShell>
   )
 }

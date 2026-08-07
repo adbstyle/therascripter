@@ -112,9 +112,9 @@ export default function AboutPage(): React.JSX.Element {
             <span className="whitespace-nowrap">[DATUM 1]</span>.
           </p>
           <p className="mb-2 text-sm text-text-secondary">
-            DSGVO-rechtlich heisst das <span className="font-medium">Pseudonymisierung</span> —
-            die Originaldaten bleiben in Ihrem lokalen Backup vorhanden, sind aber im
-            exportierten Text nicht mehr enthalten.
+            DSGVO-rechtlich heisst das <span className="font-medium">Pseudonymisierung</span> — die
+            Originaldaten bleiben in Ihrem lokalen Backup vorhanden, sind aber im exportierten Text
+            nicht mehr enthalten.
           </p>
           <p className="text-sm text-text-secondary">
             Echte Anonymisierung wäre, die Originale zu löschen — das machen wir bewusst nicht,

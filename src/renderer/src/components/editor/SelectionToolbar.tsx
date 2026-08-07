@@ -1,9 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import type { PlaceholderType } from '../../../../shared/types'
-import {
-  ANONYMIZE_TYPE_OPTIONS,
-  BLOCKLIST_TYPE_OPTIONS
-} from '../../constants/editorConstants'
+import { ANONYMIZE_TYPE_OPTIONS, BLOCKLIST_TYPE_OPTIONS } from '../../constants/editorConstants'
 import {
   ActionPopover,
   type ActionPopoverCloseReason,

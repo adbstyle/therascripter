@@ -92,16 +92,12 @@ describe('PlaceholderChipView', () => {
 
   it('uses Sperrliste source label when source=blocklist', () => {
     setup({ source: 'blocklist' })
-    expect(
-      screen.getByRole('button', { name: /Person 1, Sperrliste/i })
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Person 1, Sperrliste/i })).toBeInTheDocument()
   })
 
   it('uses manuell-markiert label when source=manual', () => {
     setup({ source: 'manual' })
-    expect(
-      screen.getByRole('button', { name: /Person 1, Manuell markiert/i })
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Person 1, Manuell markiert/i })).toBeInTheDocument()
   })
 
   it('opens action menu on click and flips aria-expanded', async () => {

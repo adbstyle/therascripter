@@ -1,6 +1,24 @@
-import { describe, it, expect } from 'vitest'
-import { computeStitchMap, buildFfmpegArgs } from '../AudioStitchService'
-import type { SpeakerSegment, StitchMap } from '../../../shared/types'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { computeStitchMap, stitchPcmSegments } from '../AudioStitchService'
+import { createWavHeader } from '../AudioFileService'
+import type { SpeakerSegment } from '../../../shared/types'
+
+const SAMPLE_RATE = 48000
+const BYTES_PER_SAMPLE = 2
+
+/** 48 kHz mono s16le WAV, deren Sample-Werte ihrem Sample-Index entsprechen
+ *  (mod 32768) — macht Byte-Offset-Fehler im Stitcher sofort sichtbar. */
+function makeIndexedWav(path: string, durationSec: number): void {
+  const sampleCount = Math.round(durationSec * SAMPLE_RATE)
+  const pcm = Buffer.alloc(sampleCount * BYTES_PER_SAMPLE)
+  for (let i = 0; i < sampleCount; i++) {
+    pcm.writeInt16LE(i % 32768, i * BYTES_PER_SAMPLE)
+  }
+  writeFileSync(path, Buffer.concat([createWavHeader(pcm.length), pcm]))
+}
 
 describe('computeStitchMap', () => {
   it('returns empty map for empty input', () => {
@@ -75,29 +93,89 @@ describe('computeStitchMap', () => {
   })
 })
 
-describe('buildFfmpegArgs', () => {
-  it('builds concat-demuxer args with one -ss/-to/-i per segment', () => {
-    const map: StitchMap = {
-      paddingSec: 0.2,
-      originalDurationSec: 100,
-      stitchedDurationSec: 10,
-      segments: [
-        { originalStart: 10, originalEnd: 15, stitchedStart: 0, duration: 5 },
-        { originalStart: 20, originalEnd: 25, stitchedStart: 5, duration: 5 }
-      ]
+describe('stitchPcmSegments', () => {
+  let dir: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'stitch-test-'))
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('concatenates the exact PCM byte ranges of the source', async () => {
+    const src = join(dir, 'src.wav')
+    makeIndexedWav(src, 2) // 2 s, Samples 0..95999
+    const map = computeStitchMap(
+      [
+        { label: 'A', start: 0.5, end: 0.75 },
+        { label: 'B', start: 1.5, end: 1.75 }
+      ],
+      0, // kein Padding → exakte Grenzen
+      2
+    )
+    const out = join(dir, 'out.wav')
+
+    await stitchPcmSegments(src, map, out)
+
+    const content = readFileSync(out)
+    const expectedSamples = 0.5 * SAMPLE_RATE // 2 Segmente à 0.25 s
+    expect(content.length).toBe(44 + expectedSamples * BYTES_PER_SAMPLE)
+    // Header: dataSize + RIFF-Size korrekt
+    expect(content.readUInt32LE(40)).toBe(expectedSamples * BYTES_PER_SAMPLE)
+    expect(content.readUInt32LE(4)).toBe(36 + expectedSamples * BYTES_PER_SAMPLE)
+    // Erster Sample des ersten Segments = Sample-Index 0.5*48000 = 24000
+    expect(content.readInt16LE(44)).toBe(24000)
+    // Erster Sample des zweiten Segments = Index 1.5*48000 = 72000 (mod 32768)
+    const seg2Offset = 44 + 0.25 * SAMPLE_RATE * BYTES_PER_SAMPLE
+    expect(content.readInt16LE(seg2Offset)).toBe(72000 % 32768)
+    // Letzter Sample insgesamt = Index 1.75*48000 - 1 = 83999 (mod 32768)
+    expect(content.readInt16LE(content.length - 2)).toBe(83999 % 32768)
+  })
+
+  it('clamps segment ends beyond the actual file size', async () => {
+    const src = join(dir, 'src.wav')
+    makeIndexedWav(src, 1)
+    // originalDuration behauptet 2 s, Datei hat nur 1 s → Ende clampen
+    const map = computeStitchMap([{ label: 'A', start: 0.5, end: 1.9 }], 0, 2)
+    const out = join(dir, 'out.wav')
+
+    await stitchPcmSegments(src, map, out)
+
+    const content = readFileSync(out)
+    expect(content.length).toBe(44 + 0.5 * SAMPLE_RATE * BYTES_PER_SAMPLE)
+  })
+
+  it('respects an already-aborted signal', async () => {
+    const src = join(dir, 'src.wav')
+    makeIndexedWav(src, 1)
+    const map = computeStitchMap([{ label: 'A', start: 0, end: 1 }], 0, 1)
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      stitchPcmSegments(src, map, join(dir, 'out.wav'), controller.signal)
+    ).rejects.toThrow(/abgebrochen/i)
+  })
+
+  it('handles hundreds of segments without resource exhaustion (EMFILE-Regression)', async () => {
+    const src = join(dir, 'src.wav')
+    makeIndexedWav(src, 10)
+    const speech: SpeakerSegment[] = []
+    for (let i = 0; i < 400; i++) {
+      speech.push({ label: 'A', start: i * 0.025, end: i * 0.025 + 0.01 })
     }
-    const args = buildFfmpegArgs('/audio.wav', map, '/out.wav')
+    const map = computeStitchMap(speech, 0, 10)
+    const out = join(dir, 'out.wav')
 
-    // Two -ss values, two -to values
-    const ssIndices = args.flatMap((a, i) => (a === '-ss' ? [i] : []))
-    expect(ssIndices).toHaveLength(2)
-    const toIndices = args.flatMap((a, i) => (a === '-to' ? [i] : []))
-    expect(toIndices).toHaveLength(2)
+    await stitchPcmSegments(src, map, out)
 
-    // Filter complex with concat=n=2
-    expect(args.some((a) => a.includes('concat=n=2:v=0:a=1'))).toBe(true)
-    // Output codec
-    expect(args).toContain('pcm_s16le')
-    expect(args[args.length - 1]).toBe('/out.wav')
+    const content = readFileSync(out)
+    const expectedBytes = map.segments.reduce(
+      (sum, s) => sum + Math.round((s.originalEnd - s.originalStart) * SAMPLE_RATE) * 2,
+      0
+    )
+    expect(content.length).toBe(44 + expectedBytes)
   })
 })
