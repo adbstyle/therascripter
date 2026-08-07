@@ -57,7 +57,7 @@ export class AlignmentService implements TaskExecutor {
         }
       }
       const alignedTranscriptPath = sessionService.generateAlignedTranscriptPath(task.sessionId)
-      writeFileAtomic(alignedTranscriptPath, JSON.stringify(emptyAligned, null, 2))
+      writeFileAtomic(alignedTranscriptPath, JSON.stringify(emptyAligned))
       sessionService.updateSession(task.sessionId, { alignedTranscriptPath })
       onProgress(1)
       return
@@ -89,7 +89,7 @@ export class AlignmentService implements TaskExecutor {
 
     // Write aligned transcript to a separate file (preserves raw ASR transcript)
     const alignedTranscriptPath = sessionService.generateAlignedTranscriptPath(task.sessionId)
-    writeFileAtomic(alignedTranscriptPath, JSON.stringify(updatedTranscript, null, 2))
+    writeFileAtomic(alignedTranscriptPath, JSON.stringify(updatedTranscript))
 
     sessionService.updateSession(task.sessionId, { alignedTranscriptPath })
 

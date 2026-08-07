@@ -107,7 +107,7 @@ export class PDFExtractionExecutor implements TaskExecutor {
     }
 
     const extractedPath = join(getDataDir(), 'extracted', `${task.sessionId}.json`)
-    writeFileAtomic(extractedPath, JSON.stringify(extractionResult, null, 2))
+    writeFileAtomic(extractedPath, JSON.stringify(extractionResult))
 
     // Always write a transcript from extracted text — guarantees the
     // anonymization step has a transcriptPath to read even when the

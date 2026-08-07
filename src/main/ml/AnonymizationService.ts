@@ -63,7 +63,7 @@ export class AnonymizationService implements TaskExecutor {
       }
       const emptyDoc = { type: 'doc', content: [{ type: 'paragraph' }] }
       const anonymizedPath = sessionService.generateAnonymizedPath(task.sessionId)
-      writeFileAtomic(anonymizedPath, JSON.stringify(emptyDoc, null, 2))
+      writeFileAtomic(anonymizedPath, JSON.stringify(emptyDoc))
       sessionService.updateSession(task.sessionId, {
         anonymizedPath,
         entityMap: {},
@@ -122,7 +122,7 @@ export class AnonymizationService implements TaskExecutor {
 
     // 10. Save results
     const anonymizedPath = sessionService.generateAnonymizedPath(task.sessionId)
-    writeFileAtomic(anonymizedPath, JSON.stringify(tiptapDoc, null, 2))
+    writeFileAtomic(anonymizedPath, JSON.stringify(tiptapDoc))
 
     const wordCount = countWords(tiptapDoc)
     const anonymizationCount = countPlaceholderChips(tiptapDoc)

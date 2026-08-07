@@ -166,7 +166,7 @@ export class WhisperService implements TaskExecutor {
         }
       }
       const transcriptPath = sessionService.generateTranscriptPath(task.sessionId)
-      writeFileAtomic(transcriptPath, JSON.stringify(emptyTranscript, null, 2))
+      writeFileAtomic(transcriptPath, JSON.stringify(emptyTranscript))
       sessionService.updateSession(task.sessionId, { transcriptPath })
       onProgress(1)
       return
@@ -219,7 +219,7 @@ export class WhisperService implements TaskExecutor {
       )
 
       const transcriptPath = sessionService.generateTranscriptPath(task.sessionId)
-      writeFileAtomic(transcriptPath, JSON.stringify(transcript, null, 2))
+      writeFileAtomic(transcriptPath, JSON.stringify(transcript))
       sessionService.updateSession(task.sessionId, { transcriptPath })
     } finally {
       // Clean up stitched WAV (best-effort). `stitched` may still be undefined

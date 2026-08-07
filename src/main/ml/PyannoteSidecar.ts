@@ -76,7 +76,7 @@ export class PyannoteSidecar implements TaskExecutor {
 
     // Save diarization results
     const diarizationPath = sessionService.generateDiarizationPath(task.sessionId)
-    writeFileAtomic(diarizationPath, JSON.stringify(diarization, null, 2))
+    writeFileAtomic(diarizationPath, JSON.stringify(diarization))
 
     sessionService.updateSession(task.sessionId, { diarizationPath })
   }

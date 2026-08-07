@@ -54,7 +54,7 @@ export class ReviewService {
     // Atomar (tmp + fsync + rename): der Autosave schreibt das editierte
     // Transkript des Users — ein Crash mitten im Write war der schlimmste
     // Datenverlust-Pfad der App (load wirft danach, Session unbrauchbar).
-    writeFileAtomic(session.anonymizedPath, JSON.stringify(document, null, 2))
+    writeFileAtomic(session.anonymizedPath, JSON.stringify(document))
 
     // Update entity map, word count, and anonymization count in database
     const wordCount = countWords(document)

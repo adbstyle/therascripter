@@ -191,17 +191,6 @@ app.whenReady().then(() => {
     return
   }
 
-  // Back-fill anonymization counts for review sessions that reached 'review'
-  // before the column existed. One-shot, idempotent.
-  try {
-    const backfilled = backfillAnonymizationCounts(getDatabase())
-    if (backfilled > 0) {
-      console.log(`Anonymization-count backfill: updated ${backfilled} legacy session(s)`)
-    }
-  } catch (error) {
-    console.error('Anonymization-count backfill failed:', error)
-  }
-
   initSettings()
 
   // Sync Electron nativeTheme with saved preference
@@ -214,11 +203,6 @@ app.whenReady().then(() => {
 
   // Clean up any incomplete model updates from a previous crashed update
   cleanupIncompleteUpdates()
-
-  // PHI-Hygiene: gestitchte Speech-WAVs, llama-Prompt-Dateien und verwaiste
-  // writeFileAtomic-Tmp-Dateien wegräumen, die ein harter Crash hinterlassen
-  // hat (das finally-Cleanup der Services lief dann nie).
-  sweepStaleArtifactsAtStartup()
 
   // Issue #84 / Story C — verify the invariant that every active-model slot
   // either points at an installed catalog model or is null. Heals stale slots
@@ -300,6 +284,25 @@ app.whenReady().then(() => {
   setupCSP()
   createWindow()
   checkFileVaultOnStartup()
+
+  // FS-lastige One-Shots NACH der Window-Erstellung (beide idempotent und
+  // nicht paint-kritisch): der Legacy-Backfill liest potenziell jede
+  // anonymisierte TipTap-Datei, der PHI-Sweep walkt das Datenverzeichnis —
+  // vor createWindow() verzögerten sie den ersten Paint unbounded.
+  setImmediate(() => {
+    try {
+      const backfilled = backfillAnonymizationCounts(getDatabase())
+      if (backfilled > 0) {
+        console.log(`Anonymization-count backfill: updated ${backfilled} legacy session(s)`)
+      }
+    } catch (error) {
+      console.error('Anonymization-count backfill failed:', error)
+    }
+    // PHI-Hygiene: gestitchte Speech-WAVs, llama-Prompt-Dateien und verwaiste
+    // writeFileAtomic-Tmp-Dateien wegräumen, die ein harter Crash hinterlassen
+    // hat (das finally-Cleanup der Services lief dann nie).
+    sweepStaleArtifactsAtStartup()
+  })
 
   // Crash-Recovery für Aufnahmen: Sessions, die im 'recording'-Status hängen
   // geblieben sind (App-Crash während Aufnahme), reparieren + Dialog anbieten.
