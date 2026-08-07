@@ -4,9 +4,14 @@
 # Installs pre-built whisper-cpp via Homebrew (no C++ toolchain needed).
 #
 # Produces:
-#   resources/bin/whisper-cli
-#   resources/lib/libwhisper.*.dylib + libggml-*.dylib
+#   resources/whisper/bin/whisper-cli
+#   resources/whisper/lib/libwhisper.*.dylib + libggml-*.dylib
 #   ~/.therascript/models/asr/ggml-large-v3-turbo-q5_0.bin (optional, with --model)
+#
+# Bundle layout rationale: whisper.cpp and llama.cpp link against incompatible
+# ggml generations (see docs/plans/ggml-abi-split.md). The two toolchains live
+# in separate self-contained directories — each binary's built-in
+# LC_RPATH=@loader_path/../lib resolves to the tool-specific lib/ sibling.
 #
 # Usage:
 #   ./scripts/setup-whisper.sh          # binary + dylibs only
@@ -16,9 +21,18 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-BIN_DIR="$PROJECT_ROOT/resources/bin"
-LIB_DIR="$PROJECT_ROOT/resources/lib"
+BIN_DIR="$PROJECT_ROOT/resources/whisper/bin"
+LIB_DIR="$PROJECT_ROOT/resources/whisper/lib"
 MODEL_DIR="$HOME/.therascript/models/asr"
+
+# Migrations-Cleanup: remove the previous shared layout if a developer is
+# upgrading from before docs/plans/ggml-abi-split.md. Only deletes whisper's
+# share of resources/lib (libwhisper.* + libggml*) and the old whisper-cli
+# binary — never touches the llama bundle, ffmpeg, or vision-ocr.
+rm -f \
+  "$PROJECT_ROOT/resources/bin/whisper-cli" \
+  "$PROJECT_ROOT/resources/lib/"libwhisper.*.dylib \
+  "$PROJECT_ROOT/resources/lib/"libggml*.dylib 2>/dev/null || true
 MODEL_FILE="ggml-large-v3-turbo-q5_0.bin"
 MODEL_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$MODEL_FILE"
 
@@ -73,6 +87,41 @@ for lib in "${DYLIBS[@]}"; do
   fi
 done
 echo "Libraries: $LIB_DIR/ ($(ls "$LIB_DIR" | wc -l | tr -d ' ') files)"
+
+# ── 3a. Make bundle self-contained ──────────────────────────────────────────
+# whisper-cpp's bundled dylibs ship with absolute LC_ID install names pointing
+# into Homebrew's prefix (e.g. /opt/homebrew/opt/whisper-cpp/libexec/lib/…).
+# whisper-cli's inter-dylib refs are already @rpath, so the bundle works on a
+# Homebrew-equipped Mac — but on an end-user Mac dyld dedup behaviour around
+# absolute LC_IDs can bite. Rewrite every Mach-O so the bundle is fully
+# location-independent. Must run before codesign re-sign below; install_name_tool
+# invalidates the Mach-O signature.
+
+echo "Rewriting absolute /opt/homebrew references to @rpath"
+rewrite_macho() {
+  local macho="$1"
+  local kind="$2" # "dylib" or "binary"
+  if [ "$kind" = 'dylib' ]; then
+    install_name_tool -id "@rpath/$(basename "$macho")" "$macho"
+  fi
+  otool -L "$macho" | awk '$1 ~ /^\/opt\/homebrew/ {print $1}' | while read -r dep; do
+    install_name_tool -change "$dep" "@rpath/$(basename "$dep")" "$macho"
+  done
+}
+rewrite_macho "$BIN_DIR/whisper-cli" binary
+for dylib in "$LIB_DIR/"*.dylib; do
+  rewrite_macho "$dylib" dylib
+done
+if otool -L "$BIN_DIR/whisper-cli" "$LIB_DIR/"*.dylib | grep '/opt/homebrew'; then
+  echo "FATAL: bundle still references /opt/homebrew after rewrite" >&2
+  exit 1
+fi
+
+# Re-sign every Mach-O ad-hoc (install_name_tool invalidated the signature).
+codesign --force --sign - "$BIN_DIR/whisper-cli"
+for dylib in "$LIB_DIR/"*.dylib; do
+  codesign --force --sign - "$dylib"
+done
 
 # ── 4. Verify binary works ──────────────────────────────────────────────────
 

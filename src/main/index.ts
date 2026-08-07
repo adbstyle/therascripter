@@ -226,8 +226,8 @@ app.whenReady().then(() => {
     },
     getBinaryPath: () =>
       app.isPackaged
-        ? join(process.resourcesPath, 'bin', 'llama-cli')
-        : join(app.getAppPath(), 'resources', 'bin', 'llama-cli'),
+        ? join(process.resourcesPath, 'llama', 'bin', 'llama-cli')
+        : join(app.getAppPath(), 'resources', 'llama', 'bin', 'llama-cli'),
     getAllowedModelsDir: () => join(getModelsDir(), 'summarization')
   })
   const sessionService = new SessionService(getDatabase())
