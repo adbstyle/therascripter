@@ -121,10 +121,6 @@ export function getActiveSessionId(): string | null {
   return activeSessionId
 }
 
-export function getAudioFileService(): AudioFileService {
-  return audioFileService
-}
-
 export function registerRecordingHandlers(): void {
   ipcMain.handle('recording:start', () => {
     if (activeSessionId) {

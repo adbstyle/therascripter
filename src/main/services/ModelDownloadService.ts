@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { existsSync, mkdirSync, rmSync, statSync, unlinkSync } from 'fs'
+import { existsSync, mkdirSync, rmSync, unlinkSync } from 'fs'
 import { dirname, join } from 'path'
 import { BrowserWindow } from 'electron'
 import { getDataDir } from '../db/connection'
@@ -184,12 +184,6 @@ export function checkRequiredAndActiveExist(
   return toCheck.every((m) => existsSync(join(modelsDir, m.checkPath)))
 }
 
-/** Backward-Compat-Alias. */
-export function checkRequiredAndActiveAsrExist(activeAsrId: string | null): boolean {
-  const activeDiar = getSettings().get('activeModels').diarization
-  return checkRequiredAndActiveExist(activeAsrId, activeDiar)
-}
-
 /**
  * Prüft, ob ein einzelnes Modell installiert ist (für UI-Status).
  */
@@ -236,23 +230,6 @@ export function getModelsToLoad(): ModelDefinition[] {
 
 export function getOverallModelSize(): number {
   return getModelsToLoad().reduce((sum, m) => sum + m.sizeBytes, 0)
-}
-
-export function getAlreadyDownloadedBytes(): number {
-  const modelsDir = getModelsDir()
-  let total = 0
-  for (const model of getModelsToLoad()) {
-    const checkTarget = join(modelsDir, model.checkPath)
-    if (existsSync(checkTarget)) {
-      total += model.sizeBytes
-    } else if (!model.archive) {
-      const partialPath = join(modelsDir, model.relativePath) + '.partial'
-      if (existsSync(partialPath)) {
-        total += statSync(partialPath).size
-      }
-    }
-  }
-  return total
 }
 
 function sendProgress(status: ModelDownloadStatus): void {

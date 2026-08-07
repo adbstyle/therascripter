@@ -207,15 +207,6 @@ export async function verifyFileSha256(filePath: string, expectedHash: string): 
   })
 }
 
-export function cleanupPartial(targetPath: string): void {
-  const partialPath = targetPath + '.partial'
-  try {
-    if (existsSync(partialPath)) unlinkSync(partialPath)
-  } catch {
-    // Ignore cleanup errors
-  }
-}
-
 export function extractTarGz(archivePath: string, targetDir: string): Promise<DownloadResult> {
   return new Promise((resolve) => {
     execFile('tar', ['-xzf', archivePath, '-C', targetDir], (error) => {
