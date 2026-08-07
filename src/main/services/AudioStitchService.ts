@@ -1,9 +1,9 @@
-import { spawn } from 'child_process'
 import { existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { app } from 'electron'
 import type { SpeakerSegment, StitchMap, StitchSegment } from '../../shared/types'
+import { runSubprocess } from '../utils/subprocess'
 
 export const DEFAULT_PADDING_SEC = 0.2
 
@@ -118,41 +118,29 @@ export function buildFfmpegArgs(
   return args
 }
 
-function runFfmpeg(bin: string, args: string[], signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // Pre-aborted-signal guard: addEventListener('abort', …) does NOT fire if
-    // the signal is already aborted at registration time (per Web spec). If a
-    // caller hands us an already-aborted controller (e.g. cancel-recovery on
-    // app restart), we'd otherwise leak a long-running ffmpeg subprocess that
-    // nothing kills. Live-verified during QA — see PR #79 Bug #2.
-    if (signal?.aborted) {
-      reject(new Error('ffmpeg aborted before start'))
-      return
-    }
+// PCM-Stitching ist disk-bound und in Sekunden fertig — 5 min ist ein reiner
+// Stall-Fallback (vorher gab es gar keinen Timeout).
+const FFMPEG_TIMEOUT_MS = 300_000
 
-    const proc = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] })
-    let stderr = ''
-    proc.stderr.on('data', (chunk) => {
-      stderr += chunk.toString()
-    })
-    const onAbort = (): void => {
-      try {
-        proc.kill('SIGTERM')
-      } catch {
-        // intentionally swallowed — process may already be gone
-      }
-    }
-    signal?.addEventListener('abort', onAbort)
-    proc.on('error', (err) => {
-      signal?.removeEventListener('abort', onAbort)
-      reject(err)
-    })
-    proc.on('close', (code) => {
-      signal?.removeEventListener('abort', onAbort)
-      if (code === 0) resolve()
-      else reject(new Error(`ffmpeg exited ${code}: ${stderr}`))
-    })
+async function runFfmpeg(bin: string, args: string[], signal?: AbortSignal): Promise<void> {
+  // Lifecycle (Pre-Abort-Guard, SIGTERM→SIGKILL-Eskalation, Group-Kill)
+  // zentral in runSubprocess — vorher handgerollt, siehe PR #79 Bug #2.
+  const result = await runSubprocess({
+    bin,
+    args,
+    signal,
+    stdout: 'ignore',
+    timeoutMs: FFMPEG_TIMEOUT_MS
   })
+  if (result.aborted) {
+    throw new Error('ffmpeg aborted before completion')
+  }
+  if (result.timedOut) {
+    throw new Error(`ffmpeg timed out after ${Math.round(FFMPEG_TIMEOUT_MS / 1000)}s`)
+  }
+  if (result.code !== 0) {
+    throw new Error(`ffmpeg exited ${result.code}: ${result.stderr}`)
+  }
 }
 
 /**
