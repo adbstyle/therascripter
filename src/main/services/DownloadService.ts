@@ -22,11 +22,14 @@ export interface DownloadResult {
   error?: string
 }
 
+const MAX_REDIRECTS = 5
+
 export function downloadFile(
   url: string,
   targetPath: string,
   onProgress: (progress: DownloadProgress) => void,
-  abortSignal?: { aborted: boolean }
+  abortSignal?: { aborted: boolean },
+  redirectsLeft = MAX_REDIRECTS
 ): Promise<DownloadResult> {
   const partialPath = targetPath + '.partial'
 
@@ -43,13 +46,40 @@ export function downloadFile(
 
     const getter = url.startsWith('https') ? httpsGet : httpGet
 
+    // settle() statt nacktem resolve: mehrere Callbacks (data/finish/error/
+    // timeout/abort-Poll) können konkurrieren; der erste gewinnt und räumt
+    // den Abort-Poll ab.
+    let settled = false
+    let abortPoll: ReturnType<typeof setInterval> | null = null
+    const settle = (result: DownloadResult): void => {
+      if (settled) return
+      settled = true
+      if (abortPoll !== null) clearInterval(abortPoll)
+      resolve(result)
+    }
+
     const request = getter(url, { headers }, (response: IncomingMessage) => {
-      // Handle redirects
+      // Handle redirects — mit Hop-Limit (eine Redirect-Schleife rekursierte
+      // vorher unbounded) und relativer Location-Auflösung (R2/CDNs dürfen
+      // relative Redirects schicken; vorher hing der Download).
       if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400) {
-        const redirectUrl = response.headers.location
-        if (redirectUrl) {
+        const location = response.headers.location
+        if (location) {
           response.destroy()
-          downloadFile(redirectUrl, targetPath, onProgress, abortSignal).then(resolve)
+          if (redirectsLeft <= 0) {
+            settle({ success: false, error: `Zu viele Redirects (Limit ${MAX_REDIRECTS})` })
+            return
+          }
+          let redirectUrl: string
+          try {
+            redirectUrl = new URL(location, url).toString()
+          } catch {
+            settle({ success: false, error: `Ungültige Redirect-URL: ${location}` })
+            return
+          }
+          downloadFile(redirectUrl, targetPath, onProgress, abortSignal, redirectsLeft - 1).then(
+            settle
+          )
           return
         }
       }
@@ -61,7 +91,7 @@ export function downloadFile(
 
       if (response.statusCode !== 200 && response.statusCode !== 206) {
         response.destroy()
-        resolve({ success: false, error: `HTTP ${response.statusCode}` })
+        settle({ success: false, error: `HTTP ${response.statusCode}` })
         return
       }
 
@@ -78,7 +108,7 @@ export function downloadFile(
         if (abortSignal?.aborted) {
           response.destroy()
           fileStream.end()
-          resolve({ success: false, error: 'Aborted' })
+          settle({ success: false, error: 'Aborted' })
           return
         }
 
@@ -94,28 +124,50 @@ export function downloadFile(
 
       fileStream.on('finish', () => {
         if (abortSignal?.aborted) {
-          resolve({ success: false, error: 'Aborted' })
+          settle({ success: false, error: 'Aborted' })
           return
         }
-        // Move partial to final path
-        renameSync(partialPath, targetPath)
-        resolve({ success: true })
+        // Move partial to final path. try/catch zwingend: ein Throw hier
+        // (EXDEV/EACCES/ENOENT) war eine uncaught exception im
+        // Stream-Callback — das Promise settlete nie und der wartende
+        // startModelDownload hing für immer.
+        try {
+          renameSync(partialPath, targetPath)
+          settle({ success: true })
+        } catch (err) {
+          settle({
+            success: false,
+            error: `Datei konnte nicht finalisiert werden: ${err instanceof Error ? err.message : String(err)}`
+          })
+        }
       })
 
       fileStream.on('error', (err) => {
         response.destroy()
-        resolve({ success: false, error: err.message })
+        settle({ success: false, error: err.message })
       })
     })
 
     request.on('error', (err) => {
-      resolve({ success: false, error: err.message })
+      settle({ success: false, error: err.message })
     })
 
     request.setTimeout(30000, () => {
       request.destroy()
-      resolve({ success: false, error: 'Connection timeout' })
+      settle({ success: false, error: 'Connection timeout' })
     })
+
+    // Abort-Poll: der data-Handler sieht das Abort-Flag nur, solange Bytes
+    // fliessen — bei gestallter Verbindung griff »Abbrechen« vorher erst
+    // nach dem 30-s-Socket-Timeout.
+    if (abortSignal) {
+      abortPoll = setInterval(() => {
+        if (abortSignal.aborted) {
+          request.destroy()
+          settle({ success: false, error: 'Aborted' })
+        }
+      }, 250)
+    }
   })
 }
 
