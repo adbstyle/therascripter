@@ -67,7 +67,7 @@ export class TaskQueueService {
   // signal the executor to stop cleanly. See DR-6 in plans/2026-04-29-pipeline-progress-ui-issue-80.md.
   private runningController: { sessionId: string; controller: AbortController } | null = null
 
-  constructor(db: Database.Database) {
+  constructor(private readonly db: Database.Database) {
     this.repository = new TaskRepository(db)
     this.sessionService = new SessionService(db)
     this.executors = createStubExecutors()
@@ -97,12 +97,18 @@ export class TaskQueueService {
     // group for this run so the Review-Editor can show provenance later.
     // Done together with plannedSteps so both states are consistent.
     const processedWithModels = captureProcessedModels(plannedSteps)
-    this.sessionService.updateSession(sessionId, { plannedSteps, processedWithModels })
 
-    const tasks: Task[] = []
-    for (const type of plannedSteps) {
-      tasks.push(this.repository.create({ sessionId, type }))
-    }
+    // Transaktional: ein Throw mitten im Task-Insert hinterließ vorher eine
+    // Partial-Pipeline (z. B. nur diarization+transcription), die bis
+    // 'review' durchlief — ohne Anonymisierung.
+    const tasks = this.db.transaction(() => {
+      this.sessionService.updateSession(sessionId, { plannedSteps, processedWithModels })
+      const created: Task[] = []
+      for (const type of plannedSteps) {
+        created.push(this.repository.create({ sessionId, type }))
+      }
+      return created
+    })()
 
     console.log(
       `[TaskQueue] Enqueued ${plannedSteps.length} tasks for session ${sessionId} (${sessionType}) — ${plannedSteps.join(',')}`
@@ -177,35 +183,40 @@ export class TaskQueueService {
     const pipeline = session.plannedSteps ?? computePlannedSteps(session)
     const resumeIndex = this.findResumeIndex(session, pipeline)
 
-    // Remove all non-completed task rows (failed + cancelled)
-    const deleted = this.repository.deleteNonCompletedForSession(sessionId)
-    if (deleted > 0) {
-      console.log(`[TaskQueue] Deleted ${deleted} non-completed tasks for session ${sessionId}`)
-    }
-
-    // Create pending tasks for remaining pipeline steps
-    const remainingSteps = pipeline.slice(resumeIndex)
-    for (const type of remainingSteps) {
-      this.repository.create({ sessionId, type })
-    }
-
-    // Transition session: error → queued. The first task's start will then push
-    // queued → processing automatically (see executeTask). errorMessage is cleared
-    // so the renderer doesn't surface stale state from the failed run while the
-    // retry is in flight. Issue #80 DR-7: increment retryCount so the UI can
-    // surface the 3-stage support hint after repeated failures.
     // Issue #84 Story I — re-capture provenance: the user may have switched
     // the active model between runs; the relevant snapshot is what actually
     // produces the next attempt, not the previous failed one.
     const processedWithModels = captureProcessedModels(pipeline)
+    const remainingSteps = pipeline.slice(resumeIndex)
 
-    this.sessionService.updateSession(sessionId, {
-      status: 'queued',
-      errorMessage: null,
-      retryCount: (session.retryCount ?? 0) + 1,
-      plannedSteps: pipeline,
-      processedWithModels
-    })
+    // Transaktional wie enqueuePipeline: delete + create + Status-Update
+    // sind alles-oder-nichts, sonst kann ein Crash mid-retry eine Session
+    // in 'error' mit halb neu erzeugten Tasks hinterlassen.
+    this.db.transaction(() => {
+      // Remove all non-completed task rows (failed + cancelled)
+      const deleted = this.repository.deleteNonCompletedForSession(sessionId)
+      if (deleted > 0) {
+        console.log(`[TaskQueue] Deleted ${deleted} non-completed tasks for session ${sessionId}`)
+      }
+
+      // Create pending tasks for remaining pipeline steps
+      for (const type of remainingSteps) {
+        this.repository.create({ sessionId, type })
+      }
+
+      // Transition session: error → queued. The first task's start will then push
+      // queued → processing automatically (see executeTask). errorMessage is cleared
+      // so the renderer doesn't surface stale state from the failed run while the
+      // retry is in flight. Issue #80 DR-7: increment retryCount so the UI can
+      // surface the 3-stage support hint after repeated failures.
+      this.sessionService.updateSession(sessionId, {
+        status: 'queued',
+        errorMessage: null,
+        retryCount: (session.retryCount ?? 0) + 1,
+        plannedSteps: pipeline,
+        processedWithModels
+      })
+    })()
 
     console.log(
       `[TaskQueue] Retrying session ${sessionId} from step ${remainingSteps[0]} ` +
