@@ -29,6 +29,20 @@ describe('buildLlamaArgs', () => {
     expect(args).toContain('200')
     expect(args).toContain('--no-display-prompt')
   })
+
+  it('sets an explicit context size matching MAX_INPUT_CHARS', () => {
+    // Ohne -c nutzt llama-cli seinen 4096-Default: von den früheren 120k
+    // Prompt-Zeichen wurde der Großteil still truncated/context-geshiftet —
+    // bezahlte Prompt-Eval-Zeit ohne Wirkung auf die Summary.
+    const args = buildLlamaArgs({
+      modelPath: '/models/gemma.gguf',
+      promptFilePath: '/tmp/prompt.txt',
+      maxTokens: 200
+    })
+    const cIdx = args.indexOf('-c')
+    expect(cIdx).toBeGreaterThanOrEqual(0)
+    expect(args[cIdx + 1]).toBe('8192')
+  })
 })
 
 describe('extractFirstJSONObject', () => {

@@ -32,6 +32,10 @@ export function buildLlamaArgs(input: LlamaArgsInput): string[] {
     // after one assistant response. Without this, llama-cli b8920+ either
     // skips the chat template (raw -p mode) or hangs interactively.
     '-st',
+    // Explizite Context-Größe passend zu MAX_INPUT_CHARS (summarization-
+    // prompt.ts) — ohne -c nutzt llama-cli 4096 und truncated still.
+    '-c',
+    '8192',
     '-n',
     String(input.maxTokens),
     '--temp',
