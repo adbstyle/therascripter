@@ -128,9 +128,27 @@ export class SessionRepository {
     return row ? rowToSession(row) : null
   }
 
+  /**
+   * Listen-Projektion: entity_map und processed_with_models werden bewusst
+   * NICHT selektiert (und bleiben null im Ergebnis). Kein Consumer der Liste
+   * (Dashboard via session:list, broadcastQueuePositions,
+   * recoverOrphanedSessions, checkForRecovery, Auto-Deletion) liest diese
+   * Blobs — der JSON-Parse pro Row und der IPC-Payload skalierten mit der
+   * Library-Größe, und die Liste wird bei jedem Task-Event refetcht.
+   * Detail-Reads (findById, z. B. via review:load) liefern sie weiterhin.
+   */
   findAll(): Session[] {
     const rows = this.db
-      .prepare('SELECT * FROM sessions ORDER BY created_at DESC')
+      .prepare(
+        `SELECT id, title, type, status, audio_path, transcript_path,
+                anonymized_path, diarization_path, aligned_transcript_path,
+                pdf_path, extracted_path, NULL AS entity_map, error_message,
+                created_at, updated_at, review_at, word_count,
+                anonymization_count, summary, summary_model_id, summarized_at,
+                planned_steps, retry_count, pdf_has_scanned_pages,
+                NULL AS processed_with_models
+         FROM sessions ORDER BY created_at DESC`
+      )
       .all() as SessionRow[]
     return rows.map(rowToSession)
   }

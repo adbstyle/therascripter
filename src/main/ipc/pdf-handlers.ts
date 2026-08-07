@@ -1,8 +1,8 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { existsSync, copyFileSync, readFileSync, unlinkSync } from 'fs'
-import { basename, dirname, join } from 'path'
-import { createRequire } from 'module'
+import { basename, join } from 'path'
 import { getDatabase, getDataDir } from '../db/connection'
+import { openPdfDocument } from '../utils/pdfjs-loader'
 import { SessionService } from '../services/SessionService'
 import { getTaskQueue } from '../services/TaskQueueService'
 import { ImportPDFSchema } from '../../shared/validation/import-schemas'
@@ -27,14 +27,8 @@ import type { Session } from '../../shared/types'
  */
 async function detectScannedPages(pdfPath: string): Promise<boolean | null> {
   try {
-    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
-    const require = createRequire(import.meta.url)
-    const pdfjsDir = dirname(require.resolve('pdfjs-dist/package.json'))
-    const standardFontDataUrl = join(pdfjsDir, 'standard_fonts') + '/'
-
     const data = new Uint8Array(readFileSync(pdfPath))
-    const doc = await pdfjs.getDocument({ data, standardFontDataUrl, useSystemFonts: false })
-      .promise
+    const doc = await openPdfDocument(data)
     const samplePages = Math.min(3, doc.numPages)
 
     let totalText = ''

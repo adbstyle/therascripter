@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from 'fs'
-import { createRequire } from 'module'
-import { dirname, join } from 'path'
+import { join } from 'path'
 import type { Task } from '../../shared/types'
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
 import type { TextContent } from 'pdfjs-dist/types/src/display/api'
@@ -11,6 +10,7 @@ import { getDatabase, getDataDir } from '../db/connection'
 import { buildPDFTranscript } from '../utils/pdf-transcript-builder'
 import { writeFileAtomic } from '../utils/file-ops'
 import { abortable } from '../utils/abortable'
+import { openPdfDocument } from '../utils/pdfjs-loader'
 
 /** Minimum characters on a page to consider it a text page (not scanned) */
 const TEXT_PAGE_THRESHOLD = 50
@@ -30,14 +30,6 @@ export class PDFExtractionExecutor implements TaskExecutor {
 
     onProgress(0.05)
 
-    // Load pdfjs-dist (dynamic import for ESM compatibility)
-    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
-
-    // Resolve standard font data path for correct text extraction
-    const require = createRequire(import.meta.url)
-    const pdfjsDir = dirname(require.resolve('pdfjs-dist/package.json'))
-    const standardFontDataUrl = join(pdfjsDir, 'standard_fonts') + '/'
-
     const data = new Uint8Array(readFileSync(session.pdfPath))
 
     // abortable(): ein in pdf.js hängender Await settlet trotzdem, wenn der
@@ -45,10 +37,7 @@ export class PDFExtractionExecutor implements TaskExecutor {
     // Single-Slot-Queue permanent (einziger Ausweg war App-Quit).
     let doc: PDFDocumentProxy
     try {
-      doc = await abortable<PDFDocumentProxy>(
-        pdfjs.getDocument({ data, standardFontDataUrl, useSystemFonts: false }).promise,
-        signal
-      )
+      doc = await abortable<PDFDocumentProxy>(openPdfDocument(data), signal)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.includes('password') || msg.includes('encrypted')) {
