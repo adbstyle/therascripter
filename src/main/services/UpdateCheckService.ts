@@ -394,7 +394,9 @@ async function runUpdates(
       state: 'verifying',
       modelId: update.id
     } satisfies ModelDownloadStatus)
-    const valid = await verifyFileSha256(downloadTarget, update.sha256)
+    const valid = downloadResult.sha256
+      ? downloadResult.sha256 === update.sha256
+      : await verifyFileSha256(downloadTarget, update.sha256)
     if (!valid) {
       try {
         rmSync(downloadTarget)

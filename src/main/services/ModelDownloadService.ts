@@ -347,10 +347,14 @@ export async function startModelDownload(): Promise<void> {
       return
     }
 
-    // SHA-256 verification (skip if hash not configured)
+    // SHA-256 verification (skip if hash not configured). Bevorzugt den beim
+    // Streamen mitberechneten Hash — erspart den zweiten Full-Read; Fallback
+    // (Resume-Downloads) liest die Datei nochmal.
     if (model.sha256) {
       sendProgress({ state: 'verifying', modelId: model.id })
-      const valid = await verifyFileSha256(targetPath, model.sha256)
+      const valid = result.sha256
+        ? result.sha256 === model.sha256
+        : await verifyFileSha256(targetPath, model.sha256)
       if (!valid) {
         try {
           unlinkSync(targetPath)
@@ -492,7 +496,9 @@ export async function downloadSingleModel(id: string): Promise<void> {
   }
 
   sendProgress({ state: 'verifying', modelId: def.id })
-  const valid = await verifyFileSha256(targetPath, def.sha256)
+  const valid = result.sha256
+    ? result.sha256 === def.sha256
+    : await verifyFileSha256(targetPath, def.sha256)
   if (!valid) {
     try {
       unlinkSync(targetPath)

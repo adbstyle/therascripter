@@ -20,6 +20,13 @@ export interface DownloadProgress {
 export interface DownloadResult {
   success: boolean
   error?: string
+  /**
+   * SHA-256 des heruntergeladenen Inhalts, beim Streamen mitberechnet —
+   * erspart den zweiten Full-Read von verifyFileSha256 (2.4 GB beim
+   * First-Launch). Undefined bei Resume (Hash-State des Partials unbekannt)
+   * — Caller fällt dann auf verifyFileSha256 zurück.
+   */
+  sha256?: string
 }
 
 const MAX_REDIRECTS = 5
@@ -98,11 +105,23 @@ export function downloadFile(
       const contentLength = parseInt(response.headers['content-length'] ?? '0', 10)
       const totalBytes = existingBytes + contentLength
 
+      const isResume = existingBytes > 0 && response.statusCode === 206
+      // Hash beim Streamen mitberechnen — nur bei Fresh-Downloads; bei Resume
+      // ist der Hash-State des bestehenden Partials unbekannt.
+      const streamHash = isResume ? null : createHash('sha256')
+
       const fileStream = createWriteStream(partialPath, {
-        flags: existingBytes > 0 && response.statusCode === 206 ? 'a' : 'w'
+        flags: isResume ? 'a' : 'w'
       })
 
       let downloaded = existingBytes
+
+      // Throttle auf ~4 Hz (Muster von TaskQueueService): ungedrosselt
+      // feuerte onProgress pro HTTP-Chunk — ~37 000 Events für den 2.4-GB-
+      // First-Launch-Download, jeder davon ein IPC-Send + Renderer-Rerender.
+      // Der finale Zustand (downloaded === totalBytes) kommt immer durch.
+      const PROGRESS_THROTTLE_MS = 250
+      let lastProgressEmit = 0
 
       response.on('data', (chunk: Buffer) => {
         if (abortSignal?.aborted) {
@@ -113,11 +132,17 @@ export function downloadFile(
         }
 
         downloaded += chunk.length
-        onProgress({
-          downloadedBytes: downloaded,
-          totalBytes,
-          percent: totalBytes > 0 ? Math.round((downloaded / totalBytes) * 100) : 0
-        })
+        streamHash?.update(chunk)
+        const now = Date.now()
+        const isFinal = totalBytes > 0 && downloaded >= totalBytes
+        if (isFinal || now - lastProgressEmit >= PROGRESS_THROTTLE_MS) {
+          lastProgressEmit = now
+          onProgress({
+            downloadedBytes: downloaded,
+            totalBytes,
+            percent: totalBytes > 0 ? Math.round((downloaded / totalBytes) * 100) : 0
+          })
+        }
       })
 
       response.pipe(fileStream)
@@ -133,7 +158,7 @@ export function downloadFile(
         // startModelDownload hing für immer.
         try {
           renameSync(partialPath, targetPath)
-          settle({ success: true })
+          settle({ success: true, sha256: streamHash?.digest('hex') })
         } catch (err) {
           settle({
             success: false,

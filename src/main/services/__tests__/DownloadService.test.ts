@@ -156,6 +156,35 @@ describe('DownloadService', () => {
     expect(existsSync(target)).toBe(false)
   })
 
+  it('throttles onProgress to ~4 Hz while always emitting the final state', async () => {
+    // Ungedrosselt feuerte onProgress pro HTTP-Chunk (~37 000 IPC-Events für
+    // 2.4 GB First-Launch-Download) — jeder Event weckt den Renderer.
+    server.on('request', (_req, res) => {
+      res.writeHead(200, { 'content-length': String(PAYLOAD.length) })
+      // 20 Chunks à 500 Bytes über ~600 ms
+      let sent = 0
+      const timer = setInterval(() => {
+        res.write(PAYLOAD.subarray(sent, sent + 500))
+        sent += 500
+        if (sent >= PAYLOAD.length) {
+          clearInterval(timer)
+          res.end()
+        }
+      }, 30)
+    })
+    const target = join(dir, 'file.bin')
+    const calls: Array<{ downloadedBytes: number; percent: number }> = []
+
+    const result = await downloadFile(`${baseUrl}/file.bin`, target, (p) => calls.push(p))
+
+    expect(result.success).toBe(true)
+    // ~600 ms Laufzeit bei 4 Hz → maximal eine Handvoll Events (20 ungedrosselt)
+    expect(calls.length).toBeLessThan(8)
+    // Der finale Zustand muss immer ankommen (Progressbar endet bei 100 %)
+    expect(calls[calls.length - 1].downloadedBytes).toBe(PAYLOAD.length)
+    expect(calls[calls.length - 1].percent).toBe(100)
+  })
+
   describe('verifyFileSha256', () => {
     it('accepts a matching hash and rejects a wrong one', async () => {
       const file = join(dir, 'hashme.bin')
@@ -164,6 +193,37 @@ describe('DownloadService', () => {
 
       await expect(verifyFileSha256(file, expected)).resolves.toBe(true)
       await expect(verifyFileSha256(file, '0'.repeat(64))).resolves.toBe(false)
+    })
+  })
+
+  describe('streaming SHA-256', () => {
+    it('returns the hash computed while downloading (no second full read)', async () => {
+      server.on('request', (_req, res) => {
+        res.writeHead(200, { 'content-length': String(PAYLOAD.length) })
+        res.end(PAYLOAD)
+      })
+      const expected = createHash('sha256').update(PAYLOAD).digest('hex')
+
+      const result = await downloadFile(`${baseUrl}/f.bin`, join(dir, 'f.bin'), () => {})
+
+      expect(result.success).toBe(true)
+      expect(result.sha256).toBe(expected)
+    })
+
+    it('returns no hash on a resumed download (partial state unknown → caller must re-read)', async () => {
+      server.on('request', (req, res) => {
+        const start = parseInt(req.headers.range?.replace('bytes=', '').replace('-', '') ?? '0', 10)
+        const rest = PAYLOAD.subarray(start)
+        res.writeHead(206, { 'content-length': String(rest.length) })
+        res.end(rest)
+      })
+      const target = join(dir, 'f.bin')
+      writeFileSync(target + '.partial', PAYLOAD.subarray(0, 4_000))
+
+      const result = await downloadFile(`${baseUrl}/f.bin`, target, () => {})
+
+      expect(result.success).toBe(true)
+      expect(result.sha256).toBeUndefined()
     })
   })
 })
