@@ -67,6 +67,46 @@ describe('TaskQueueService', () => {
     db.close()
   })
 
+  describe('shutdown', () => {
+    it('aborts the running executor, waits for settle, and resets the task to pending', async () => {
+      // Executor, der bis zum Abort hängt — simuliert einen laufenden
+      // ML-Subprozess beim App-Quit.
+      const hangingExecutor: TaskExecutor = {
+        execute(_task, _onProgress, signal) {
+          return new Promise((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+          })
+        }
+      }
+      queue.registerExecutor('diarization', hangingExecutor)
+      queue.enqueuePipeline(sessionId, 'audio')
+
+      // Warten bis der Task läuft
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(queue.isProcessing()).toBe(true)
+
+      await queue.shutdown(2_000)
+
+      expect(queue.isProcessing()).toBe(false)
+
+      // Shutdown-Abort ist KEIN Fehler: der Task muss auf pending zurück,
+      // damit der Boot-Recovery ihn fortsetzt — nicht auf failed (das würde
+      // dem User nach jedem Quit einen Retry-Button zeigen).
+      const tasks = queue.getSessionTasks(sessionId)
+      const diarization = tasks.find((t) => t.type === 'diarization')
+      expect(diarization?.status).toBe('pending')
+
+      const session = sessionRepo.findById(sessionId)
+      expect(session?.status).not.toBe('error')
+    })
+
+    it('resolves quickly when nothing is running', async () => {
+      const start = Date.now()
+      await queue.shutdown(2_000)
+      expect(Date.now() - start).toBeLessThan(500)
+    })
+  })
+
   describe('enqueuePipeline', () => {
     it('enqueues audio pipeline tasks in correct order', () => {
       const tasks = queue.enqueuePipeline(sessionId, 'audio')

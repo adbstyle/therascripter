@@ -37,6 +37,7 @@ import {
   checkForUpdates,
   invalidateCachedAppUpdateIfNeeded
 } from './services/UpdateCheckService'
+import { sweepStaleArtifactsAtStartup } from './services/StartupCleanupService'
 import { WhisperService } from './ml/WhisperService'
 import { PyannoteSidecar } from './ml/PyannoteSidecar'
 import { AlignmentService } from './ml/AlignmentService'
@@ -149,6 +150,34 @@ function setupCSP(): void {
   })
 }
 
+// Last-Resort-Handler: mehrere Main-Throws passieren in Event-Callbacks
+// außerhalb von IPC-Invokes (Stream-finish-Handler, Recording-Writes) — ohne
+// diese Handler crasht Electron kommentarlos und die DB bleibt ohne
+// WAL-Checkpoint zurück.
+process.on('uncaughtException', (error) => {
+  console.error('[Main] Uncaught exception:', error)
+  try {
+    closeDatabase()
+  } catch {
+    // DB war ggf. nie offen
+  }
+  try {
+    dialog.showErrorBox(
+      'Unerwarteter Fehler',
+      `Therascript ist auf einen unerwarteten Fehler gestoßen und wird beendet.\n\n${error.message}`
+    )
+  } catch {
+    // Dialog kann vor app.whenReady fehlschlagen
+  }
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (reason) => {
+  // Nur loggen — eine unbehandelte Rejection ist kein Grund, die App (und
+  // damit ggf. eine laufende Aufnahme) zu beenden.
+  console.error('[Main] Unhandled rejection:', reason)
+})
+
 app.whenReady().then(() => {
   try {
     initDatabase()
@@ -184,6 +213,11 @@ app.whenReady().then(() => {
 
   // Clean up any incomplete model updates from a previous crashed update
   cleanupIncompleteUpdates()
+
+  // PHI-Hygiene: gestitchte Speech-WAVs, llama-Prompt-Dateien und verwaiste
+  // writeFileAtomic-Tmp-Dateien wegräumen, die ein harter Crash hinterlassen
+  // hat (das finally-Cleanup der Services lief dann nie).
+  sweepStaleArtifactsAtStartup()
 
   // Issue #84 / Story C — verify the invariant that every active-model slot
   // either points at an installed catalog model or is null. Heals stale slots
@@ -333,19 +367,30 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
+// Geordneter Shutdown: den laufenden ML-Subprozess abbrechen und auf das
+// Settle des Executors warten, BEVOR die DB geschlossen wird. Vorher
+// überlebten whisper/python/llama den App-Exit (reparented, nie gekillt)
+// und der Executor schrieb nach closeDatabase() in eine geschlossene DB.
+let quitCleanupDone = false
+app.on('before-quit', (event) => {
   isQuitting = true
-  cleanupRecordingOnQuit()
-  stopAutoDeletion()
-  try {
-    getTaskQueue().stop()
-  } catch {
-    // TaskQueue may not have been initialized
-  }
-  try {
-    getTray().destroy()
-  } catch {
-    // Tray may not have been initialized
-  }
-  closeDatabase()
+  if (quitCleanupDone) return
+  event.preventDefault()
+  void (async () => {
+    cleanupRecordingOnQuit()
+    stopAutoDeletion()
+    try {
+      await getTaskQueue().shutdown(8_000)
+    } catch {
+      // TaskQueue may not have been initialized
+    }
+    try {
+      getTray().destroy()
+    } catch {
+      // Tray may not have been initialized
+    }
+    closeDatabase()
+    quitCleanupDone = true
+    app.quit()
+  })()
 })

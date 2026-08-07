@@ -302,6 +302,23 @@ export class TaskQueueService {
     this.stopPeriodicRecovery()
   }
 
+  /**
+   * Geordneter Shutdown für before-quit: stoppt die Queue, abortet den
+   * laufenden Executor (killt damit den ML-Subprozess über runSubprocess)
+   * und wartet bounded, bis processNext gesettelt hat — erst danach darf
+   * die DB geschlossen werden. Vorher überlebten whisper/python/llama den
+   * App-Exit und der Executor schrieb in eine bereits geschlossene DB.
+   */
+  async shutdown(timeoutMs = 8_000): Promise<void> {
+    this.shouldStop = true
+    this.stopPeriodicRecovery()
+    this.runningController?.controller.abort()
+    const deadline = Date.now() + timeoutMs
+    while (this.processing && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+  }
+
   isProcessing(): boolean {
     return this.processing
   }
@@ -440,6 +457,25 @@ export class TaskQueueService {
         taskType: task.type
       })
     } catch (error) {
+      // Shutdown-Abort ist kein Fehler: Task zurück auf pending, damit der
+      // nächste Start ihn nahtlos fortsetzt. failed + session:error würde
+      // dem User nach jedem Quit-mit-laufendem-Task einen Retry zeigen.
+      if (this.shouldStop && controller.signal.aborted) {
+        try {
+          this.repository.update(task.id, {
+            status: 'pending',
+            progress: 0,
+            startedAt: null
+          })
+        } catch (resetErr) {
+          console.error('[TaskQueue] Shutdown-Reset des Tasks fehlgeschlagen:', resetErr)
+        }
+        console.log(
+          `[TaskQueue] Task ${task.type} für Session ${task.sessionId} beim Shutdown auf pending zurückgesetzt`
+        )
+        return
+      }
+
       const errorMessage = controller.signal.aborted
         ? 'Verarbeitung reagiert nicht mehr'
         : error instanceof Error
