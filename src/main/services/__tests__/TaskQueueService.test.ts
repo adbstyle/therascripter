@@ -154,6 +154,41 @@ describe('TaskQueueService', () => {
     })
   })
 
+  describe('recoverOrphanedSessions', () => {
+    it('marks processing sessions without pending/running tasks as error', () => {
+      // Orphan-Szenario: Session hängt in 'processing', aber alle Tasks sind
+      // terminal (z. B. Crash zwischen Task-Abschluss und Status-Update).
+      // Die beforeEach-Session bekommt Tasks, damit nur der Orphan zählt.
+      queue.enqueuePipeline(sessionId, 'audio')
+      const orphan = sessionRepo.create({ title: 'Orphan', type: 'audio', status: 'processing' })
+
+      const recovered = queue.recoverOrphanedSessions()
+
+      expect(recovered).toBe(1)
+      const session = sessionRepo.findById(orphan.id)
+      expect(session?.status).toBe('error')
+      expect(session?.errorMessage).toContain('unerwartet abgebrochen')
+    })
+
+    it('leaves sessions with pending tasks and non-pipeline statuses alone', () => {
+      // sessionId (beforeEach) ist 'processing' — bekommt pending Tasks
+      queue.enqueuePipeline(sessionId, 'audio')
+      const reviewSession = sessionRepo.create({ title: 'Done', type: 'audio', status: 'review' })
+      const recordingSession = sessionRepo.create({
+        title: 'Live',
+        type: 'audio',
+        status: 'recording'
+      })
+
+      const recovered = queue.recoverOrphanedSessions()
+
+      expect(recovered).toBe(0)
+      expect(sessionRepo.findById(sessionId)?.status).toBe('processing')
+      expect(sessionRepo.findById(reviewSession.id)?.status).toBe('review')
+      expect(sessionRepo.findById(recordingSession.id)?.status).toBe('recording')
+    })
+  })
+
   describe('recoverStuckTasks', () => {
     it('resets running tasks to pending', () => {
       const tasks = queue.enqueuePipeline(sessionId, 'audio')
