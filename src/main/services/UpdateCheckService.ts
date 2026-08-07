@@ -1,5 +1,5 @@
 import { app, BrowserWindow } from 'electron'
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statfsSync } from 'fs'
 import { join } from 'path'
 import { get as httpsGet } from 'https'
 import { getSettings } from './SettingsService'
@@ -13,6 +13,7 @@ import {
 import { sendToRenderer } from '../utils/ipc-helpers'
 import type { ModelDownloadStatus } from '../../shared/types/IpcApi'
 import type { PendingModelUpdate, AppUpdateStatus, CheckResult } from '../../shared/types/ModelUpdate'
+import { getTaskQueue } from './TaskQueueService'
 import { z } from 'zod'
 
 const MANIFEST_URL = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/manifest.json'
@@ -284,6 +285,59 @@ export async function executeUpdates(): Promise<void> {
   mkdirSync(backupDir, { recursive: true })
 
   const overallTotal = updates.reduce((sum, u) => sum + u.sizeBytes, 0)
+
+  // Disk-Precheck: Download (staging) + Backup der alten Version brauchen
+  // kurzzeitig ~2× die Update-Größe. Vorher lief der Download bis zum
+  // ENOSPC-Fehler mitten im Swap.
+  try {
+    const stats = statfsSync(modelsDir)
+    const availableBytes = stats.bavail * stats.bsize
+    const requiredBytes = overallTotal * 2
+    if (availableBytes < requiredBytes) {
+      const requiredGb = (requiredBytes / 1024 ** 3).toFixed(1)
+      sendToRenderer(
+        'modelUpdate:downloadError',
+        `Nicht genügend freier Speicherplatz für das Update (benötigt ca. ${requiredGb} GB). ` +
+          'Bitte schaffen Sie Platz und versuchen Sie es erneut.'
+      )
+      return
+    }
+  } catch (err) {
+    // Precheck ist best-effort — bei statfs-Fehlern normal fortfahren
+    console.warn('[UpdateCheck] Disk-Precheck fehlgeschlagen:', err)
+  }
+
+  // Queue-Quiescence: nach dem Relaunch resumed die TaskQueue recovered
+  // Tasks, während wir hier Modellfiles swappen — renameSync konnte das
+  // ASR-Modell unter einem laufenden whisper-Prozess wegtauschen.
+  // shutdown() abortet den laufenden Task (er geht zurück auf pending und
+  // resumed nach dem Swap mit dem NEUEN Modell); finally startet die Queue
+  // auf jedem Ausgang wieder.
+  try {
+    await getTaskQueue().shutdown(15_000)
+  } catch {
+    // TaskQueue ggf. nicht initialisiert (z. B. im ModelUpdateScreen-Boot)
+  }
+
+  try {
+    await runUpdates(updates, stagingDir, backupDir, modelsDir, overallTotal)
+  } finally {
+    try {
+      getTaskQueue().start()
+    } catch {
+      // TaskQueue ggf. nicht initialisiert
+    }
+  }
+}
+
+async function runUpdates(
+  updates: PendingModelUpdate[],
+  stagingDir: string,
+  backupDir: string,
+  modelsDir: string,
+  overallTotal: number
+): Promise<void> {
+  const settings = getSettings()
   let overallDownloaded = 0
 
   for (const update of updates) {
