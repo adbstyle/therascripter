@@ -103,6 +103,18 @@ def main() -> None:
 
     report_progress(10)
 
+    # MPS wie in diarize.py: der 550M-Parameter-Encoder auf 4 CPU-Threads
+    # (OMP_NUM_THREADS-Pin) war der langsamste Pipeline-Step. flair liest
+    # flair.device beim Modell-Load.
+    try:
+        import torch
+
+        if torch.backends.mps.is_available():
+            flair.device = torch.device("mps")
+            print("MPS-Backend aktiv (Apple Silicon GPU)", file=sys.stderr)
+    except Exception as e:
+        print(f"MPS nicht verfügbar, nutze CPU: {e}", file=sys.stderr)
+
     # Load NER model
     try:
         # flair caches models in ~/.flair/ by default
@@ -119,33 +131,44 @@ def main() -> None:
 
     report_progress(25)
 
-    # Process segments
+    # Process segments — gebatcht statt Satz-für-Satz: predict() über eine
+    # Liste nutzt mini_batch_size (flair sortiert intern nach Länge für
+    # effizientes Padding). Vorher war jedes Segment ein eigener Forward-Pass
+    # durch XLM-RoBERTa-large — bei hunderten Segmenten pro Stunde Audio der
+    # dominante Kostenfaktor dieses Steps (~3-5×).
     all_entities = []
     total = len(segments)
+    BATCH_SIZE = 32
 
     try:
-        for idx, segment in enumerate(segments):
-            text = segment.get("text", "")
-            if not text.strip():
-                continue
+        # (sentence, original_segment_index) — leere Segmente überspringen,
+        # aber den Original-Index für segmentIndex-Mapping behalten
+        indexed_sentences = [
+            (Sentence(text), idx)
+            for idx, segment in enumerate(segments)
+            if (text := segment.get("text", "")).strip()
+        ]
 
-            sentence = Sentence(text)
-            tagger.predict(sentence)
+        for batch_start in range(0, len(indexed_sentences), BATCH_SIZE):
+            batch = indexed_sentences[batch_start : batch_start + BATCH_SIZE]
+            tagger.predict([s for s, _ in batch], mini_batch_size=BATCH_SIZE)
 
-            for entity in sentence.get_spans("ner"):
-                all_entities.append(
-                    {
-                        "text": entity.text,
-                        "type": entity.get_label("ner").value,
-                        "segmentIndex": idx,
-                        "charStart": entity.start_position,
-                        "charEnd": entity.end_position,
-                        "confidence": round(entity.get_label("ner").score, 4),
-                    }
-                )
+            for sentence, idx in batch:
+                for entity in sentence.get_spans("ner"):
+                    all_entities.append(
+                        {
+                            "text": entity.text,
+                            "type": entity.get_label("ner").value,
+                            "segmentIndex": idx,
+                            "charStart": entity.start_position,
+                            "charEnd": entity.end_position,
+                            "confidence": round(entity.get_label("ner").score, 4),
+                        }
+                    )
 
-            # Report progress: 25-95% range mapped to segment processing
-            pct = 25 + int((idx + 1) / total * 70)
+            # Report progress: 25-95% range mapped to batch processing
+            done = min(batch_start + BATCH_SIZE, len(indexed_sentences))
+            pct = 25 + int(done / max(1, len(indexed_sentences)) * 70)
             report_progress(min(pct, 95))
 
     except Exception as e:
