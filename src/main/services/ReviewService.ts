@@ -1,6 +1,7 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 import type Database from 'better-sqlite3'
 import { SessionService } from './SessionService'
+import { writeFileAtomic } from '../utils/file-ops'
 import type { AudioStats, EntityMap, Session } from '../../shared/types'
 import type { ReviewData } from '../../shared/types/IpcApi'
 import type { TipTapDocument } from '../../shared/types/TipTapDocument'
@@ -50,8 +51,10 @@ export class ReviewService {
       throw new Error(`Session ${sessionId} has no anonymized path`)
     }
 
-    // Write TipTap document to filesystem
-    writeFileSync(session.anonymizedPath, JSON.stringify(document, null, 2), 'utf-8')
+    // Atomar (tmp + fsync + rename): der Autosave schreibt das editierte
+    // Transkript des Users — ein Crash mitten im Write war der schlimmste
+    // Datenverlust-Pfad der App (load wirft danach, Session unbrauchbar).
+    writeFileAtomic(session.anonymizedPath, JSON.stringify(document, null, 2))
 
     // Update entity map, word count, and anonymization count in database
     const wordCount = countWords(document)
