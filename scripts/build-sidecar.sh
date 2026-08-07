@@ -194,6 +194,18 @@ rm -rf "$SITE_PACKAGES_DIR/pkg_resources"
 # CPython C headers — extension building only.
 rm -rf "$STANDALONE_DIR/include"
 
+# Runtime-verifiziert ungenutzte Transitiv-Pakete (~58 MB): weder beim
+# Import noch bei echter Inferenz geladen (Gate: diarize.py mit Pyannote-
+# Modell-Load + ner_service.py mit flair-Inferenz auf realem Fixture, nach
+# dem Entfernen). ACHTUNG: networkx sieht auch ungenutzt aus (kein
+# Import-Time-Load), wird aber von pyannote LAZY beim Pipeline-Load
+# importiert — NICHT entfernen. Der Verify-Step unten prüft nur Imports,
+# keine Lazy-Loads: Erweiterungen dieser Liste brauchen denselben
+# End-to-End-Inferenz-Test.
+rm -rf "$SITE_PACKAGES_DIR/grpc" "$SITE_PACKAGES_DIR"/grpcio-*.dist-info
+rm -rf "$SITE_PACKAGES_DIR/fontTools" "$SITE_PACKAGES_DIR"/fonttools-*.dist-info
+rm -rf "$SITE_PACKAGES_DIR/sqlalchemy" "$SITE_PACKAGES_DIR"/SQLAlchemy-*.dist-info "$SITE_PACKAGES_DIR"/sqlalchemy-*.dist-info
+
 # Runtime dist-infos (~9 MB) are deliberately KEPT: several packages resolve
 # their version via importlib.metadata at runtime.
 
