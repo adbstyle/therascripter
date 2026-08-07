@@ -127,6 +127,15 @@ fi
 # asar hygiene: only meaningful after `npm run package`. The old blacklist
 # leaked swift_cli/.build (271 MB), website/ and the .env (R2 credentials!)
 # into the shipped archive — never again.
+#
+# WICHTIG — Grenze dieses Checks: hier stehen nur SECRET-/BALLAST-Leaks
+# (Dinge, die NICHT ins Archiv gehören). Eine Präsenzliste über Top-Level-
+# Ordner kann NICHT prüfen, ob jede Runtime-Dependency auflösbar ist — genau
+# daran ist der PDF-Import gestorben (fehlendes @napi-rs/canvas ⇒ pdfjs nicht
+# importierbar), während dieser Check grün war. Diese Eigenschaft prüft
+# `scripts/verify-asar-resolves.mjs` (wird unten aufgerufen). Absichtlich
+# NICHT auf der forbidden-Liste: @napi-rs — ob es fehlen DARF, entscheidet
+# das Resolve-Gate samt dokumentierter Allowlist, nicht ein Pfad-Verbot hier.
 echo ""
 echo "=== app.asar (if packaged) ==="
 ASAR="$REPO_ROOT/dist/mac-arm64/Therascript.app/Contents/Resources/app.asar"
@@ -135,7 +144,7 @@ if [ -f "$ASAR" ]; then
   ASAR_FAIL=0
   # Herestrings statt `echo | grep -q`: grep -q beendet beim ersten Match und
   # schickt echo unter pipefail ein SIGPIPE — der Check würde flaky failen.
-  for forbidden in '/swift_cli' '/.env' '/website' '/src' '/node_modules/lucide-react' '/node_modules/@tiptap' '/node_modules/@napi-rs'; do
+  for forbidden in '/swift_cli' '/.env' '/website' '/src'; do
     if grep -q "^$forbidden" <<<"$asar_list"; then
       echo "FAIL [asar]: forbidden path in app.asar: $forbidden" >&2
       ASAR_FAIL=1
@@ -148,7 +157,16 @@ if [ -f "$ASAR" ]; then
     fi
   done
   if [ $ASAR_FAIL -eq 0 ]; then
-    echo "ok   [asar]: no leaked paths, all runtime deps present"
+    echo "ok   [asar]: no secret/ballast leaks, all top-level runtime deps present"
+  else
+    FAIL=1
+  fi
+
+  # Der eigentliche Beweis: löst jeder Runtime-Specifier im Bundle auf?
+  echo ""
+  echo "=== asar resolve gate ==="
+  if node "$SCRIPT_DIR/verify-asar-resolves.mjs" "$ASAR"; then
+    :
   else
     FAIL=1
   fi
