@@ -120,9 +120,13 @@ describe('SessionRepository', () => {
       // IPC-Payload skalierten mit der Library-Größe. Detail-Reads
       // (findById via review:load) liefern sie weiterhin.
       const session = repo.create({ title: 'T', type: 'audio' })
-      repo.update(session.id, { entityMap: { 'PERSON 1': 'Meier' } })
+      repo.update(session.id, {
+        entityMap: {
+          e1: { original: 'Meier', placeholder: '[PERSON 1]', type: 'PERSON', source: 'ner' }
+        }
+      })
 
-      expect(repo.findById(session.id)?.entityMap).toEqual({ 'PERSON 1': 'Meier' })
+      expect(repo.findById(session.id)?.entityMap?.e1?.original).toBe('Meier')
       expect(repo.findAll()[0].entityMap).toBeNull()
     })
   })
