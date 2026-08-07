@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync } from 'fs'
+import { open, stat } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { app } from 'electron'
 import type { SpeakerSegment, StitchMap, StitchSegment } from '../../shared/types'
-import { runSubprocess } from '../utils/subprocess'
+import { createWavHeader } from './AudioFileService'
 
 export const DEFAULT_PADDING_SEC = 0.2
 
@@ -74,83 +74,84 @@ export function computeStitchMap(
   }
 }
 
-function getFfmpegPath(): string {
-  if (app.isPackaged) {
-    return join(process.resourcesPath, 'bin', 'ffmpeg')
-  }
-  return join(app.getAppPath(), 'resources', 'bin', 'ffmpeg')
-}
-
 /**
- * Build the ffmpeg command-line args to extract and concatenate the speech
- * segments listed in `stitchMap`. Uses input-seek (-ss/-to before -i) for
- * fast seeking on PCM WAV input. Filter-complex `concat` with audio-only
- * (n=N:v=0:a=1) merges the segments. Output is forced to PCM 16-bit 48kHz
- * mono — what whisper-cli expects.
+ * Concatenate the PCM byte ranges described by `stitchMap` into a new WAV.
+ *
+ * Ersetzt den früheren ffmpeg-Subprozess (ein -ss/-to/-i-Triplet pro Segment
+ * + N-Input-concat-Filtergraph): bei hunderten Segmenten hielt ffmpeg
+ * hunderte Demuxer/Decoder offen (EMFILE-Risiko) — für das, was bei
+ * garantiert 48 kHz/16-bit/mono PCM (siehe PyannoteSidecar/WhisperService-
+ * Asserts) reine Byte-Arithmetik ist: Sample-Offset = round(t · 48000),
+ * Byte-Offset = 44 + Offset · 2. Entfernt zugleich das 48-MB-ffmpeg-Binary
+ * aus dem Bundle.
+ *
+ * Async + chunked (1 MiB), damit der Main-Process-Event-Loop während des
+ * Kopierens nicht blockiert. Kooperative Abort-Checks pro Chunk.
  */
-export function buildFfmpegArgs(
+export async function stitchPcmSegments(
   audioPath: string,
   stitchMap: StitchMap,
-  outputPath: string
-): string[] {
-  const args: string[] = ['-y', '-hide_banner', '-loglevel', 'error']
-  for (const seg of stitchMap.segments) {
-    args.push(
-      '-ss',
-      String(seg.originalStart),
-      '-to',
-      String(seg.originalEnd),
-      '-i',
-      audioPath
-    )
+  outputPath: string,
+  signal?: AbortSignal
+): Promise<void> {
+  if (signal?.aborted) {
+    throw new Error('Stitching abgebrochen')
   }
 
-  const n = stitchMap.segments.length
-  const filterParts: string[] = []
-  for (let i = 0; i < n; i++) {
-    filterParts.push(`[${i}:a]`)
-  }
-  const filter = `${filterParts.join('')}concat=n=${n}:v=0:a=1[out]`
-  args.push('-filter_complex', filter, '-map', '[out]')
+  const SAMPLE_RATE = 48000
+  const BYTES_PER_SAMPLE = 2 // 16-bit mono
+  const WAV_HEADER_SIZE = 44
+  const CHUNK_SIZE = 1024 * 1024
 
-  args.push('-ar', '48000', '-ac', '1', '-acodec', 'pcm_s16le', outputPath)
+  const srcStat = await stat(audioPath)
+  const srcSize = srcStat.size
 
-  return args
-}
-
-// PCM-Stitching ist disk-bound und in Sekunden fertig — 5 min ist ein reiner
-// Stall-Fallback (vorher gab es gar keinen Timeout).
-const FFMPEG_TIMEOUT_MS = 300_000
-
-async function runFfmpeg(bin: string, args: string[], signal?: AbortSignal): Promise<void> {
-  // Lifecycle (Pre-Abort-Guard, SIGTERM→SIGKILL-Eskalation, Group-Kill)
-  // zentral in runSubprocess — vorher handgerollt, siehe PR #79 Bug #2.
-  const result = await runSubprocess({
-    bin,
-    args,
-    signal,
-    stdout: 'ignore',
-    timeoutMs: FFMPEG_TIMEOUT_MS
+  // Byte-Ranges berechnen: round() auf Sample-Ebene hält die Offsets
+  // automatisch frame-aligned (2 Bytes pro Sample, mono).
+  const ranges = stitchMap.segments.map((seg) => {
+    const startByte = WAV_HEADER_SIZE + Math.round(seg.originalStart * SAMPLE_RATE) * BYTES_PER_SAMPLE
+    const endByte = WAV_HEADER_SIZE + Math.round(seg.originalEnd * SAMPLE_RATE) * BYTES_PER_SAMPLE
+    const clampedStart = Math.min(Math.max(WAV_HEADER_SIZE, startByte), srcSize)
+    const clampedEnd = Math.min(Math.max(clampedStart, endByte), srcSize)
+    return { start: clampedStart, end: clampedEnd }
   })
-  if (result.aborted) {
-    throw new Error('ffmpeg aborted before completion')
-  }
-  if (result.timedOut) {
-    throw new Error(`ffmpeg timed out after ${Math.round(FFMPEG_TIMEOUT_MS / 1000)}s`)
-  }
-  if (result.code !== 0) {
-    throw new Error(`ffmpeg exited ${result.code}: ${result.stderr}`)
+  const totalBytes = ranges.reduce((sum, r) => sum + (r.end - r.start), 0)
+
+  const src = await open(audioPath, 'r')
+  try {
+    const out = await open(outputPath, 'w')
+    try {
+      await out.write(createWavHeader(totalBytes))
+      const buf = Buffer.allocUnsafe(CHUNK_SIZE)
+      for (const range of ranges) {
+        let pos = range.start
+        while (pos < range.end) {
+          if (signal?.aborted) {
+            throw new Error('Stitching abgebrochen')
+          }
+          const toRead = Math.min(CHUNK_SIZE, range.end - pos)
+          const { bytesRead } = await src.read(buf, 0, toRead, pos)
+          if (bytesRead <= 0) break
+          await out.write(buf, 0, bytesRead)
+          pos += bytesRead
+        }
+      }
+    } finally {
+      await out.close()
+    }
+  } finally {
+    await src.close()
   }
 }
 
 /**
- * Stitch speech segments of `audioPath` into a single WAV using ffmpeg's
- * concat filter. Returns the stitched WAV path + stitch map for timestamp
- * remapping. Caller owns the file (must clean up).
+ * Stitch speech segments of `audioPath` into a single WAV via direct PCM
+ * byte-range concatenation. Returns the stitched WAV path + stitch map for
+ * timestamp remapping. Caller owns the file (must clean up).
  *
  * Precondition: `speech` must contain at least one segment. Callers MUST
  * short-circuit on empty speech before invoking this — whisper-cli crashes
- * on a 0-sample WAV and ffmpeg refuses to emit one.
+ * on a 0-sample WAV.
  */
 export async function stitchSpeechSegments(
   audioPath: string,
@@ -172,8 +173,7 @@ export async function stitchSpeechSegments(
 
   const wavPath = join(dir, `stitched-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`)
 
-  const ffmpegArgs = buildFfmpegArgs(audioPath, stitchMap, wavPath)
-  await runFfmpeg(getFfmpegPath(), ffmpegArgs, signal)
+  await stitchPcmSegments(audioPath, stitchMap, wavPath, signal)
 
   return { wavPath, stitchMap }
 }

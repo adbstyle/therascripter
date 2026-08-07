@@ -2,7 +2,7 @@ import { spawn } from 'child_process'
 import { accessSync, constants } from 'fs'
 
 // Shared subprocess runner for all ML tool invocations (whisper-cli, python
-// sidecar, llama-cli, vision-ocr, ffmpeg). Centralizes the lifecycle handling
+// sidecar, llama-cli, vision-ocr). Centralizes the lifecycle handling
 // that was previously duplicated — subtly differently — across six wrappers:
 //
 // - Pre-aborted-signal guard (addEventListener('abort') does NOT fire for an

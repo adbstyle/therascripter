@@ -174,7 +174,7 @@ export class WhisperService implements TaskExecutor {
 
     // Important: declare stitched BEFORE the try so the finally block can clean
     // up even if stitchSpeechSegments throws after partial-write of the stitched
-    // WAV (e.g. ffmpeg crash mid-encode). Initialize as undefined; assign inside
+    // WAV (e.g. Stitch-Abbruch mid-copy). Initialize as undefined; assign inside
     // the try.
     let stitched: StitchedAudio | undefined
 

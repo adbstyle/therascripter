@@ -27,8 +27,6 @@ extraResources:
     to: llama
     filter:
       - '**/*'
-  - from: resources/bin/ffmpeg
-    to: bin/ffmpeg
   - from: resources/bin/vision-ocr
     to: bin/vision-ocr
   - from: resources/icons
