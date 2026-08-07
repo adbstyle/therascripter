@@ -56,6 +56,9 @@ export class TaskQueueService {
   private repository: TaskRepository
   private sessionService: SessionService
   private executors: Map<TaskType, TaskExecutor>
+  /** Max. Crash-Recoveries pro Task, bevor er als Poison-Task failed (016). */
+  private static readonly MAX_BOOT_RECOVERY_ATTEMPTS = 2
+
   private processing = false
   private shouldStop = false
   private recoveryTimer: ReturnType<typeof setInterval> | null = null
@@ -256,7 +259,40 @@ export class TaskQueueService {
   }
 
   recoverStuckTasks(): number {
-    return this.repository.resetRunningToPending()
+    // Boot-Recovery mit Poison-Erkennung: ein Task, der bereits
+    // MAX_BOOT_RECOVERY_ATTEMPTS mal nach einem Crash zurückgesetzt wurde
+    // und WIEDER als 'running' vorgefunden wird, crasht die App
+    // reproduzierbar (z. B. nativer OOM) — erneutes pending würde eine
+    // endlose Crash-Schleife erzeugen. Sauberer Shutdown zählt nicht:
+    // shutdown() setzt selbst auf pending zurück, ohne attempts zu erhöhen.
+    const running = this.repository.findRunning()
+    for (const task of running) {
+      const attempts = task.attempts + 1
+      if (attempts > TaskQueueService.MAX_BOOT_RECOVERY_ATTEMPTS) {
+        const message =
+          'Dieser Verarbeitungsschritt ist mehrfach unerwartet abgebrochen. ' +
+          'Bitte versuchen Sie es mit "Erneut versuchen" — tritt der Fehler erneut auf, ' +
+          'starten Sie die App neu oder kontaktieren Sie den Support.'
+        this.repository.update(task.id, {
+          status: 'failed',
+          error: message,
+          completedAt: new Date().toISOString(),
+          attempts
+        })
+        this.handleTaskFailure(task, message)
+        console.warn(
+          `[TaskQueue] Task ${task.type} für Session ${task.sessionId} nach ${task.attempts} Boot-Recoveries poisoned`
+        )
+      } else {
+        this.repository.update(task.id, {
+          status: 'pending',
+          startedAt: null,
+          progress: 0,
+          attempts
+        })
+      }
+    }
+    return running.length
   }
 
   /** Find sessions stuck in a processing state with no pending/running tasks and mark as error */

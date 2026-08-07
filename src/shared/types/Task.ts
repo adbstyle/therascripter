@@ -19,6 +19,8 @@ export interface Task {
   createdAt: string
   startedAt: string | null
   completedAt: string | null
+  /** Boot-Recovery-Zähler: wie oft dieser Task nach einem Crash auf pending zurückgesetzt wurde. */
+  attempts: number
 }
 
 export interface CreateTaskInput {
@@ -32,4 +34,5 @@ export interface UpdateTaskInput {
   error?: string | null
   startedAt?: string | null
   completedAt?: string | null
+  attempts?: number
 }

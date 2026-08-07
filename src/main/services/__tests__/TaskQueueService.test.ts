@@ -168,6 +168,52 @@ describe('TaskQueueService', () => {
       const recovered = taskRepo.findById(tasks[0].id)
       expect(recovered?.status).toBe('pending')
     })
+
+    it('poisons a task after 2 boot recoveries instead of crash-looping forever', () => {
+      // Hard-Crash-Szenario (z. B. nativer OOM in pyannote): der identische
+      // Task wird sonst bei jedem Boot erneut auf pending gesetzt und crasht
+      // die App in einer Endlosschleife.
+      const tasks = queue.enqueuePipeline(sessionId, 'audio')
+      const taskId = tasks[0].id
+
+      // Boot-Recovery 1 und 2: Task darf zurück auf pending
+      for (let boot = 1; boot <= 2; boot++) {
+        taskRepo.update(taskId, { status: 'running', startedAt: new Date().toISOString() })
+        queue.recoverStuckTasks()
+        expect(taskRepo.findById(taskId)?.status).toBe('pending')
+      }
+
+      // Boot-Recovery 3: Poison — Task failed, Session error mit Meldung
+      taskRepo.update(taskId, { status: 'running', startedAt: new Date().toISOString() })
+      queue.recoverStuckTasks()
+
+      const poisoned = taskRepo.findById(taskId)
+      expect(poisoned?.status).toBe('failed')
+      expect(poisoned?.error).toContain('mehrfach')
+
+      const session = sessionRepo.findById(sessionId)
+      expect(session?.status).toBe('error')
+      expect(session?.errorMessage).toContain('mehrfach')
+    })
+
+    it('does not count a clean shutdown reset as a recovery attempt', async () => {
+      // shutdown() setzt den laufenden Task selbst auf pending zurück —
+      // beim nächsten Boot ist er nicht 'running' und darf nicht Richtung
+      // Poison-Schwelle zählen.
+      const hangingExecutor: TaskExecutor = {
+        execute(_task, _onProgress, signal) {
+          return new Promise((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+          })
+        }
+      }
+      queue.registerExecutor('diarization', hangingExecutor)
+      const tasks = queue.enqueuePipeline(sessionId, 'audio')
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      await queue.shutdown(2_000)
+
+      expect(taskRepo.findById(tasks[0].id)?.attempts).toBe(0)
+    })
   })
 
   describe('sequential processing', () => {
