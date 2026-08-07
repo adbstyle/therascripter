@@ -159,7 +159,7 @@ SITECUSTOMIZE_EOF
 
 echo "sitecustomize.py installed."
 
-# --- 5. Prune build-time-only weight (~230 MB) ---
+# --- 5. Prune build-time-only + runtime-verifiziert ungenutztes Gewicht (~290 MB) ---
 echo ""
 echo "=== Step 4/6: Pruning build-time-only files ==="
 

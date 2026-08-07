@@ -37,7 +37,11 @@ export interface SubprocessOptions {
   onStderrLine?: (line: string) => void
   /** Grace period between SIGTERM and SIGKILL. Default 5000 ms. */
   killGraceMs?: number
-  /** stderr tail cap. Default 64 KiB. */
+  /**
+   * stderr-Tail-Cap in UTF-16-Code-Units (String.length), Default 64 Ki.
+   * Bei Multi-Byte-Output (Umlaute) weicht die Byte-Größe leicht ab —
+   * als Speicher-Schranke gegen unbounded growth ist das gleichwertig.
+   */
   maxStderrBytes?: number
 }
 

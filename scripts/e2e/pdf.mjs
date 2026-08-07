@@ -90,7 +90,13 @@ while (Date.now() < sumDeadline) {
   if (summary?.text) break
   await new Promise((r) => setTimeout(r, 5000))
 }
-log(summary?.text ? `Summary: "${summary.text.slice(0, 70)}…"` : 'Keine Summary (Skip-Pfad)')
+// Hinweis: llama darf bis 540 s laufen (LLAMA_TIMEOUT_MS) — nach unseren
+// 180 s kann die Summary also auch einfach noch unterwegs sein.
+log(
+  summary?.text
+    ? `Summary: "${summary.text.slice(0, 70)}…"`
+    : 'Keine Summary nach 180 s (läuft evtl. noch, oder Graceful-Skip)'
+)
 
 log('Aufräumen über den regulären Delete-Pfad …')
 const deleted = await evalInApp(`window.api.sessions.delete(${JSON.stringify(sessionId)})`)

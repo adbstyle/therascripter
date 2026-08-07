@@ -2,8 +2,9 @@
 /**
  * Audio-E2E gegen die ECHTE (gepackte) App: synthetisierte deutsche Sprache
  * (zwei say-Stimmen mit Stille-Lücken) wird über die reguläre Recording-IPC
- * (recording:start/data/stop — exakt der Mikrofon-Worklet-Pfad) eingespeist
- * und der komplette Pipeline-Durchlauf verifiziert:
+ * (recording:start/data/stop — derselbe IPC-Vertrag, den der Mikrofon-
+ * Worklet nutzt; der Worklet/getUserMedia selbst wird nicht ausgeführt)
+ * eingespeist und der komplette Pipeline-Durchlauf verifiziert:
  * Diarization → PCM-Stitch → Whisper → Alignment → NER → review.
  *
  * Vorbereitung:

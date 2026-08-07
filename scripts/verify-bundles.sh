@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 #
-# Verify that the whisper and llama bundles under resources/<tool>/ are fully
-# self-contained: no absolute /opt/homebrew references in any Mach-O, all
-# required runtime dependencies present. Intended as a pre-package smoke
-# check; fails fast if the DMG would crash on Macs without Homebrew.
+# Pre-Release-Verifikation über alle Bundle-Bausteine:
+#   1. whisper/llama-Bundles self-contained (keine /opt/homebrew-Refs,
+#      keine Dylib-Duplikate, alle @rpath-Refs auflösbar)
+#   2. Python-Sidecar geprunt (kein __pycache__/torch-include/pip)
+#   3. app.asar (falls gepackt): keine Secret-/Ballast-Leaks, Runtime-Deps
+#      vorhanden, Resolve-Gate via verify-asar-resolves.mjs
 #
 # Usage: ./scripts/verify-bundles.sh
 #
@@ -176,7 +178,7 @@ fi
 
 echo ""
 if [ $FAIL -ne 0 ]; then
-  echo "VERIFY FAILED — DMG would not work on Macs without Homebrew at /opt/homebrew." >&2
+  echo "VERIFY FAILED — mindestens ein Bundle-Check rot (Details oben). Das DMG würde auf Endnutzer-Macs fehlerhaft laufen." >&2
   exit 1
 fi
 echo "VERIFY OK — bundles are self-contained."

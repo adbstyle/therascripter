@@ -292,7 +292,7 @@ export class TaskQueueService {
         })
         this.handleTaskFailure(task, message)
         console.warn(
-          `[TaskQueue] Task ${task.type} für Session ${task.sessionId} nach ${task.attempts} Boot-Recoveries poisoned`
+          `[TaskQueue] Task ${task.type} für Session ${task.sessionId} nach ${attempts} Boot-Recoveries poisoned`
         )
       } else {
         this.repository.update(task.id, {
