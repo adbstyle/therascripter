@@ -1,4 +1,3 @@
-import { spawn } from 'child_process'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
@@ -8,6 +7,7 @@ import type { TaskExecutor } from '../services/task-executors'
 import { SessionService } from '../services/SessionService'
 import { getDatabase, getDataDir } from '../db/connection'
 import { buildPDFTranscript } from '../utils/pdf-transcript-builder'
+import { runSubprocess } from '../utils/subprocess'
 
 /** Timeout per OCR page in milliseconds */
 const PAGE_TIMEOUT_MS = 30_000
@@ -26,6 +26,27 @@ interface VisionOCROutput {
   confidence: number
   language: string
   pageNumber: number
+}
+
+/**
+ * Parse the vision-ocr CLI's JSON stdout. Throws on unparsable output —
+ * previously raw stdout (e.g. a warning banner) was silently accepted as the
+ * page's OCR text and landed in the transcript.
+ */
+export function parseVisionOCROutput(stdout: string, pageNumber: number): string {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(stdout)
+  } catch {
+    throw new Error(
+      `Vision OCR lieferte für Seite ${pageNumber} keine gültige JSON-Ausgabe: ${stdout.slice(0, 200)}`
+    )
+  }
+  const result = parsed as Partial<VisionOCROutput>
+  if (typeof result.text !== 'string') {
+    throw new Error(`Vision OCR Ausgabe für Seite ${pageNumber} enthält kein text-Feld`)
+  }
+  return dehyphenateOCRText(result.text)
 }
 
 export class VisionOCRService implements TaskExecutor {
@@ -103,88 +124,41 @@ export class VisionOCRService implements TaskExecutor {
     onProgress(1)
   }
 
-  private ocrPage(
+  private async ocrPage(
     binaryPath: string,
     pdfPath: string,
     pageNumber: number,
     signal?: AbortSignal
   ): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const args = ['-n', '10', binaryPath, '--pdf', pdfPath, '--page', pageNumber.toString()]
-
-      const proc = spawn('nice', args, {
-        stdio: ['ignore', 'pipe', 'pipe']
+    let result
+    try {
+      result = await runSubprocess({
+        bin: binaryPath,
+        args: ['--pdf', pdfPath, '--page', pageNumber.toString()],
+        nice: 10,
+        timeoutMs: PAGE_TIMEOUT_MS,
+        signal
       })
+    } catch (error) {
+      throw new Error(
+        `Vision OCR konnte nicht gestartet werden: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
 
-      let stdout = ''
-      let stderr = ''
-      let settled = false
-      let killTimer: ReturnType<typeof setTimeout> | null = null
+    if (result.aborted) {
+      throw new Error('Verarbeitung reagiert nicht mehr')
+    }
+    if (result.timedOut) {
+      throw new Error(
+        `OCR für Seite ${pageNumber} abgebrochen: Timeout nach ${Math.round(PAGE_TIMEOUT_MS / 1000)}s`
+      )
+    }
+    if (result.code !== 0) {
+      throw new Error(
+        `Vision OCR Fehler auf Seite ${pageNumber} (Exit ${result.code}): ${result.stderr}`
+      )
+    }
 
-      const timeout = setTimeout(() => {
-        signal?.removeEventListener('abort', onAbort)
-        proc.kill('SIGTERM')
-        settled = true
-        reject(
-          new Error(
-            `OCR für Seite ${pageNumber} abgebrochen: Timeout nach ${Math.round(PAGE_TIMEOUT_MS / 1000)}s`
-          )
-        )
-      }, PAGE_TIMEOUT_MS)
-
-      // Watchdog abort: SIGTERM → 5s grace → SIGKILL
-      const onAbort = (): void => {
-        clearTimeout(timeout)
-        proc.kill('SIGTERM')
-        killTimer = setTimeout(() => {
-          try {
-            proc.kill('SIGKILL')
-          } catch {
-            /* already dead */
-          }
-        }, 5_000)
-        settled = true
-        reject(new Error('Verarbeitung reagiert nicht mehr'))
-      }
-      signal?.addEventListener('abort', onAbort, { once: true })
-
-      proc.stdout?.on('data', (data: Buffer) => {
-        stdout += data.toString()
-      })
-
-      proc.stderr?.on('data', (data: Buffer) => {
-        stderr += data.toString()
-      })
-
-      proc.on('error', (error) => {
-        clearTimeout(timeout)
-        if (killTimer) clearTimeout(killTimer)
-        signal?.removeEventListener('abort', onAbort)
-        if (settled) return
-        settled = true
-        reject(new Error(`Vision OCR konnte nicht gestartet werden: ${error.message}`))
-      })
-
-      proc.on('close', (code) => {
-        clearTimeout(timeout)
-        if (killTimer) clearTimeout(killTimer)
-        signal?.removeEventListener('abort', onAbort)
-
-        if (settled) return
-
-        if (code !== 0) {
-          reject(new Error(`Vision OCR Fehler auf Seite ${pageNumber} (Exit ${code}): ${stderr}`))
-          return
-        }
-
-        try {
-          const result = JSON.parse(stdout) as VisionOCROutput
-          resolve(dehyphenateOCRText(result.text))
-        } catch {
-          // If JSON parsing fails, use raw stdout as text
-          resolve(dehyphenateOCRText(stdout.trim()))
-        }
-      })
-    })
+    return parseVisionOCROutput(result.stdout, pageNumber)
   }
 }
