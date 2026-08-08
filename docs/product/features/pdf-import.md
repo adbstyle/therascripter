@@ -27,6 +27,8 @@ For each selected file, the `import:pdf` IPC handler in `pdf-handlers.ts` perfor
 5. **Pipeline enqueue** -- Calls `taskQueue.enqueuePipeline(sessionId, 'pdf')` to schedule the three processing tasks.
 6. **Session list refresh** -- After all files are imported, the renderer refreshes the session list.
 
+PDF import is also available while an audio recording is running; the imported session then stays in `queued` ("Wartet") until the recording stops, because the task queue is paused for the duration of the recording (see [transcription-pipeline.md](transcription-pipeline.md)).
+
 ### Copy Failure Rollback
 
 If `copyFileSync` fails (e.g. source is on an ejected volume, permission denied, disk full), the handler rolls back immediately:

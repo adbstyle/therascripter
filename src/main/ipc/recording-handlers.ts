@@ -3,12 +3,12 @@ import { getDatabase } from '../db/connection'
 import { SessionService } from '../services/SessionService'
 import { AudioFileService } from '../services/AudioFileService'
 import { getTray } from '../services/TrayService'
-import { setAppMenuRecording } from '../services/AppMenuService'
 import { getTaskQueue } from '../services/TaskQueueService'
 import { RecordingStopSchema, RecordingDataSchema } from '../../shared/validation/recording-schemas'
+import { AUTO_STOP_SECONDS } from '../../shared/constants/recording'
 import { sendToRenderer } from '../utils/ipc-helpers'
 
-const AUTO_STOP_MS = 7200 * 1000 // 2 hours
+const AUTO_STOP_MS = AUTO_STOP_SECONDS * 1000 // 2 hours
 
 const audioFileService = new AudioFileService()
 let durationInterval: ReturnType<typeof setInterval> | null = null
@@ -74,6 +74,15 @@ function stopRecordingInternal(sessionId: string): { durationSeconds: number } {
   // transition the session to 'processing' (see TaskQueueService.executeTask).
   service.updateSession(sessionId, { status: 'queued' })
 
+  // Resume BEFORE enqueue, damit enqueuePipeline's eigenes scheduleNext()
+  // die Verarbeitung sofort starten kann. Deckt alle Stop-Pfade ab
+  // (manuell, Auto-Stop, Tray) — alle laufen durch diese Funktion.
+  try {
+    getTaskQueue().setRecordingPause(false)
+  } catch {
+    // TaskQueue may not be initialized in tests
+  }
+
   // Enqueue ML pipeline tasks for sequential processing
   try {
     getTaskQueue().enqueuePipeline(sessionId, 'audio')
@@ -88,7 +97,6 @@ function stopRecordingInternal(sessionId: string): { durationSeconds: number } {
   } catch {
     // Tray may not be initialized in tests
   }
-  setAppMenuRecording(false)
 
   return { durationSeconds }
 }
@@ -137,6 +145,15 @@ export function registerRecordingHandlers(): void {
     activeSessionId = session.id
     recordingStartTime = Date.now()
 
+    // Queue pausieren: keine neuen ML-Tasks während der Aufnahme.
+    // Nach dem Point-of-no-Return, damit ein Throw bei der Session-
+    // Erstellung keine pausierte Queue ohne Aufnahme hinterlässt.
+    try {
+      getTaskQueue().setRecordingPause(true)
+    } catch {
+      // TaskQueue may not be initialized in tests
+    }
+
     // Start power save blocker (NFR-24)
     startPowerBlocker()
 
@@ -161,7 +178,6 @@ export function registerRecordingHandlers(): void {
     } catch {
       // Tray may not be initialized in tests
     }
-    setAppMenuRecording(true)
 
     return { sessionId: session.id }
   })
@@ -207,6 +223,12 @@ export function cleanupRecordingOnQuit(): void {
     clearAutoStopTimer()
     stopPowerBlocker()
     activeSessionId = null
+    // Defensiv resumen (Pause-State ist in-memory, beim Quit ohnehin weg)
+    try {
+      getTaskQueue().setRecordingPause(false)
+    } catch {
+      // Best effort cleanup on quit
+    }
   }
 }
 

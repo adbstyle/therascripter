@@ -12,10 +12,10 @@ describe('VUMeter', () => {
     expect(meter).toHaveAttribute('aria-valuemax', '100')
   })
 
-  it('renders 16 bars', () => {
+  it('renders 6 bars', () => {
     const { container } = render(<VUMeter level={0.5} />)
-    const bars = container.querySelectorAll('[class*="w-2"]')
-    expect(bars).toHaveLength(16)
+    const bars = container.querySelectorAll('[class*="w-1"]')
+    expect(bars).toHaveLength(6)
   })
 
   it('reflects level in aria-valuenow', () => {
@@ -30,8 +30,8 @@ describe('VUMeter', () => {
 
   it('shows zero level with minimum bar heights', () => {
     const { container } = render(<VUMeter level={0} />)
-    const bars = container.querySelectorAll('[class*="w-2"]')
-    // With level=0, height = max(0.03, 0 * ...) = 0.03, rendered as max(3, 0.03 * 96) = 3px
+    const bars = container.querySelectorAll('[class*="w-1"]')
+    // With level=0, height = max(0.03, 0 * ...) = 0.03, rendered as max(3, 0.03 * 18) = 3px
     bars.forEach((bar) => {
       const height = parseFloat((bar as HTMLElement).style.height)
       expect(height).toBeLessThanOrEqual(4)

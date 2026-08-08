@@ -183,14 +183,20 @@ export function SessionCard({
           >
             {formatCardTimestamp(session.createdAt)}
           </time>
-          <button
-            className="pointer-events-auto absolute -right-1.5 -top-1.5 z-10 rounded p-1.5 text-text-tertiary opacity-0 transition-opacity hover:bg-error-bg hover:text-error-text group-hover:opacity-100 focus-visible:opacity-100"
-            onClick={onDelete}
-            aria-label="Transkription löschen"
-            title="Löschen"
-          >
-            <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-          </button>
+          {/* Kein Löschen für eine laufende Aufnahme — normalerweise rendert
+              SessionDashboard dafür die RecordingSessionCard, aber im kurzen
+              Fenster zwischen Session-Erstellung (main) und isRecording=true
+              (renderer) kann diese Karte den 'recording'-Status zeigen. */}
+          {session.status !== 'recording' && (
+            <button
+              className="pointer-events-auto absolute -right-1.5 -top-1.5 z-10 rounded p-1.5 text-text-tertiary opacity-0 transition-opacity hover:bg-error-bg hover:text-error-text group-hover:opacity-100 focus-visible:opacity-100"
+              onClick={onDelete}
+              aria-label="Transkription löschen"
+              title="Löschen"
+            >
+              <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
 
