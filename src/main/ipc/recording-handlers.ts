@@ -67,20 +67,38 @@ function stopRecordingInternal(sessionId: string): { durationSeconds: number } {
   clearAutoStopTimer()
   stopPowerBlocker()
 
-  const { durationSeconds } = audioFileService.finalizeWavFile(sessionId)
-
-  const service = new SessionService(getDatabase())
-  // Issue #80 DR-5: post-stop status is 'queued'. The first task's start will
-  // transition the session to 'processing' (see TaskQueueService.executeTask).
-  service.updateSession(sessionId, { status: 'queued' })
-
-  // Resume BEFORE enqueue, damit enqueuePipeline's eigenes scheduleNext()
-  // die Verarbeitung sofort starten kann. Deckt alle Stop-Pfade ab
-  // (manuell, Auto-Stop, Tray) — alle laufen durch diese Funktion.
+  let durationSeconds: number
   try {
-    getTaskQueue().setRecordingPause(false)
-  } catch {
-    // TaskQueue may not be initialized in tests
+    ;({ durationSeconds } = audioFileService.finalizeWavFile(sessionId))
+
+    const service = new SessionService(getDatabase())
+    // Issue #80 DR-5: post-stop status is 'queued'. The first task's start will
+    // transition the session to 'processing' (see TaskQueueService.executeTask).
+    service.updateSession(sessionId, { status: 'queued' })
+  } finally {
+    // MUSS auch bei Throw laufen (finalizeWavFile/updateSession können
+    // synchron werfen, z. B. ENOSPC nach einer 2-h-Aufnahme): ohne das
+    // Resume bliebe die GESAMTE Queue bis zum App-Neustart pausiert, und
+    // ohne das Zurücksetzen von activeSessionId wäre keine neue Aufnahme
+    // möglich — Auto-Stop/Tray schlucken den Fehler zusätzlich still.
+    // Die Session selbst bleibt bei einem Throw in 'recording' und wird
+    // beim nächsten Start von recoverCrashedRecordings aufgegriffen.
+    activeSessionId = null
+
+    // Resume BEFORE enqueue, damit enqueuePipeline's eigenes scheduleNext()
+    // die Verarbeitung sofort starten kann. Deckt alle Stop-Pfade ab
+    // (manuell, Auto-Stop, Tray) — alle laufen durch diese Funktion.
+    try {
+      getTaskQueue().setRecordingPause(false)
+    } catch {
+      // TaskQueue may not be initialized in tests
+    }
+
+    try {
+      getTray().setRecordingState(false)
+    } catch {
+      // Tray may not be initialized in tests
+    }
   }
 
   // Enqueue ML pipeline tasks for sequential processing
@@ -88,14 +106,6 @@ function stopRecordingInternal(sessionId: string): { durationSeconds: number } {
     getTaskQueue().enqueuePipeline(sessionId, 'audio')
   } catch {
     // TaskQueue may not be initialized in tests
-  }
-
-  activeSessionId = null
-
-  try {
-    getTray().setRecordingState(false)
-  } catch {
-    // Tray may not be initialized in tests
   }
 
   return { durationSeconds }

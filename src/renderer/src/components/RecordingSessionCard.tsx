@@ -1,3 +1,4 @@
+import { Square } from 'lucide-react'
 import type { Session } from '../../../shared/types'
 import { AUTO_STOP_SECONDS } from '../../../shared/constants/recording'
 import { VUMeter } from './VUMeter'
@@ -60,10 +61,11 @@ export function RecordingSessionCard({
 
         <button
           onClick={live.onStop}
-          className="shrink-0 rounded-md bg-recording px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-recording-hover"
+          className="flex shrink-0 items-center gap-1.5 rounded-md bg-recording px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-recording-hover"
           aria-label="Aufnahme stoppen"
         >
-          &#9632; Aufnahme stoppen
+          <Square className="h-3 w-3 fill-current" strokeWidth={2} aria-hidden />
+          Aufnahme stoppen
         </button>
       </div>
 
