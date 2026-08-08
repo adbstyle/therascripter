@@ -3,7 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-# Bundle layout rationale: see docs/plans/ggml-abi-split.md. whisper.cpp and
+# Bundle layout rationale: see CLAUDE.md gotcha "whisper.cpp und llama.cpp
+# linken gegen inkompatible ggml-Generationen". whisper.cpp and
 # llama.cpp link against incompatible ggml generations, so each toolchain
 # lives in its own self-contained dir; LC_RPATH=@loader_path/../lib in both
 # binaries resolves to the tool-specific lib/ sibling.
@@ -11,7 +12,7 @@ BIN_DIR="$REPO_ROOT/resources/llama/bin"
 LIB_DIR="$REPO_ROOT/resources/llama/lib"
 
 # Migrations-Cleanup: remove the previous shared layout if upgrading from
-# before docs/plans/ggml-abi-split.md. Only deletes llama's share of
+# before the ggml ABI split. Only deletes llama's share of
 # resources/lib (libllama*, libmtmd*, libggml*) and the old llama-cli binary
 # — never touches whisper's bundle, ffmpeg, or vision-ocr.
 rm -f \

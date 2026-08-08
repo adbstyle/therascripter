@@ -3,7 +3,7 @@ import { runSubprocess } from '../subprocess'
 
 // Lifecycle tests use real short-lived processes (sh/sleep) — the whole point
 // is to verify actual kill semantics (SIGTERM → grace → SIGKILL), which mocks
-// cannot prove. See docs/plans: Phase 2 subprocess runner.
+// cannot prove.
 
 describe('runSubprocess', () => {
   it('resolves with stdout and exit code 0 on normal exit', async () => {
