@@ -384,6 +384,12 @@ export async function startModelDownload(): Promise<void> {
 
   // All models downloaded successfully
   getSettings().set('modelsDownloaded', true)
+  // Re-reconcile: the boot reconciler may have cleared a required slot whose
+  // checkPath was missing (v1→v2-NER-Upgrade-Pfad) — the download just made
+  // the model observable again, so the slot is re-promoted NOW instead of at
+  // the next restart. Closes the window in which sessions would record
+  // ner:null provenance and Settings would show the model as inactive.
+  reconcileActiveModels()
   sendProgress({ state: 'complete' })
   abortSignal = null
 }
@@ -793,17 +799,39 @@ export function reconcileActiveModels(): ReadonlyArray<ReconcileRepair> {
   }
 
   if (repairs.length > 0) {
-    const previous = settings.get('reconcileEvents') ?? []
-    const additions: ReconcileEvent[] = repairs.map((r) => ({
-      id: randomUUID(),
-      timestamp: new Date().toISOString(),
-      group: r.group,
-      fromModelId: r.fromModelId,
-      toModelId: r.toModelId,
-      reason: r.reason,
-      status: 'pending'
-    }))
-    settings.set('reconcileEvents', [...previous, ...additions])
+    let events = settings.get('reconcileEvents') ?? []
+    let eventsChanged = false
+    for (const r of repairs) {
+      // Round-trip collapse: this repair exactly inverts an earlier event
+      // (X → null → X, e.g. the v1→v2-NER-Upgrade: boot-reconcile cleared the
+      // slot, the re-download made the model observable again). Net state is
+      // unchanged for the user — drop the stale event instead of stacking a
+      // misleading "Modell entfernt" + "Standard aktiviert" banner pair.
+      const inverseIdx = events.findIndex(
+        (e) => e.group === r.group && e.fromModelId === r.toModelId && e.toModelId === r.fromModelId
+      )
+      if (inverseIdx >= 0) {
+        events = [...events.slice(0, inverseIdx), ...events.slice(inverseIdx + 1)]
+        eventsChanged = true
+        continue
+      }
+      events = [
+        ...events,
+        {
+          id: randomUUID(),
+          timestamp: new Date().toISOString(),
+          group: r.group,
+          fromModelId: r.fromModelId,
+          toModelId: r.toModelId,
+          reason: r.reason,
+          status: 'pending'
+        }
+      ]
+      eventsChanged = true
+    }
+    if (eventsChanged) {
+      settings.set('reconcileEvents', events)
+    }
     for (const r of repairs) {
       console.log(
         `[reconcile] ${r.group}: ${r.fromModelId ?? '<null>'} → ${r.toModelId ?? '<null>'} (${r.reason})`
