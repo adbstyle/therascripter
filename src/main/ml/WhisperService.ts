@@ -22,7 +22,7 @@ import { filterSpecialTokens, mergeSubTokens } from './token-processing'
 import type { WhisperToken } from './token-processing'
 import { stitchSpeechSegments } from '../services/AudioStitchService'
 import type { StitchedAudio } from '../services/AudioStitchService'
-import { remapStitchedTimestamp } from './timestamp-remap'
+import { remapStitchedTimestamp, remapStitchedWordInterval } from './timestamp-remap'
 
 interface WhisperSegment {
   timestamps: { from: string; to: string }
@@ -382,10 +382,13 @@ function remapTranscript(
   map: StitchMap,
   originalDurationSec: number
 ): TranscriptData {
+  // Words are remapped as intervals: independent scalar remapping of start/end
+  // injects elided silence into words that span a stitch seam (see
+  // remapStitchedWordInterval). Segments keep scalar remapping — a sentence
+  // may legitimately span a seam (= pause); only the atomic word may not.
   const remappedWords: TranscriptWord[] = (transcript.words ?? []).map((w) => ({
     ...w,
-    start: remapStitchedTimestamp(w.start, map),
-    end: remapStitchedTimestamp(w.end, map)
+    ...remapStitchedWordInterval(w.start, w.end, map)
   }))
 
   const remappedSegments: TranscriptSegment[] = (transcript.segments ?? []).map((s) => ({
