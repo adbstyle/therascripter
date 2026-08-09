@@ -3,6 +3,7 @@ import {
   buildSpeakerLabelMap,
   findBestOverlapSegment,
   alignWords,
+  suppressSpeakerIslands,
   correctSentenceBoundaries,
   findSpeakerForTime,
   rebuildSegmentsWithSpeakers,
@@ -218,6 +219,173 @@ describe('alignWords', () => {
 
     // Should get assigned to nearest segment
     expect(result[0].speaker).toBeDefined()
+  })
+})
+
+// --- suppressSpeakerIslands ---
+
+describe('suppressSpeakerIslands', () => {
+  it('absorbs multi-word sandwich island ending mid-sentence', () => {
+    // A ... [B B] ... A — island ends without .!? → diarization artifact
+    const words = [
+      word('und', 0, 0.5, 'Person A'),
+      word('dann', 0.5, 1, 'Person A'),
+      word('habe', 1, 1.5, 'Person B'),
+      word('ich', 1.5, 2, 'Person B'),
+      word('gedacht.', 2, 2.5, 'Person A')
+    ]
+
+    const result = suppressSpeakerIslands(words)
+
+    expect(result.map((w) => w.speaker)).toEqual([
+      'Person A',
+      'Person A',
+      'Person A',
+      'Person A',
+      'Person A'
+    ])
+  })
+
+  it('keeps single-word island (below MIN_ISLAND_WORDS)', () => {
+    const words = [
+      word('und', 0, 0.5, 'Person A'),
+      word('vielleicht', 0.5, 1, 'Person B'),
+      word('weiter', 1, 1.5, 'Person A')
+    ]
+
+    const result = suppressSpeakerIslands(words)
+
+    expect(result[1].speaker).toBe('Person B')
+  })
+
+  it('keeps island that ends at a sentence boundary (genuine interjection)', () => {
+    const words = [
+      word('und', 0, 0.5, 'Person A'),
+      word('warte', 0.5, 1, 'Person B'),
+      word('kurz.', 1, 1.5, 'Person B'),
+      word('weiter', 1.5, 2, 'Person A')
+    ]
+
+    const result = suppressSpeakerIslands(words)
+
+    expect(result[1].speaker).toBe('Person B')
+    expect(result[2].speaker).toBe('Person B')
+  })
+
+  it('keeps island longer than MAX_ISLAND_WORDS', () => {
+    // 9-word island exceeds the 8-word cap → likely a genuine turn
+    const island = Array.from({ length: 9 }, (_, i) =>
+      word(`w${i}`, 1 + i * 0.3, 1.3 + i * 0.3, 'Person B')
+    )
+    const words = [word('vorher', 0, 1, 'Person A'), ...island, word('nachher', 4, 4.5, 'Person A')]
+
+    const result = suppressSpeakerIslands(words)
+
+    expect(result[1].speaker).toBe('Person B')
+    expect(result[9].speaker).toBe('Person B')
+  })
+
+  it('keeps island exceeding MAX_ISLAND_DURATION_SEC', () => {
+    // 2 words but 5 s span → likely a genuine turn
+    const words = [
+      word('vorher', 0, 1, 'Person A'),
+      word('lange', 1, 3.5, 'Person B'),
+      word('Pause', 5.5, 6, 'Person B'),
+      word('nachher', 6, 6.5, 'Person A')
+    ]
+
+    const result = suppressSpeakerIslands(words)
+
+    expect(result[1].speaker).toBe('Person B')
+    expect(result[2].speaker).toBe('Person B')
+  })
+
+  it('keeps non-sandwich run (different speakers on each side)', () => {
+    const words = [
+      word('eins', 0, 0.5, 'Person A'),
+      word('zwei', 0.5, 1, 'Person B'),
+      word('drei', 1, 1.5, 'Person B'),
+      word('vier', 1.5, 2, 'Person C')
+    ]
+
+    const result = suppressSpeakerIslands(words)
+
+    expect(result[1].speaker).toBe('Person B')
+    expect(result[2].speaker).toBe('Person B')
+  })
+
+  it('leaves runs at transcript start and end untouched (no sandwich possible)', () => {
+    const words = [
+      word('Anfang', 0, 0.5, 'Person B'),
+      word('hier', 0.5, 1, 'Person B'),
+      word('Mitte.', 1, 1.5, 'Person A'),
+      word('Ende', 1.5, 2, 'Person B'),
+      word('hier', 2, 2.5, 'Person B')
+    ]
+
+    const result = suppressSpeakerIslands(words)
+
+    expect(result.map((w) => w.speaker)).toEqual([
+      'Person B',
+      'Person B',
+      'Person A',
+      'Person B',
+      'Person B'
+    ])
+  })
+
+  it('does not mutate input array', () => {
+    const words = [
+      word('und', 0, 0.5, 'Person A'),
+      word('habe', 0.5, 1, 'Person B'),
+      word('ich', 1, 1.5, 'Person B'),
+      word('gedacht.', 1.5, 2, 'Person A')
+    ]
+
+    suppressSpeakerIslands(words)
+
+    expect(words[1].speaker).toBe('Person B')
+    expect(words[2].speaker).toBe('Person B')
+  })
+
+  it('returns input unchanged for fewer than 3 words', () => {
+    const words = [word('Hallo', 0, 1, 'Person A'), word('Welt', 1, 2, 'Person B')]
+
+    expect(suppressSpeakerIslands(words)).toEqual(words)
+  })
+
+  it('regression: phantom pyannote island splits sentence across speakers (session e18cabcc)', () => {
+    // Real data: pyannote emitted a spurious 2.14 s SPEAKER_01 turn inside a
+    // continuous SPEAKER_03 utterance. The full chain must yield ONE segment.
+    const speakers = [
+      seg('SPEAKER_03', 26.963, 36.413),
+      seg('SPEAKER_01', 37.156, 39.299), // phantom island — sole occurrence in the file
+      seg('SPEAKER_03', 39.248, 60.342)
+    ]
+    const words = [
+      word('sind.', 35.65, 36.23),
+      word('Im', 36.23, 36.4),
+      word('Juli', 36.51, 37.133), // zero overlap with any turn (stitch-padding band)
+      word('etwa', 37.133, 37.513),
+      word('wurden', 37.513, 38.083),
+      word('unter', 38.083, 38.553),
+      word('anderem', 38.623, 39.203),
+      word('zwei', 39.203, 39.593),
+      word('Schweizer', 39.593, 40.03)
+    ]
+    const labelMap = buildSpeakerLabelMap(speakers)
+
+    const aligned = alignWords(words, speakers, labelMap)
+    // Precondition (documents the bug): raw alignment produces the island
+    expect(aligned[2].speaker).toBe('Person B')
+    expect(aligned[6].speaker).toBe('Person B')
+
+    const corrected = correctSentenceBoundaries(suppressSpeakerIslands(aligned))
+    const segments = rebuildSegmentsWithSpeakers(corrected, 4)
+
+    expect(segments).toHaveLength(1)
+    expect(segments[0].speaker).toBe('Person A')
+    expect(segments[0].text).toBe('sind. Im Juli etwa wurden unter anderem zwei Schweizer')
   })
 })
 

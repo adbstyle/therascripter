@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { remapStitchedTimestamp } from '../timestamp-remap'
+import { remapStitchedTimestamp, remapStitchedWordInterval } from '../timestamp-remap'
 import type { StitchMap } from '../../../shared/types'
 
 const fixture: StitchMap = {
@@ -57,5 +57,81 @@ describe('remapStitchedTimestamp', () => {
       segments: []
     }
     expect(remapStitchedTimestamp(5, emptyMap)).toBe(0)
+  })
+})
+
+describe('remapStitchedWordInterval', () => {
+  it('maps interval fully inside one segment identically to scalar remap', () => {
+    const result = remapStitchedWordInterval(4, 5, fixture)
+
+    expect(result.start).toBe(14)
+    expect(result.end).toBe(15)
+  })
+
+  it('clamps boundary-spanning interval into the segment with the larger overlap (second)', () => {
+    // Stitched [9.8, 10.5] spans the seam at 10: overlap seg0 = 0.2, seg1 = 0.5
+    const result = remapStitchedWordInterval(9.8, 10.5, fixture)
+
+    // Entire interval clamped into seg1 (orig 50–60) — no elided silence injected
+    expect(result.start).toBe(50)
+    expect(result.end).toBeCloseTo(50.5, 10)
+    expect(result.end - result.start).toBeLessThanOrEqual(10.5 - 9.8)
+  })
+
+  it('clamps boundary-spanning interval into the segment with the larger overlap (first)', () => {
+    // Stitched [9.5, 10.2]: overlap seg0 = 0.5, seg1 = 0.2
+    const result = remapStitchedWordInterval(9.5, 10.2, fixture)
+
+    expect(result.start).toBeCloseTo(19.5, 10)
+    expect(result.end).toBe(20)
+  })
+
+  it('resolves overlap ties to the earlier segment', () => {
+    // Stitched [9.75, 10.25]: overlap seg0 = 0.25, seg1 = 0.25 → earlier segment wins
+    const result = remapStitchedWordInterval(9.75, 10.25, fixture)
+
+    expect(result.start).toBeCloseTo(19.75, 10)
+    expect(result.end).toBe(20)
+  })
+
+  it('falls back to scalar remap when interval overlaps no segment', () => {
+    // Past end of stitched audio → scalar behavior clamps both to last segment end
+    const result = remapStitchedWordInterval(31, 32, fixture)
+
+    expect(result.start).toBe(90)
+    expect(result.end).toBe(90)
+  })
+
+  it('falls back to scalar remap for empty stitch map', () => {
+    const emptyMap: StitchMap = {
+      paddingSec: 0,
+      originalDurationSec: 100,
+      stitchedDurationSec: 0,
+      segments: []
+    }
+
+    expect(remapStitchedWordInterval(5, 6, emptyMap)).toEqual({ start: 0, end: 0 })
+  })
+
+  it('regression: word "Juli" spanning the seam is not inflated by elided silence (session e18cabcc)', () => {
+    // Real numbers: seam at stitched 35.483, 0.343 s of original audio elided.
+    // Old behavior mapped [35.38, 35.66] → [36.510, 37.133] (0.28 s word → 0.62 s).
+    const realMap: StitchMap = {
+      paddingSec: 0.2,
+      originalDurationSec: 189.3,
+      stitchedDurationSec: 183.517,
+      segments: [
+        { originalStart: 1.13, originalEnd: 36.613, stitchedStart: 0, duration: 35.483 },
+        { originalStart: 36.956, originalEnd: 179.916, stitchedStart: 35.483, duration: 142.96 }
+      ]
+    }
+
+    const result = remapStitchedWordInterval(35.38, 35.66, realMap)
+
+    // Larger overlap lies in segment 2 (0.177 s vs 0.103 s) → clamp into it
+    expect(result.start).toBe(36.956)
+    expect(result.end).toBeCloseTo(37.133, 10)
+    // Duration must not exceed the stitched word duration (0.28 s)
+    expect(result.end - result.start).toBeLessThanOrEqual(35.66 - 35.38)
   })
 })
