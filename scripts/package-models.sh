@@ -76,9 +76,19 @@ fi
 package_pyannote_suite || exit 1
 
 # flair NER model (archive contents extracted INTO ner/)
+# -v2: enthält zusätzlich den hf/-Subtree (xlm-roberta-large-Tokenizer, ~14 MB),
+# den ner_service.py über HF_HOME=<model-dir>/hf auflöst. Neuer Dateiname statt
+# Overwrite: ausgelieferte App-Versionen verifizieren First-Launch-Downloads
+# gegen die EINGEBAUTEN Katalog-Hashes — ein überschriebenes R2-Objekt würde
+# deren Installation brechen. Das alte flair-ner-german-large.tar.gz bleibt
+# auf R2 liegen, bis keine App-Version mehr darauf zeigt.
 if [ -d "$MODELS_DIR/ner" ]; then
-  tar -czf "$OUTPUT_DIR/flair-ner-german-large.tar.gz" -C "$MODELS_DIR/ner" .
-  echo "  -> flair-ner-german-large.tar.gz"
+  if [ ! -d "$MODELS_DIR/ner/hf/hub/models--xlm-roberta-large" ]; then
+    echo "  FEHLER: ner/hf/-Tokenizer-Subtree fehlt — zuerst scripts/setup-ner.sh --model ausführen." >&2
+    exit 1
+  fi
+  tar --exclude '.DS_Store' -czf "$OUTPUT_DIR/flair-ner-german-large-v2.tar.gz" -C "$MODELS_DIR/ner" .
+  echo "  -> flair-ner-german-large-v2.tar.gz"
 else
   echo "  SKIP: flair-Modell nicht gefunden: $MODELS_DIR/ner"
 fi

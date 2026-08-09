@@ -108,11 +108,15 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
   {
     id: 'flair-ner-german-large',
     label: 'flair/ner-german-large',
-    url: `${R2_CDN}/flair-ner-german-large.tar.gz`,
+    // -v2: enthält den hf/-Tokenizer-Subtree (xlm-roberta-large, ~14 MB), den
+    // ner_service.py über HF_HOME=<model-dir>/hf offline auflöst. Neuer Datei-
+    // name statt R2-Overwrite, damit ältere App-Versionen (eingebaute Hashes)
+    // beim First-Launch weiter das alte Artefakt laden können.
+    url: `${R2_CDN}/flair-ner-german-large-v2.tar.gz`,
     relativePath: 'ner',
     checkPath: 'ner/models/ner-german-large',
-    sizeBytes: 1_741_706_626,
-    sha256: '5dc0390c6d844d30648c4d950ee694eafeb01813e4d75e734cad6deede29d8a3',
+    sizeBytes: 1_747_844_368,
+    sha256: '1223f81f809adec2725034761db83817e1926e650a3f250af530bf08fa98e0ab',
     archive: true,
     group: 'ner',
     isRequired: true,
