@@ -71,6 +71,7 @@ vi.mock('fs', () => {
 // MODEL_DEFINITIONS is already a real import that ships with the app.
 import {
   reconcileActiveModels,
+  startModelDownload,
   getReconcileEvents,
   markReconcileEventsSeen,
   dismissReconcileEvents,
@@ -129,7 +130,7 @@ describe('reconcileActiveModels', () => {
     pretendInstalled(
       'asr/ggml-large-v3-turbo-q5_0.bin',
       'diarization/models--pyannote--speaker-diarization-community-1',
-      'ner/models/ner-german-large'
+      'ner/hf/hub/models--xlm-roberta-large'
     )
 
     const repairs = reconcileActiveModels()
@@ -145,7 +146,7 @@ describe('reconcileActiveModels', () => {
     pretendInstalled(
       'asr/ggml-large-v3-turbo-q5_0.bin',
       'diarization/models--pyannote--speaker-diarization-community-1',
-      'ner/models/ner-german-large'
+      'ner/hf/hub/models--xlm-roberta-large'
       // summarization NOT installed — default-state, slot is null per freshState
     )
 
@@ -173,7 +174,7 @@ describe('reconcileActiveModels', () => {
     pretendInstalled(
       'asr/ggml-large-v3-turbo-q5_0.bin',
       'diarization/models--pyannote--speaker-diarization-community-1',
-      'ner/models/ner-german-large'
+      'ner/hf/hub/models--xlm-roberta-large'
       // summarization-Datei vom User gelöscht
     )
 
@@ -205,7 +206,7 @@ describe('reconcileActiveModels', () => {
     pretendInstalled(
       'asr/ggml-large-v3-turbo-q5_0.bin',
       'diarization/models--pyannote--speaker-diarization-community-1',
-      'ner/models/ner-german-large'
+      'ner/hf/hub/models--xlm-roberta-large'
     )
 
     const repairs = reconcileActiveModels()
@@ -230,7 +231,7 @@ describe('reconcileActiveModels', () => {
     pretendInstalled(
       'asr/ggml-large-v3-turbo-q5_0.bin', // multi-lingual default
       'diarization/models--pyannote--speaker-diarization-community-1',
-      'ner/models/ner-german-large'
+      'ner/hf/hub/models--xlm-roberta-large'
     )
 
     const repairs = reconcileActiveModels()
@@ -261,7 +262,7 @@ describe('reconcileActiveModels', () => {
     pretendInstalled(
       'asr/ggml-large-v3-turbo-swiss-q5_0.bin', // only the swiss variant
       'diarization/models--pyannote--speaker-diarization-community-1',
-      'ner/models/ner-german-large'
+      'ner/hf/hub/models--xlm-roberta-large'
     )
 
     const repairs = reconcileActiveModels()
@@ -287,7 +288,7 @@ describe('reconcileActiveModels', () => {
     })
     pretendInstalled(
       'diarization/models--pyannote--speaker-diarization-community-1',
-      'ner/models/ner-german-large'
+      'ner/hf/hub/models--xlm-roberta-large'
     )
 
     const repairs = reconcileActiveModels()
@@ -301,6 +302,161 @@ describe('reconcileActiveModels', () => {
       }
     ])
     expect(storeState.activeModels.transcription).toBeNull()
+  })
+
+  // ─── v1→v2-NER-Upgrade-Pfad (checkPath = v2-only-Marker, Commit 08746d5) ────
+
+  it('treats a v1 NER install (payload present, hf/ marker missing) as removed — upgrade path', () => {
+    // Every v0.8.5 installation has ner/models/ner-german-large but no hf/
+    // tokenizer subtree. checkPath deliberately points at the v2-only marker so
+    // the First-Launch gate re-downloads the v2 tarball. The reconciler shares
+    // that definition: it clears the slot and emits model-removed. This test
+    // documents that behavior EXPLICITLY — it is intended, not an accident.
+    pretendInstalled(
+      'asr/ggml-large-v3-turbo-q5_0.bin',
+      'diarization/models--pyannote--speaker-diarization-community-1',
+      'ner/models/ner-german-large' // v1 payload — NOT the v2 checkPath
+    )
+
+    const repairs = reconcileActiveModels()
+
+    expect(repairs).toEqual([
+      {
+        group: 'ner',
+        fromModelId: 'flair-ner-german-large',
+        toModelId: null,
+        reason: 'model-removed'
+      }
+    ])
+    expect(storeState.activeModels.ner).toBeNull()
+    expect(storeState.reconcileEvents).toHaveLength(1)
+    expect(storeState.reconcileEvents[0].reason).toBe('model-removed')
+  })
+
+  it('collapses the round-trip event when the removed model comes back (X → null → X)', () => {
+    // Boot 1 of the upgrade path emitted "model-removed" and cleared the slot.
+    // After the v2 re-download the model is observable again — re-promoting it
+    // must REMOVE the stale pending event instead of stacking a second banner:
+    // net state is unchanged, the user must not see "Modell entfernt" +
+    // "Standard aktiviert" for an upgrade where nothing was removed.
+    freshState({
+      activeModels: {
+        transcription: 'whisper-large-v3-turbo',
+        diarization: 'pyannote-suite',
+        diarizationPipeline: 'pyannote/speaker-diarization-3.1',
+        ner: null, // cleared by the boot-1 reconcile
+        ocr: 'apple-vision',
+        summarization: null
+      },
+      reconcileEvents: [
+        {
+          id: 'evt-boot1',
+          timestamp: '2026-08-09T10:00:00.000Z',
+          group: 'ner',
+          fromModelId: 'flair-ner-german-large',
+          toModelId: null,
+          reason: 'model-removed',
+          status: 'pending'
+        }
+      ]
+    })
+    pretendInstalled(
+      'asr/ggml-large-v3-turbo-q5_0.bin',
+      'diarization/models--pyannote--speaker-diarization-community-1',
+      'ner/hf/hub/models--xlm-roberta-large' // v2 now installed
+    )
+
+    const repairs = reconcileActiveModels()
+
+    expect(repairs).toEqual([
+      {
+        group: 'ner',
+        fromModelId: null,
+        toModelId: 'flair-ner-german-large',
+        reason: 'default-promoted'
+      }
+    ])
+    expect(storeState.activeModels.ner).toBe('flair-ner-german-large')
+    // Round-trip collapsed: no events left, no banner shown
+    expect(storeState.reconcileEvents).toHaveLength(0)
+  })
+
+  it('still emits an event for a promotion that is NOT a round-trip', () => {
+    // Slot was null with no matching removed-event → promotion is genuine news.
+    freshState({
+      activeModels: {
+        transcription: 'whisper-large-v3-turbo',
+        diarization: 'pyannote-suite',
+        diarizationPipeline: 'pyannote/speaker-diarization-3.1',
+        ner: null,
+        ocr: 'apple-vision',
+        summarization: null
+      }
+    })
+    pretendInstalled(
+      'asr/ggml-large-v3-turbo-q5_0.bin',
+      'diarization/models--pyannote--speaker-diarization-community-1',
+      'ner/hf/hub/models--xlm-roberta-large'
+    )
+
+    const repairs = reconcileActiveModels()
+
+    expect(repairs).toHaveLength(1)
+    expect(storeState.reconcileEvents).toHaveLength(1)
+    expect(storeState.reconcileEvents[0].reason).toBe('default-promoted')
+  })
+})
+
+// ─── startModelDownload: post-download reconcile ──────────────────────────────
+
+describe('startModelDownload re-reconciles required slots', () => {
+  beforeEach(() => {
+    freshState()
+    vi.clearAllMocks()
+  })
+
+  it('re-promotes a cleared required slot once the download made the model observable', () => {
+    // v1-upgrade scenario, same app session: boot reconcile cleared ner → null,
+    // FirstLaunchScreen ran startModelDownload, tar merged the v2 subtree.
+    // Without the post-download reconcile the slot stays null until the next
+    // restart — sessions processed in that window record ner:null provenance.
+    freshState({
+      modelsDownloaded: false,
+      activeModels: {
+        transcription: 'whisper-large-v3-turbo',
+        diarization: 'pyannote-suite',
+        diarizationPipeline: 'pyannote/speaker-diarization-3.1',
+        ner: null, // cleared by boot reconcile
+        ocr: 'apple-vision',
+        summarization: null
+      },
+      reconcileEvents: [
+        {
+          id: 'evt-boot1',
+          timestamp: '2026-08-09T10:00:00.000Z',
+          group: 'ner',
+          fromModelId: 'flair-ner-german-large',
+          toModelId: null,
+          reason: 'model-removed',
+          status: 'pending'
+        }
+      ]
+    })
+    // All checkPaths present → download loop skips everything (simulates the
+    // state right after tar extraction; avoids any network in the test).
+    pretendInstalled(
+      'asr/ggml-large-v3-turbo-q5_0.bin',
+      'diarization/models--pyannote--speaker-diarization-community-1',
+      'ner/hf/hub/models--xlm-roberta-large'
+    )
+
+    return startModelDownload().then(() => {
+      expect(storeState.modelsDownloaded).toBe(true)
+      // Slot restored in the SAME session — provenance gap closed
+      expect(storeState.activeModels.ner).toBe('flair-ner-german-large')
+      // Round-trip collapsed — the misleading boot-1 banner is gone
+      expect(storeState.reconcileEvents).toHaveLength(0)
+    })
   })
 })
 
