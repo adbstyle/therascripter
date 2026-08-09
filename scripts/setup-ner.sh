@@ -59,12 +59,18 @@ if [ "$DOWNLOAD_MODEL" = true ]; then
   echo "This may take several minutes depending on your connection."
   echo ""
 
-  FLAIR_CACHE_ROOT="$MODEL_DIR" python3 -c "
+  # HF_HOME="$MODEL_DIR/hf": Der xlm-roberta-large-Tokenizer (~14 MB) wird von
+  # flair beim Modell-Load OHNE explizites cache_dir über huggingface_hub
+  # aufgelöst — ohne HF_HOME landet er in ~/.cache/huggingface und fehlt dann
+  # im gepackten Artefakt (Endnutzer-Macs haben keinen HF-Cache; ner_service.py
+  # setzt HF_HOME zur Laufzeit auf denselben Pfad).
+  FLAIR_CACHE_ROOT="$MODEL_DIR" HF_HOME="$MODEL_DIR/hf" python3 -c "
 from flair.nn import Classifier
 import os
 
 model_dir = os.environ.get('FLAIR_CACHE_ROOT', '$MODEL_DIR')
 print(f'Cache directory: {model_dir}')
+print(f'HF_HOME (Tokenizer-Cache): {os.environ[\"HF_HOME\"]}')
 print('Loading flair/ner-german-large (will download if not cached)...')
 
 try:
