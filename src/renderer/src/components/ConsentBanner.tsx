@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 
-export function ConsentBanner(): React.JSX.Element | null {
+interface ConsentBannerProps {
+  /**
+   * Feuert beim Wegklicken. Der Parent (App) merkt sich das pro Aufnahme —
+   * die Sessions-View (und damit dieser Banner) wird bei jedem View-Wechsel
+   * neu gemountet, lokaler State allein würde den Banner also bei jeder
+   * Rückkehr zur Liste erneut zeigen.
+   */
+  onDismiss?: () => void
+}
+
+export function ConsentBanner({ onDismiss }: ConsentBannerProps): React.JSX.Element | null {
   const [visible, setVisible] = useState(false)
   const [dontShowAgain, setDontShowAgain] = useState(false)
 
@@ -15,7 +25,8 @@ export function ConsentBanner(): React.JSX.Element | null {
     if (dontShowAgain) {
       window.api.settings.set('consentReminderShown', true)
     }
-  }, [dontShowAgain])
+    onDismiss?.()
+  }, [dontShowAgain, onDismiss])
 
   if (!visible) return null
 

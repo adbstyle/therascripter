@@ -1,13 +1,31 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { ToastProvider } from '../contexts/ToastContext'
+import { ThemeProvider } from '../contexts/ThemeContext'
+
+// useRecording mocken: Aufnahme-Zustand pro Test steuerbar, ohne
+// getUserMedia/AudioWorklet in jsdom simulieren zu müssen.
+const mockRecordingState = {
+  isRecording: false,
+  duration: 0,
+  level: 0,
+  error: null as string | null,
+  startRecording: vi.fn(),
+  stopRecording: vi.fn()
+}
+vi.mock('../hooks/useRecording', () => ({
+  useRecording: () => mockRecordingState
+}))
 
 const renderApp = (): ReturnType<typeof render> =>
   render(
-    <ToastProvider>
-      <App />
-    </ToastProvider>
+    <ThemeProvider>
+      <ToastProvider>
+        <App />
+      </ToastProvider>
+    </ThemeProvider>
   )
 
 const mockModelUpdate = {
@@ -24,6 +42,11 @@ const mockModelUpdate = {
 }
 
 beforeEach(() => {
+  mockRecordingState.isRecording = false
+  mockRecordingState.duration = 0
+  mockRecordingState.level = 0
+  mockRecordingState.error = null
+
   window.api = {
     sessions: {
       list: vi.fn().mockResolvedValue([]),
@@ -98,12 +121,10 @@ beforeEach(() => {
     modelUpdate: mockModelUpdate,
     appUpdate: {
       getStatus: vi.fn().mockResolvedValue(null),
-      check: vi
-        .fn()
-        .mockResolvedValue({
-          modelUpdates: [],
-          appUpdate: { available: false, latestVersion: null, checkedAt: null }
-        }),
+      check: vi.fn().mockResolvedValue({
+        modelUpdates: [],
+        appUpdate: { available: false, latestVersion: null, checkedAt: null }
+      }),
       openReleasePage: vi.fn(),
       onStatus: vi.fn().mockReturnValue(() => {})
     },
@@ -137,6 +158,81 @@ describe('App', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Keine Transkriptionen')).toBeInTheDocument()
+    })
+  })
+})
+
+describe('App — Navigation während der Aufnahme', () => {
+  it('zeigt BottomNav während der Aufnahme, versteckt nur "Aufnahme starten"', async () => {
+    mockRecordingState.isRecording = true
+    renderApp()
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Transkriptionen' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Einstellungen' })).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('PDF importieren')).toBeInTheDocument()
+    expect(screen.queryByText('Aufnahme starten')).not.toBeInTheDocument()
+  })
+
+  it('rendert die Live-Karte für die Recording-Session in der Liste', async () => {
+    mockRecordingState.isRecording = true
+    mockRecordingState.duration = 95
+
+    window.api.sessions.list = vi.fn().mockResolvedValue([
+      {
+        id: 'rec-1',
+        title: 'Aufnahme 07.08.2026 14:02',
+        type: 'audio',
+        status: 'recording',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ])
+
+    renderApp()
+
+    await waitFor(() => {
+      expect(screen.getByText('REC')).toBeInTheDocument()
+    })
+    expect(screen.getByText('00:01:35')).toBeInTheDocument()
+    expect(screen.getByLabelText('Aufnahme stoppen')).toBeInTheDocument()
+    // Auf der Sessions-Liste keine RecordingBar (Karte übernimmt)
+    expect(screen.queryByLabelText('Zur laufenden Aufnahme wechseln')).not.toBeInTheDocument()
+  })
+
+  it('zeigt die RecordingBar in Settings und navigiert per Klick zurück', async () => {
+    const user = userEvent.setup()
+    mockRecordingState.isRecording = true
+    mockRecordingState.duration = 61
+
+    renderApp()
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Einstellungen' })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('tab', { name: 'Einstellungen' }))
+
+    const bar = await screen.findByLabelText('Zur laufenden Aufnahme wechseln')
+    expect(screen.getByText('Aufnahme läuft')).toBeInTheDocument()
+    expect(screen.getByText('00:01:01')).toBeInTheDocument()
+
+    await user.click(bar)
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Zur laufenden Aufnahme wechseln')).not.toBeInTheDocument()
+      expect(screen.getByText('PDF importieren')).toBeInTheDocument()
+    })
+  })
+
+  it('zeigt Aufnahmefehler als Toast', async () => {
+    mockRecordingState.error = 'Mikrofonzugriff wurde verweigert.'
+    renderApp()
+
+    await waitFor(() => {
+      expect(screen.getByText('Mikrofonzugriff wurde verweigert.')).toBeInTheDocument()
     })
   })
 })

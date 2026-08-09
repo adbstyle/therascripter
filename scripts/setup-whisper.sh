@@ -9,7 +9,8 @@
 #   ~/.therascript/models/asr/ggml-large-v3-turbo-q5_0.bin (optional, with --model)
 #
 # Bundle layout rationale: whisper.cpp and llama.cpp link against incompatible
-# ggml generations (see docs/plans/ggml-abi-split.md). The two toolchains live
+# ggml generations (see CLAUDE.md gotcha "whisper.cpp und llama.cpp linken
+# gegen inkompatible ggml-Generationen"). The two toolchains live
 # in separate self-contained directories — each binary's built-in
 # LC_RPATH=@loader_path/../lib resolves to the tool-specific lib/ sibling.
 #
@@ -26,7 +27,7 @@ LIB_DIR="$PROJECT_ROOT/resources/whisper/lib"
 MODEL_DIR="$HOME/.therascript/models/asr"
 
 # Migrations-Cleanup: remove the previous shared layout if a developer is
-# upgrading from before docs/plans/ggml-abi-split.md. Only deletes whisper's
+# upgrading from before the ggml ABI split. Only deletes whisper's
 # share of resources/lib (libwhisper.* + libggml*) and the old whisper-cli
 # binary — never touches the llama bundle, ffmpeg, or vision-ocr.
 rm -f \

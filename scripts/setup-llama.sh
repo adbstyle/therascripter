@@ -3,7 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-# Bundle layout rationale: see docs/plans/ggml-abi-split.md. whisper.cpp and
+# Bundle layout rationale: see CLAUDE.md gotcha "whisper.cpp und llama.cpp
+# linken gegen inkompatible ggml-Generationen". whisper.cpp and
 # llama.cpp link against incompatible ggml generations, so each toolchain
 # lives in its own self-contained dir; LC_RPATH=@loader_path/../lib in both
 # binaries resolves to the tool-specific lib/ sibling.
@@ -11,7 +12,7 @@ BIN_DIR="$REPO_ROOT/resources/llama/bin"
 LIB_DIR="$REPO_ROOT/resources/llama/lib"
 
 # Migrations-Cleanup: remove the previous shared layout if upgrading from
-# before docs/plans/ggml-abi-split.md. Only deletes llama's share of
+# before the ggml ABI split. Only deletes llama's share of
 # resources/lib (libllama*, libmtmd*, libggml*) and the old llama-cli binary
 # — never touches whisper's bundle, ffmpeg, or vision-ocr.
 rm -f \
@@ -68,16 +69,23 @@ cp "$OPENSSL_PREFIX/lib/libcrypto.3.dylib" "$LIB_DIR/"
 
 # ggml 0.10+ uses a plugin architecture: backend implementations (Metal, BLAS,
 # CPU variants) live as separate libggml-*.so files that libggml dlopens at
-# runtime. libggml has a hardcoded fallback path
-# (/opt/homebrew/Cellar/ggml/<ver>/libexec) AND respects $GGML_BACKEND_PATH —
-# we bundle the .so files into resources/llama/lib/ and the main process sets
-# GGML_BACKEND_PATH=<lib_dir> when spawning llama-cli (see LlamaSummarizer.ts).
-echo '==> Copying ggml backend plugins (.so) for Apple Silicon'
+# runtime. Die Plugins MÜSSEN neben die EXECUTABLE (bin/), denn ggml scannt
+# beim Backend-Load das Executable-Verzeichnis. Die beiden anderen Wege sind
+# auf Endnutzer-Macs tot: der hardcodete Fallback
+# /opt/homebrew/Cellar/ggml/<ver>/libexec existiert dort nicht, und
+# $GGML_BACKEND_PATH wird von dieser ggml-Generation als EINZELNE DATEI
+# ge-dlopen-t (nicht als Suchverzeichnis) — und selbst eine einzelne .so
+# reicht nie, weil zwingend Metal UND CPU-Backend gebraucht werden
+# (make_cpu_buft_list). Auf Dev-Macs mit passendem Homebrew-ggml maskiert der
+# Cellar-Fallback jeden Fehler in diesem Setup — deshalb blieb das lange
+# unentdeckt. Ihre @rpath-Deps (libggml-base, libomp) lösen die Plugins über
+# ihr eigenes LC_RPATH @loader_path/../lib auf.
+echo '==> Copying ggml backend plugins (.so) next to the executable'
 if [ -z "$GGML_PREFIX" ] || [ ! -d "$GGML_PREFIX/libexec" ]; then
   echo 'FATAL: ggml libexec dir not found — backend plugins missing' >&2
   exit 1
 fi
-cp "$GGML_PREFIX/libexec/"libggml-*.so "$LIB_DIR/"
+cp "$GGML_PREFIX/libexec/"libggml-*.so "$BIN_DIR/"
 
 # libggml-cpu-apple_m*.so transitively links libomp (OpenMP runtime). macOS
 # doesn't ship system OpenMP, so bundle it alongside the backends.
@@ -125,12 +133,12 @@ echo '==> Rewriting absolute /opt/homebrew dependencies to @rpath'
 # shellcheck source=lib/rewrite-macho.sh
 source "$SCRIPT_DIR/lib/rewrite-macho.sh"
 rewrite_macho "$BIN_DIR/llama-cli" binary
-for macho in "$LIB_DIR/"*.dylib "$LIB_DIR/"*.so; do
+for macho in "$LIB_DIR/"*.dylib "$BIN_DIR/"*.so; do
   [ -f "$macho" ] && rewrite_macho "$macho" dylib
 done
 
 echo '==> Verifying bundle is self-contained (zero /opt/homebrew references)'
-if otool -L "$BIN_DIR/llama-cli" "$LIB_DIR/"*.dylib "$LIB_DIR/"*.so | grep '/opt/homebrew'; then
+if otool -L "$BIN_DIR/llama-cli" "$LIB_DIR/"*.dylib "$BIN_DIR/"*.so | grep '/opt/homebrew'; then
   echo 'FATAL: bundle still references /opt/homebrew after rewrite — DMG would not work on Macs without Homebrew' >&2
   exit 1
 fi
@@ -140,7 +148,7 @@ fi
 # major bump (e.g. libllama.1.dylib) silently changing which names are loaded.
 echo '==> Verifying every @rpath reference resolves inside the bundle'
 unresolved="$(
-  for macho in "$BIN_DIR/llama-cli" "$LIB_DIR"/*.dylib "$LIB_DIR"/*.so; do
+  for macho in "$BIN_DIR/llama-cli" "$LIB_DIR"/*.dylib "$BIN_DIR"/*.so; do
     otool -L "$macho" | awk -v self="$(basename "$macho")" \
       '$1 ~ /^@rpath\// { sub(/^@rpath\//, "", $1); if ($1 != self) print $1 }'
   done | sort -u | while read -r dep; do
@@ -155,7 +163,7 @@ fi
 
 echo '==> Re-signing all Mach-Os with ad-hoc signature'
 codesign --force --sign - "$BIN_DIR/llama-cli"
-for macho in "$LIB_DIR/"*.dylib "$LIB_DIR/"*.so; do
+for macho in "$LIB_DIR/"*.dylib "$BIN_DIR/"*.so; do
   [ -f "$macho" ] && codesign --force --sign - "$macho"
 done
 

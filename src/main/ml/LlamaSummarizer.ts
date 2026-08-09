@@ -1,6 +1,6 @@
 import { writeFile, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, resolve as resolvePath, relative, dirname } from 'node:path'
+import { join, resolve as resolvePath, relative } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { buildSummarizationPrompt } from './summarization-prompt'
 import { SUMMARIZATION_JSON_SCHEMA, SummarizationOutputSchema } from './summarization-schema'
@@ -181,15 +181,17 @@ export class LlamaSummarizer {
   }
 
   private async spawn(args: string[], signal: AbortSignal): Promise<string> {
-    // ggml dlopens its backend plugins (Metal/BLAS/CPU) at runtime. libggml
-    // contains a hardcoded fallback /opt/homebrew/Cellar/... search path
-    // that only exists on the build host. On end-user Macs without Homebrew
-    // the hardcoded path fails filesystem::exists() and ggml falls back to
-    // $GGML_BACKEND_PATH — which we point at the bundle's lib/ where
-    // setup-llama.sh placed libggml-*.so + libomp.dylib. On dev machines
-    // both paths exist; ggml may load from either, which is harmless.
+    // ggml dlopens its backend plugins (Metal/BLAS/CPU) at runtime und findet
+    // sie über den Scan des EXECUTABLE-Verzeichnisses — setup-llama.sh legt
+    // die libggml-*.so deshalb neben llama-cli in bin/. KEIN
+    // GGML_BACKEND_PATH setzen: diese ggml-Generation dlopent den Wert als
+    // einzelne Datei (nicht als Suchverzeichnis) — der frühere Env-Override
+    // war wirkungslos und wurde auf Dev-Macs nur vom Homebrew-Cellar-
+    // Fallback (/opt/homebrew/Cellar/ggml/<ver>/libexec) maskiert; auf
+    // Endnutzer-Macs lud er null Backends und die Summarization skippte
+    // still (live nachgestellt, nachdem ein brew upgrade den Fallback vom
+    // Dev-Mac entfernt hatte).
     const binaryPath = this.deps.getBinaryPath()
-    const libDir = join(dirname(binaryPath), '..', 'lib')
 
     const result = await runSubprocess({
       bin: binaryPath,
@@ -199,8 +201,7 @@ export class LlamaSummarizer {
       // ProcessWatchdog (600 s Wall ohne Heartbeat, da summarize() keine
       // Progress-Callbacks liefert). Knapp darunter, damit der Fehler hier
       // sauber als Skip landet statt als Watchdog-Abort.
-      timeoutMs: LLAMA_TIMEOUT_MS,
-      env: { GGML_BACKEND_PATH: libDir }
+      timeoutMs: LLAMA_TIMEOUT_MS
     })
 
     if (result.aborted) {

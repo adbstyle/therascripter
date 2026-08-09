@@ -153,7 +153,7 @@ type View = 'sessions' | 'settings' | 'review'
 | `modelsReady === null` | Empty loading screen (transparent, no flash) |
 | `modelsReady === false` | `FirstLaunchScreen` — model download wizard |
 | `pendingUpdates !== null` | `ModelUpdateScreen` — applies staged model updates |
-| `isRecording === true` | `RecordingView` overlays the main content area |
+| `isRecording === true` | No dedicated view — the sessions list renders a live `RecordingSessionCard`; other views show the `RecordingBar` |
 | `currentView === 'review'` | `ReviewEditor` (full-screen, own header) |
 | `currentView === 'sessions'` | `SessionDashboard` |
 | `currentView === 'settings'` | `Settings` (tabbed: Sperrliste / Darstellung / Modelle / Über) |

@@ -3,6 +3,7 @@ import type { Session, SessionStatus } from '../../../shared/types'
 import { useSessions } from '../hooks/useSessions'
 import { groupSessionsByTime, GROUP_ORDER } from '../utils/groupSessionsByTime'
 import { SessionCard } from './SessionCard'
+import { RecordingSessionCard, type LiveRecording } from './RecordingSessionCard'
 import { ConfirmDialog } from './ConfirmDialog'
 
 const PROCESSING_STATUSES: SessionStatus[] = ['queued', 'processing']
@@ -14,6 +15,8 @@ interface SessionDashboardProps {
   onOpenReview?: (sessionId: string) => void
   scrollToSessionId?: string | null
   onScrollComplete?: () => void
+  /** Laufende Aufnahme — die Karte mit Status 'recording' wird zur Live-Steuerung */
+  liveRecording?: LiveRecording | null
 }
 
 export default function SessionDashboard({
@@ -22,7 +25,8 @@ export default function SessionDashboard({
   onImportingChange,
   onOpenReview,
   scrollToSessionId,
-  onScrollComplete
+  onScrollComplete,
+  liveRecording
 }: SessionDashboardProps): React.JSX.Element {
   const { sessions, loading, error, refresh, deleteSession } = useSessions()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -197,19 +201,30 @@ export default function SessionDashboard({
                 {group}
               </h3>
               <div className="flex flex-col gap-2">
-                {groupSessions.map((session) => (
-                  <SessionCard
-                    key={session.id}
-                    session={session}
-                    data-session-id={session.id}
-                    onDelete={() => setDeleteTarget(session)}
-                    onRetry={session.status === 'error' ? () => handleRetry(session.id) : undefined}
-                    retryDisabled={isAnyProcessing}
-                    onClick={
-                      session.status === 'review' ? () => onOpenReview?.(session.id) : undefined
-                    }
-                  />
-                ))}
+                {groupSessions.map((session) =>
+                  session.status === 'recording' && liveRecording ? (
+                    <RecordingSessionCard
+                      key={session.id}
+                      session={session}
+                      live={liveRecording}
+                      data-session-id={session.id}
+                    />
+                  ) : (
+                    <SessionCard
+                      key={session.id}
+                      session={session}
+                      data-session-id={session.id}
+                      onDelete={() => setDeleteTarget(session)}
+                      onRetry={
+                        session.status === 'error' ? () => handleRetry(session.id) : undefined
+                      }
+                      retryDisabled={isAnyProcessing}
+                      onClick={
+                        session.status === 'review' ? () => onOpenReview?.(session.id) : undefined
+                      }
+                    />
+                  )
+                )}
               </div>
             </div>
           )

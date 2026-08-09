@@ -38,16 +38,16 @@ The `VUMeter` component provides real-time audio level feedback during recording
   - Red (`#dc2626`) -- clipping risk (height > 0.8)
 - **Accessibility**: Uses `role="meter"` with `aria-label="Audiopegel"` and `aria-valuenow` reporting the smoothed percentage.
 
-The recording view also displays a large monospace duration timer in `HH:MM:SS` format, updated every second.
+The `RecordingSessionCard` also displays a monospace duration timer in `HH:MM:SS` format, updated every second; the `RecordingBar` shows the same timer in Settings/Review.
 
 ## Consent Banner
 
-The `ConsentBanner` is a warning shown inside the recording view on the user's first-ever recording. It reminds the therapist to obtain patient consent before recording.
+The `ConsentBanner` is a warning shown above the sessions list while a recording is active. It reminds the therapist to obtain patient consent before recording.
 
 - **When shown**: On every recording start until the user dismisses it with the "Nicht mehr anzeigen" checkbox checked.
 - **Content**: "Bitte stellen Sie sicher, dass die aufgenommene Person der Aufnahme zugestimmt hat (StGB Art. 179bis)." -- a reference to the Swiss criminal code provision on unauthorized audio recording.
 - **Persistence**: Controlled by the `consentReminderShown` key in electron-store. When the user checks "Nicht mehr anzeigen" and dismisses the banner, the key is set to `true` and the banner never appears again.
-- **Dismissal without checkbox**: If the user closes the banner without checking the checkbox, it will reappear on the next recording.
+- **Dismissal without checkbox**: If the user closes the banner without checking the checkbox, it will reappear on the next recording. Within the same recording it stays dismissed even when the user navigates away and back (tracked per recording in `App.tsx`).
 
 ## System Tray
 
@@ -73,7 +73,6 @@ Recording is automatically stopped after **2 hours** (7,200 seconds).
 
 ## Background Behavior
 
-- The recording view displays a hint: "Die App kann minimiert werden -- die Aufnahme lauft im Hintergrund weiter."
 - When the window is minimized or loses focus, audio capture continues uninterrupted because the Web Audio API stream and the main-process file writer operate independently of window visibility.
 - The app stays running in the background when the window is closed (managed by the system tray).
 
@@ -81,9 +80,13 @@ Recording is automatically stopped after **2 hours** (7,200 seconds).
 
 The main process activates Electron's `powerSaveBlocker` with type `prevent-app-suspension` when recording starts. This prevents macOS from suspending the app or putting the system to sleep during an active recording. The blocker is stopped when recording ends (normal stop, auto-stop, or app quit).
 
-## Navigation Blocking
+## Navigation During Recording
 
-While a recording is active, the sidebar navigation is disabled to prevent the user from accidentally leaving the recording view. Navigation is re-enabled after the recording stops.
+Recording is a status, not a mode: the full app stays navigable while a recording is active. The session card with status `recording` becomes the live recording control (`RecordingSessionCard`): pulsing REC indicator, live timer, compact VU meter, stop button, and auto-stop countdown live directly in the sessions list. There is no separate fullscreen recording view.
+
+In views where that card is not visible (Settings, Review), a slim red `RecordingBar` appears directly below the title bar showing the pulsing dot, "Aufnahme läuft", and the live timer; clicking it navigates back to the sessions list. The bar and the card are mutually exclusive so the same information is never shown twice.
+
+Only two actions remain blocked while recording: starting a second recording (button hidden, main process throws) and the model-update restart (gated in `model-update-handlers.ts`). PDF import is allowed, but the task queue is paused for the duration of the recording — see the queue pause section in [transcription-pipeline.md](transcription-pipeline.md). Recording errors (e.g. denied microphone access) surface as an error toast.
 
 ## Crash Recovery
 
@@ -93,7 +96,8 @@ While a recording is active, the sidebar navigation is disabled to prevent the u
 
 | File | Purpose |
 |---|---|
-| `src/renderer/src/components/RecordingView.tsx` | Recording UI: timer, VU meter, stop button, auto-stop countdown |
+| `src/renderer/src/components/RecordingSessionCard.tsx` | Live recording control in the sessions list: timer, compact VU meter, stop button, auto-stop countdown |
+| `src/renderer/src/components/shell/RecordingBar.tsx` | Slim recording status bar shown in Settings/Review |
 | `src/renderer/src/components/VUMeter.tsx` | Audio level visualization (16-bar symmetric meter) |
 | `src/renderer/src/components/ConsentBanner.tsx` | First-recording consent reminder |
 | `src/main/ipc/recording-handlers.ts` | IPC handlers: start, stop, data streaming, auto-stop, recovery |

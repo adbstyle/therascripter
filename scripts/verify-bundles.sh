@@ -42,6 +42,7 @@ check_file_present() {
 WHISPER_BIN="$REPO_ROOT/resources/whisper/bin/whisper-cli"
 WHISPER_LIB="$REPO_ROOT/resources/whisper/lib"
 LLAMA_BIN="$REPO_ROOT/resources/llama/bin/llama-cli"
+LLAMA_BIN_DIR="$REPO_ROOT/resources/llama/bin"
 LLAMA_LIB="$REPO_ROOT/resources/llama/lib"
 
 echo "=== whisper bundle ==="
@@ -58,20 +59,23 @@ check_file_present 'libggml.0.dylib'        "$LLAMA_LIB/libggml.0.dylib"
 check_file_present 'libssl.3.dylib'         "$LLAMA_LIB/libssl.3.dylib"
 check_file_present 'libcrypto.3.dylib'      "$LLAMA_LIB/libcrypto.3.dylib"
 check_file_present 'libomp.dylib'           "$LLAMA_LIB/libomp.dylib"
-check_file_present 'libggml-metal.so'       "$LLAMA_LIB/libggml-metal.so"
-check_file_present 'libggml-blas.so'        "$LLAMA_LIB/libggml-blas.so"
+check_file_present 'libggml-metal.so'       "$LLAMA_BIN_DIR/libggml-metal.so"
+check_file_present 'libggml-blas.so'        "$LLAMA_BIN_DIR/libggml-blas.so"
 # At least one CPU backend variant must be present (apple_m1/m2_m3/m4 cover
 # all current Apple Silicon Macs).
-if ! ls "$LLAMA_LIB/"libggml-cpu-apple_*.so >/dev/null 2>&1; then
-  echo "FAIL [llama]: no libggml-cpu-apple_*.so backend plugin in $LLAMA_LIB/" >&2
+# Plugins MÜSSEN neben der Executable liegen (bin/): ggml scannt das
+# Executable-Verzeichnis; lib/ wird NICHT gescannt und GGML_BACKEND_PATH ist
+# kein Suchverzeichnis. Plugins in lib/ = Summarization auf Endnutzer-Macs tot.
+if ! ls "$LLAMA_BIN_DIR/"libggml-cpu-apple_*.so >/dev/null 2>&1; then
+  echo "FAIL [llama]: no libggml-cpu-apple_*.so backend plugin in $LLAMA_BIN_DIR/ (neben der Executable!)" >&2
   FAIL=1
 else
-  echo "ok   [llama]: libggml-cpu-apple_*.so plugin present ($(ls "$LLAMA_LIB/"libggml-cpu-apple_*.so | wc -l | tr -d ' ') variant(s))"
+  echo "ok   [llama]: libggml-cpu-apple_*.so plugin present in bin/ ($(ls "$LLAMA_BIN_DIR/"libggml-cpu-apple_*.so | wc -l | tr -d ' ') variant(s))"
 fi
 check_no_homebrew_refs 'llama bundle' \
   "$LLAMA_BIN" \
   "$LLAMA_LIB/"*.dylib \
-  "$LLAMA_LIB/"*.so
+  "$LLAMA_BIN_DIR/"*.so
 
 # Duplicate-variant guard: Homebrew ships each dylib under three names; only
 # the single-major install names (lib*.N.dylib) are ever loaded. setup-llama.sh
@@ -88,7 +92,7 @@ fi
 
 # Every @rpath reference in the llama bundle must resolve to a shipped file.
 unresolved="$(
-  for macho in "$LLAMA_BIN" "$LLAMA_LIB"/*.dylib "$LLAMA_LIB"/*.so; do
+  for macho in "$LLAMA_BIN" "$LLAMA_LIB"/*.dylib "$LLAMA_BIN_DIR"/*.so; do
     otool -L "$macho" 2>/dev/null | awk -v self="$(basename "$macho")" \
       '$1 ~ /^@rpath\// { sub(/^@rpath\//, "", $1); if ($1 != self) print $1 }'
   done | sort -u | while read -r dep; do
