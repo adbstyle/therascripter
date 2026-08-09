@@ -733,9 +733,11 @@ export interface ReconcileRepair {
 }
 
 /**
- * Bootstrap reconciler — läuft einmal beim App-Start, NACH `initSettings()`
- * und VOR `createWindow()`. Geht jede Modell-Gruppe durch und stellt das
- * Invariant sicher:
+ * Reconciler — läuft beim App-Start (NACH `initSettings()`, VOR
+ * `createWindow()`) und ein zweites Mal am Ende von `startModelDownload()`,
+ * damit ein beim Boot geleerter required-Slot direkt nach dem First-Launch-
+ * Download re-promotet wird statt erst beim nächsten Start. Geht jede
+ * Modell-Gruppe durch und stellt das Invariant sicher:
  *   "Der active-Slot zeigt entweder auf ein installiertes Katalog-Modell
  *    oder ist null."
  *

@@ -163,6 +163,7 @@ launch_clean() {
 (deny file-read* (subpath "$HOME/.cache/torch"))
 (deny file-write* (subpath "$HOME/.flair"))
 (deny file-write* (subpath "$HOME/.cache/huggingface"))
+(deny file-write* (subpath "$HOME/.cache/torch"))
 EOF
 
   bold "Clean-Launch — App startet OHNE /opt/homebrew und ohne Dev-Caches"

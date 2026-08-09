@@ -78,6 +78,7 @@ cat > "$PROFILE" <<EOF
 (deny file-read* (subpath "$HOME/.cache/torch"))
 (deny file-write* (subpath "$HOME/.flair"))
 (deny file-write* (subpath "$HOME/.cache/huggingface"))
+(deny file-write* (subpath "$HOME/.cache/torch"))
 EOF
 
 CLEAN_TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)"
