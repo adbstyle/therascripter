@@ -187,6 +187,12 @@ interface TranscriptData {
 }
 ```
 
+## Queue Pause During Recording
+
+While an audio recording is active, `TaskQueueService` starts no new tasks (`setRecordingPause(true)`, called from the `recording:start` handler). The pause guard sits in `processNext()`, i.e. between pipeline steps — a task that is already running finishes normally, but the next step waits. This keeps CPU/GPU load (and fan noise) out of the therapy session; sessions enqueued in the meantime (e.g. PDF imports) simply stay in `queued`/"Wartet".
+
+Every stop path resumes the queue: manual stop, the 2-hour auto-stop, and tray stop all funnel through `stopRecordingInternal()`, which calls `setRecordingPause(false)` before enqueueing the recording's own pipeline. The pause flag is in-memory only, so an app restart after a crash always starts unpaused; `recoverOrphanedSessions()` ignores paused-waiting sessions because their pending task rows still exist.
+
 ## Error Handling
 
 ### Timeouts

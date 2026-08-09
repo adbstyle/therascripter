@@ -4,7 +4,11 @@ interface VUMeterProps {
   level: number // 0.0 to 1.0 (RMS from AudioWorklet)
 }
 
-const BAR_COUNT = 16
+// Kompakte Ausprägung für die RecordingSessionCard — der einzige Aufrufer,
+// seit die Vollbild-RecordingView (16 Balken / 96 px) entfernt wurde.
+const BAR_COUNT = 6
+const METER_HEIGHT = 18
+
 // dB range for normalization: silence at -60 dB, speech clips rarely above -6 dBFS
 const MIN_DB = -60
 const MAX_DB = -6
@@ -36,7 +40,7 @@ export function VUMeter({ level }: VUMeterProps): React.JSX.Element {
   return (
     <div
       className="flex items-end justify-center gap-1"
-      style={{ height: '96px' }}
+      style={{ height: `${METER_HEIGHT}px` }}
       role="meter"
       aria-label="Audiopegel"
       aria-valuenow={Math.round(smoothed * 100)}
@@ -46,9 +50,9 @@ export function VUMeter({ level }: VUMeterProps): React.JSX.Element {
       {bars.map((height, i) => (
         <div
           key={i}
-          className="w-2 rounded-sm"
+          className="w-1 rounded-sm"
           style={{
-            height: `${Math.max(3, height * 96)}px`,
+            height: `${Math.max(3, height * METER_HEIGHT)}px`,
             backgroundColor: barColor(height)
           }}
         />

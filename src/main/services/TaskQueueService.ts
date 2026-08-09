@@ -61,6 +61,10 @@ export class TaskQueueService {
 
   private processing = false
   private shouldStop = false
+  // Während einer laufenden Aufnahme startet die Queue keine neuen Tasks
+  // (kein Lüfterlärm in der Therapiesitzung); ein bereits laufender Task
+  // läuft aus. In-memory: App-Neustart startet unpausiert.
+  private pausedForRecording = false
   private recoveryTimer: ReturnType<typeof setInterval> | null = null
   // Tracks the AbortController for the currently running task so that
   // abortRunningForSession() (called from SessionService.deleteSession) can
@@ -372,6 +376,18 @@ export class TaskQueueService {
     return this.processing
   }
 
+  /**
+   * Pausiert/resumt die Queue für die Dauer einer Aufnahme. Greift im
+   * processNext()-Guard, also zwischen Pipeline-Steps — jeder Step
+   * (whisper/pyannote/flair/llama) ist rechenintensiv. Idempotent.
+   */
+  setRecordingPause(paused: boolean): void {
+    if (this.pausedForRecording === paused) return
+    this.pausedForRecording = paused
+    console.log(`[TaskQueue] Recording pause ${paused ? 'ON' : 'OFF'}`)
+    if (!paused) this.scheduleNext()
+  }
+
   /** Fire-and-forget wrapper that swallows rejections during shutdown */
   private scheduleNext(): void {
     this.processNext().catch(() => {
@@ -380,7 +396,7 @@ export class TaskQueueService {
   }
 
   private async processNext(): Promise<void> {
-    if (this.processing || this.shouldStop) return
+    if (this.processing || this.shouldStop || this.pausedForRecording) return
 
     let task: Task | null
     try {

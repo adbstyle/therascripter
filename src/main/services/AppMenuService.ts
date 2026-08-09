@@ -6,7 +6,6 @@ interface InitOptions {
 }
 
 let currentOptions: InitOptions | null = null
-let recording = false
 
 // Builds the macOS Application Menu with standard sub-menus plus
 // "Einstellungen…" (⌘,) routed to the Settings overview and the standard
@@ -18,15 +17,6 @@ let recording = false
 export function initAppMenu(options: InitOptions): void {
   if (process.platform !== 'darwin') return
   currentOptions = options
-  rebuild()
-}
-
-// Rebuild when recording starts/stops so the Einstellungen item (and ⌘,)
-// can be disabled while the renderer is locked to RecordingView.
-export function setAppMenuRecording(isRecording: boolean): void {
-  if (process.platform !== 'darwin') return
-  if (recording === isRecording) return
-  recording = isRecording
   rebuild()
 }
 
@@ -45,7 +35,6 @@ function rebuild(): void {
         {
           label: 'Einstellungen…',
           accelerator: 'CommandOrControl+,',
-          enabled: !recording,
           click: () => onOpenSettings()
         },
         { type: 'separator' },
