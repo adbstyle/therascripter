@@ -99,6 +99,10 @@ scenario_c_models_only() {
 # Live-Verzeichnisse werden als <pfad>.testrun-<timestamp> geparkt (in --status
 # sichtbar), damit --restore auch NACH einem App-Launch durchläuft.
 restore() {
+  # Live-Verzeichnisse werden verschoben — bei laufender App würde die offene
+  # SQLite-DB per fd in die geparkte Kopie weiterschreiben, während pfadbasierte
+  # Writes ins restaurierte Verzeichnis gehen (Split-Brain).
+  require_app_closed
   bold "Restore — stelle Backups wieder her"
   local did_anything=0
   local stamp

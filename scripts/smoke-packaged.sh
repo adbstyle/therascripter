@@ -36,7 +36,14 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# Gate-Modus (app/dist): Skips gelten als FEHLER. Ein Smoke-Lauf gegen eine
+# gepackte .app, in dem die kritischen Checks (llama CPU-buft, NER offline)
+# mangels Modellen oder Binaries gar nicht laufen, darf NICHT grün enden —
+# sonst released release.sh ein ungetestetes DMG mit "SMOKE OK". Nur --staging
+# bleibt tolerant (halbfertige Dev-Checkouts).
+STRICT=false
 if [ "$MODE" = "app" ]; then
+  STRICT=true
   RES="$TARGET/Contents/Resources"
   if [ ! -d "$RES" ]; then
     echo "FEHLER: $TARGET ist keine .app (Contents/Resources fehlt)" >&2
@@ -109,7 +116,14 @@ run_check() {
 }
 
 skip_check() {
-  echo "skip [$1]: $2"
+  if [ "$STRICT" = true ]; then
+    echo "FAIL [$1]: $2 — im Gate-Modus (--app/--dist) sind Skips Fehler." >&2
+    echo "       Fehlende Modelle installieren (setup-ner.sh --model / setup-llama.sh --model)" >&2
+    echo "       bzw. sim-clean-install.sh --restore ausführen, dann erneut." >&2
+    FAIL=1; FAIL_LIST="$FAIL_LIST $1"
+  else
+    echo "skip [$1]: $2"
+  fi
 }
 
 echo ""

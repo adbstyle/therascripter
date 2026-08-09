@@ -114,7 +114,15 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
     // beim First-Launch weiter das alte Artefakt laden können.
     url: `${R2_CDN}/flair-ner-german-large-v2.tar.gz`,
     relativePath: 'ner',
-    checkPath: 'ner/models/ner-german-large',
+    // checkPath zeigt bewusst auf den v2-ONLY-Bestandteil (hf/-Subtree), nicht
+    // auf das Modell selbst: v1-Installationen (ohne hf/) gelten damit als
+    // "nicht installiert" → First-Launch lädt gezielt das v2-Tarball nach
+    // (startModelDownload skippt Modelle mit existierendem checkPath; tar
+    // extrahiert merge-artig über das bestehende ner/). Ohne diesen Marker
+    // bliebe eine v1-Installation nach dem App-Update dauerhaft kaputt, sobald
+    // der User das dismissbare Modell-Update wegklickt — ner_service.py läuft
+    // offline und braucht den Tokenizer unter ner/hf/.
+    checkPath: 'ner/hf/hub/models--xlm-roberta-large',
     sizeBytes: 1_747_844_368,
     sha256: '1223f81f809adec2725034761db83817e1926e650a3f250af530bf08fa98e0ab',
     archive: true,

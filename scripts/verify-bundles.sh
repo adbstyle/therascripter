@@ -75,10 +75,13 @@ check_file_present() {
 check_rpaths_relative() {
   local label="$1"; shift
   local bad
+  # `|| true`: ein otool-Fehler (fehlende/korrupte Datei) darf unter pipefail
+  # nicht die Zuweisung failen lassen — set -e würde sonst das ganze Script
+  # ohne FAIL-Zeile killen; fehlende Dateien melden die Presence-Checks.
   bad=$(otool -l "$@" 2>/dev/null | awk '
     $1 == "cmd" { cmd=$2 }
     $1 == "path" && cmd == "LC_RPATH" && ($2 ~ /^\/opt\/homebrew/ || $2 ~ /^\/Users\//) { print $2 }
-  ' | sort -u)
+  ' | sort -u || true)
   if [ -n "$bad" ]; then
     echo "FAIL [$label]: absolute LC_RPATH entries (masken Bundle-Fehler auf Dev-Macs):" >&2
     echo "$bad" >&2
@@ -156,10 +159,13 @@ else
 fi
 
 # Every @rpath reference in the llama bundle must resolve to a shipped file.
+# `|| true` im Loop-Body: ein otool-Fehler (fehlende Datei) darf unter
+# set -e/pipefail nicht die ganze Substitution killen (Presence-Checks melden
+# fehlende Dateien separat).
 unresolved="$(
   for macho in "$LLAMA_BIN" "$LLAMA_LIB"/*.dylib "$LLAMA_BIN_DIR"/*.so; do
     otool -L "$macho" 2>/dev/null | awk -v self="$(basename "$macho")" \
-      '$1 ~ /^@rpath\// { sub(/^@rpath\//, "", $1); if ($1 != self) print $1 }'
+      '$1 ~ /^@rpath\// { sub(/^@rpath\//, "", $1); if ($1 != self) print $1 }' || true
   done | sort -u | while read -r dep; do
     if [ ! -f "$LLAMA_LIB/$dep" ]; then echo "$dep"; fi
   done
@@ -175,13 +181,27 @@ fi
 check_rpaths_relative 'whisper rpaths' "$WHISPER_BIN" "$WHISPER_LIB/"*.dylib
 check_rpaths_relative 'llama rpaths'   "$LLAMA_BIN" "$LLAMA_LIB/"*.dylib "$LLAMA_BIN_DIR/"*.so
 
+# Skip vs. FAIL: im Staging-Tree kann ein Bundle legitim "noch nicht gebaut"
+# sein — in einer GEPACKTEN .app (--app) ist ein fehlender Baustein immer ein
+# kaputtes Package (z. B. umbenanntes extraResources-Mapping) und muss das
+# Release-Gate rot machen.
+missing_bundle() {
+  local label="$1" path="$2"
+  if [ -n "$APP_PATH" ]; then
+    echo "FAIL [$label]: fehlt in der gepackten App: $path (extraResources-Mapping prüfen)" >&2
+    FAIL=1
+  else
+    echo "skip [$label]: $path not built"
+  fi
+}
+
 echo ""
 echo "=== vision-ocr ==="
 if [ -f "$VISION_OCR" ]; then
   check_no_homebrew_refs 'vision-ocr' "$VISION_OCR"
   check_rpaths_relative  'vision-ocr rpaths' "$VISION_OCR"
 else
-  echo "skip [vision-ocr]: $VISION_OCR not built"
+  missing_bundle 'vision-ocr' "$VISION_OCR"
 fi
 
 echo ""
@@ -208,6 +228,9 @@ if [ -d "$SIDECAR" ]; then
   # Endnutzer-Macs ins Leere laufen bzw. auf dem Dev-Mac still Homebrew laden).
   # LC_ID-Einträge mit solchen Pfaden sind nur die Eigenkennung der Dylib —
   # harmlos solange nichts sie über diesen Pfad LÄDT, darum Warning.
+  # `|| true`: ein einzelner otool-Fehler (0-Byte-/korrupte .so) lässt xargs
+  # mit 123 exiten — unter set -e/pipefail würde die Zuweisung das Script
+  # ohne FAIL-Zeile killen (stderr ist verworfen).
   macho_scan=$( (find "$SIDECAR" -type f \( -name '*.dylib' -o -name '*.so' \) -print0; printf '%s\0' "$SIDECAR/bin/python3") \
     | xargs -0 otool -l 2>/dev/null | awk '
       /^\// && /:$/ { file=$0; sub(/:$/, "", file); next }
@@ -216,7 +239,7 @@ if [ -d "$SIDECAR" ]; then
         && ($2 ~ /^\/opt\/homebrew/ || $2 ~ /^\/Users\//) { print "LOAD\t" file "\t" $2 }
       $1 == "name" && cmd == "LC_ID_DYLIB" \
         && ($2 ~ /^\/opt\/homebrew/ || $2 ~ /^\/Users\//) { print "ID\t" file "\t" $2 }
-    ')
+    ' || true)
   bad_loads=$(printf '%s\n' "$macho_scan" | grep '^LOAD' || true)
   id_warns=$(printf '%s\n' "$macho_scan" | grep '^ID' || true)
   if [ -n "$bad_loads" ]; then
@@ -231,7 +254,7 @@ if [ -d "$SIDECAR" ]; then
     echo "$id_warns"
   fi
 else
-  echo "skip [sidecar]: $SIDECAR not built"
+  missing_bundle 'sidecar' "$SIDECAR"
 fi
 
 # asar hygiene: only meaningful after `npm run package`. The old blacklist
@@ -280,7 +303,7 @@ if [ -f "$ASAR" ]; then
     FAIL=1
   fi
 else
-  echo "skip [asar]: not packaged yet"
+  missing_bundle 'asar' "$ASAR"
 fi
 
 echo ""
