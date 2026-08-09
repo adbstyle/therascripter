@@ -20,7 +20,9 @@ Three models are defined in `MODEL_DEFINITIONS` inside `ModelDownloadService.ts`
 |----|-------|--------------|---------|---------------|------------|
 | `whisper-large-v3-turbo` | Spracherkennung (whisper-large-v3-turbo) | ~574 MB | No (flat `.bin`) | `asr/ggml-large-v3-turbo-q5_0.bin` | `asr/ggml-large-v3-turbo-q5_0.bin` |
 | `pyannote-community-1` | Sprechererkennung (pyannote-community-1) | ~30 MB | Yes (`.tar.gz`) | `diarization` | `diarization/models--pyannote--speaker-diarization-3.1` |
-| `flair-ner-german-large` | Anonymisierung (flair-ner-german-large) | ~1.74 GB | Yes (`.tar.gz`) | `ner` | `ner/models/ner-german-large` |
+| `flair-ner-german-large` | Anonymisierung (flair-ner-german-large) | ~1.74 GB | Yes (`.tar.gz`) | `ner` | `ner/hf/hub/models--xlm-roberta-large` |
+
+The NER check path deliberately points at the **v2-only** `hf/` tokenizer subtree (not the model payload): v1 installs (≤ 0.8.5, without `hf/`) read as "not installed", so the first-launch gate re-downloads the v2 tarball, which tar-merges over the existing `ner/`. The bootstrap reconciler shares this definition and clears the `ner` slot on such installs; `startModelDownload()` re-runs the reconciler after a successful download to re-promote the slot in the same session, and inverse repairs (X → null → X) collapse the pending reconcile event so the upgrade shows no "Modell entfernt" banner.
 
 Total download: ~2.3 GB (combined archive sizes). All downloads come from the Cloudflare R2 CDN at `https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/`.
 
@@ -38,6 +40,9 @@ All models live under `~/.therascript/models/`:
   ner/
     models/
       ner-german-large/
+    hf/
+      hub/
+        models--xlm-roberta-large/
     ...
 ```
 
