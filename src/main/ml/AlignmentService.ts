@@ -70,9 +70,13 @@ export class AlignmentService implements TaskExecutor {
     // Build consistent speaker label mapping (raw label → "Person A", "Person B", ...)
     const labelMap = buildSpeakerLabelMap(diarization.speakers)
 
-    // Align words with speaker segments, then correct sentence boundaries
+    // Align words with speaker segments, absorb phantom speaker islands,
+    // then correct sentence boundaries. Island suppression must run FIRST:
+    // correctSentenceBoundaries otherwise extends an island backward to the
+    // sentence start, making the misassignment look tidier instead of fixing it.
     const rawAligned = alignWords(transcript.words, diarization.speakers, labelMap)
-    const alignedWords = correctSentenceBoundaries(rawAligned)
+    const deIslanded = suppressSpeakerIslands(rawAligned)
+    const alignedWords = correctSentenceBoundaries(deIslanded)
 
     onProgress(0.6)
 
@@ -162,6 +166,67 @@ export function alignWords(
       speaker: mappedLabel ? `Person ${mappedLabel}` : undefined
     }
   })
+}
+
+// Minimum number of words for a foreign-speaker island to be absorbed.
+// Single-word islands are deliberately kept (product decision): a lone word
+// from another speaker mid-sentence may be a genuine short interjection.
+const MIN_ISLAND_WORDS = 2
+
+// Maximum island size (words / seconds) that is still treated as a
+// diarization artifact. Longer runs are likely genuine speaker turns.
+// Calibrated against a verified phantom turn: 5 words / 2.7 s.
+const MAX_ISLAND_WORDS = 8
+const MAX_ISLAND_DURATION_SEC = 4.0
+
+// Absorb phantom speaker islands: pyannote occasionally emits a short
+// foreign-speaker turn in the middle of one speaker's continuous utterance
+// (clustering artifact). Word-level overlap alignment then relabels the words
+// inside that turn, and rebuildSegmentsWithSpeakers cuts the sentence apart.
+// A run of words is absorbed into the surrounding speaker when ALL hold:
+//   - sandwich: the runs before and after belong to the SAME other speaker
+//   - the run ends mid-sentence (genuine turns end with .!?)
+//   - MIN_ISLAND_WORDS <= run length <= MAX_ISLAND_WORDS
+//   - run duration <= MAX_ISLAND_DURATION_SEC
+// Single pass over the runs of the ORIGINAL input — absorptions do not cascade.
+export function suppressSpeakerIslands(words: TranscriptWord[]): TranscriptWord[] {
+  if (words.length < 3) return words
+
+  const result = words.map((w) => ({ ...w }))
+
+  // Group words into maximal runs of the same speaker (index ranges, inclusive)
+  const runs: { speaker: string | undefined; from: number; to: number }[] = []
+  for (let i = 0; i < words.length; i++) {
+    const last = runs[runs.length - 1]
+    if (last && words[i].speaker === last.speaker) {
+      last.to = i
+    } else {
+      runs.push({ speaker: words[i].speaker, from: i, to: i })
+    }
+  }
+
+  for (let r = 1; r < runs.length - 1; r++) {
+    const run = runs[r]
+    const prev = runs[r - 1]
+    const next = runs[r + 1]
+
+    // Sandwich: same speaker on both sides
+    if (prev.speaker !== next.speaker) continue
+
+    // Genuine turns end at a sentence boundary — only absorb mid-sentence runs
+    if (/[.!?]$/.test(words[run.to].text)) continue
+
+    // Size limits: keep single-word blips and anything long enough to be real
+    const runLength = run.to - run.from + 1
+    if (runLength < MIN_ISLAND_WORDS || runLength > MAX_ISLAND_WORDS) continue
+    if (words[run.to].end - words[run.from].start > MAX_ISLAND_DURATION_SEC) continue
+
+    for (let k = run.from; k <= run.to; k++) {
+      result[k] = { ...result[k], speaker: prev.speaker }
+    }
+  }
+
+  return result
 }
 
 // Maximum number of words to look back when snapping a speaker change

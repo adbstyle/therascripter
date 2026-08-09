@@ -29,7 +29,7 @@ export interface SubprocessOptions {
   signal?: AbortSignal
   /** Wrap in `nice -n <n>` (NFR-23 QoS). */
   nice?: number
-  /** Merged over process.env. */
+  /** Merged over the Whitelist-Env (buildSubprocessEnv), NICHT über process.env. */
   env?: Record<string, string | undefined>
   /** 'ignore' for callers that read output from files (whisper -ojf). */
   stdout?: 'capture' | 'ignore'
@@ -58,6 +58,34 @@ export interface SubprocessResult {
 const DEFAULT_KILL_GRACE_MS = 5_000
 const DEFAULT_MAX_STDERR_BYTES = 64 * 1024
 
+// Whitelist-Env statt process.env-Vererbung: In der gepackten App (Finder-
+// Launch) sehen die Subprozesse ohnehin nur die minimale launchd-Umgebung —
+// im Dev-Modus dagegen die volle Login-Shell (PATH mit /opt/homebrew/bin,
+// HF_TOKEN, HF_HOME, DYLD_*, PYTHONPATH, …). Diese Variablen haben Fehler
+// maskiert, die erst auf Endnutzer-Macs auftraten (z. B. flair-Modelle aus
+// ~/.cache/huggingface statt ~/.therascript). Die Whitelist macht Dev und
+// Prod deckungsgleich; anders als eine Scrub-Liste kann sie nicht veralten.
+// PATH ist gepinnt, weil der nice-Wrapper argv[0] über PATH auflöst
+// (/usr/bin/nice). Policy-Variablen (OMP_NUM_THREADS etc.) bleiben Sache
+// der Caller via opts.env.
+export function buildSubprocessEnv(
+  overrides?: Record<string, string | undefined>
+): Record<string, string | undefined> {
+  const base: Record<string, string | undefined> = {
+    HOME: process.env.HOME,
+    USER: process.env.USER,
+    LOGNAME: process.env.LOGNAME,
+    TMPDIR: process.env.TMPDIR,
+    SHELL: process.env.SHELL,
+    __CF_USER_TEXT_ENCODING: process.env.__CF_USER_TEXT_ENCODING,
+    PATH: '/usr/bin:/bin:/usr/sbin:/sbin'
+  }
+  if (process.env.LANG !== undefined) {
+    base.LANG = process.env.LANG
+  }
+  return { ...base, ...overrides }
+}
+
 // async, damit der synchrone accessSync-Throw als Rejection ankommt statt
 // als Sync-Exception am Call-Site.
 export async function runSubprocess(opts: SubprocessOptions): Promise<SubprocessResult> {
@@ -83,7 +111,7 @@ export async function runSubprocess(opts: SubprocessOptions): Promise<Subprocess
 
     const proc = spawn(argv0, argv, {
       stdio: ['ignore', captureStdout ? 'pipe' : 'ignore', 'pipe'],
-      env: { ...process.env, ...opts.env },
+      env: buildSubprocessEnv(opts.env),
       // Eigene Process-Group: Kill-Eskalation trifft die GANZE Gruppe. Ohne
       // das hält ein Kind des Targets (z. B. torch-Worker, sh-Subprozess) die
       // stderr-Pipe offen — 'close' feuert dann erst, wenn das Enkelkind von

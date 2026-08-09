@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { runSubprocess } from '../subprocess'
+import { buildSubprocessEnv, runSubprocess } from '../subprocess'
 
 // Lifecycle tests use real short-lived processes (sh/sleep) — the whole point
 // is to verify actual kill semantics (SIGTERM → grace → SIGKILL), which mocks
@@ -163,14 +163,55 @@ describe('runSubprocess', () => {
     expect(result.code).toBe(0)
   })
 
-  it('passes env overrides merged with process.env', async () => {
+  it('passes env overrides merged with the whitelist env', async () => {
     const result = await runSubprocess({
       bin: '/bin/sh',
       args: ['-c', 'printf "$THERA_TEST_VAR-$HOME"'],
       env: { THERA_TEST_VAR: 'xyz' }
     })
     expect(result.stdout.startsWith('xyz-')).toBe(true)
-    expect(result.stdout.length).toBeGreaterThan(4) // HOME kam aus process.env durch
+    expect(result.stdout.length).toBeGreaterThan(4) // HOME steht auf der Whitelist
+  })
+
+  it('does NOT leak arbitrary process.env vars into the child', async () => {
+    process.env.THERA_LEAK_TEST = 'leaked'
+    try {
+      const result = await runSubprocess({
+        bin: '/bin/sh',
+        args: ['-c', 'printf "[$THERA_LEAK_TEST]"']
+      })
+      expect(result.stdout).toBe('[]')
+    } finally {
+      delete process.env.THERA_LEAK_TEST
+    }
+  })
+
+  it('pins PATH to the system default instead of inheriting the shell PATH', async () => {
+    const result = await runSubprocess({
+      bin: '/bin/sh',
+      args: ['-c', 'printf "$PATH"']
+    })
+    expect(result.stdout).toBe('/usr/bin:/bin:/usr/sbin:/sbin')
+  })
+
+  describe('buildSubprocessEnv', () => {
+    it('contains only whitelisted vars plus overrides', () => {
+      process.env.THERA_LEAK_TEST = 'leaked'
+      try {
+        const env = buildSubprocessEnv({ OMP_NUM_THREADS: '4' })
+        expect(env.THERA_LEAK_TEST).toBeUndefined()
+        expect(env.OMP_NUM_THREADS).toBe('4')
+        expect(env.HOME).toBe(process.env.HOME)
+        expect(env.PATH).toBe('/usr/bin:/bin:/usr/sbin:/sbin')
+      } finally {
+        delete process.env.THERA_LEAK_TEST
+      }
+    })
+
+    it('lets overrides win over whitelist values', () => {
+      const env = buildSubprocessEnv({ PATH: '/custom/bin' })
+      expect(env.PATH).toBe('/custom/bin')
+    })
   })
 
   it('can ignore stdout for callers that read output from files', async () => {

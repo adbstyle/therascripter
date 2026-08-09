@@ -34,6 +34,14 @@ import json
 import os
 import sys
 
+# CSP-Äquivalent (wie in diarize.py): Alle HuggingFace-Hub-Netzwerk-Requests
+# blockieren. CSP connect-src 'none' gilt nur im Electron-Renderer, nicht im
+# Python-Subprocess. Ohne diese Flags würde flair/transformers bei fehlendem
+# lokalen Cache (z. B. Tokenizer von xlm-roberta-large) stillschweigend über
+# HTTP nachladen. Muss gesetzt werden, BEVOR flair importiert wird.
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
 
 def report_progress(percent: int) -> None:
     """Print progress to stderr for TaskExecutor parsing."""
@@ -49,6 +57,16 @@ def main() -> None:
         help="Directory for flair model cache",
     )
     args = parser.parse_args()
+
+    # flair bindet cache_root beim IMPORT (flair/__init__.py liest FLAIR_CACHE_ROOT
+    # einmalig, Default ~/.flair) — die Variable muss also VOR `import flair` gesetzt
+    # sein, sonst wird das heruntergeladene Modell in --model-dir ignoriert und flair
+    # greift auf ~/.flair zurück (auf Endnutzer-Macs leer → Hub-Download-Versuch).
+    # HF_HOME lenkt zusätzlich alle huggingface_hub-Zugriffe ohne explizites
+    # cache_dir (z. B. Tokenizer-Auflösung) unter das App-Modellverzeichnis statt
+    # ~/.cache/huggingface.
+    os.environ["FLAIR_CACHE_ROOT"] = args.model_dir
+    os.environ.setdefault("HF_HOME", os.path.join(args.model_dir, "hf"))
 
     # Validate transcript file
     if not os.path.isfile(args.transcript):
@@ -85,10 +103,15 @@ def main() -> None:
     # Import flair (heavy import, ~3-5s)
     try:
         import logging
+        from pathlib import Path
 
         import flair
         from flair.data import Sentence
         from flair.nn import Classifier
+
+        # Belt-and-braces zum FLAIR_CACHE_ROOT-Env oben: direkt am Modul pinnen,
+        # falls eine künftige flair-Version das Import-Zeitpunkt-Binding ändert.
+        flair.cache_root = Path(args.model_dir)
 
         # Redirect flair's logger from stdout to stderr so JSON output stays clean
         flair.logger.handlers.clear()
@@ -115,11 +138,8 @@ def main() -> None:
     except Exception as e:
         print(f"MPS nicht verfügbar, nutze CPU: {e}", file=sys.stderr)
 
-    # Load NER model
+    # Load NER model (Cache-Verzeichnis via FLAIR_CACHE_ROOT, gesetzt vor dem Import)
     try:
-        # flair caches models in ~/.flair/ by default
-        # We set FLAIR_CACHE_ROOT to keep models in our directory
-        os.environ["FLAIR_CACHE_ROOT"] = args.model_dir
         tagger = Classifier.load("flair/ner-german-large")
     except Exception as e:
         print(f"Fehler: NER-Modell konnte nicht geladen werden: {e}", file=sys.stderr)

@@ -97,11 +97,11 @@ echo ""
 echo "→ Setze Version auf $NEW_VERSION in package.json …"
 set_version "$NEW_VERSION"
 
-# ── Git commit + tag ─────────────────────────────────────────────────────────
+# ── Git commit (nur lokal — Push erst NACH erfolgreichem Build + Verify) ────
 
 cd "$ROOT_DIR"
 
-echo "→ Git commit + tag v$NEW_VERSION …"
+echo "→ Git commit (lokal) …"
 git add package.json
 
 # Only commit if package.json actually changed
@@ -110,17 +110,6 @@ if git diff --cached --quiet; then
 else
   git commit -m "chore: bump version to $NEW_VERSION"
 fi
-
-# Only create tag if it doesn't exist yet
-if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
-  echo "  (Tag v$NEW_VERSION existiert bereits — überspringe)"
-else
-  git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
-fi
-
-echo "→ Push commit + tag …"
-git push origin HEAD
-git push origin "v$NEW_VERSION"
 
 # ── Build DMG ────────────────────────────────────────────────────────────────
 
@@ -135,10 +124,38 @@ DMG_PATH="$ROOT_DIR/dist/Therascript.dmg"
 
 if [[ ! -f "$DMG_PATH" ]]; then
   echo "❌ DMG nicht gefunden: $DMG_PATH"
+  echo "   (Version-Commit ist nur lokal — mit 'git reset HEAD~1' rückgängig machbar.)"
   exit 1
 fi
 
 echo "  DMG: $DMG_PATH"
+
+# ── Verify + Smoke (Release-Gate) ────────────────────────────────────────────
+# Prüft die GEPACKTE .app: Bundles self-contained (statisch) + alle ML-Tools
+# laufen in einer Homebrew-freien Sandbox (Runtime). Bei Rot hat noch nichts
+# die Maschine verlassen — kein Tag, kein Push, kein Release.
+
+echo ""
+echo "→ Verifiziere Bundles + Runtime-Smoke …"
+if ! "$ROOT_DIR/scripts/verify-bundles.sh" --app "$ROOT_DIR/dist/mac-arm64/Therascript.app" --smoke; then
+  echo ""
+  echo "❌ Verifikation fehlgeschlagen — Release abgebrochen."
+  echo "   Nichts wurde gepusht. Fix committen (Version-Commit ggf. amenden) und erneut starten."
+  exit 1
+fi
+
+# ── Git tag + push (erst jetzt — Build und Verify sind grün) ─────────────────
+
+# Only create tag if it doesn't exist yet
+if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
+  echo "  (Tag v$NEW_VERSION existiert bereits — überspringe)"
+else
+  git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+fi
+
+echo "→ Push commit + tag …"
+git push origin HEAD
+git push origin "v$NEW_VERSION"
 
 # ── GitHub Release ───────────────────────────────────────────────────────────
 
