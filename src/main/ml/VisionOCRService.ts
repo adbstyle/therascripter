@@ -51,13 +51,13 @@ export function parseVisionOCROutput(stdout: string, pageNumber: number): string
 
 export class VisionOCRService implements TaskExecutor {
   private getBinaryPath(): string {
-    // In packaged app: resources/bin/vision-ocr
-    // In dev: resources/bin/vision-ocr (built by scripts/setup-vision-ocr.sh)
-    const devPath = join(app.getAppPath(), 'resources', 'bin', 'vision-ocr')
-    if (existsSync(devPath)) return devPath
-
-    const packagedPath = join(process.resourcesPath, 'bin', 'vision-ocr')
-    if (existsSync(packagedPath)) return packagedPath
+    // isPackaged-Split wie in allen anderen Resolvern (WhisperService etc.):
+    // Die gepackte App nutzt AUSSCHLIESSLICH das mitgelieferte Binary — ein
+    // Dev-Checkout auf demselben Rechner darf es nicht shadowen.
+    const binPath = app.isPackaged
+      ? join(process.resourcesPath, 'bin', 'vision-ocr')
+      : join(app.getAppPath(), 'resources', 'bin', 'vision-ocr')
+    if (existsSync(binPath)) return binPath
 
     throw new Error(
       'Vision OCR Binary nicht gefunden. Bitte führen Sie scripts/setup-vision-ocr.sh aus.'
