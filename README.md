@@ -32,9 +32,15 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 2. DMG öffnen und Therascript in den Programme-Ordner ziehen
 3. Gatekeeper-Sperre aufheben (App ist nicht notarisiert):
    ```bash
-   xattr -cr /Applications/Therascript.app
+   chmod -R u+w /Applications/Therascript.app && xattr -cr /Applications/Therascript.app
    ```
-   Alternativ: Rechtsklick → Öffnen
+   Das vorangestellte `chmod` ist für Versionen bis 0.8.7 nötig (einzelne mitgelieferte
+   Dateien waren schreibgeschützt, `xattr` meldete sonst `Permission denied`) und ist
+   für neuere Versionen wirkungslos, aber harmlos.
+
+   Hinweis: Rechtsklick → Öffnen genügt **nicht** — es erlaubt nur den App-Start,
+   entfernt aber die Quarantäne der mitgelieferten ML-Werkzeuge nicht (die
+   Zusammenfassungs-Funktion bliebe stumm deaktiviert).
 4. Therascript starten
 5. Beim ersten Start lädt Therascript die ML-Modelle herunter (~4.1 GB; Zusammenfassungs-Modell ist optional und kann später nachgeladen werden)
 
