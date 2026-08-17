@@ -9,6 +9,9 @@
 #   4. LC_RPATH-Einträge nur @loader_path/@executable_path-relativ
 #   5. app.asar (falls gepackt): keine Secret-/Ballast-Leaks, Runtime-Deps
 #      vorhanden, Resolve-Gate via verify-asar-resolves.mjs
+#   6. Owner-Write-Bit (u+w) auf jedem gebundelten Pfad — read-only kopierte
+#      Homebrew-Mach-Os machen `xattr -cr` auf Endnutzer-Macs unmöglich
+#      (EACCES → Quarantäne bleibt → Gatekeeper killt das Binary per SIGKILL)
 #
 # Usage:
 #   ./scripts/verify-bundles.sh                  # prüft den Repo-Staging-Tree
@@ -255,6 +258,35 @@ if [ -d "$SIDECAR" ]; then
   fi
 else
   missing_bundle 'sidecar' "$SIDECAR"
+fi
+
+# Owner-Write-Gate: Homebrew-Bottles shippen Mach-Os teils mit Modus 444/555
+# und die Setup-Skripte übernehmen den Modus via `cp`. Ohne u+w schlägt auf
+# Endnutzer-Macs die Gatekeeper-Anleitung `xattr -cr` mit EACCES fehl (xattr
+# braucht Write-Permission, Ownership reicht nicht) — die Quarantäne bleibt
+# und Gatekeeper killt das Binary beim Spawn per SIGKILL, ohne stderr. Auf
+# Dev-Macs unsichtbar: dort ist nie etwas quarantänisiert. afterPack.js
+# chmod-t die gepackte App; dieser Check fängt Regressionen (und meldet im
+# Staging-Tree frisch kopierte Bottles direkt nach einem Setup-Skript-Lauf).
+echo ""
+echo "=== owner-write bit (xattr -cr auf Endnutzer-Macs) ==="
+if [ -n "$APP_PATH" ]; then
+  PERM_SCAN_DIRS=("$APP_PATH")
+else
+  PERM_SCAN_DIRS=()
+  for d in "$REPO_ROOT/resources" "$SIDECAR"; do
+    [ -d "$d" ] && PERM_SCAN_DIRS+=("$d")
+  done
+fi
+# `|| true`: head beendet nach 20 Zeilen und schickt find unter pipefail ein
+# SIGPIPE — die Zuweisung darf davon nicht failen.
+readonly_files=$( { [ ${#PERM_SCAN_DIRS[@]} -gt 0 ] && find "${PERM_SCAN_DIRS[@]}" ! -perm -u+w -print | head -20; } 2>/dev/null || true)
+if [ -n "$readonly_files" ]; then
+  echo "FAIL [perms]: Pfade ohne Owner-Write-Bit — xattr -cr wirft auf Endnutzer-Macs EACCES, Quarantäne bleibt (max. 20 gezeigt):" >&2
+  echo "$readonly_files" >&2
+  FAIL=1
+else
+  echo "ok   [perms]: alle Pfade owner-writable"
 fi
 
 # asar hygiene: only meaningful after `npm run package`. The old blacklist

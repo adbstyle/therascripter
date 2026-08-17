@@ -97,6 +97,15 @@ if [ -z "$LIBOMP_PREFIX" ] || [ ! -d "$LIBOMP_PREFIX/lib" ]; then
 fi
 cp "$LIBOMP_PREFIX/lib/libomp.dylib" "$LIB_DIR/"
 
+# Homebrew-Bottles shippen viele Mach-Os ohne Owner-Write-Bit (444/555) und
+# `cp` übernimmt den Modus. Ohne u+w schlägt beim Endnutzer `xattr -cr` mit
+# EACCES fehl (xattr braucht Write-Permission, Ownership reicht nicht) — die
+# Quarantäne bleibt und Gatekeeper killt llama-cli beim Spawn per SIGKILL.
+# afterPack.js chmod-t zusätzlich die ganze gepackte App (Chokepoint);
+# hier trotzdem fixen, damit der Staging-Tree sauber ist und
+# verify-bundles.sh (Owner-Write-Gate) direkt nach dem Setup grün läuft.
+chmod -R u+w "$BIN_DIR" "$LIB_DIR"
+
 # Prune duplicate dylib name variants: Homebrew ships each library under three
 # names (bare libfoo.dylib, libfoo.N.dylib, libfoo.N.M.P.dylib) — two of them
 # as symlinks that `cp` above resolves into physical copies (~16 MB dead
