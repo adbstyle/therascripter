@@ -22,6 +22,9 @@ Progress format (stderr):
     [PROGRESS] 50
     [PROGRESS] 100
 
+Liveness format (stderr):
+    [HEARTBEAT]
+
 Exit codes:
     0 = success
     1 = invalid arguments / file not found
@@ -33,6 +36,8 @@ import argparse
 import json
 import os
 import sys
+import threading
+from contextlib import contextmanager
 
 # CSP-Äquivalent (wie in diarize.py): Alle HuggingFace-Hub-Netzwerk-Requests
 # blockieren. CSP connect-src 'none' gilt nur im Electron-Renderer, nicht im
@@ -42,10 +47,161 @@ import sys
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
+HEARTBEAT_INTERVAL_SEC = 10
+
+_stderr_lock = threading.Lock()
+
+
+def _emit(line: str) -> None:
+    """
+    Eine Zeile atomar auf stderr schreiben. print() macht zwei separate
+    write()-Calls (Text, dann Newline) — der Heartbeat-Thread und der
+    Haupt-Thread teilen sich stderr und würden sich sonst mitten in einer
+    Zeile verschränken, was den [PROGRESS]-Parser im Main-Prozess bricht.
+    """
+    with _stderr_lock:
+        sys.stderr.write(line + "\n")
+        sys.stderr.flush()
+
 
 def report_progress(percent: int) -> None:
     """Print progress to stderr for TaskExecutor parsing."""
-    print(f"[PROGRESS] {percent}", file=sys.stderr, flush=True)
+    _emit(f"[PROGRESS] {percent}")
+
+
+@contextmanager
+def heartbeat():
+    """
+    Daemon-Thread, der alle HEARTBEAT_INTERVAL_SEC ein Lebenszeichen auf
+    stderr schreibt.
+
+    Der ProcessWatchdog im Main-Prozess kannte bisher nur [PROGRESS] als
+    Lebenszeichen. Zwischen `import flair` (10 %) und dem Ende von
+    `Classifier.load()` (25 %) liegt aber der Load von 2.24 GB
+    pytorch_model.bin: auf einer Maschine mit wenig freiem RAM ist das
+    überwiegend I/O-Wait (gemessen: 281 s wall vs. 42 s CPU bei vollem
+    Swap) und damit weit über der 120-s-Stall-Schwelle → der Watchdog
+    killte die Prozessgruppe mitten im gesunden Modell-Load.
+
+    Gleiches gilt für die Inferenz: bei einem einzigen Batch (PDF mit
+    einer Seite = ein Segment) feuert zwischen 25 % und 95 % ebenfalls
+    kein einziges [PROGRESS].
+    """
+    stop = threading.Event()
+
+    def beat() -> None:
+        while not stop.wait(HEARTBEAT_INTERVAL_SEC):
+            _emit("[HEARTBEAT]")
+
+    thread = threading.Thread(target=beat, name="heartbeat", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        # Deterministisch stoppen (auch bei sys.exit → SystemExit), sonst
+        # könnte der Thread beim Interpreter-Shutdown noch auf stderr
+        # schreiben und "Exception ignored in thread"-Rauschen erzeugen.
+        stop.set()
+        thread.join(timeout=1)
+
+
+def run_ner(model_dir: str, segments: list) -> list:
+    """Import flair, load the model and tag all segments. Returns entities."""
+    # Import flair (heavy import, ~3-5s)
+    try:
+        import logging
+        from pathlib import Path
+
+        import flair
+        from flair.data import Sentence
+        from flair.nn import Classifier
+
+        # Belt-and-braces zum FLAIR_CACHE_ROOT-Env oben: direkt am Modul pinnen,
+        # falls eine künftige flair-Version das Import-Zeitpunkt-Binding ändert.
+        flair.cache_root = Path(model_dir)
+
+        # Redirect flair's logger from stdout to stderr so JSON output stays clean
+        flair.logger.handlers.clear()
+        flair.logger.addHandler(logging.StreamHandler(sys.stderr))
+    except ImportError as e:
+        print(f"Fehler: Benötigtes Paket nicht installiert: {e}", file=sys.stderr)
+        print(
+            "Führen Sie scripts/setup-ner.sh aus, um Abhängigkeiten zu installieren.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    report_progress(10)
+
+    # MPS wie in diarize.py: der 550M-Parameter-Encoder auf 4 CPU-Threads
+    # (OMP_NUM_THREADS-Pin) war der langsamste Pipeline-Step. flair liest
+    # flair.device beim Modell-Load.
+    try:
+        import torch
+
+        if torch.backends.mps.is_available():
+            flair.device = torch.device("mps")
+            print("MPS-Backend aktiv (Apple Silicon GPU)", file=sys.stderr)
+    except Exception as e:
+        print(f"MPS nicht verfügbar, nutze CPU: {e}", file=sys.stderr)
+
+    # Load NER model (Cache-Verzeichnis via FLAIR_CACHE_ROOT, gesetzt vor dem Import)
+    try:
+        tagger = Classifier.load("flair/ner-german-large")
+    except Exception as e:
+        print(f"Fehler: NER-Modell konnte nicht geladen werden: {e}", file=sys.stderr)
+        print(
+            "Führen Sie scripts/setup-ner.sh --model aus, um das Modell herunterzuladen.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    report_progress(25)
+
+    # Process segments — gebatcht statt Satz-für-Satz: predict() über eine
+    # Liste nutzt mini_batch_size (flair sortiert intern nach Länge für
+    # effizientes Padding). Vorher war jedes Segment ein eigener Forward-Pass
+    # durch XLM-RoBERTa-large — bei hunderten Segmenten pro Stunde Audio der
+    # dominante Kostenfaktor dieses Steps (~3-5×).
+    all_entities = []
+    BATCH_SIZE = 32
+
+    try:
+        # (sentence, original_segment_index) — leere Segmente überspringen,
+        # aber den Original-Index für segmentIndex-Mapping behalten
+        indexed_sentences = [
+            (Sentence(text), idx)
+            for idx, segment in enumerate(segments)
+            if (text := segment.get("text", "")).strip()
+        ]
+
+        for batch_start in range(0, len(indexed_sentences), BATCH_SIZE):
+            batch = indexed_sentences[batch_start : batch_start + BATCH_SIZE]
+            tagger.predict([s for s, _ in batch], mini_batch_size=BATCH_SIZE)
+
+            for sentence, idx in batch:
+                for entity in sentence.get_spans("ner"):
+                    all_entities.append(
+                        {
+                            "text": entity.text,
+                            "type": entity.get_label("ner").value,
+                            "segmentIndex": idx,
+                            "charStart": entity.start_position,
+                            "charEnd": entity.end_position,
+                            "confidence": round(entity.get_label("ner").score, 4),
+                        }
+                    )
+
+            # Report progress: 25-95% range mapped to batch processing
+            done = min(batch_start + BATCH_SIZE, len(indexed_sentences))
+            pct = 25 + int(done / max(1, len(indexed_sentences)) * 70)
+            report_progress(min(pct, 95))
+
+    except Exception as e:
+        print(f"Fehler: NER-Verarbeitung fehlgeschlagen: {e}", file=sys.stderr)
+        sys.exit(3)
+
+    return all_entities
 
 
 def main() -> None:
@@ -100,107 +256,18 @@ def main() -> None:
 
     report_progress(5)
 
-    # Import flair (heavy import, ~3-5s)
-    try:
-        import logging
-        from pathlib import Path
-
-        import flair
-        from flair.data import Sentence
-        from flair.nn import Classifier
-
-        # Belt-and-braces zum FLAIR_CACHE_ROOT-Env oben: direkt am Modul pinnen,
-        # falls eine künftige flair-Version das Import-Zeitpunkt-Binding ändert.
-        flair.cache_root = Path(args.model_dir)
-
-        # Redirect flair's logger from stdout to stderr so JSON output stays clean
-        flair.logger.handlers.clear()
-        flair.logger.addHandler(logging.StreamHandler(sys.stderr))
-    except ImportError as e:
-        print(f"Fehler: Benötigtes Paket nicht installiert: {e}", file=sys.stderr)
-        print(
-            "Führen Sie scripts/setup-ner.sh aus, um Abhängigkeiten zu installieren.",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-
-    report_progress(10)
-
-    # MPS wie in diarize.py: der 550M-Parameter-Encoder auf 4 CPU-Threads
-    # (OMP_NUM_THREADS-Pin) war der langsamste Pipeline-Step. flair liest
-    # flair.device beim Modell-Load.
-    try:
-        import torch
-
-        if torch.backends.mps.is_available():
-            flair.device = torch.device("mps")
-            print("MPS-Backend aktiv (Apple Silicon GPU)", file=sys.stderr)
-    except Exception as e:
-        print(f"MPS nicht verfügbar, nutze CPU: {e}", file=sys.stderr)
-
-    # Load NER model (Cache-Verzeichnis via FLAIR_CACHE_ROOT, gesetzt vor dem Import)
-    try:
-        tagger = Classifier.load("flair/ner-german-large")
-    except Exception as e:
-        print(f"Fehler: NER-Modell konnte nicht geladen werden: {e}", file=sys.stderr)
-        print(
-            "Führen Sie scripts/setup-ner.sh --model aus, um das Modell herunterzuladen.",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-
-    report_progress(25)
-
-    # Process segments — gebatcht statt Satz-für-Satz: predict() über eine
-    # Liste nutzt mini_batch_size (flair sortiert intern nach Länge für
-    # effizientes Padding). Vorher war jedes Segment ein eigener Forward-Pass
-    # durch XLM-RoBERTa-large — bei hunderten Segmenten pro Stunde Audio der
-    # dominante Kostenfaktor dieses Steps (~3-5×).
-    all_entities = []
-    total = len(segments)
-    BATCH_SIZE = 32
-
-    try:
-        # (sentence, original_segment_index) — leere Segmente überspringen,
-        # aber den Original-Index für segmentIndex-Mapping behalten
-        indexed_sentences = [
-            (Sentence(text), idx)
-            for idx, segment in enumerate(segments)
-            if (text := segment.get("text", "")).strip()
-        ]
-
-        for batch_start in range(0, len(indexed_sentences), BATCH_SIZE):
-            batch = indexed_sentences[batch_start : batch_start + BATCH_SIZE]
-            tagger.predict([s for s, _ in batch], mini_batch_size=BATCH_SIZE)
-
-            for sentence, idx in batch:
-                for entity in sentence.get_spans("ner"):
-                    all_entities.append(
-                        {
-                            "text": entity.text,
-                            "type": entity.get_label("ner").value,
-                            "segmentIndex": idx,
-                            "charStart": entity.start_position,
-                            "charEnd": entity.end_position,
-                            "confidence": round(entity.get_label("ner").score, 4),
-                        }
-                    )
-
-            # Report progress: 25-95% range mapped to batch processing
-            done = min(batch_start + BATCH_SIZE, len(indexed_sentences))
-            pct = 25 + int(done / max(1, len(indexed_sentences)) * 70)
-            report_progress(min(pct, 95))
-
-    except Exception as e:
-        print(f"Fehler: NER-Verarbeitung fehlgeschlagen: {e}", file=sys.stderr)
-        sys.exit(3)
+    # Ab hier laufen Import, Modell-Load und Inferenz — Phasen, in denen
+    # minutenlang kein [PROGRESS] fällt. Der Heartbeat hält den Watchdog
+    # im Main-Prozess ruhig, ohne den Progress-Wert zu verändern.
+    with heartbeat():
+        all_entities = run_ner(args.model_dir, segments)
 
     # Output result
     result = {
         "entities": all_entities,
         "metadata": {
             "model": "flair/ner-german-large",
-            "segmentCount": total,
+            "segmentCount": len(segments),
             "entityCount": len(all_entities),
         },
     }

@@ -2,9 +2,10 @@ import type { Task, TaskType } from '../../shared/types'
 
 /**
  * Optional runtime helpers an executor can use to interact with the
- * orchestrating TaskQueueService. Currently only exposes the watchdog
- * threshold setter — used by WhisperService after stitching to retune
- * the stall budget for the (typically much shorter) stitched audio.
+ * orchestrating TaskQueueService. Exposes the watchdog threshold setter
+ * (used by WhisperService after stitching to retune the stall budget for
+ * the typically much shorter stitched audio) and a bare heartbeat for
+ * long progress-free phases.
  */
 export interface ExecutorRuntime {
   /**
@@ -12,6 +13,14 @@ export interface ExecutorRuntime {
    * call mid-execution; the watchdog reuses its existing heartbeat state.
    */
   setAudioDurationSec(audioDurationSec: number): void
+  /**
+   * Reines Lebenszeichen: setzt die Stall-Uhr des Watchdogs zurück, ohne
+   * den Fortschrittswert zu verändern. Für Subprozesse, die in einer
+   * Phase ohne feingranularen Fortschritt stecken (NER-Modell-Load:
+   * 2.24 GB pytorch_model.bin, auf RAM-knappen Maschinen minutenlang) —
+   * ohne das killt der Watchdog nach 120 s einen gesunden Prozess.
+   */
+  heartbeat(): void
 }
 
 export interface TaskExecutor {

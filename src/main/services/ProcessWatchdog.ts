@@ -6,6 +6,12 @@ const POLL_INTERVAL_MS = 15_000
 // Note: diarization and transcription use dynamic thresholds based on audio
 // duration (computed in computeThreshold). See ADR-007 / Issue #78.
 const STALL_THRESHOLDS: Partial<Record<TaskType, number>> = {
+  // Bleibt bei 120 s, obwohl der NER-Modell-Load (2.24 GB) auf RAM-knappen
+  // Macs minutenlang dauern kann: ner_service.py sendet seit dem Heartbeat-
+  // Umbau alle 10 s ein [HEARTBEAT] auf stderr, das AnonymizationService in
+  // runtime.heartbeat() übersetzt. Die Schwelle misst damit echte Liveness
+  // statt Fortschritt — ein wirklich wedged Prozess fliegt weiterhin nach
+  // 2 min raus. Die harte Zeitwall ist das Subprocess-Timeout (15 min).
   anonymization: 120_000,
   ocr: 60_000,
   // pdf.js läuft in-process; onProgress feuert pro Seite. Eine einzelne

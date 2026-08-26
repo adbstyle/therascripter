@@ -496,6 +496,12 @@ export class TaskQueueService {
     const runtime = {
       setAudioDurationSec: (sec: number): void => {
         watchdog.setAudioDurationSec(sec)
+      },
+      // Lebenszeichen ohne Fortschritt: kein repository.update, kein
+      // task:progress-Event — der Renderer soll nicht bei jedem Herzschlag
+      // eines still ladenden Modells neu rendern.
+      heartbeat: (): void => {
+        watchdog.heartbeat()
       }
     }
 
