@@ -119,6 +119,14 @@ run_check() {
   PASS_LIST="$PASS_LIST $name"
 }
 
+# Ein Fehler, der ausserhalb von run_check passiert (z. B. Fixture-Erzeugung),
+# muss trotzdem in FAIL_LIST und die Zusammenfassung — sonst reisst `set -e`
+# das Script mittendrin ab und die restlichen Checks laufen stumm nicht mehr.
+fail_check() {
+  echo "FAIL [$1]: $2" >&2
+  FAIL=1; FAIL_LIST="$FAIL_LIST $1"
+}
+
 skip_check() {
   if [ "$STRICT" = true ]; then
     echo "FAIL [$1]: $2 — im Gate-Modus (--app/--dist) sind Skips Fehler." >&2
@@ -187,8 +195,14 @@ fi
 # 4b. Diarization end-to-end: beweist den Offline-Load der Pipeline (inkl. der
 #     transitiven Sub-Modelle segmentation-3.0 und wespeaker-…) aus
 #     ~/.therascript/models/diarization, ohne ~/.cache/huggingface und
-#     ~/.cache/torch. Anders als ner_service.py setzt diarize.py KEIN HF_HOME
-#     und verlässt sich allein auf cache_dir= — genau das prüft dieser Check.
+#     ~/.cache/torch. diarize.py pinnt dafür — wie ner_service.py — HF_HOME
+#     unter das Modellverzeichnis; dieser Check ist das, was das Pinning
+#     festhält. Ohne es stirbt der Modell-Load hier mit
+#     "[Errno 1] Operation not permitted: ~/.cache/huggingface/token": die
+#     Modelle kämen zwar über cache_dir=, aber huggingface_hub liest daneben
+#     die Token-Datei, und einen PermissionError fängt es (anders als ein
+#     fehlendes File) nicht ab. Wird der Check rot, gehört HF_HOME repariert —
+#     NICHT das Sandbox-Deny gelockert.
 #     Assertion ist "[PROGRESS] 100" (stderr, von run_check nach stdout
 #     gemergt): das ist die letzte Zeile von main() und beweist damit Import,
 #     Modell-Load, Inferenz und RTTM-Ausgabe. Auf RTTM-Zeilen zu prüfen wäre
@@ -207,6 +221,11 @@ if [ -x "$SIDECAR_PY" ] && [ -f "$DIARIZE_SCRIPT" ] && [ -n "$DIARIZE_HF_MODEL" 
   # nötig, sonst wäre der Gate-Check auf Maschinen ohne python3 ein FAIL.
   # PYTHONDONTWRITEBYTECODE, damit der Aufruf keine pyc-Caches ins signierte
   # Bundle schreibt (siehe CLAUDE.md / verify-bundles.sh).
+  # set +e wie in run_check: schlägt der Interpreter hier fehl (z. B.
+  # quarantänisiertes Binary → SIGKILL, exit 137), soll das ein roter Check
+  # sein und keine Script-Abbruch durch `set -e` — sonst fehlen Summary,
+  # FAIL_LIST und die danach folgenden Checks.
+  set +e
   PYTHONDONTWRITEBYTECODE=1 "$SIDECAR_PY" - "$FIXTURE" <<'PYWAV'
 import struct
 import sys
@@ -227,9 +246,15 @@ with wave.open(sys.argv[1], "wb") as out:
     out.setframerate(16000)
     out.writeframes(bytes(frames))
 PYWAV
-  run_check 'diarize offline e2e' '\[PROGRESS\] 100' \
-    "$SIDECAR_PY" "$DIARIZE_SCRIPT" --audio "$FIXTURE" \
-    --model-dir "$DIARIZE_MODEL_DIR" --hf-model "$DIARIZE_HF_MODEL"
+  fixture_rc=$?
+  set -e
+  if [ $fixture_rc -ne 0 ]; then
+    fail_check 'diarize offline e2e' "Fixture-Erzeugung fehlgeschlagen (exit $fixture_rc): $SIDECAR_PY"
+  else
+    run_check 'diarize offline e2e' '\[PROGRESS\] 100' \
+      "$SIDECAR_PY" "$DIARIZE_SCRIPT" --audio "$FIXTURE" \
+      --model-dir "$DIARIZE_MODEL_DIR" --hf-model "$DIARIZE_HF_MODEL"
+  fi
   rm -f "$FIXTURE"
 else
   skip_check 'diarize offline e2e' "Diarization-Modell nicht installiert ($DIARIZE_MODEL_DIR)"
