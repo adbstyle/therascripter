@@ -209,13 +209,52 @@ fi
 #     falsch — auf einem Rauschen-Fixture darf pyannote legitim 0 Sprecher
 #     finden.
 DIARIZE_MODEL_DIR="$HOME/.therascript/models/diarization"
+# Geprüft wird die Pipeline, die der Nutzer tatsächlich fährt
+# (activeModels.diarizationPipeline aus electron-store), nicht pauschal der
+# Katalog-Default: 3.1 und community-1 haben unterschiedliche Sub-Modell-Sätze,
+# ein Cache-Layout-Fehler in genau der aktiven Pipeline wäre sonst grün durchs
+# Gate gelaufen. Fällt das Lesen aus (App nie gestartet, kaputtes JSON,
+# Modell nicht installiert), greift die Katalog-Reihenfolge als Fallback.
+# electron-store legt die Datei unter <userData>/settings.json ab; userData ist
+# für Dev und gepackte App identisch, weil electron-builder keinen productName
+# setzt und damit package.json "name" gilt.
+DIARIZE_SETTINGS="$HOME/Library/Application Support/therascript/settings.json"
 DIARIZE_HF_MODEL=""
-if [ -d "$DIARIZE_MODEL_DIR/models--pyannote--speaker-diarization-3.1" ]; then
-  DIARIZE_HF_MODEL="pyannote/speaker-diarization-3.1"
-elif [ -d "$DIARIZE_MODEL_DIR/models--pyannote--speaker-diarization-community-1" ]; then
-  DIARIZE_HF_MODEL="pyannote/speaker-diarization-community-1"
+DIARIZE_PICK="Katalog-Default"
+
+if [ -x "$SIDECAR_PY" ] && [ -f "$DIARIZE_SETTINGS" ]; then
+  ACTIVE_PIPELINE="$(PYTHONDONTWRITEBYTECODE=1 "$SIDECAR_PY" -c '
+import json
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        print(json.load(f).get("activeModels", {}).get("diarizationPipeline") or "")
+except Exception:
+    pass
+' "$DIARIZE_SETTINGS" 2>/dev/null || true)"
+  # Nur ein pyannote-Bezeichner, dessen HF-Cache-Verzeichnis auch existiert —
+  # sonst würde ein veralteter Store-Eintrag den Check rot machen, obwohl das
+  # Bundle in Ordnung ist.
+  case "$ACTIVE_PIPELINE" in
+    pyannote/*)
+      if [ -d "$DIARIZE_MODEL_DIR/models--${ACTIVE_PIPELINE//\//--}" ]; then
+        DIARIZE_HF_MODEL="$ACTIVE_PIPELINE"
+        DIARIZE_PICK="aktive Pipeline"
+      fi
+      ;;
+  esac
+fi
+
+if [ -z "$DIARIZE_HF_MODEL" ]; then
+  if [ -d "$DIARIZE_MODEL_DIR/models--pyannote--speaker-diarization-3.1" ]; then
+    DIARIZE_HF_MODEL="pyannote/speaker-diarization-3.1"
+  elif [ -d "$DIARIZE_MODEL_DIR/models--pyannote--speaker-diarization-community-1" ]; then
+    DIARIZE_HF_MODEL="pyannote/speaker-diarization-community-1"
+  fi
 fi
 if [ -x "$SIDECAR_PY" ] && [ -f "$DIARIZE_SCRIPT" ] && [ -n "$DIARIZE_HF_MODEL" ]; then
+  echo "     Diarization-Pipeline: $DIARIZE_HF_MODEL ($DIARIZE_PICK)"
   FIXTURE="$(mktemp -t therascript-diarize-fixture).wav"
   # Fixture mit dem ausgelieferten Interpreter erzeugen — kein System-Python
   # nötig, sonst wäre der Gate-Check auf Maschinen ohne python3 ein FAIL.
