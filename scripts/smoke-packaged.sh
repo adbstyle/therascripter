@@ -37,7 +37,8 @@ while [ $# -gt 0 ]; do
 done
 
 # Gate-Modus (app/dist): Skips gelten als FEHLER. Ein Smoke-Lauf gegen eine
-# gepackte .app, in dem die kritischen Checks (llama CPU-buft, NER offline)
+# gepackte .app, in dem die kritischen Checks (llama CPU-buft, NER offline,
+# Diarization offline)
 # mangels Modellen oder Binaries gar nicht laufen, darf NICHT grün enden —
 # sonst released release.sh ein ungetestetes DMG mit "SMOKE OK". Nur --staging
 # bleibt tolerant (halbfertige Dev-Checkouts).
@@ -53,6 +54,7 @@ if [ "$MODE" = "app" ]; then
   LLAMA_CLI="$RES/llama/bin/llama-cli"
   SIDECAR_PY="$RES/ml_sidecar/standalone/bin/python3"
   NER_SCRIPT="$RES/ml_sidecar/ner_service.py"
+  DIARIZE_SCRIPT="$RES/ml_sidecar/diarize.py"
   VISION_OCR="$RES/bin/vision-ocr"
   echo "Smoke-Target: $TARGET"
 else
@@ -60,6 +62,7 @@ else
   LLAMA_CLI="$REPO_ROOT/resources/llama/bin/llama-cli"
   SIDECAR_PY="$REPO_ROOT/python_sidecar/standalone/bin/python3"
   NER_SCRIPT="$REPO_ROOT/python_sidecar/ner_service.py"
+  DIARIZE_SCRIPT="$REPO_ROOT/python_sidecar/diarize.py"
   VISION_OCR="$REPO_ROOT/resources/bin/vision-ocr"
   echo "Smoke-Target: Repo-Staging-Tree ($REPO_ROOT)"
 fi
@@ -179,6 +182,57 @@ if [ -x "$SIDECAR_PY" ] && [ -f "$NER_SCRIPT" ] && [ -d "$NER_MODEL_DIR/models/n
   rm -f "$FIXTURE"
 else
   skip_check 'ner offline e2e' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
+fi
+
+# 4b. Diarization end-to-end: beweist den Offline-Load der Pipeline (inkl. der
+#     transitiven Sub-Modelle segmentation-3.0 und wespeaker-…) aus
+#     ~/.therascript/models/diarization, ohne ~/.cache/huggingface und
+#     ~/.cache/torch. Anders als ner_service.py setzt diarize.py KEIN HF_HOME
+#     und verlässt sich allein auf cache_dir= — genau das prüft dieser Check.
+#     Assertion ist "[PROGRESS] 100" (stderr, von run_check nach stdout
+#     gemergt): das ist die letzte Zeile von main() und beweist damit Import,
+#     Modell-Load, Inferenz und RTTM-Ausgabe. Auf RTTM-Zeilen zu prüfen wäre
+#     falsch — auf einem Rauschen-Fixture darf pyannote legitim 0 Sprecher
+#     finden.
+DIARIZE_MODEL_DIR="$HOME/.therascript/models/diarization"
+DIARIZE_HF_MODEL=""
+if [ -d "$DIARIZE_MODEL_DIR/models--pyannote--speaker-diarization-3.1" ]; then
+  DIARIZE_HF_MODEL="pyannote/speaker-diarization-3.1"
+elif [ -d "$DIARIZE_MODEL_DIR/models--pyannote--speaker-diarization-community-1" ]; then
+  DIARIZE_HF_MODEL="pyannote/speaker-diarization-community-1"
+fi
+if [ -x "$SIDECAR_PY" ] && [ -f "$DIARIZE_SCRIPT" ] && [ -n "$DIARIZE_HF_MODEL" ]; then
+  FIXTURE="$(mktemp -t therascript-diarize-fixture).wav"
+  # Fixture mit dem ausgelieferten Interpreter erzeugen — kein System-Python
+  # nötig, sonst wäre der Gate-Check auf Maschinen ohne python3 ein FAIL.
+  # PYTHONDONTWRITEBYTECODE, damit der Aufruf keine pyc-Caches ins signierte
+  # Bundle schreibt (siehe CLAUDE.md / verify-bundles.sh).
+  PYTHONDONTWRITEBYTECODE=1 "$SIDECAR_PY" - "$FIXTURE" <<'PYWAV'
+import struct
+import sys
+import wave
+
+# 5 s, 16 kHz, mono, 16-bit. Deterministisches Rauschen mit sehr kleiner
+# Amplitude statt digitaler Stille: energiebasierte Normalisierungsschritte
+# mögen einen Nullvektor nicht, und ein fester Seed hält den Check stabil.
+state = 12345
+frames = bytearray()
+for _ in range(16000 * 5):
+    state = (1103515245 * state + 12345) & 0x7FFFFFFF
+    frames += struct.pack("<h", (state % 601) - 300)
+
+with wave.open(sys.argv[1], "wb") as out:
+    out.setnchannels(1)
+    out.setsampwidth(2)
+    out.setframerate(16000)
+    out.writeframes(bytes(frames))
+PYWAV
+  run_check 'diarize offline e2e' '\[PROGRESS\] 100' \
+    "$SIDECAR_PY" "$DIARIZE_SCRIPT" --audio "$FIXTURE" \
+    --model-dir "$DIARIZE_MODEL_DIR" --hf-model "$DIARIZE_HF_MODEL"
+  rm -f "$FIXTURE"
+else
+  skip_check 'diarize offline e2e' "Diarization-Modell nicht installiert ($DIARIZE_MODEL_DIR)"
 fi
 
 # 5. vision-ocr: System-Framework-Binary startet

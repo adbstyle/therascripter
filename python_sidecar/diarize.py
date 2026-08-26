@@ -252,6 +252,16 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # HF_HOME unter das App-Modellverzeichnis lenken — wie in ner_service.py und
+    # aus demselben Grund: huggingface_hub liest den Pfad beim IMPORT in seine
+    # Konstanten, die Variable muss also VOR `from pyannote.audio import Pipeline`
+    # stehen. Die Modelle selbst kommen zwar über cache_dir=, aber der Hub greift
+    # daneben auf ~/.cache/huggingface zu (Token-Datei, Config). Auf einem Mac
+    # ohne diesen Ordner ist das folgenlos, unter jeder Sandbox mit Read-Deny
+    # aber ein PermissionError, den huggingface_hub — anders als ein fehlendes
+    # File — nicht abfängt: der Modell-Load stirbt mit Exit 2.
+    os.environ.setdefault("HF_HOME", os.path.join(args.model_dir, "hf"))
+
     # Validate audio file
     if not os.path.isfile(args.audio):
         _emit(f"Fehler: Audiodatei nicht gefunden: {args.audio}")
