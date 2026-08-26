@@ -34,6 +34,7 @@ Exit codes:
 
 import argparse
 import json
+import logging
 import os
 import sys
 import threading
@@ -49,19 +50,52 @@ os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 HEARTBEAT_INTERVAL_SEC = 10
 
+# Obergrenze fürs Warten auf _stderr_lock. Siehe _emit: der Lock ist eine
+# Best-Effort-Garantie für Zeilenintegrität, nie eine Vorbedingung fürs
+# Schreiben — deshalb ein Timeout statt eines blockierenden `with`.
+_STDERR_LOCK_TIMEOUT_SEC = 2
+
 _stderr_lock = threading.Lock()
 
 
 def _emit(line: str) -> None:
     """
-    Eine Zeile atomar auf stderr schreiben. print() macht zwei separate
-    write()-Calls (Text, dann Newline) — der Heartbeat-Thread und der
-    Haupt-Thread teilen sich stderr und würden sich sonst mitten in einer
-    Zeile verschränken, was den [PROGRESS]-Parser im Main-Prozess bricht.
+    Eine Zeile in EINEM write() auf stderr schreiben.
+
+    Alle stderr-Ausgaben dieses Scripts laufen hier durch — auch die
+    Fehlermeldungen und der flair-Logger (_EmitHandler). Zwei Gründe:
+    (1) print() macht zwei write()-Calls (Text, dann Newline); der
+    Heartbeat-Thread und der Haupt-Thread würden sich sonst mitten in
+    einer Zeile verschränken und der [PROGRESS]-Parser im Main-Prozess
+    bekäme Müll. (2) Ein einzelner write() plus der Lock hält die Zeilen
+    beider Threads auseinander.
+
+    Der Lock wird mit Timeout genommen und im Zweifel übersprungen: er
+    darf niemals blockieren. thread.join(timeout=1) in heartbeat() kann
+    den Heartbeat-Thread aufgeben, während der in einem hängenden
+    flush() steckt und den Lock hält — ein blockierendes `with` würde
+    dann den Haupt-Thread beim nächsten report_progress() für immer
+    aufhalten. Der Prozess hinge, obwohl das Ergebnis schon auf stdout
+    steht, bis das 900-s-Subprocess-Timeout ihn killt. Eine im Extremfall
+    verschränkte Diagnosezeile ist der bessere Preis.
     """
-    with _stderr_lock:
+    acquired = _stderr_lock.acquire(timeout=_STDERR_LOCK_TIMEOUT_SEC)
+    try:
         sys.stderr.write(line + "\n")
         sys.stderr.flush()
+    finally:
+        if acquired:
+            _stderr_lock.release()
+
+
+class _EmitHandler(logging.Handler):
+    """Leitet flairs Logger über _emit statt über einen eigenen Stream."""
+
+    def emit(self, record: "logging.LogRecord") -> None:
+        try:
+            _emit(self.format(record))
+        except Exception:  # noqa: BLE001 — Logging darf den Lauf nie kippen
+            self.handleError(record)
 
 
 def report_progress(percent: int) -> None:
@@ -109,7 +143,6 @@ def run_ner(model_dir: str, segments: list) -> list:
     """Import flair, load the model and tag all segments. Returns entities."""
     # Import flair (heavy import, ~3-5s)
     try:
-        import logging
         from pathlib import Path
 
         import flair
@@ -120,15 +153,14 @@ def run_ner(model_dir: str, segments: list) -> list:
         # falls eine künftige flair-Version das Import-Zeitpunkt-Binding ändert.
         flair.cache_root = Path(model_dir)
 
-        # Redirect flair's logger from stdout to stderr so JSON output stays clean
+        # Redirect flair's logger from stdout to stderr so JSON output stays
+        # clean. Über _EmitHandler, damit auch flairs Zeilen den stderr-Lock
+        # respektieren und nicht mit einem [HEARTBEAT] kollidieren.
         flair.logger.handlers.clear()
-        flair.logger.addHandler(logging.StreamHandler(sys.stderr))
+        flair.logger.addHandler(_EmitHandler())
     except ImportError as e:
-        print(f"Fehler: Benötigtes Paket nicht installiert: {e}", file=sys.stderr)
-        print(
-            "Führen Sie scripts/setup-ner.sh aus, um Abhängigkeiten zu installieren.",
-            file=sys.stderr,
-        )
+        _emit(f"Fehler: Benötigtes Paket nicht installiert: {e}")
+        _emit("Führen Sie scripts/setup-ner.sh aus, um Abhängigkeiten zu installieren.")
         sys.exit(2)
 
     report_progress(10)
@@ -141,19 +173,16 @@ def run_ner(model_dir: str, segments: list) -> list:
 
         if torch.backends.mps.is_available():
             flair.device = torch.device("mps")
-            print("MPS-Backend aktiv (Apple Silicon GPU)", file=sys.stderr)
+            _emit("MPS-Backend aktiv (Apple Silicon GPU)")
     except Exception as e:
-        print(f"MPS nicht verfügbar, nutze CPU: {e}", file=sys.stderr)
+        _emit(f"MPS nicht verfügbar, nutze CPU: {e}")
 
     # Load NER model (Cache-Verzeichnis via FLAIR_CACHE_ROOT, gesetzt vor dem Import)
     try:
         tagger = Classifier.load("flair/ner-german-large")
     except Exception as e:
-        print(f"Fehler: NER-Modell konnte nicht geladen werden: {e}", file=sys.stderr)
-        print(
-            "Führen Sie scripts/setup-ner.sh --model aus, um das Modell herunterzuladen.",
-            file=sys.stderr,
-        )
+        _emit(f"Fehler: NER-Modell konnte nicht geladen werden: {e}")
+        _emit("Führen Sie scripts/setup-ner.sh --model aus, um das Modell herunterzuladen.")
         sys.exit(2)
 
     report_progress(25)
@@ -198,7 +227,7 @@ def run_ner(model_dir: str, segments: list) -> list:
             report_progress(min(pct, 95))
 
     except Exception as e:
-        print(f"Fehler: NER-Verarbeitung fehlgeschlagen: {e}", file=sys.stderr)
+        _emit(f"Fehler: NER-Verarbeitung fehlgeschlagen: {e}")
         sys.exit(3)
 
     return all_entities
@@ -226,7 +255,7 @@ def main() -> None:
 
     # Validate transcript file
     if not os.path.isfile(args.transcript):
-        print(f"Fehler: Transkript-Datei nicht gefunden: {args.transcript}", file=sys.stderr)
+        _emit(f"Fehler: Transkript-Datei nicht gefunden: {args.transcript}")
         sys.exit(1)
 
     report_progress(0)
@@ -236,7 +265,7 @@ def main() -> None:
         with open(args.transcript, "r", encoding="utf-8") as f:
             transcript = json.load(f)
     except (json.JSONDecodeError, IOError) as e:
-        print(f"Fehler: Transkript konnte nicht geladen werden: {e}", file=sys.stderr)
+        _emit(f"Fehler: Transkript konnte nicht geladen werden: {e}")
         sys.exit(1)
 
     segments = transcript.get("segments", [])
