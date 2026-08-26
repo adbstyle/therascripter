@@ -3,16 +3,14 @@ import { join } from 'path'
 import { app } from 'electron'
 import type { Task } from '../../shared/types'
 import type { DiarizationData, SpeakerSegment } from '../../shared/types'
-import type { TaskExecutor } from '../services/task-executors'
+import type { ExecutorRuntime, TaskExecutor } from '../services/task-executors'
 import { SessionService } from '../services/SessionService'
 import { runSubprocess } from '../utils/subprocess'
 import { getDatabase, getDataDir } from '../db/connection'
 import { writeFileAtomic } from '../utils/file-ops'
 import { resolvePythonSidecar } from './resolve-python'
 import { getSettings } from '../services/SettingsService'
-
-// Progress line format: "[PROGRESS] 42"
-const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
+import { parseSidecarStderrLine } from './sidecar-stderr'
 
 // Minimum segment duration in seconds. Segments shorter than this are
 // filtered as pyannote segmentation noise. The Python-side collar merge
@@ -31,7 +29,8 @@ export class PyannoteSidecar implements TaskExecutor {
   async execute(
     task: Task,
     onProgress: (progress: number) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    runtime?: ExecutorRuntime
   ): Promise<void> {
     const { bin, args: prefixArgs } = this.getCommand()
 
@@ -53,11 +52,17 @@ export class PyannoteSidecar implements TaskExecutor {
       throw new Error(`Audiodatei nicht gefunden: ${session.audioPath}`)
     }
 
-    // Calculate timeout: 4x audio duration (pyannote is slower than whisper)
+    // Calculate timeout: 4x audio duration (pyannote is slower than whisper).
+    // Der Boden liegt bei 10 min, nicht bei 2: seit dem [HEARTBEAT] ist der
+    // Watchdog nur noch ein Liveness-Check, dieses Timeout also die einzige
+    // harte Wall. Sie muss den Modell-Load überdecken, und der ist von der
+    // Audiolänge unabhängig — bei einer 30-s-Aufnahme hätten die alten 120 s
+    // exakt den Fehler reproduziert, den der Heartbeat gerade behebt. Für
+    // echte Sitzungen dominiert ohnehin der 4×-Term.
     const audioStats = statSync(session.audioPath)
     const WAV_HEADER_SIZE = 44
     const audioDurationEstimate = Math.max(0, audioStats.size - WAV_HEADER_SIZE) / (48000 * 2) // 48kHz 16-bit mono
-    const timeoutMs = Math.max(audioDurationEstimate * 4 * 1000, 120_000) // min 2 minutes
+    const timeoutMs = Math.max(audioDurationEstimate * 4 * 1000, 600_000) // min 10 minutes
 
     const activePipeline = getSettings().get('activeModels').diarizationPipeline
 
@@ -69,7 +74,8 @@ export class PyannoteSidecar implements TaskExecutor {
       activePipeline,
       timeoutMs,
       onProgress,
-      signal
+      signal,
+      () => runtime?.heartbeat()
     )
 
     // Parse RTTM output
@@ -92,7 +98,8 @@ export class PyannoteSidecar implements TaskExecutor {
     hfModel: string,
     timeoutMs: number,
     onProgress: (progress: number) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onHeartbeat?: () => void
   ): Promise<string> {
     const modelDir = this.getModelDir()
     const args = [
@@ -127,9 +134,11 @@ export class PyannoteSidecar implements TaskExecutor {
           PYTHONDONTWRITEBYTECODE: '1'
         },
         onStderrLine: (line) => {
-          const match = PROGRESS_REGEX.exec(line)
-          if (match) {
-            onProgress(parseInt(match[1], 10) / 100)
+          const event = parseSidecarStderrLine(line)
+          if (event?.kind === 'progress') {
+            onProgress(event.progress)
+          } else if (event?.kind === 'heartbeat') {
+            onHeartbeat?.()
           }
         }
       })

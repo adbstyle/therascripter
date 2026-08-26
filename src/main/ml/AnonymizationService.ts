@@ -16,36 +16,8 @@ import { buildTipTapDocument } from './tiptap-builder'
 import { countWords } from '../../shared/utils/countWords'
 import { countPlaceholderChips } from '../../shared/utils/countPlaceholderChips'
 import { resolvePythonSidecar } from './resolve-python'
+import { parseSidecarStderrLine } from './sidecar-stderr'
 import { writeFileAtomic } from '../utils/file-ops'
-
-// Progress line format: "[PROGRESS] 42"
-const PROGRESS_REGEX = /\[PROGRESS\]\s*(\d+)/
-// Liveness line format: "[HEARTBEAT]" — kein Fortschritt, nur "ich lebe noch".
-// ner_service.py sendet das alle 10 s aus einem Daemon-Thread, weil zwischen
-// [PROGRESS] 10 (nach `import flair`) und [PROGRESS] 25 (nach Classifier.load)
-// der Load von 2.24 GB pytorch_model.bin liegt: auf RAM-knappen Macs
-// dominiert dabei I/O-Wait (gemessen 281 s wall / 42 s CPU bei vollem Swap),
-// womit die 120-s-Stall-Schwelle des Watchdogs einen gesunden Prozess killte.
-const HEARTBEAT_REGEX = /\[HEARTBEAT\]/
-
-export type NerStderrEvent = { kind: 'progress'; progress: number } | { kind: 'heartbeat' } | null
-
-/**
- * Klassifiziert eine stderr-Zeile des NER-Sidecars. Beide Signale müssen den
- * Watchdog zurücksetzen, aber nur [PROGRESS] darf den Fortschrittswert
- * bewegen — ein Heartbeat, der Progress schreibt, würde die Balken im
- * Renderer flackern lassen und den DB-Progress verfälschen.
- */
-export function parseNerStderrLine(line: string): NerStderrEvent {
-  const match = PROGRESS_REGEX.exec(line)
-  if (match) {
-    return { kind: 'progress', progress: parseInt(match[1], 10) / 100 }
-  }
-  if (HEARTBEAT_REGEX.test(line)) {
-    return { kind: 'heartbeat' }
-  }
-  return null
-}
 
 export class AnonymizationService implements TaskExecutor {
   private getCommand(): { bin: string; args: string[] } {
@@ -181,8 +153,9 @@ export class AnonymizationService implements TaskExecutor {
     const args = [...prefixArgs, '--transcript', transcriptPath, '--model-dir', modelDir]
 
     // Harte Obergrenze gegen einen wirklich weggelaufenen Prozess. Seit dem
-    // [HEARTBEAT] ist der Watchdog kein Zeitlimit mehr, sondern nur noch ein
-    // Liveness-Check — dieses Timeout ist die einzige Wall. 5 Minuten reichten
+    // [HEARTBEAT] (siehe sidecar-stderr.ts) ist der Watchdog kein Zeitlimit
+    // mehr, sondern nur noch ein Liveness-Check — dieses Timeout ist die
+    // einzige Wall. 5 Minuten reichten
     // dafür nicht: ein Lauf auf einer 8-GB-Maschine mit vollem Swap brauchte
     // 281 s allein für Modell-Load + Inferenz eines einseitigen PDFs. 15 min
     // gibt auch dem Worst Case Luft, ohne die Queue unbegrenzt zu blockieren.
@@ -203,7 +176,7 @@ export class AnonymizationService implements TaskExecutor {
           PYTHONDONTWRITEBYTECODE: '1'
         },
         onStderrLine: (line) => {
-          const event = parseNerStderrLine(line)
+          const event = parseSidecarStderrLine(line)
           if (event?.kind === 'progress') {
             onProgress(event.progress)
           } else if (event?.kind === 'heartbeat') {
