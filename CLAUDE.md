@@ -25,7 +25,7 @@ npm run format        # Prettier formatting
 npm run typecheck     # TypeScript check (both node + web configs)
 npm run start         # Preview production build (electron-vite preview)
 npm run package       # electron-rebuild + build + electron-builder → macOS DMG (arm64 only)
-scripts/release.sh                # Version bump → DMG build → GitHub release (via gh CLI). Interaktiv ohne Args; nicht-interaktiv mit --bump patch|minor|major bzw. --version X.Y.Z plus --notes/--notes-file (Claude entscheidet Bump + schreibt Notes). Installationsanleitung wird IMMER an die Notes angehängt.
+scripts/release.sh                # Version bump → DMG build → GitHub release (via gh CLI). Interaktiv ohne Args; nicht-interaktiv mit --bump patch|minor|major bzw. --version X.Y.Z plus --notes/--notes-file (nur auf main; Claude entscheidet Bump + schreibt Notes). Endanwender-Installationsanleitung (scripts/release-install-guide.md, Fakten synchron mit README halten) wird IMMER an die Notes angehängt.
 scripts/setup-whisper.sh          # Install whisper-cli via Homebrew → resources/whisper/{bin,lib}/
 scripts/setup-whisper.sh --model  # Also download ASR model (~547 MB)
 scripts/setup-pyannote.sh                # Create Python venv with pyannote.audio → python_sidecar/venv/

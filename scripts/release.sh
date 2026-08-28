@@ -5,6 +5,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PACKAGE_JSON="$ROOT_DIR/package.json"
+# Wird an JEDE Release-Note angehängt (Endanwender-Anleitung, siehe Datei-Header).
+INSTALL_GUIDE_FILE="$ROOT_DIR/scripts/release-install-guide.md"
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -30,6 +32,13 @@ bump_major() {
   echo "$((major + 1)).0.0"
 }
 
+validate_version() {
+  if ! [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "❌ Ungültiges Versionsformat: '$1' — erwartet: X.Y.Z"
+    exit 1
+  fi
+}
+
 set_version() {
   local new_ver="$1"
   node -e "
@@ -51,10 +60,11 @@ Usage: scripts/release.sh [--bump patch|minor|major | --version X.Y.Z]
                           [--notes "text" | --notes-file <pfad>]
 
 Ohne Argumente: interaktiver Modus (Fragen wie bisher).
-Mit --bump oder --version: nicht-interaktiv, keine Rückfragen.
+Mit --bump oder --version: nicht-interaktiv, keine Rückfragen; läuft nur auf
+dem main-Branch (Ersatz für die entfallene menschliche Bestätigung).
 Notes aus --notes/--notes-file; fehlen sie, werden sie von GitHub aus den
-Commits generiert. Die Installationsanleitung für Endanwender wird IMMER
-automatisch an die Release Notes angehängt.
+Commits generiert. Die Installationsanleitung für Endanwender
+(scripts/release-install-guide.md) wird IMMER automatisch angehängt.
 EOF
 }
 
@@ -64,18 +74,76 @@ NOTES_ARG=""
 NOTES_FILE_ARG=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --bump)       BUMP="${2:-}"; shift 2 ;;
-    --version)    VERSION_ARG="${2:-}"; shift 2 ;;
-    --notes)      NOTES_ARG="${2:-}"; shift 2 ;;
-    --notes-file) NOTES_FILE_ARG="${2:-}"; shift 2 ;;
-    -h|--help)    usage; exit 0 ;;
+    --bump|--version|--notes|--notes-file)
+      if [ $# -lt 2 ]; then
+        echo "❌ Option $1 braucht einen Wert."
+        usage
+        exit 1
+      fi
+      case "$1" in
+        --bump)       BUMP="$2" ;;
+        --version)    VERSION_ARG="$2" ;;
+        --notes)      NOTES_ARG="$2" ;;
+        --notes-file) NOTES_FILE_ARG="$2" ;;
+      esac
+      shift 2
+      ;;
+    -h|--help) usage; exit 0 ;;
     *) echo "❌ Unbekannte Option: $1"; usage; exit 1 ;;
   esac
 done
 
+# ── Fail-fast: ALLE Flag-Inputs validieren, bevor irgendetwas passiert ──────
+# (Build dauert >10 min und pusht Commit+Tag — ein Tippfehler in einem Flag
+# darf nicht erst danach auffallen.)
+
+if [ -n "$BUMP" ] && [ -n "$VERSION_ARG" ]; then
+  echo "❌ --bump und --version schliessen sich gegenseitig aus."
+  exit 1
+fi
+if [ -n "$BUMP" ]; then
+  case "$BUMP" in
+    patch|minor|major) ;;
+    *) echo "❌ --bump erwartet patch|minor|major (war: $BUMP)"; exit 1 ;;
+  esac
+fi
+if [ -n "$VERSION_ARG" ]; then
+  validate_version "$VERSION_ARG"
+fi
+if [ -n "$NOTES_ARG" ] && [ -n "$NOTES_FILE_ARG" ]; then
+  echo "❌ --notes und --notes-file schliessen sich gegenseitig aus."
+  exit 1
+fi
+
+# Notes-Quelle sofort auflösen — ab hier gibt es nur noch NOTES_BODY.
+NOTES_BODY=""
+if [ -n "$NOTES_FILE_ARG" ]; then
+  if [ ! -f "$NOTES_FILE_ARG" ]; then
+    echo "❌ --notes-file nicht gefunden: $NOTES_FILE_ARG"
+    exit 1
+  fi
+  NOTES_BODY="$(cat "$NOTES_FILE_ARG")"
+elif [ -n "$NOTES_ARG" ]; then
+  NOTES_BODY="$NOTES_ARG"
+fi
+
+if [ ! -f "$INSTALL_GUIDE_FILE" ]; then
+  echo "❌ Installationsanleitung fehlt: $INSTALL_GUIDE_FILE"
+  exit 1
+fi
+
 INTERACTIVE=true
 if [ -n "$BUMP" ] || [ -n "$VERSION_ARG" ]; then
   INTERACTIVE=false
+  # Branch-Guard: interaktiv fängt der Mensch am Bestätigungs-Prompt einen
+  # falschen Branch ab — nicht-interaktiv muss das Skript es tun. Ein Release
+  # von einem Feature-Branch würde dessen HEAD pushen und ungemergten Code
+  # öffentlich veröffentlichen.
+  CURRENT_BRANCH="$(git -C "$ROOT_DIR" branch --show-current)"
+  if [ "$CURRENT_BRANCH" != "main" ]; then
+    echo "❌ Nicht-interaktives Release nur vom main-Branch (aktuell: $CURRENT_BRANCH)."
+    exit 1
+  fi
 fi
 
 # ── Version selection ────────────────────────────────────────────────────────
@@ -85,26 +153,10 @@ NEXT_PATCH="$(bump_patch "$CURRENT")"
 NEXT_MINOR="$(bump_minor "$CURRENT")"
 NEXT_MAJOR="$(bump_major "$CURRENT")"
 
-RELEASE_NOTES=""
-
-if [ "$INTERACTIVE" = false ]; then
-  if [ -n "$VERSION_ARG" ]; then
-    if ! [[ "$VERSION_ARG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-      echo "❌ Ungültiges Format für --version. Erwartet: X.Y.Z"
-      exit 1
-    fi
-    NEW_VERSION="$VERSION_ARG"
-  else
-    case "$BUMP" in
-      patch) NEW_VERSION="$NEXT_PATCH" ;;
-      minor) NEW_VERSION="$NEXT_MINOR" ;;
-      major) NEW_VERSION="$NEXT_MAJOR" ;;
-      *) echo "❌ --bump erwartet patch|minor|major (war: $BUMP)"; exit 1 ;;
-    esac
-  fi
-  echo ""
-  echo "Release (nicht-interaktiv): $CURRENT → $NEW_VERSION"
-else
+# Der interaktive Modus FÜLLT nur BUMP/VERSION_ARG — die Auflösung zu
+# NEW_VERSION teilt er sich danach mit dem Flag-Pfad (eine Implementierung,
+# eine Validierung).
+if [ "$INTERACTIVE" = true ]; then
   echo ""
   echo "╔══════════════════════════════════════════╗"
   echo "║        Therascript Release Script        ║"
@@ -121,34 +173,39 @@ else
   read -rp "  Auswahl [1-4]: " choice
 
   case "$choice" in
-    1) NEW_VERSION="$NEXT_PATCH" ;;
-    2) NEW_VERSION="$NEXT_MINOR" ;;
-    3) NEW_VERSION="$NEXT_MAJOR" ;;
-    4)
-      read -rp "  Version eingeben (z.B. 1.2.3): " custom
-      if ! [[ "$custom" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo "❌ Ungültiges Format. Erwartet: X.Y.Z"
-        exit 1
-      fi
-      NEW_VERSION="$custom"
-      ;;
-    *)
-      echo "❌ Ungültige Auswahl."
-      exit 1
-      ;;
+    1) BUMP="patch" ;;
+    2) BUMP="minor" ;;
+    3) BUMP="major" ;;
+    4) read -rp "  Version eingeben (z.B. 1.2.3): " VERSION_ARG ;;
+    *) echo "❌ Ungültige Auswahl."; exit 1 ;;
   esac
+fi
 
+if [ -n "$VERSION_ARG" ]; then
+  validate_version "$VERSION_ARG"
+  NEW_VERSION="$VERSION_ARG"
+else
+  case "$BUMP" in
+    patch) NEW_VERSION="$NEXT_PATCH" ;;
+    minor) NEW_VERSION="$NEXT_MINOR" ;;
+    major) NEW_VERSION="$NEXT_MAJOR" ;;
+  esac
+fi
+
+if [ "$INTERACTIVE" = true ]; then
   echo ""
   echo "  Neue Version: $NEW_VERSION"
   read -rp "  Fortfahren? [j/N] " confirm
   [[ "$confirm" =~ ^[jJyY]$ ]] || { echo "Abgebrochen."; exit 0; }
 
-  # Interaktive Notes nur, wenn nicht schon per Flag geliefert
-  if [ -z "$NOTES_ARG" ] && [ -z "$NOTES_FILE_ARG" ]; then
+  if [ -z "$NOTES_BODY" ]; then
     echo ""
-    echo "  Release Notes (optional, Eingabe leer lassen zum Überspringen):"
-    read -rp "  > " RELEASE_NOTES
+    echo "  Release Notes (optional, leer = von GitHub aus Commits generiert):"
+    read -rp "  > " NOTES_BODY
   fi
+else
+  echo ""
+  echo "Release (nicht-interaktiv): $CURRENT → $NEW_VERSION"
 fi
 
 # ── Version bump ─────────────────────────────────────────────────────────────
@@ -218,80 +275,44 @@ git push origin HEAD
 git push origin "v$NEW_VERSION"
 
 # ── GitHub Release ───────────────────────────────────────────────────────────
-# Die Installationsanleitung wird IMMER an die Notes angehängt — die Anwender
-# sind technisch nicht versiert und brauchen bei jedem Release die exakten
-# Schritte (inkl. xattr -cr: Rechtsklick→Öffnen whitelistet nur den App-Start,
-# nicht die inneren ML-Binaries — siehe CLAUDE.md Gotcha zu u+w/Quarantäne).
-
-INSTALL_GUIDE=$(cat <<'GUIDE_EOF'
-## 📦 Installationsanleitung
-
-**Systemvoraussetzungen:** Mac mit Apple-Chip (M1–M4), macOS 26 (Tahoe) oder neuer, mindestens 8 GB Arbeitsspeicher, ca. 6 GB freier Speicherplatz. Für den ersten Start wird eine Internetverbindung benötigt (Modell-Download, ~4.1 GB) — danach arbeitet Therascript vollständig offline.
-
-### Schritt 1: Herunterladen und installieren
-
-1. Unten bei **Assets** auf `Therascript.dmg` klicken und die Datei herunterladen.
-2. Die heruntergeladene Datei `Therascript.dmg` doppelklicken — ein Fenster öffnet sich.
-3. Das Therascript-Symbol in den Ordner **Programme** ziehen.
-4. Das Fenster schliessen.
-
-### Schritt 2: App freigeben (einmalig, wichtig!)
-
-macOS blockiert Apps, die nicht aus dem App Store stammen. Damit Therascript vollständig funktioniert, muss die App einmalig freigegeben werden:
-
-1. **Terminal** öffnen: Tastenkombination `cmd + Leertaste` drücken, „Terminal" eintippen, mit `Enter` bestätigen.
-2. Die folgende Zeile kopieren, im Terminal einfügen und `Enter` drücken:
-   ```
-   xattr -cr /Applications/Therascript.app
-   ```
-3. Das Terminal kann danach geschlossen werden.
-
-> ⚠️ **Wichtig:** „Rechtsklick → Öffnen" allein genügt **nicht** — damit startet zwar die App, aber die eingebauten Verarbeitungs-Werkzeuge bleiben blockiert und die Transkription schlägt fehl. Bitte immer den Terminal-Befehl aus Schritt 2 verwenden.
-
-### Schritt 3: Starten
-
-1. Therascript aus dem Ordner **Programme** (oder über das Launchpad) starten.
-2. Beim ersten Start lädt die App die benötigten Sprachmodelle herunter (~4.1 GB, je nach Internetverbindung 10–30 Minuten). Der Fortschritt wird angezeigt.
-3. Fertig — ab jetzt arbeitet Therascript komplett lokal auf Ihrem Mac, ohne Cloud.
-
-**Update von einer früheren Version:** Einfach Schritt 1 und 2 wiederholen (alte App im Programme-Ordner ersetzen). Ihre Transkriptionen, Einstellungen und die bereits heruntergeladenen Modelle bleiben erhalten.
-GUIDE_EOF
-)
+# Die Installationsanleitung (scripts/release-install-guide.md) wird IMMER an
+# die Notes angehängt — die Anwender sind technisch nicht versiert und
+# brauchen bei jedem Release die exakten Schritte. Der Guide liegt als eigene
+# Markdown-Datei vor (editierbar ohne Shell-Quoting-Fallen); Fakten dort mit
+# README.md synchron halten.
 
 echo ""
 echo "→ Erstelle GitHub Release v$NEW_VERSION …"
 
-NOTES_BODY=""
-if [ -n "$NOTES_FILE_ARG" ]; then
-  if [ ! -f "$NOTES_FILE_ARG" ]; then
-    echo "❌ --notes-file nicht gefunden: $NOTES_FILE_ARG"
-    exit 1
+if [ -z "$NOTES_BODY" ]; then
+  # Von GitHub aus den Commits generieren. Muss NACH dem Tag-Push laufen
+  # (generate-notes referenziert den Tag). Kein --generate-notes-Flag möglich:
+  # gh release create kann es nicht mit --notes-file kombinieren, und der
+  # Guide muss angehängt werden. Fehler hier NICHT verschlucken — ein
+  # changelog-loses Release soll laut auffallen, auch wenn wir es (mit Guide)
+  # trotzdem veröffentlichen.
+  if ! NOTES_BODY="$(gh api "repos/{owner}/{repo}/releases/generate-notes" \
+      -f tag_name="v$NEW_VERSION" --jq .body)"; then
+    NOTES_BODY=""
+    echo "⚠️  GitHub-Notes-Generierung fehlgeschlagen — das Release enthält nur"
+    echo "    die Installationsanleitung. Changelog nachtragen mit:"
+    echo "    gh release edit v$NEW_VERSION --notes-file <datei>"
   fi
-  NOTES_BODY="$(cat "$NOTES_FILE_ARG")"
-elif [ -n "$NOTES_ARG" ]; then
-  NOTES_BODY="$NOTES_ARG"
-elif [ -n "$RELEASE_NOTES" ]; then
-  NOTES_BODY="$RELEASE_NOTES"
-else
-  # Von GitHub aus den Commits generieren (Fallback: leer, Guide bleibt)
-  NOTES_BODY="$(gh api "repos/{owner}/{repo}/releases/generate-notes" \
-    -f tag_name="v$NEW_VERSION" --jq .body 2>/dev/null || true)"
 fi
 
-NOTES_TMP="$(mktemp -t therascript-release-notes).md"
+NOTES_TMP="$(mktemp -t therascript-release-notes)"
+trap 'rm -f "$NOTES_TMP"' EXIT
 {
   if [ -n "$NOTES_BODY" ]; then
     printf '%s\n\n---\n\n' "$NOTES_BODY"
   fi
-  printf '%s\n' "$INSTALL_GUIDE"
+  cat "$INSTALL_GUIDE_FILE"
 } > "$NOTES_TMP"
 
 gh release create "v$NEW_VERSION" \
   --title "Therascript v$NEW_VERSION" \
   --notes-file "$NOTES_TMP" \
   "$DMG_PATH"
-
-rm -f "$NOTES_TMP"
 
 # ── Update manifest ──────────────────────────────────────────────────────────
 
