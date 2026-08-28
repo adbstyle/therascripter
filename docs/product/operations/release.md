@@ -2,7 +2,12 @@
 
 ## Overview
 
-Therascript releases are built as macOS DMG installers targeting Apple Silicon (arm64 only). The release flow is driven by an interactive shell script (`scripts/release.sh`) that bumps the version, builds the DMG, and publishes a GitHub Release via the `gh` CLI.
+Therascript releases are built as macOS DMG installers targeting Apple Silicon (arm64 only). The release flow is driven by `scripts/release.sh`, which bumps the version, builds the DMG, runs the verify+smoke release gate, and publishes a GitHub Release via the `gh` CLI. The script has two modes:
+
+- **Interactive** (no arguments): prompts for the version choice, a confirmation, and optional release notes.
+- **Non-interactive** (`--bump patch|minor|major` or `--version X.Y.Z`, plus `--notes "text"` or `--notes-file <path>`): no prompts; intended for automated releases (e.g. Claude-driven). Refuses to run on any branch other than `main` — that guard replaces the human confirmation prompt. All flag inputs (bump value, version format, notes-file existence, mutually exclusive flag combinations) are validated up front, before anything is built or pushed.
+
+The end-user install guide (`scripts/release-install-guide.md`) is **always** appended to the release notes, regardless of how the notes were produced. Keep its facts (macOS floor, model size, disk space, Gatekeeper command) in sync with README.md.
 
 ## Release Flow
 
@@ -10,23 +15,21 @@ Therascript releases are built as macOS DMG installers targeting Apple Silicon (
 
 The release script performs these steps in order:
 
-1. **Version selection** — Reads the current version from `package.json` and presents an interactive menu with four options: patch bump, minor bump, major bump, or a custom version string. The version must match semver format (`X.Y.Z`).
+1. **Input resolution** — Parses and validates flags (or prompts interactively), resolves the notes body from `--notes-file` > `--notes` > interactive input, and fails fast on any invalid input.
 
-2. **Release notes** — Optionally prompts for a one-line release note. If left empty, GitHub auto-generates notes from commit history.
+2. **Version bump** — Writes the new version into `package.json` using Node.js and commits it **locally only** (`chore: bump version to X.Y.Z`). Skips the commit if `package.json` is unchanged.
 
-3. **Version bump** — Writes the new version into `package.json` using Node.js.
+3. **Build DMG** — Runs `npm run package` to produce the DMG (see Build section below).
 
-4. **Git commit + tag** — Stages `package.json`, commits with message `chore: bump version to X.Y.Z`, and creates an annotated git tag `vX.Y.Z`. Skips the commit if `package.json` is unchanged; skips the tag if it already exists.
+4. **Locate DMG** — Expects the output at `dist/Therascript.dmg`. Exits with an error if the file is missing (the local version commit can be undone with `git reset HEAD~1`).
 
-5. **Push** — Pushes the commit and tag to the remote (`git push origin HEAD` + `git push origin vX.Y.Z`).
+5. **Verify + Smoke (release gate)** — Runs `scripts/verify-bundles.sh --app dist/mac-arm64/Therascript.app --smoke`. On failure the release aborts here: nothing has been tagged or pushed yet.
 
-6. **Build DMG** — Runs `npm run package` to produce the DMG (see Build section below).
+6. **Tag + push** — Only after a green gate: creates the annotated tag `vX.Y.Z` (skipped if it exists) and pushes commit + tag.
 
-7. **Locate DMG** — Expects the output at `dist/Therascript-X.Y.Z-arm64.dmg`. Exits with an error if the file is missing.
+7. **GitHub Release** — If no notes were provided, generates them from commit history via `gh api repos/{owner}/{repo}/releases/generate-notes` (must run after the tag push; the built-in `--generate-notes` flag cannot be combined with `--notes-file`, which is needed for the appended install guide). A failed generation is reported loudly but does not abort — the release then ships with the install guide only. Creates the release via `gh release create vX.Y.Z --notes-file …` with the DMG attached.
 
-8. **GitHub Release** — Creates a release via `gh release create vX.Y.Z` with the DMG attached. Uses custom release notes if provided, otherwise `--generate-notes`.
-
-9. **Update manifest** — Runs `scripts/publish-manifest.sh --app-version-only` to update `latestAppVersion` in the R2 manifest so the in-app update check picks up the new version. Warns (but does not fail) if this step errors.
+8. **Update manifest** — Runs `scripts/publish-manifest.sh --app-version-only` to update `latestAppVersion` in the R2 manifest so the in-app update check picks up the new version. Warns (but does not fail) if this step errors.
 
 ## Build Pipeline
 
@@ -103,27 +106,27 @@ Therascript is not signed with an Apple Developer certificate. The implications:
 
 ## Gatekeeper
 
-Because the app lacks a Developer ID signature and is not notarized, macOS Gatekeeper blocks it on first launch. Users must bypass this:
+Because the app lacks a Developer ID signature and is not notarized, macOS Gatekeeper quarantines the downloaded app. Users must clear the quarantine once per downloaded version:
 
-1. **Right-click (or Control-click) the app** in Finder
-2. **Select "Open"** from the context menu
-3. **Click "Open"** in the confirmation dialog
+```bash
+chmod -R u+w /Applications/Therascript.app && xattr -cr /Applications/Therascript.app
+```
 
-This only needs to be done once per downloaded version. After the first launch, macOS remembers the user's choice and the app opens normally.
+**Right-click → Open is NOT sufficient**: it only whitelists the app launch itself, not the bundled ML binaries — those would still be SIGKILLed by Gatekeeper on spawn (silent summarization skip, failing transcription). The `chmod` prefix is needed for versions ≤ 0.8.7 (some bundled files shipped read-only, making `xattr` fail with `Permission denied`); harmless on newer versions. This is the same instruction the appended install guide (`scripts/release-install-guide.md`) and README.md give end users.
 
 ## Version Management
 
 - The version lives in `package.json` as the `version` field (semver: `MAJOR.MINOR.PATCH`).
 - `scripts/release.sh` is the sole mechanism for bumping the version. It writes directly to `package.json` via Node.js.
 - Git tags follow the format `vX.Y.Z` (e.g., `v1.2.3`) and are annotated tags.
-- electron-builder reads the version from `package.json` automatically and uses it in the DMG filename (`Therascript-X.Y.Z-arm64.dmg`).
+- electron-builder reads the version from `package.json` automatically; the DMG filename is version-less (`Therascript.dmg`, via `artifactName` in `electron-builder.yml`) so the website's `releases/latest/download/Therascript.dmg` link stays stable.
 
 ## GitHub Release
 
-- Created via `gh release create vX.Y.Z` (GitHub CLI).
+- Created via `gh release create vX.Y.Z --notes-file …` (GitHub CLI).
 - The release title is `Therascript vX.Y.Z`.
 - The DMG file is attached as a release asset.
-- Release notes are either user-provided (from the interactive prompt) or auto-generated from commits since the previous tag.
+- Release notes body: provided via `--notes`/`--notes-file`, entered at the interactive prompt, or generated from commits since the previous tag (`generate-notes` API). The install guide (`scripts/release-install-guide.md`) is always appended after a `---` separator.
 - The release URL follows the pattern: `https://github.com/adbstyle/therascripter/releases/tag/vX.Y.Z`
 
 ## Prerequisites

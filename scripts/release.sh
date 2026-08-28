@@ -5,6 +5,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PACKAGE_JSON="$ROOT_DIR/package.json"
+# Wird an JEDE Release-Note angehängt (Endanwender-Anleitung, siehe Datei-Header).
+INSTALL_GUIDE_FILE="$ROOT_DIR/scripts/release-install-guide.md"
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -30,6 +32,13 @@ bump_major() {
   echo "$((major + 1)).0.0"
 }
 
+validate_version() {
+  if ! [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "❌ Ungültiges Versionsformat: '$1' — erwartet: X.Y.Z"
+    exit 1
+  fi
+}
+
 set_version() {
   local new_ver="$1"
   node -e "
@@ -40,6 +49,103 @@ set_version() {
   "
 }
 
+# ── CLI-Args (Hybrid-Modus) ─────────────────────────────────────────────────
+# Ohne Argumente: interaktiv wie bisher. Mit --bump/--version: nicht-interaktiv
+# (keine Rückfragen) — gedacht für automatisierte Releases, bei denen der
+# Aufrufer (z. B. Claude) Versionsentscheid und Release Notes liefert.
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/release.sh [--bump patch|minor|major | --version X.Y.Z]
+                          [--notes "text" | --notes-file <pfad>]
+
+Ohne Argumente: interaktiver Modus (Fragen wie bisher).
+Mit --bump oder --version: nicht-interaktiv, keine Rückfragen; läuft nur auf
+dem main-Branch (Ersatz für die entfallene menschliche Bestätigung).
+Notes aus --notes/--notes-file; fehlen sie, werden sie von GitHub aus den
+Commits generiert. Die Installationsanleitung für Endanwender
+(scripts/release-install-guide.md) wird IMMER automatisch angehängt.
+EOF
+}
+
+BUMP=""
+VERSION_ARG=""
+NOTES_ARG=""
+NOTES_FILE_ARG=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --bump|--version|--notes|--notes-file)
+      if [ $# -lt 2 ]; then
+        echo "❌ Option $1 braucht einen Wert."
+        usage
+        exit 1
+      fi
+      case "$1" in
+        --bump)       BUMP="$2" ;;
+        --version)    VERSION_ARG="$2" ;;
+        --notes)      NOTES_ARG="$2" ;;
+        --notes-file) NOTES_FILE_ARG="$2" ;;
+      esac
+      shift 2
+      ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "❌ Unbekannte Option: $1"; usage; exit 1 ;;
+  esac
+done
+
+# ── Fail-fast: ALLE Flag-Inputs validieren, bevor irgendetwas passiert ──────
+# (Build dauert >10 min und pusht Commit+Tag — ein Tippfehler in einem Flag
+# darf nicht erst danach auffallen.)
+
+if [ -n "$BUMP" ] && [ -n "$VERSION_ARG" ]; then
+  echo "❌ --bump und --version schliessen sich gegenseitig aus."
+  exit 1
+fi
+if [ -n "$BUMP" ]; then
+  case "$BUMP" in
+    patch|minor|major) ;;
+    *) echo "❌ --bump erwartet patch|minor|major (war: $BUMP)"; exit 1 ;;
+  esac
+fi
+if [ -n "$VERSION_ARG" ]; then
+  validate_version "$VERSION_ARG"
+fi
+if [ -n "$NOTES_ARG" ] && [ -n "$NOTES_FILE_ARG" ]; then
+  echo "❌ --notes und --notes-file schliessen sich gegenseitig aus."
+  exit 1
+fi
+
+# Notes-Quelle sofort auflösen — ab hier gibt es nur noch NOTES_BODY.
+NOTES_BODY=""
+if [ -n "$NOTES_FILE_ARG" ]; then
+  if [ ! -f "$NOTES_FILE_ARG" ]; then
+    echo "❌ --notes-file nicht gefunden: $NOTES_FILE_ARG"
+    exit 1
+  fi
+  NOTES_BODY="$(cat "$NOTES_FILE_ARG")"
+elif [ -n "$NOTES_ARG" ]; then
+  NOTES_BODY="$NOTES_ARG"
+fi
+
+if [ ! -f "$INSTALL_GUIDE_FILE" ]; then
+  echo "❌ Installationsanleitung fehlt: $INSTALL_GUIDE_FILE"
+  exit 1
+fi
+
+INTERACTIVE=true
+if [ -n "$BUMP" ] || [ -n "$VERSION_ARG" ]; then
+  INTERACTIVE=false
+  # Branch-Guard: interaktiv fängt der Mensch am Bestätigungs-Prompt einen
+  # falschen Branch ab — nicht-interaktiv muss das Skript es tun. Ein Release
+  # von einem Feature-Branch würde dessen HEAD pushen und ungemergten Code
+  # öffentlich veröffentlichen.
+  CURRENT_BRANCH="$(git -C "$ROOT_DIR" branch --show-current)"
+  if [ "$CURRENT_BRANCH" != "main" ]; then
+    echo "❌ Nicht-interaktives Release nur vom main-Branch (aktuell: $CURRENT_BRANCH)."
+    exit 1
+  fi
+fi
+
 # ── Version selection ────────────────────────────────────────────────────────
 
 CURRENT="$(current_version)"
@@ -47,49 +153,60 @@ NEXT_PATCH="$(bump_patch "$CURRENT")"
 NEXT_MINOR="$(bump_minor "$CURRENT")"
 NEXT_MAJOR="$(bump_major "$CURRENT")"
 
-echo ""
-echo "╔══════════════════════════════════════════╗"
-echo "║        Therascript Release Script        ║"
-echo "╚══════════════════════════════════════════╝"
-echo ""
-echo "  Aktuelle Version: $CURRENT"
-echo ""
-echo "  Wähle neue Version:"
-echo "    1) Patch  → $NEXT_PATCH"
-echo "    2) Minor  → $NEXT_MINOR"
-echo "    3) Major  → $NEXT_MAJOR"
-echo "    4) Eigene Version eingeben"
-echo ""
-read -rp "  Auswahl [1-4]: " choice
+# Der interaktive Modus FÜLLT nur BUMP/VERSION_ARG — die Auflösung zu
+# NEW_VERSION teilt er sich danach mit dem Flag-Pfad (eine Implementierung,
+# eine Validierung).
+if [ "$INTERACTIVE" = true ]; then
+  echo ""
+  echo "╔══════════════════════════════════════════╗"
+  echo "║        Therascript Release Script        ║"
+  echo "╚══════════════════════════════════════════╝"
+  echo ""
+  echo "  Aktuelle Version: $CURRENT"
+  echo ""
+  echo "  Wähle neue Version:"
+  echo "    1) Patch  → $NEXT_PATCH"
+  echo "    2) Minor  → $NEXT_MINOR"
+  echo "    3) Major  → $NEXT_MAJOR"
+  echo "    4) Eigene Version eingeben"
+  echo ""
+  read -rp "  Auswahl [1-4]: " choice
 
-case "$choice" in
-  1) NEW_VERSION="$NEXT_PATCH" ;;
-  2) NEW_VERSION="$NEXT_MINOR" ;;
-  3) NEW_VERSION="$NEXT_MAJOR" ;;
-  4)
-    read -rp "  Version eingeben (z.B. 1.2.3): " custom
-    if ! [[ "$custom" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-      echo "❌ Ungültiges Format. Erwartet: X.Y.Z"
-      exit 1
-    fi
-    NEW_VERSION="$custom"
-    ;;
-  *)
-    echo "❌ Ungültige Auswahl."
-    exit 1
-    ;;
-esac
+  case "$choice" in
+    1) BUMP="patch" ;;
+    2) BUMP="minor" ;;
+    3) BUMP="major" ;;
+    4) read -rp "  Version eingeben (z.B. 1.2.3): " VERSION_ARG ;;
+    *) echo "❌ Ungültige Auswahl."; exit 1 ;;
+  esac
+fi
 
-echo ""
-echo "  Neue Version: $NEW_VERSION"
-read -rp "  Fortfahren? [j/N] " confirm
-[[ "$confirm" =~ ^[jJyY]$ ]] || { echo "Abgebrochen."; exit 0; }
+if [ -n "$VERSION_ARG" ]; then
+  validate_version "$VERSION_ARG"
+  NEW_VERSION="$VERSION_ARG"
+else
+  case "$BUMP" in
+    patch) NEW_VERSION="$NEXT_PATCH" ;;
+    minor) NEW_VERSION="$NEXT_MINOR" ;;
+    major) NEW_VERSION="$NEXT_MAJOR" ;;
+  esac
+fi
 
-# ── Release notes ────────────────────────────────────────────────────────────
+if [ "$INTERACTIVE" = true ]; then
+  echo ""
+  echo "  Neue Version: $NEW_VERSION"
+  read -rp "  Fortfahren? [j/N] " confirm
+  [[ "$confirm" =~ ^[jJyY]$ ]] || { echo "Abgebrochen."; exit 0; }
 
-echo ""
-echo "  Release Notes (optional, Eingabe leer lassen zum Überspringen):"
-read -rp "  > " RELEASE_NOTES
+  if [ -z "$NOTES_BODY" ]; then
+    echo ""
+    echo "  Release Notes (optional, leer = von GitHub aus Commits generiert):"
+    read -rp "  > " NOTES_BODY
+  fi
+else
+  echo ""
+  echo "Release (nicht-interaktiv): $CURRENT → $NEW_VERSION"
+fi
 
 # ── Version bump ─────────────────────────────────────────────────────────────
 
@@ -158,23 +275,44 @@ git push origin HEAD
 git push origin "v$NEW_VERSION"
 
 # ── GitHub Release ───────────────────────────────────────────────────────────
+# Die Installationsanleitung (scripts/release-install-guide.md) wird IMMER an
+# die Notes angehängt — die Anwender sind technisch nicht versiert und
+# brauchen bei jedem Release die exakten Schritte. Der Guide liegt als eigene
+# Markdown-Datei vor (editierbar ohne Shell-Quoting-Fallen); Fakten dort mit
+# README.md synchron halten.
 
 echo ""
 echo "→ Erstelle GitHub Release v$NEW_VERSION …"
 
-GH_ARGS=(
-  release create "v$NEW_VERSION"
-  --title "Therascript v$NEW_VERSION"
-  "$DMG_PATH"
-)
-
-if [[ -n "$RELEASE_NOTES" ]]; then
-  GH_ARGS+=(--notes "$RELEASE_NOTES")
-else
-  GH_ARGS+=(--generate-notes)
+if [ -z "$NOTES_BODY" ]; then
+  # Von GitHub aus den Commits generieren. Muss NACH dem Tag-Push laufen
+  # (generate-notes referenziert den Tag). Kein --generate-notes-Flag möglich:
+  # gh release create kann es nicht mit --notes-file kombinieren, und der
+  # Guide muss angehängt werden. Fehler hier NICHT verschlucken — ein
+  # changelog-loses Release soll laut auffallen, auch wenn wir es (mit Guide)
+  # trotzdem veröffentlichen.
+  if ! NOTES_BODY="$(gh api "repos/{owner}/{repo}/releases/generate-notes" \
+      -f tag_name="v$NEW_VERSION" --jq .body)"; then
+    NOTES_BODY=""
+    echo "⚠️  GitHub-Notes-Generierung fehlgeschlagen — das Release enthält nur"
+    echo "    die Installationsanleitung. Changelog nachtragen mit:"
+    echo "    gh release edit v$NEW_VERSION --notes-file <datei>"
+  fi
 fi
 
-gh "${GH_ARGS[@]}"
+NOTES_TMP="$(mktemp -t therascript-release-notes)"
+trap 'rm -f "$NOTES_TMP"' EXIT
+{
+  if [ -n "$NOTES_BODY" ]; then
+    printf '%s\n\n---\n\n' "$NOTES_BODY"
+  fi
+  cat "$INSTALL_GUIDE_FILE"
+} > "$NOTES_TMP"
+
+gh release create "v$NEW_VERSION" \
+  --title "Therascript v$NEW_VERSION" \
+  --notes-file "$NOTES_TMP" \
+  "$DMG_PATH"
 
 # ── Update manifest ──────────────────────────────────────────────────────────
 
