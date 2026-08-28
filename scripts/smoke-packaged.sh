@@ -119,6 +119,59 @@ run_check() {
   PASS_LIST="$PASS_LIST $name"
 }
 
+# Output des letzten run_check, für Checks die mehr als ein grep brauchen.
+LAST_OUTPUT="$(mktemp -t therascript-smoke-out)"
+
+# Wie run_check, legt den Output zusätzlich in $LAST_OUTPUT ab.
+run_check_capture() {
+  local name="$1"; shift
+  local pattern="$1"; shift
+  local output rc
+  set +e
+  output=$(sandbox-exec -f "$PROFILE" env -i \
+    HOME="$HOME" USER="$USER" LOGNAME="$USER" SHELL=/bin/zsh \
+    TMPDIR="$CLEAN_TMPDIR" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    __CF_USER_TEXT_ENCODING="$(id -u):0:0" PYTHONDONTWRITEBYTECODE=1 \
+    "$@" 2>&1)
+  rc=$?
+  set -e
+  printf '%s\n' "$output" > "$LAST_OUTPUT"
+  if [ $rc -ne 0 ]; then
+    echo "FAIL [$name]: exit $rc" >&2
+    echo "$output" | tail -8 >&2
+    FAIL=1; FAIL_LIST="$FAIL_LIST $name"
+    return 1
+  fi
+  if [ -n "$pattern" ] && ! printf '%s\n' "$output" | grep -q "$pattern"; then
+    echo "FAIL [$name]: Output enthält '$pattern' nicht" >&2
+    echo "$output" | tail -8 >&2
+    FAIL=1; FAIL_LIST="$FAIL_LIST $name"
+    return 1
+  fi
+  echo "ok   [$name]"
+  PASS_LIST="$PASS_LIST $name"
+  return 0
+}
+
+# Erzeugt eine Fixture mit dem ausgelieferten Interpreter; das Python-Programm
+# kommt über stdin (Heredoc am Aufruf). Gründe für den Sidecar-Interpreter
+# statt /usr/bin/python3: im Gate-Modus darf kein System-Python vorausgesetzt
+# werden, und PYTHONDONTWRITEBYTECODE hält pyc-Caches aus dem signierten
+# Bundle. Rückgabewert statt `set -e`-Abbruch, damit ein Fehlschlag als roter
+# Check endet und die folgenden Checks noch laufen.
+write_fixture() {
+  local name="$1" out="$2" rc
+  set +e
+  PYTHONDONTWRITEBYTECODE=1 "$SIDECAR_PY" - "$out"
+  rc=$?
+  set -e
+  if [ $rc -ne 0 ]; then
+    fail_check "$name" "Fixture-Erzeugung fehlgeschlagen (exit $rc): $SIDECAR_PY"
+    return 1
+  fi
+  return 0
+}
+
 # Ein Fehler, der ausserhalb von run_check passiert (z. B. Fixture-Erzeugung),
 # muss trotzdem in FAIL_LIST und die Zusammenfassung — sonst reisst `set -e`
 # das Script mittendrin ab und die restlichen Checks laufen stumm nicht mehr.
@@ -179,17 +232,106 @@ else
   skip_check 'python imports' "nicht gefunden: $SIDECAR_PY"
 fi
 
-# 4. NER end-to-end: beweist Offline-Load aus ~/.therascript/models/ner
-#    (inkl. hf/-Tokenizer-Subtree) ohne ~/.flair und ohne ~/.cache/huggingface
+# 4. NER end-to-end + Token-Budget: EIN Sidecar-Lauf beweist beides, weil jeder
+#    Lauf den flair-Import und 2.24 GB pytorch_model.bin lädt — zwei getrennte
+#    Checks verdoppelten das im Release-Gate.
+#    (a) Offline-Load aus ~/.therascript/models/ner (inkl. hf/-Tokenizer-Subtree)
+#        ohne ~/.flair und ohne ~/.cache/huggingface → Assert auf "entities".
+#    (b) Token-Budget-Pfad: die Fixture enthält 11 seitengrosse Segmente (ein
+#        Segment pro PDF-Seite, wie pdf-transcript-builder sie baut = je 1–3
+#        überlappende 512-Token-Zeilen). Der Folge-Check 'ner token budget'
+#        prüft die [BATCH]-Zeilen gegen das aus ner_service.py IMPORTIERTE
+#        TOKEN_BUDGET — nicht gegen eine hartkodierte Gruppengrösse, die bei
+#        jeder Budget-Änderung still falsch würde.
+#    Das Memory-Ceiling selbst ist hier NICHT reproduzierbar: es greift erst auf
+#    8-GB-Macs (MPS-Limit 1.7 × ⅔ × RAM = 9.07 GiB), Dev-Macs überleben auch
+#    die alte feste Batch-Grösse 32.
 NER_MODEL_DIR="$HOME/.therascript/models/ner"
 if [ -x "$SIDECAR_PY" ] && [ -f "$NER_SCRIPT" ] && [ -d "$NER_MODEL_DIR/models/ner-german-large" ]; then
   FIXTURE="$(mktemp -t therascript-ner-fixture).json"
-  printf '%s' '{"segments":[{"text":"Dr. Müller wohnt in Bern."}]}' > "$FIXTURE"
-  run_check 'ner offline e2e' '"entities"' \
-    "$SIDECAR_PY" "$NER_SCRIPT" --transcript "$FIXTURE" --model-dir "$NER_MODEL_DIR"
+  if write_fixture 'ner offline e2e' "$FIXTURE" <<'PYNER'
+import json
+import sys
+
+# Ein kurzes Segment (Audio-Profil) + 11 seitengrosse (PDF-Profil). Die Seiten
+# müssen lang genug sein, dass sie NICHT alle in eine Budget-Gruppe passen —
+# ~2800 Zeichen ist der gemessene Schnitt der Seiten, die auf 8-GB-Macs das
+# MPS-Ceiling gerissen haben.
+PARAGRAPH = (
+    "Der Verlaufsbericht wurde am 14. März von Dr. L. Anrig in Bern verfasst "
+    "und anschliessend mit der Klientin besprochen. Sie arbeitet seit vier "
+    "Jahren bei der Muster AG in Thun und schildert eine anhaltende Belastung "
+    "am Arbeitsplatz, die sich vor allem in Schlafstörungen und "
+    "Konzentrationsproblemen zeigt. Ihr Hausarzt, Dr. Peter Wyss aus "
+    "Steffisburg, hatte sie im Januar zugewiesen; die Krankenkasse in Luzern "
+    "wurde über die Verlängerung der Behandlung informiert. "
+)
+
+page = ""
+while len(page) < 2800:
+    page += PARAGRAPH
+
+segments = [{"text": "Dr. Müller wohnt in Bern."}]
+segments += [{"text": page} for _ in range(11)]
+
+with open(sys.argv[1], "w", encoding="utf-8") as out:
+    json.dump({"segments": segments}, out, ensure_ascii=False)
+PYNER
+  then
+    if run_check_capture 'ner offline e2e' '"entities"' \
+      "$SIDECAR_PY" "$NER_SCRIPT" --transcript "$FIXTURE" --model-dir "$NER_MODEL_DIR"
+    then
+      set +e
+      PYTHONDONTWRITEBYTECODE=1 "$SIDECAR_PY" - "$LAST_OUTPUT" "$NER_SCRIPT" <<'PYBUDGET'
+import os
+import re
+import sys
+
+# TOKEN_BUDGET aus dem GEBUNDELTEN ner_service.py importieren, damit der Check
+# eine Budget-Änderung mitzieht statt sie stumm zu übergehen. Der Import ist
+# nebenwirkungsfrei: die Top-Level-Zeilen sind reine stdlib, flair/torch werden
+# erst in run_ner importiert (darauf baut auch der Vitest ner-packing.test.ts).
+sys.path.insert(0, os.path.dirname(os.path.abspath(sys.argv[2])))
+from ner_service import TOKEN_BUDGET
+
+LINE = re.compile(r"\[BATCH\] sentences=(\d+) rows=(\d+) padded=(\d+) budget=(\d+)")
+
+batches = [tuple(map(int, m.groups())) for m in map(LINE.search, open(sys.argv[1])) if m]
+
+if not batches:
+    sys.exit("keine [BATCH]-Zeile im Output — Format geändert?")
+
+# Eine feste Batch-Grösse (Regression der Klasse ad9c716) packte alle 12
+# Segmente in EINEN Forward-Pass.
+if len(batches) < 2:
+    sys.exit(f"nur {len(batches)} Forward-Pass — Budget hat nicht gruppiert: {batches}")
+
+for sentences, rows, padded, budget in batches:
+    if budget != TOKEN_BUDGET:
+        sys.exit(f"budget={budget} != TOKEN_BUDGET={TOKEN_BUDGET} (kein OOM erwartet)")
+    # Die Invariante, die pack_by_budget garantiert. Nur Gruppen mit einem
+    # einzigen Segment dürfen sie reissen (ein Segment ist unteilbar).
+    if sentences > 1 and rows * padded > budget:
+        sys.exit(f"Gruppe über Budget: {rows}×{padded} > {budget} (sentences={sentences})")
+
+print(f"ok: {len(batches)} Forward-Pässe, alle innerhalb TOKEN_BUDGET={TOKEN_BUDGET}")
+PYBUDGET
+      budget_rc=$?
+      set -e
+      if [ $budget_rc -ne 0 ]; then
+        fail_check 'ner token budget' "Budget-Invariante verletzt (exit $budget_rc)"
+      else
+        echo "ok   [ner token budget]"
+        PASS_LIST="$PASS_LIST ner-token-budget"
+      fi
+    else
+      fail_check 'ner token budget' 'übersprungen — ner offline e2e ist rot'
+    fi
+  fi
   rm -f "$FIXTURE"
 else
   skip_check 'ner offline e2e' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
+  skip_check 'ner token budget' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
 fi
 
 # 4b. Diarization end-to-end: beweist den Offline-Load der Pipeline (inkl. der
@@ -260,12 +402,7 @@ if [ -x "$SIDECAR_PY" ] && [ -f "$DIARIZE_SCRIPT" ] && [ -n "$DIARIZE_HF_MODEL" 
   # nötig, sonst wäre der Gate-Check auf Maschinen ohne python3 ein FAIL.
   # PYTHONDONTWRITEBYTECODE, damit der Aufruf keine pyc-Caches ins signierte
   # Bundle schreibt (siehe CLAUDE.md / verify-bundles.sh).
-  # set +e wie in run_check: schlägt der Interpreter hier fehl (z. B.
-  # quarantänisiertes Binary → SIGKILL, exit 137), soll das ein roter Check
-  # sein und keine Script-Abbruch durch `set -e` — sonst fehlen Summary,
-  # FAIL_LIST und die danach folgenden Checks.
-  set +e
-  PYTHONDONTWRITEBYTECODE=1 "$SIDECAR_PY" - "$FIXTURE" <<'PYWAV'
+  if write_fixture 'diarize offline e2e' "$FIXTURE" <<'PYWAV'
 import struct
 import sys
 import wave
@@ -285,11 +422,7 @@ with wave.open(sys.argv[1], "wb") as out:
     out.setframerate(16000)
     out.writeframes(bytes(frames))
 PYWAV
-  fixture_rc=$?
-  set -e
-  if [ $fixture_rc -ne 0 ]; then
-    fail_check 'diarize offline e2e' "Fixture-Erzeugung fehlgeschlagen (exit $fixture_rc): $SIDECAR_PY"
-  else
+  then
     run_check 'diarize offline e2e' '\[PROGRESS\] 100' \
       "$SIDECAR_PY" "$DIARIZE_SCRIPT" --audio "$FIXTURE" \
       --model-dir "$DIARIZE_MODEL_DIR" --hf-model "$DIARIZE_HF_MODEL"
@@ -306,7 +439,7 @@ else
   skip_check 'vision-ocr' "nicht gefunden: $VISION_OCR"
 fi
 
-rm -f "$PROFILE"
+rm -f "$PROFILE" "$LAST_OUTPUT"
 
 echo ""
 if [ $FAIL -ne 0 ]; then
