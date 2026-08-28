@@ -6,6 +6,12 @@ const POLL_INTERVAL_MS = 15_000
 // Note: diarization and transcription use dynamic thresholds based on audio
 // duration (computed in computeThreshold). See ADR-007 / Issue #78.
 const STALL_THRESHOLDS: Partial<Record<TaskType, number>> = {
+  // Bleibt bei 120 s, obwohl der NER-Modell-Load (2.24 GB) auf RAM-knappen
+  // Macs minutenlang dauern kann: ner_service.py sendet seit dem Heartbeat-
+  // Umbau alle 10 s ein [HEARTBEAT] auf stderr, das AnonymizationService in
+  // runtime.heartbeat() übersetzt. Die Schwelle misst damit echte Liveness
+  // statt Fortschritt — ein wirklich wedged Prozess fliegt weiterhin nach
+  // 2 min raus. Die harte Zeitwall ist das Subprocess-Timeout (15 min).
   anonymization: 120_000,
   ocr: 60_000,
   // pdf.js läuft in-process; onProgress feuert pro Seite. Eine einzelne
@@ -111,6 +117,9 @@ export class ProcessWatchdog {
       // ADR-007 / Issue #78: pyannote runs first now and can take minutes per
       // stage with no progress event. Spike A datapoint: ~4 min on 62 min audio.
       // N=15 → 240s for 1h audio as safe reserve. Minimum 120s.
+      // Das 120-s-Minimum trägt, seit diarize.py in den progress-freien Phasen
+      // [HEARTBEAT] sendet (siehe sidecar-stderr.ts) — die Schwelle misst
+      // Liveness, nicht Fortschritt. Harte Wall ist das Subprocess-Timeout.
       const dynamicSec = (audioDurationSec ?? 0) / 15
       return Math.max(dynamicSec, 120) * 1000
     }

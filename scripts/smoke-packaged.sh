@@ -37,7 +37,8 @@ while [ $# -gt 0 ]; do
 done
 
 # Gate-Modus (app/dist): Skips gelten als FEHLER. Ein Smoke-Lauf gegen eine
-# gepackte .app, in dem die kritischen Checks (llama CPU-buft, NER offline)
+# gepackte .app, in dem die kritischen Checks (llama CPU-buft, NER offline,
+# Diarization offline)
 # mangels Modellen oder Binaries gar nicht laufen, darf NICHT grün enden —
 # sonst released release.sh ein ungetestetes DMG mit "SMOKE OK". Nur --staging
 # bleibt tolerant (halbfertige Dev-Checkouts).
@@ -53,6 +54,7 @@ if [ "$MODE" = "app" ]; then
   LLAMA_CLI="$RES/llama/bin/llama-cli"
   SIDECAR_PY="$RES/ml_sidecar/standalone/bin/python3"
   NER_SCRIPT="$RES/ml_sidecar/ner_service.py"
+  DIARIZE_SCRIPT="$RES/ml_sidecar/diarize.py"
   VISION_OCR="$RES/bin/vision-ocr"
   echo "Smoke-Target: $TARGET"
 else
@@ -60,6 +62,7 @@ else
   LLAMA_CLI="$REPO_ROOT/resources/llama/bin/llama-cli"
   SIDECAR_PY="$REPO_ROOT/python_sidecar/standalone/bin/python3"
   NER_SCRIPT="$REPO_ROOT/python_sidecar/ner_service.py"
+  DIARIZE_SCRIPT="$REPO_ROOT/python_sidecar/diarize.py"
   VISION_OCR="$REPO_ROOT/resources/bin/vision-ocr"
   echo "Smoke-Target: Repo-Staging-Tree ($REPO_ROOT)"
 fi
@@ -114,6 +117,14 @@ run_check() {
   fi
   echo "ok   [$name]"
   PASS_LIST="$PASS_LIST $name"
+}
+
+# Ein Fehler, der ausserhalb von run_check passiert (z. B. Fixture-Erzeugung),
+# muss trotzdem in FAIL_LIST und die Zusammenfassung — sonst reisst `set -e`
+# das Script mittendrin ab und die restlichen Checks laufen stumm nicht mehr.
+fail_check() {
+  echo "FAIL [$1]: $2" >&2
+  FAIL=1; FAIL_LIST="$FAIL_LIST $1"
 }
 
 skip_check() {
@@ -179,6 +190,113 @@ if [ -x "$SIDECAR_PY" ] && [ -f "$NER_SCRIPT" ] && [ -d "$NER_MODEL_DIR/models/n
   rm -f "$FIXTURE"
 else
   skip_check 'ner offline e2e' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
+fi
+
+# 4b. Diarization end-to-end: beweist den Offline-Load der Pipeline (inkl. der
+#     transitiven Sub-Modelle segmentation-3.0 und wespeaker-…) aus
+#     ~/.therascript/models/diarization, ohne ~/.cache/huggingface und
+#     ~/.cache/torch. diarize.py pinnt dafür — wie ner_service.py — HF_HOME
+#     unter das Modellverzeichnis; dieser Check ist das, was das Pinning
+#     festhält. Ohne es stirbt der Modell-Load hier mit
+#     "[Errno 1] Operation not permitted: ~/.cache/huggingface/token": die
+#     Modelle kämen zwar über cache_dir=, aber huggingface_hub liest daneben
+#     die Token-Datei, und einen PermissionError fängt es (anders als ein
+#     fehlendes File) nicht ab. Wird der Check rot, gehört HF_HOME repariert —
+#     NICHT das Sandbox-Deny gelockert.
+#     Assertion ist "[PROGRESS] 100" (stderr, von run_check nach stdout
+#     gemergt): das ist die letzte Zeile von main() und beweist damit Import,
+#     Modell-Load, Inferenz und RTTM-Ausgabe. Auf RTTM-Zeilen zu prüfen wäre
+#     falsch — auf einem Rauschen-Fixture darf pyannote legitim 0 Sprecher
+#     finden.
+DIARIZE_MODEL_DIR="$HOME/.therascript/models/diarization"
+# Geprüft wird die Pipeline, die der Nutzer tatsächlich fährt
+# (activeModels.diarizationPipeline aus electron-store), nicht pauschal der
+# Katalog-Default: 3.1 und community-1 haben unterschiedliche Sub-Modell-Sätze,
+# ein Cache-Layout-Fehler in genau der aktiven Pipeline wäre sonst grün durchs
+# Gate gelaufen. Fällt das Lesen aus (App nie gestartet, kaputtes JSON,
+# Modell nicht installiert), greift die Katalog-Reihenfolge als Fallback.
+# electron-store legt die Datei unter <userData>/settings.json ab; userData ist
+# für Dev und gepackte App identisch, weil electron-builder keinen productName
+# setzt und damit package.json "name" gilt.
+DIARIZE_SETTINGS="$HOME/Library/Application Support/therascript/settings.json"
+DIARIZE_HF_MODEL=""
+DIARIZE_PICK="Katalog-Default"
+
+if [ -x "$SIDECAR_PY" ] && [ -f "$DIARIZE_SETTINGS" ]; then
+  ACTIVE_PIPELINE="$(PYTHONDONTWRITEBYTECODE=1 "$SIDECAR_PY" -c '
+import json
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        print(json.load(f).get("activeModels", {}).get("diarizationPipeline") or "")
+except Exception:
+    pass
+' "$DIARIZE_SETTINGS" 2>/dev/null || true)"
+  # Nur ein pyannote-Bezeichner, dessen HF-Cache-Verzeichnis auch existiert —
+  # sonst würde ein veralteter Store-Eintrag den Check rot machen, obwohl das
+  # Bundle in Ordnung ist.
+  case "$ACTIVE_PIPELINE" in
+    pyannote/*)
+      if [ -d "$DIARIZE_MODEL_DIR/models--${ACTIVE_PIPELINE//\//--}" ]; then
+        DIARIZE_HF_MODEL="$ACTIVE_PIPELINE"
+        DIARIZE_PICK="aktive Pipeline"
+      fi
+      ;;
+  esac
+fi
+
+if [ -z "$DIARIZE_HF_MODEL" ]; then
+  if [ -d "$DIARIZE_MODEL_DIR/models--pyannote--speaker-diarization-3.1" ]; then
+    DIARIZE_HF_MODEL="pyannote/speaker-diarization-3.1"
+  elif [ -d "$DIARIZE_MODEL_DIR/models--pyannote--speaker-diarization-community-1" ]; then
+    DIARIZE_HF_MODEL="pyannote/speaker-diarization-community-1"
+  fi
+fi
+if [ -x "$SIDECAR_PY" ] && [ -f "$DIARIZE_SCRIPT" ] && [ -n "$DIARIZE_HF_MODEL" ]; then
+  echo "     Diarization-Pipeline: $DIARIZE_HF_MODEL ($DIARIZE_PICK)"
+  FIXTURE="$(mktemp -t therascript-diarize-fixture).wav"
+  # Fixture mit dem ausgelieferten Interpreter erzeugen — kein System-Python
+  # nötig, sonst wäre der Gate-Check auf Maschinen ohne python3 ein FAIL.
+  # PYTHONDONTWRITEBYTECODE, damit der Aufruf keine pyc-Caches ins signierte
+  # Bundle schreibt (siehe CLAUDE.md / verify-bundles.sh).
+  # set +e wie in run_check: schlägt der Interpreter hier fehl (z. B.
+  # quarantänisiertes Binary → SIGKILL, exit 137), soll das ein roter Check
+  # sein und keine Script-Abbruch durch `set -e` — sonst fehlen Summary,
+  # FAIL_LIST und die danach folgenden Checks.
+  set +e
+  PYTHONDONTWRITEBYTECODE=1 "$SIDECAR_PY" - "$FIXTURE" <<'PYWAV'
+import struct
+import sys
+import wave
+
+# 5 s, 16 kHz, mono, 16-bit. Deterministisches Rauschen mit sehr kleiner
+# Amplitude statt digitaler Stille: energiebasierte Normalisierungsschritte
+# mögen einen Nullvektor nicht, und ein fester Seed hält den Check stabil.
+state = 12345
+frames = bytearray()
+for _ in range(16000 * 5):
+    state = (1103515245 * state + 12345) & 0x7FFFFFFF
+    frames += struct.pack("<h", (state % 601) - 300)
+
+with wave.open(sys.argv[1], "wb") as out:
+    out.setnchannels(1)
+    out.setsampwidth(2)
+    out.setframerate(16000)
+    out.writeframes(bytes(frames))
+PYWAV
+  fixture_rc=$?
+  set -e
+  if [ $fixture_rc -ne 0 ]; then
+    fail_check 'diarize offline e2e' "Fixture-Erzeugung fehlgeschlagen (exit $fixture_rc): $SIDECAR_PY"
+  else
+    run_check 'diarize offline e2e' '\[PROGRESS\] 100' \
+      "$SIDECAR_PY" "$DIARIZE_SCRIPT" --audio "$FIXTURE" \
+      --model-dir "$DIARIZE_MODEL_DIR" --hf-model "$DIARIZE_HF_MODEL"
+  fi
+  rm -f "$FIXTURE"
+else
+  skip_check 'diarize offline e2e' "Diarization-Modell nicht installiert ($DIARIZE_MODEL_DIR)"
 fi
 
 # 5. vision-ocr: System-Framework-Binary startet
