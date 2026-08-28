@@ -171,12 +171,20 @@ EOF
   blue "  Beenden: Cmd-Q in der App (oder Ctrl-C hier)"
   echo
 
+  # --no-sandbox ist zwingend: Chromiums Helper (GPU/Renderer/Network) rufen
+  # beim Start selbst sandbox_init auf, und macOS erlaubt kein Nesting in einem
+  # bereits per sandbox-exec gesandboxten Prozess → "sandbox initialization
+  # failed: Operation not permitted", Helper-Crashloop, FATAL "GPU process
+  # isn't usable", Main-Prozess hängt fensterlos bei 100 % CPU. Das Flag
+  # deaktiviert NUR Chromiums internen Sandbox (nicht Testgegenstand); die
+  # äusseren Denies oben gelten weiter — auch für alle von der App gespawnten
+  # ML-Subprozesse.
   sandbox-exec -f "$profile" env -i \
     HOME="$HOME" USER="$USER" LOGNAME="$USER" SHELL=/bin/zsh \
     TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)" \
     PATH=/usr/bin:/bin:/usr/sbin:/sbin \
     __CF_USER_TEXT_ENCODING="$(id -u):0:0" \
-    "$APP_PATH/Contents/MacOS/Therascript"
+    "$APP_PATH/Contents/MacOS/Therascript" --no-sandbox
 }
 
 status() {
