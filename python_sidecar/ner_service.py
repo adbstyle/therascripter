@@ -98,6 +98,70 @@ class _EmitHandler(logging.Handler):
             self.handleError(record)
 
 
+# Token-Budget für einen flair-Mini-Batch: Summe der 512-Token-Zeilen mal
+# längster Zeile. Siehe pack_by_budget.
+TOKEN_BUDGET = 4096
+MAX_SENTENCES_PER_BATCH = 32
+
+
+def pack_by_budget(items, token_budget=TOKEN_BUDGET, max_sentences=MAX_SENTENCES_PER_BATCH):
+    """
+    Segmente greedy zu Mini-Batches gruppieren — begrenzt durch ein
+    Token-Budget statt durch eine feste Batch-Größe.
+
+    items: Liste von (rows, row_len)-Tupeln pro Segment. `rows` ist die Zahl
+    der 512-Token-Fenster, die flair für das Segment erzeugt
+    (allow_long_sentences=True, stride=256), `row_len` die Länge des
+    längsten dieser Fenster. Rückgabe: Liste von Gruppen, jede Gruppe eine
+    Liste von Indizes in `items`; die Originalreihenfolge bleibt erhalten.
+
+    Warum nicht einfach BATCH_SIZE=32: flair padded jede Mini-Batch auf ihr
+    längstes Element, der Attention-Speicher wächst also mit
+    Zeilen × padded_len². Für Audio-Segmente ist eine feste 32 unkritisch
+    (gemessen: 64 × 220 Zeichen bei Batch 32 = 3.23 GiB Live-Peak). Bei
+    seitengroßen PDF-Segmenten kippt sie: 11 × 2800 Zeichen ergeben je 1–3
+    überlappende 512-Token-Fenster und bei Batch 32 gemessene 14.07 GiB
+    gegen das MPS-Ceiling von 9.07 GiB auf 8-GB-Macs → "MPS backend out of
+    memory". Mit diesem Budget gemessen: 5.32 GiB für einen einzelnen
+    8×512-Forward-Pass (frischer Prozess) bzw. 3.16 GiB Live-Peak über den
+    ganzen run_ner-Lauf derselben Eingabe — beides passt. Das Budget ist
+    dabei nominal: die Zählung in run_ner unterschätzt die echte
+    Padding-Matrix leicht (siehe Kommentar dort); Marge zum Ceiling plus
+    CPU-Fallback decken das. Kurze Segmente
+    füllen das Budget weiterhin bis MAX_SENTENCES_PER_BATCH aus — der
+    3–5×-Speedup der Audio-Pipeline aus Commit ad9c716 bleibt erhalten.
+
+    Ein einzelnes übergroßes Segment bildet immer allein eine Gruppe: die
+    erste Aufnahme in eine leere Gruppe ist unbedingt, denn ein Segment
+    lässt sich nicht weiter teilen, ohne die Sentence-Grenzen (und damit das
+    segmentIndex-Mapping) zu verändern.
+    """
+    groups = []
+    current = []
+    current_rows = 0
+    current_maxlen = 0
+
+    for i, (rows, row_len) in enumerate(items):
+        if current:
+            padded = max(current_maxlen, row_len)
+            fits_budget = (current_rows + rows) * padded <= token_budget
+            fits_count = len(current) < max_sentences
+            if not (fits_budget and fits_count):
+                groups.append(current)
+                current = []
+                current_rows = 0
+                current_maxlen = 0
+
+        current.append(i)
+        current_rows += rows
+        current_maxlen = max(current_maxlen, row_len)
+
+    if current:
+        groups.append(current)
+
+    return groups
+
+
 def report_progress(percent: int) -> None:
     """Print progress to stderr for TaskExecutor parsing."""
     _emit(f"[PROGRESS] {percent}")
@@ -168,11 +232,15 @@ def run_ner(model_dir: str, segments: list) -> list:
     # MPS wie in diarize.py: der 550M-Parameter-Encoder auf 4 CPU-Threads
     # (OMP_NUM_THREADS-Pin) war der langsamste Pipeline-Step. flair liest
     # flair.device beim Modell-Load.
+    # mps_active steuert unten den OOM-Fallback; der fasst torch nur an,
+    # wenn MPS aktiv wurde — also nach erfolgreichem Import.
+    mps_active = False
     try:
         import torch
 
         if torch.backends.mps.is_available():
             flair.device = torch.device("mps")
+            mps_active = True
             _emit("MPS-Backend aktiv (Apple Silicon GPU)")
     except Exception as e:
         _emit(f"MPS nicht verfügbar, nutze CPU: {e}")
@@ -191,24 +259,85 @@ def run_ner(model_dir: str, segments: list) -> list:
     # Liste nutzt mini_batch_size (flair sortiert intern nach Länge für
     # effizientes Padding). Vorher war jedes Segment ein eigener Forward-Pass
     # durch XLM-RoBERTa-large — bei hunderten Segmenten pro Stunde Audio der
-    # dominante Kostenfaktor dieses Steps (~3-5×).
+    # dominante Kostenfaktor dieses Steps (~3-5×). Die Batch-Größe ist aber
+    # nicht mehr fix, sondern folgt einem Token-Budget (pack_by_budget):
+    # seitengroße PDF-Segmente sprengten bei fixen 32 den MPS-Speicher.
     all_entities = []
-    BATCH_SIZE = 32
 
     try:
-        # (sentence, original_segment_index) — leere Segmente überspringen,
-        # aber den Original-Index für segmentIndex-Mapping behalten
-        indexed_sentences = [
-            (Sentence(text), idx)
+        # (text, original_segment_index) — leere Segmente überspringen, aber
+        # den Original-Index für das segmentIndex-Mapping behalten. Die Texte
+        # werden mitgeführt statt fertiger Sentence-Objekte: sie sind Input
+        # fürs Token-Zählen und erlauben im CPU-Fallback ein Neu-Erzeugen.
+        indexed_texts = [
+            (text, idx)
             for idx, segment in enumerate(segments)
             if (text := segment.get("text", "")).strip()
         ]
 
-        for batch_start in range(0, len(indexed_sentences), BATCH_SIZE):
-            batch = indexed_sentences[batch_start : batch_start + BATCH_SIZE]
-            tagger.predict([s for s, _ in batch], mini_batch_size=BATCH_SIZE)
+        # rows/row_len mit flairs eigenem Tokenizer und dessen
+        # Fenster-Settings zählen. Das ist eine konservative NÄHERUNG der
+        # echten Padding-Matrix, keine Kopie: flair tokenisiert intern über
+        # die Wortliste (is_split_into_words=True) und hängt als
+        # FLERT-Modell ±64 Wörter Kontext aus den Batch-Nachbarn an — beides
+        # macht die echten Zeilen etwas LÄNGER als hier gezählt. Die Marge
+        # zum 9.07-GiB-Ceiling (gemessen 3.16 GiB Live-Peak) plus der
+        # CPU-Fallback decken die Unterzählung. emb.* sind flair-Interna und
+        # flair ist in requirements-ner.txt nicht gepinnt — verschiebt eine
+        # künftige Version die Attribute, degradieren wir auf eine grobe
+        # Konstant-Schätzung (Gruppen à 8), statt hier zu sterben: ein
+        # AttributeError würde sonst JEDE Anonymisierung nach error kippen.
+        try:
+            emb = tagger.embeddings
+            items = []
+            for text, _ in indexed_texts:
+                enc = emb.tokenizer(
+                    [text],
+                    max_length=emb.tokenizer.model_max_length,
+                    stride=emb.stride,
+                    return_overflowing_tokens=emb.allow_long_sentences,
+                    truncation=emb.truncate,
+                )
+                rows = len(enc["input_ids"])
+                row_len = max(len(r) for r in enc["input_ids"])
+                items.append((rows, row_len))
+        except Exception as count_error:  # noqa: BLE001 — flair-Interna verschoben
+            _emit(f"Token-Zählung nicht möglich ({count_error}) — konservative Gruppierung")
+            items = [(1, 512)] * len(indexed_texts)
 
-            for sentence, idx in batch:
+        groups = pack_by_budget(items)
+
+        done = 0
+        for group in groups:
+            group_rows = sum(items[i][0] for i in group)
+            group_padded = max(items[i][1] for i in group)
+            _emit(f"[BATCH] sentences={len(group)} rows={group_rows} padded={group_padded}")
+
+            sentences = [Sentence(indexed_texts[i][0]) for i in group]
+            try:
+                tagger.predict(sentences, mini_batch_size=len(sentences))
+            except RuntimeError as e:
+                # MPS-OOM ist kein Verarbeitungsfehler: einmalig auf CPU
+                # zurückfallen (langsamer, aber Swap-gedeckt) und ab hier
+                # alle restlichen Batches dort rechnen. Kein zweiter
+                # MPS-Versuch — das Ceiling ändert sich nicht.
+                if not (mps_active and "out of memory" in str(e).lower()):
+                    raise
+                _emit("MPS out of memory — wechsle auf CPU und wiederhole verbleibende Batches")
+                mps_active = False
+                flair.device = torch.device("cpu")
+                tagger.to(flair.device)
+                try:
+                    torch.mps.empty_cache()
+                except Exception as cache_error:  # noqa: BLE001 — best effort
+                    _emit(f"torch.mps.empty_cache() fehlgeschlagen: {cache_error}")
+                # Sentences neu erzeugen: der abgebrochene Forward-Pass kann
+                # halb-annotierte Objekte hinterlassen haben.
+                sentences = [Sentence(indexed_texts[i][0]) for i in group]
+                tagger.predict(sentences, mini_batch_size=len(sentences))
+
+            for sentence, i in zip(sentences, group):
+                idx = indexed_texts[i][1]
                 for entity in sentence.get_spans("ner"):
                     all_entities.append(
                         {
@@ -221,9 +350,10 @@ def run_ner(model_dir: str, segments: list) -> list:
                         }
                     )
 
-            # Report progress: 25-95% range mapped to batch processing
-            done = min(batch_start + BATCH_SIZE, len(indexed_sentences))
-            pct = 25 + int(done / max(1, len(indexed_sentences)) * 70)
+            # Report progress: 25-95 % anteilig nach abgearbeiteten Segmenten
+            # (nicht Gruppen — die sind je nach Segmentlänge sehr ungleich groß)
+            done += len(group)
+            pct = 25 + int(done / max(1, len(indexed_texts)) * 70)
             report_progress(min(pct, 95))
 
     except Exception as e:

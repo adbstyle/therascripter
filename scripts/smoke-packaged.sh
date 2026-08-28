@@ -182,7 +182,11 @@ fi
 # 4. NER end-to-end: beweist Offline-Load aus ~/.therascript/models/ner
 #    (inkl. hf/-Tokenizer-Subtree) ohne ~/.flair und ohne ~/.cache/huggingface
 NER_MODEL_DIR="$HOME/.therascript/models/ner"
+NER_READY=false
 if [ -x "$SIDECAR_PY" ] && [ -f "$NER_SCRIPT" ] && [ -d "$NER_MODEL_DIR/models/ner-german-large" ]; then
+  NER_READY=true
+fi
+if [ "$NER_READY" = true ]; then
   FIXTURE="$(mktemp -t therascript-ner-fixture).json"
   printf '%s' '{"segments":[{"text":"Dr. Müller wohnt in Bern."}]}' > "$FIXTURE"
   run_check 'ner offline e2e' '"entities"' \
@@ -190,6 +194,64 @@ if [ -x "$SIDECAR_PY" ] && [ -f "$NER_SCRIPT" ] && [ -d "$NER_MODEL_DIR/models/n
   rm -f "$FIXTURE"
 else
   skip_check 'ner offline e2e' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
+fi
+
+# 4a. NER page-sized PDF: seitengrosse Segmente (ein Segment pro PDF-Seite, wie
+#     pdf-transcript-builder sie baut) sind 1–3 überlappende 512-Token-Zeilen
+#     pro Segment, und flair padded jede Mini-Batch aufs längste Element. Der
+#     Check beweist, dass genau diese Form den Token-Budget-Pfad in
+#     pack_by_budget nimmt und e2e durchkommt. Assertiert wird
+#     `[BATCH] sentences=[1-8]`: das Budget von 4096 Slots erlaubt bei
+#     512er-Zeilen höchstens 8 Segmente pro Forward-Pass — eine Regression
+#     zurück zu einer festen Batch-Grösse (Klasse ad9c716) würde hier
+#     `sentences=11` emittieren und den Check rot machen. Das
+#     Memory-Ceiling selbst ist hier NICHT reproduzierbar: es greift erst auf
+#     8-GB-Macs (MPS-Limit 1.7 × ⅔ × RAM = 9.07 GiB), Dev-Macs haben mehr RAM
+#     und überleben auch die alte feste Batch-Grösse 32.
+if [ "$NER_READY" = true ]; then
+  FIXTURE="$(mktemp -t therascript-ner-pagesized).json"
+  # Fixture-Erzeugung wie beim diarize-Check (4b): ausgelieferter Interpreter
+  # statt System-python3, set +e macht einen Fehlschlag zum roten Check statt
+  # zum `set -e`-Abbruch mitten im Lauf.
+  set +e
+  PYTHONDONTWRITEBYTECODE=1 "$SIDECAR_PY" - "$FIXTURE" <<'PYPDF'
+import json
+import sys
+
+# Realistischer deutscher Fliesstext mit Personennamen und Orten, wiederholt
+# bis eine Seite voll ist (~2800 Zeichen — der gemessene Schnitt der Seiten,
+# die auf 8-GB-Macs das MPS-Ceiling gerissen haben), dann 11 Seiten wie im
+# Fehlerbericht.
+PARAGRAPH = (
+    "Der Verlaufsbericht wurde am 14. März von Dr. L. Anrig in Bern verfasst "
+    "und anschliessend mit der Klientin besprochen. Sie arbeitet seit vier "
+    "Jahren bei der Muster AG in Thun und schildert eine anhaltende Belastung "
+    "am Arbeitsplatz, die sich vor allem in Schlafstörungen und "
+    "Konzentrationsproblemen zeigt. Ihr Hausarzt, Dr. Peter Wyss aus "
+    "Steffisburg, hatte sie im Januar zugewiesen; die Krankenkasse in Luzern "
+    "wurde über die Verlängerung der Behandlung informiert. "
+)
+
+page = ""
+while len(page) < 2800:
+    page += PARAGRAPH
+
+with open(sys.argv[1], "w", encoding="utf-8") as out:
+    json.dump(
+        {"segments": [{"text": page} for _ in range(11)]}, out, ensure_ascii=False
+    )
+PYPDF
+  fixture_rc=$?
+  set -e
+  if [ $fixture_rc -ne 0 ]; then
+    fail_check 'ner page-sized pdf' "Fixture-Erzeugung fehlgeschlagen (exit $fixture_rc): $SIDECAR_PY"
+  else
+    run_check 'ner page-sized pdf' '\[BATCH\] sentences=[1-8] ' \
+      "$SIDECAR_PY" "$NER_SCRIPT" --transcript "$FIXTURE" --model-dir "$NER_MODEL_DIR"
+  fi
+  rm -f "$FIXTURE"
+else
+  skip_check 'ner page-sized pdf' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
 fi
 
 # 4b. Diarization end-to-end: beweist den Offline-Load der Pipeline (inkl. der
