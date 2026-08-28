@@ -16,23 +16,24 @@ import sys
 
 sys.path.insert(0, sys.argv[1])
 
-from ner_service import pack_by_budget, TOKEN_BUDGET, MAX_SENTENCES_PER_BATCH
+from ner_service import (
+    pack_by_budget,
+    estimate_item,
+    TOKEN_BUDGET,
+    MAX_SENTENCES_PER_BATCH,
+    MIN_TOKEN_BUDGET
+)
 
 payload = json.loads(sys.argv[2])
 items = [tuple(item) for item in payload['items']]
-
-kwargs = {}
-if payload.get('tokenBudget') is not None:
-    kwargs['token_budget'] = payload['tokenBudget']
-if payload.get('maxSentences') is not None:
-    kwargs['max_sentences'] = payload['maxSentences']
-
-groups = pack_by_budget(items, **kwargs)
+groups = pack_by_budget(items, **payload.get('kwargs', {}))
 
 print(json.dumps({
-    'groups': [list(group) for group in groups],
+    'groups': groups,
+    'estimates': [estimate_item('x' * n) for n in payload.get('charLengths', [])],
     'tokenBudget': TOKEN_BUDGET,
-    'maxSentences': MAX_SENTENCES_PER_BATCH
+    'maxSentences': MAX_SENTENCES_PER_BATCH,
+    'minTokenBudget': MIN_TOKEN_BUDGET
 }))
 `
 
@@ -41,21 +42,23 @@ type PackItem = [number, number]
 
 interface PackResult {
   groups: number[][]
+  estimates: PackItem[]
   tokenBudget: number
   maxSentences: number
+  minTokenBudget: number
 }
 
-function runPackByBudget(
+function runSidecar(
   items: PackItem[],
-  opts: { tokenBudget?: number; maxSentences?: number } = {}
+  opts: { tokenBudget?: number; maxSentences?: number; charLengths?: number[] } = {}
 ): PackResult {
-  const payload = JSON.stringify({
-    items,
-    tokenBudget: opts.tokenBudget ?? null,
-    maxSentences: opts.maxSentences ?? null
-  })
+  const kwargs: Record<string, number> = {}
+  if (opts.tokenBudget !== undefined) kwargs.token_budget = opts.tokenBudget
+  if (opts.maxSentences !== undefined) kwargs.max_sentences = opts.maxSentences
+  const payload = JSON.stringify({ items, kwargs, charLengths: opts.charLengths ?? [] })
   const stdout = execFileSync('python3', ['-c', PY_PROGRAM, sidecarDir, payload], {
-    encoding: 'utf-8'
+    encoding: 'utf-8',
+    env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' }
   })
   return JSON.parse(stdout) as PackResult
 }
@@ -86,16 +89,18 @@ describeIfPython3('pack_by_budget (python_sidecar/ner_service.py)', () => {
   it('exposes the budget constants the OOM fix depends on', () => {
     // 4096 Slots ⇒ max 8 × 512-Token-Zeilen pro Forward-Pass ⇒ ~5.32 GiB statt
     // der gemessenen 14.07 GiB (Ceiling auf 8-GB-Macs: 9.07 GiB).
-    const result = runPackByBudget([[1, 64]])
+    const result = runSidecar([[1, 64]])
     expect(result.tokenBudget).toBe(4096)
     expect(result.maxSentences).toBe(32)
+    // Boden der adaptiven Halbierung: 512 = genau eine 512-Token-Zeile.
+    expect(result.minTokenBudget).toBe(512)
   })
 
   it('caps page-sized PDF segments at the token budget instead of at 32 segments', () => {
     // Der ursprüngliche Bug: BATCH_SIZE = 32 packte 32 seitengrosse Segmente
     // (2–3 Fenster à 512 Tokens) in EINEN Forward-Pass.
     const items: PackItem[] = [...repeat([2, 512], 11), ...repeat([3, 512], 11)]
-    const { groups } = runPackByBudget(items)
+    const { groups } = runSidecar(items)
 
     // Nachgerechnet: (2+2)*512 = 2048, +2 ⇒ 3072, +2 ⇒ 4096 (passt exakt),
     // +2 ⇒ 5120 > 4096 ⇒ Schnitt. Also 4 Items pro Gruppe bei (2, 512).
@@ -118,7 +123,7 @@ describeIfPython3('pack_by_budget (python_sidecar/ner_service.py)', () => {
     // einzeln durch den Tagger — hier greift max_sentences, nicht das Budget
     // (64 Zeilen à 64 Tokens wären erst bei 4096 Slots voll).
     const items = repeat([1, 64], 64)
-    const { groups } = runPackByBudget(items)
+    const { groups } = runSidecar(items)
 
     expect(groups.length).toBe(2)
     expect(groups[0].length).toBe(32)
@@ -137,14 +142,14 @@ describeIfPython3('pack_by_budget (python_sidecar/ner_service.py)', () => {
       [1, 64],
       [1, 64]
     ]
-    const { groups } = runPackByBudget(items)
+    const { groups } = runSidecar(items)
 
     expect(groups).toEqual([[0, 1], [2], [3, 4]])
     expect(slotsOf(items, [2])).toBeGreaterThan(4096)
   })
 
   it('returns no groups for an empty item list', () => {
-    expect(runPackByBudget([]).groups).toEqual([])
+    expect(runSidecar([]).groups).toEqual([])
   })
 
   it('never exceeds the budget for multi-item groups in a mixed workload', () => {
@@ -156,7 +161,7 @@ describeIfPython3('pack_by_budget (python_sidecar/ner_service.py)', () => {
       { length: 60 },
       (_, i) => [rowsCycle[i % rowsCycle.length], lenCycle[i % lenCycle.length]] as PackItem
     )
-    const { groups } = runPackByBudget(items)
+    const { groups } = runSidecar(items)
 
     expect(groups.flat()).toEqual(Array.from({ length: items.length }, (_, i) => i))
     for (const group of groups) {
@@ -172,18 +177,42 @@ describeIfPython3('pack_by_budget (python_sidecar/ner_service.py)', () => {
     const items = repeat([1, 128], 10)
 
     // Budget 512 ⇒ 4 Zeilen à 128 Tokens pro Gruppe.
-    expect(runPackByBudget(items, { tokenBudget: 512 }).groups).toEqual([
+    expect(runSidecar(items, { tokenBudget: 512 }).groups).toEqual([
       [0, 1, 2, 3],
       [4, 5, 6, 7],
       [8, 9]
     ])
 
     // max_sentences 3 schneidet vor dem Budget.
-    expect(runPackByBudget(items, { maxSentences: 3 }).groups).toEqual([
+    expect(runSidecar(items, { maxSentences: 3 }).groups).toEqual([
       [0, 1, 2],
       [3, 4, 5],
       [6, 7, 8],
       [9]
+    ])
+  })
+
+  it('estimates rows above the real tokenizer count, never below', () => {
+    // Fallback, wenn flairs Tokenizer-Interna nicht erreichbar sind. Er MUSS
+    // überschätzen: die alte Konstante (1, 512) zählte jede PDF-Seite als eine
+    // Zeile statt als 2–3 und hätte das gefixte OOM reproduziert.
+    // Referenzwerte real gemessen (deutscher Fliesstext, XLM-R):
+    // 220 Z. → (1, 57), 2800 Z. → (2, 512), 3800 Z. → (3, 512).
+    const { estimates } = runSidecar([[1, 64]], { charLengths: [220, 2800, 3800] })
+    const real: PackItem[] = [
+      [1, 57],
+      [2, 512],
+      [3, 512]
+    ]
+    estimates.forEach(([rows, rowLen], i) => {
+      expect(rows).toBeGreaterThanOrEqual(real[i][0])
+      expect(rowLen).toBeGreaterThanOrEqual(real[i][1])
+    })
+    // Konkret: seitengrosse Segmente landen bei 3 bzw. 4 Zeilen.
+    expect(estimates).toEqual([
+      [1, 73],
+      [3, 512],
+      [4, 512]
     ])
   })
 })
