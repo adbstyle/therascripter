@@ -19,6 +19,7 @@ sys.path.insert(0, sys.argv[1])
 from ner_service import (
     pack_by_budget,
     estimate_item,
+    fast_checkpoint_name,
     should_write_fast_checkpoint,
     TOKEN_BUDGET,
     MAX_SENTENCES_PER_BATCH,
@@ -34,6 +35,7 @@ print(json.dumps({
     'estimates': [estimate_item('x' * n) for n in payload.get('charLengths', [])],
     'diskDecisions': [should_write_fast_checkpoint('/tmp/x.pt', free, size)
                       for free, size in payload.get('diskCases', [])],
+    'checkpointNames': [fast_checkpoint_name(m) for m in payload.get('modelIds', [])],
     'tokenBudget': TOKEN_BUDGET,
     'maxSentences': MAX_SENTENCES_PER_BATCH,
     'minTokenBudget': MIN_TOKEN_BUDGET
@@ -47,6 +49,7 @@ interface PackResult {
   groups: number[][]
   estimates: PackItem[]
   diskDecisions: boolean[]
+  checkpointNames: string[]
   tokenBudget: number
   maxSentences: number
   minTokenBudget: number
@@ -59,6 +62,7 @@ function runSidecar(
     maxSentences?: number
     charLengths?: number[]
     diskCases?: number[][]
+    modelIds?: string[]
   } = {}
 ): PackResult {
   const kwargs: Record<string, number> = {}
@@ -68,7 +72,8 @@ function runSidecar(
     items,
     kwargs,
     charLengths: opts.charLengths ?? [],
-    diskCases: opts.diskCases ?? []
+    diskCases: opts.diskCases ?? [],
+    modelIds: opts.modelIds ?? []
   })
   const stdout = execFileSync('python3', ['-c', PY_PROGRAM, sidecarDir, payload], {
     encoding: 'utf-8',
@@ -204,6 +209,22 @@ describeIfPython3('pack_by_budget (python_sidecar/ner_service.py)', () => {
       [6, 7, 8],
       [9]
     ])
+  })
+
+  it('derives the fast-checkpoint filename from the model id', () => {
+    // Das Modellverzeichnis heisst nach der Gruppe ("ner"), nicht nach dem
+    // Modell. Ein fester Dateiname würde bei einem zweiten NER-Modell (Slot
+    // activeModels.ner existiert, NFR-9/10) die Kopie des deutschen Modells
+    // laden, obwohl ein anderes aktiv ist — still und ohne Fehler.
+    const { checkpointNames } = runSidecar([[1, 64]], {
+      modelIds: ['flair/ner-german-large', 'anderes/modell-v2']
+    })
+    expect(checkpointNames).toEqual([
+      'flair--ner-german-large-fast.pt',
+      'anderes--modell-v2-fast.pt'
+    ])
+    // Kein '/' im Namen, sonst zeigt der Pfad in ein Unterverzeichnis.
+    checkpointNames.forEach((name) => expect(name).not.toContain('/'))
   })
 
   it('only writes the fast checkpoint when the disk keeps a safety margin', () => {

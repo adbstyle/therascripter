@@ -6,7 +6,7 @@
 
 ## 📦 Installationsanleitung
 
-**Systemvoraussetzungen:** Mac mit Apple-Chip (M1–M4), macOS 26 (Tahoe) oder neuer, mindestens 8 GB Arbeitsspeicher, ca. 5 GB freier Speicherplatz. Für den ersten Start wird eine Internetverbindung benötigt (Modell-Download, ~4.1 GB) — danach arbeitet Therascript vollständig offline.
+**Systemvoraussetzungen:** Mac mit Apple-Chip (M1–M4), macOS 26 (Tahoe) oder neuer, mindestens 8 GB Arbeitsspeicher, ca. 7 GB freier Speicherplatz. Für den ersten Start wird eine Internetverbindung benötigt (Modell-Download, ~4.1 GB) — danach arbeitet Therascript vollständig offline. Bei der ersten Anonymisierung legt Therascript einmalig eine ~2.1 GB grosse, schneller ladbare Kopie des Namenserkennungs-Modells an; ist zu wenig Platz frei, wird sie übersprungen und alles läuft wie bisher, nur langsamer.
 
 ### Schritt 1: Herunterladen und installieren
 
