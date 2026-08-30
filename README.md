@@ -24,7 +24,8 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 - macOS 26 (Tahoe) oder neuer (die mitgelieferte Metal-GPU-Bibliothek für die Spracherkennung wurde gegen das macOS-26-SDK gebaut; eine niedrigere Untergrenze ist als [Issue #97](https://github.com/adbstyle/therascripter/issues/97) erfasst)
 - Apple Silicon
 - Mindestens 8 GB RAM
-- ~5 GB freier Speicherplatz (App + ML-Modelle, plus ~2.5 GB optional für Zusammenfassung)
+- ~7 GB freier Speicherplatz (App + ML-Modelle 4.1 GB, plus ~2.1 GB für den beschleunigten
+  NER-Checkpoint, der beim ersten Lauf entsteht; zusätzlich ~2.5 GB optional für Zusammenfassung)
 
 ## Installation
 

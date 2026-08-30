@@ -19,6 +19,8 @@ sys.path.insert(0, sys.argv[1])
 from ner_service import (
     pack_by_budget,
     estimate_item,
+    fast_checkpoint_name,
+    should_write_fast_checkpoint,
     TOKEN_BUDGET,
     MAX_SENTENCES_PER_BATCH,
     MIN_TOKEN_BUDGET
@@ -31,6 +33,9 @@ groups = pack_by_budget(items, **payload.get('kwargs', {}))
 print(json.dumps({
     'groups': groups,
     'estimates': [estimate_item('x' * n) for n in payload.get('charLengths', [])],
+    'diskDecisions': [should_write_fast_checkpoint('/tmp/x.pt', free, size)
+                      for free, size in payload.get('diskCases', [])],
+    'checkpointNames': [fast_checkpoint_name(m) for m in payload.get('modelIds', [])],
     'tokenBudget': TOKEN_BUDGET,
     'maxSentences': MAX_SENTENCES_PER_BATCH,
     'minTokenBudget': MIN_TOKEN_BUDGET
@@ -43,6 +48,8 @@ type PackItem = [number, number]
 interface PackResult {
   groups: number[][]
   estimates: PackItem[]
+  diskDecisions: boolean[]
+  checkpointNames: string[]
   tokenBudget: number
   maxSentences: number
   minTokenBudget: number
@@ -50,12 +57,24 @@ interface PackResult {
 
 function runSidecar(
   items: PackItem[],
-  opts: { tokenBudget?: number; maxSentences?: number; charLengths?: number[] } = {}
+  opts: {
+    tokenBudget?: number
+    maxSentences?: number
+    charLengths?: number[]
+    diskCases?: number[][]
+    modelIds?: string[]
+  } = {}
 ): PackResult {
   const kwargs: Record<string, number> = {}
   if (opts.tokenBudget !== undefined) kwargs.token_budget = opts.tokenBudget
   if (opts.maxSentences !== undefined) kwargs.max_sentences = opts.maxSentences
-  const payload = JSON.stringify({ items, kwargs, charLengths: opts.charLengths ?? [] })
+  const payload = JSON.stringify({
+    items,
+    kwargs,
+    charLengths: opts.charLengths ?? [],
+    diskCases: opts.diskCases ?? [],
+    modelIds: opts.modelIds ?? []
+  })
   const stdout = execFileSync('python3', ['-c', PY_PROGRAM, sidecarDir, payload], {
     encoding: 'utf-8',
     env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' }
@@ -190,6 +209,39 @@ describeIfPython3('pack_by_budget (python_sidecar/ner_service.py)', () => {
       [6, 7, 8],
       [9]
     ])
+  })
+
+  it('derives the fast-checkpoint filename from the model id', () => {
+    // Das Modellverzeichnis heisst nach der Gruppe ("ner"), nicht nach dem
+    // Modell. Ein fester Dateiname würde bei einem zweiten NER-Modell (Slot
+    // activeModels.ner existiert, NFR-9/10) die Kopie des deutschen Modells
+    // laden, obwohl ein anderes aktiv ist — still und ohne Fehler.
+    const { checkpointNames } = runSidecar([[1, 64]], {
+      modelIds: ['flair/ner-german-large', 'anderes/modell-v2']
+    })
+    expect(checkpointNames).toEqual([
+      'flair--ner-german-large-fast.pt',
+      'anderes--modell-v2-fast.pt'
+    ])
+    // Kein '/' im Namen, sonst zeigt der Pfad in ein Unterverzeichnis.
+    checkpointNames.forEach((name) => expect(name).not.toContain('/'))
+  })
+
+  it('only writes the fast checkpoint when the disk keeps a safety margin', () => {
+    // Der konvertierte Checkpoint (modernes torch-Format, mmap-fähig) belegt
+    // zusätzliche ~2.1 GB. Auf knappen Platten muss die Konvertierung
+    // ausbleiben, statt das Modellverzeichnis volllaufen zu lassen — die
+    // Anonymisierung läuft dann nur mit dem langsameren Legacy-Load weiter.
+    const GB = 1024 ** 3
+    const { diskDecisions } = runSidecar([[1, 64]], {
+      diskCases: [
+        [8 * GB, 2.1 * GB], // reichlich Platz
+        [5.2 * GB, 2.1 * GB], // knapp über dem 3-GB-Puffer
+        [4 * GB, 2.1 * GB], // Puffer unterschritten
+        [2 * GB, 2.1 * GB] // weniger frei als die Datei gross ist
+      ]
+    })
+    expect(diskDecisions).toEqual([true, true, false, false])
   })
 
   it('estimates rows above the real tokenizer count, never below', () => {
