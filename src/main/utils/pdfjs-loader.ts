@@ -92,3 +92,17 @@ export async function openPdfDocument(data: Uint8Array): Promise<PDFDocumentProx
   const standardFontDataUrl = join(pdfjsDir, 'standard_fonts') + '/'
   return pdfjs.getDocument({ data, standardFontDataUrl, useSystemFonts: false }).promise
 }
+
+/**
+ * Gibt ein mit `openPdfDocument` geöffnetes Dokument frei. Ohne `destroy()`
+ * hält pdfjs Transport und Seiten-/Font-Caches im langlebigen Main-Prozess
+ * fest (gemessen: ~145 KB je 58-KB-PDF, mit Fonts/Bildern mehr) — und jeder
+ * Import öffnet das PDF zweimal (Scan-Heuristik + Extraktion).
+ *
+ * Bewusst NICHT awaiten: Aufrufer brechen hängende pdfjs-Awaits per
+ * `abortable()` ab; ein awaitetes `destroy()` im `finally` würde genau diesen
+ * Hänger zurückbringen. Fehler beim Freigeben sind folgenlos.
+ */
+export function releasePdfDocument(doc: PDFDocumentProxy): void {
+  doc.destroy().catch(() => {})
+}

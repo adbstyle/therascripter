@@ -54,7 +54,7 @@ The `TaskQueueService` defines the PDF pipeline as three sequential tasks: `extr
 Uses `pdfjs-dist` (legacy build for Node.js compatibility) with `standardFontDataUrl` configured for correct font rendering. For each page:
 
 1. Extracts text content via `page.getTextContent()`.
-2. Joins all text items, normalizes whitespace.
+2. Joins the text items via `joinTextItems` (`src/main/utils/pdf-text-join.ts`), normalizes whitespace. Items are **not** words: some generators (mirrored text space with negative font size + TJ kerning) yield one item per glyph, so joining with `' '` produced `"H a n s"` and flair tagged the single letters as PERSON. pdfjs already emits word spaces as items and marks line ends with `hasEOL`, so items are concatenated directly; a space is inserted only at `hasEOL` or where the geometry breaks (backward jump > 0.5 em, e.g. table cells; forward gap > 0.102 em; baseline shift > 0.25 em, e.g. superscripts — so "Müller¹" doesn't become an unmatchable "Müller1").
 3. Classifies the page as `text` (extracted text longer than 50 characters) or `scanned` (50 characters or fewer).
 
 The extraction result (per-page text, content type, and PDF metadata like title/author) is saved to `~/.therascript/extracted/<sessionId>.json`.

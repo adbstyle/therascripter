@@ -10,7 +10,7 @@ import { getDatabase, getDataDir } from '../db/connection'
 import { buildPDFTranscript } from '../utils/pdf-transcript-builder'
 import { writeFileAtomic } from '../utils/file-ops'
 import { abortable } from '../utils/abortable'
-import { openPdfDocument } from '../utils/pdfjs-loader'
+import { openPdfDocument, releasePdfDocument } from '../utils/pdfjs-loader'
 import { joinTextItems } from '../utils/pdf-text-join'
 
 /** Minimum characters on a page to consider it a text page (not scanned) */
@@ -53,40 +53,15 @@ export class PDFExtractionExecutor implements TaskExecutor {
 
     onProgress(0.1)
 
-    const totalPages = doc.numPages
-
-    if (totalPages === 0) {
-      throw new Error('Das PDF-Dokument ist leer (0 Seiten).')
+    let extracted: ExtractedPages
+    try {
+      extracted = await readPages(doc, onProgress, signal)
+    } finally {
+      releasePdfDocument(doc)
     }
+    const { pages, info } = extracted
+    const totalPages = pages.length
 
-    const pages: PageData[] = []
-
-    for (let i = 1; i <= totalPages; i++) {
-      if (signal?.aborted) {
-        throw new Error('Verarbeitung abgebrochen')
-      }
-      const page = await abortable<PDFPageProxy>(doc.getPage(i), signal)
-      const textContent = await abortable<TextContent>(page.getTextContent(), signal)
-
-      const text = joinTextItems(textContent.items)
-
-      const contentType: PageData['contentType'] =
-        text.length > TEXT_PAGE_THRESHOLD ? 'text' : 'scanned'
-
-      pages.push({
-        pageNumber: i,
-        contentType,
-        text: contentType === 'text' ? text : ''
-      })
-
-      onProgress(0.1 + (i / totalPages) * 0.85)
-    }
-
-    // Save extraction result
-    const pdfMetadata = await doc.getMetadata().catch(() => null)
-    // pdfjs typt info nur als Object — Title/Author sind dokumentierte,
-    // optionale PDF-Info-Dictionary-Felder.
-    const info = pdfMetadata?.info as { Title?: string; Author?: string } | undefined
     const extractionResult: ExtractionResult = {
       pages,
       metadata: {
@@ -113,4 +88,51 @@ export class PDFExtractionExecutor implements TaskExecutor {
 
     onProgress(1)
   }
+}
+
+/** pdfjs typt info nur als Object — Title/Author sind dokumentierte,
+ * optionale PDF-Info-Dictionary-Felder. */
+type PdfInfo = { Title?: string; Author?: string }
+
+interface ExtractedPages {
+  pages: PageData[]
+  info: PdfInfo | undefined
+}
+
+async function readPages(
+  doc: PDFDocumentProxy,
+  onProgress: (progress: number) => void,
+  signal?: AbortSignal
+): Promise<ExtractedPages> {
+  const totalPages = doc.numPages
+
+  if (totalPages === 0) {
+    throw new Error('Das PDF-Dokument ist leer (0 Seiten).')
+  }
+
+  const pages: PageData[] = []
+
+  for (let i = 1; i <= totalPages; i++) {
+    if (signal?.aborted) {
+      throw new Error('Verarbeitung abgebrochen')
+    }
+    const page = await abortable<PDFPageProxy>(doc.getPage(i), signal)
+    const textContent = await abortable<TextContent>(page.getTextContent(), signal)
+
+    const text = joinTextItems(textContent.items)
+
+    const contentType: PageData['contentType'] =
+      text.length > TEXT_PAGE_THRESHOLD ? 'text' : 'scanned'
+
+    pages.push({
+      pageNumber: i,
+      contentType,
+      text: contentType === 'text' ? text : ''
+    })
+
+    onProgress(0.1 + (i / totalPages) * 0.85)
+  }
+
+  const pdfMetadata = await doc.getMetadata().catch(() => null)
+  return { pages, info: pdfMetadata?.info as PdfInfo | undefined }
 }

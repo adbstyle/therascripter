@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { join } from 'path'
 import { readFileSync } from 'fs'
 import type { TextItem, TextMarkedContent } from 'pdfjs-dist/types/src/display/api'
-import { openPdfDocument } from '../pdfjs-loader'
+import { openPdfDocument, releasePdfDocument } from '../pdfjs-loader'
 import { joinTextItems } from '../pdf-text-join'
 
 // Regression für Rechnungen/Formulare, deren Generator den Textraum spiegelt
@@ -18,8 +18,12 @@ const FIXTURES = join(__dirname, '__fixtures__')
 
 async function pageItems(file: string): Promise<Array<TextItem | TextMarkedContent>> {
   const doc = await openPdfDocument(new Uint8Array(readFileSync(join(FIXTURES, file))))
-  const page = await doc.getPage(1)
-  return (await page.getTextContent()).items
+  try {
+    const page = await doc.getPage(1)
+    return (await page.getTextContent()).items
+  } finally {
+    releasePdfDocument(doc)
+  }
 }
 
 /** Horizontales Text-Item im pdfjs-Format (transform = [a, b, c, d, e, f]). */
@@ -99,6 +103,25 @@ describe('joinTextItems — Geometrie-Grenzfälle', () => {
 
   it('trennt hoch-/tiefgestellte Glyphen ab, damit ein Name nicht mit der Fussnote verklebt', () => {
     expect(joinTextItems([item('Müller', 0, 0, 30), item('1', 30, 4, 4)])).toBe('Müller 1')
+  })
+
+  it('folgt bei gedrehtem Text der Schreibrichtung statt der x-Achse', () => {
+    // 90° gedreht: Fortschritt entlang +y, Zeilenwechsel quer dazu.
+    const rotated = (str: string, x: number, y: number, width: number) =>
+      item(str, x, y, width, { transform: [0, 10, -10, 0, x, y] })
+    expect(joinTextItems([rotated('H', 100, 0, 7), rotated('a', 100, 7, 5)])).toBe('Ha')
+    expect(joinTextItems([rotated('Hans', 100, 0, 20), rotated('Muster', 88, 20, 30)])).toBe(
+      'Hans Muster'
+    )
+  })
+
+  it('trennt bei degenerierter Transformationsmatrix im Zweifel', () => {
+    expect(
+      joinTextItems([
+        item('Ha', 0, 0, 10, { transform: [0, 0, 0, 0, 0, 0] }),
+        item('ns', 10, 0, 10)
+      ])
+    ).toBe('Ha ns')
   })
 
   it('ignoriert Marked-Content-Einträge', () => {

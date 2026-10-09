@@ -4,9 +4,15 @@ import type { TextItem, TextMarkedContent } from 'pdfjs-dist/types/src/display/a
  * Schwellen relativ zur Schriftgrösse des vorigen Items. Vorwärtslücke und
  * Grundlinien-Versatz sind die Werte, ab denen pdfjs innerhalb EINES Laufs
  * selbst ein Leerzeichen setzt bzw. flusht (`SPACE_IN_FLOW_MIN_FACTOR` /
- * `VERTICAL_SHIFT_RATIO` im pdf.worker) — über Item-Grenzen hinweg urteilen
- * wir also genau wie pdfjs. Gemessen an Glyphe-pro-Item-PDFs liegen echte
- * Wort-innere Lücken unter 0.1 em.
+ * `VERTICAL_SHIFT_RATIO` im pdf.worker) — darin urteilen wir über
+ * Item-Grenzen hinweg wie pdfjs. Gemessen an Glyphe-pro-Item-PDFs liegen
+ * echte Wort-innere Lücken unter 0.1 em.
+ *
+ * Rückwärts weichen wir bewusst ab: pdfjs flusht schon ab -0.2 em
+ * (`NEGATIVE_SPACE_FACTOR`). Die in Glyphe-pro-Item-PDFs gemessenen
+ * Wort-inneren Überlappungen (Kerning) liegen zwar alle oberhalb -0.2 em, aber
+ * nahe dran. -0.5 em lässt Abstand dazu und zu separat gesetzten Akzenten
+ * über dem Grundbuchstaben; Tabellen-Rücksprünge liegen bei vielen em.
  */
 const GAP_FORWARD = 0.102
 const GAP_BACKWARD = -0.5
