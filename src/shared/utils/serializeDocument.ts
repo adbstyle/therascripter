@@ -6,6 +6,7 @@
  * PDF sessions: plain text with placeholders only (no labels/timestamps).
  */
 import type { SessionType, TipTapDocument, TipTapInlineNode } from '../types'
+import { formatPlaceholder } from './formatPlaceholder'
 
 export function serializeDocument(doc: TipTapDocument, sessionType: SessionType): string {
   const paragraphs: string[] = []
@@ -22,7 +23,7 @@ export function serializeDocument(doc: TipTapDocument, sessionType: SessionType)
           line += node.text
           break
         case 'placeholderChip':
-          line += `[${node.attrs.type} ${node.attrs.number}]`
+          line += formatPlaceholder(node.attrs)
           break
         case 'speakerLabel':
           if (sessionType === 'audio') {
