@@ -223,7 +223,7 @@ export default function AboutPage(): React.JSX.Element {
           title="TheraScript vollständig entfernen"
           message="Alle Daten werden unwiderruflich gelöscht:"
           details={[
-            'ML-Modelle (~4 GB)',
+            'ML-Modelle (mehrere GB)',
             'Alle Transkriptionen und Audiodateien',
             'Sperrliste',
             'Einstellungen'

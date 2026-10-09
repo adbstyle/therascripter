@@ -11,8 +11,8 @@ Usage:
 Output format (stdout JSON):
     {
       "entities": [
-        {"text": "Dr. Müller", "type": "PER", "segment_index": 0,
-         "char_start": 0, "char_end": 10, "confidence": 0.96}
+        {"text": "Dr. Müller", "type": "PER", "segmentIndex": 0,
+         "charStart": 0, "charEnd": 10, "confidence": 0.96}
       ],
       "metadata": {"model": "flair/ner-german-large", ...}
     }
@@ -40,6 +40,8 @@ import shutil
 import sys
 import threading
 import time
+import warnings
+import zipfile
 from contextlib import contextmanager
 
 # CSP-Äquivalent (wie in diarize.py): Alle HuggingFace-Hub-Netzwerk-Requests
@@ -116,18 +118,15 @@ WINDOW_LEN = 512
 WINDOW_STRIDE = 256
 
 
-# Der von HuggingFace gelieferte Checkpoint liegt im ALTEN torch-Pickle-Format.
-# torch schiebt den dann Byte für Byte durch den Pickle-Parser; gemessen 14.3 s
-# gegen 8.0 s, wenn dieselben fp32-Gewichte einmal im modernen Zip-Format neu
-# gespeichert wurden, und 6.4 s mit zusätzlichem mmap. Das Legacy-Format kann
-# kein mmap (torch verlangt dafür einen Pfad und das neue Format), deshalb
-# konvertieren wir einmalig und laden ab dann aus dieser Kopie. Gerundet wird
-# dabei nichts — es sind bit-identisch dieselben fp32-Werte, nur anders
-# serialisiert. (fp16 als zusätzlicher Hebel: Issue #131.)
 NER_MODEL_ID = "flair/ner-german-large"
 
-# Die Kopie belegt zusätzliche ~2.1 GB. Unter diesem Schwellwert wird nicht
-# konvertiert, damit das Modellverzeichnis auf knappen Platten nicht volläuft.
+# Namenskonvention der Fast-Kopie (siehe needs_fast_checkpoint). Aufräumen fasst
+# ausschliesslich Dateien mit diesem Suffix an, nie das Original.
+FAST_CHECKPOINT_SUFFIX = "-fast.pt"
+
+# Die Fast-Kopie eines v1/v2-Originals belegt zusätzliche ~2.1 GB. Unter diesem
+# Schwellwert wird nicht konvertiert, damit das Modellverzeichnis auf knappen
+# Platten nicht volläuft.
 FAST_CHECKPOINT_MIN_FREE_BYTES = 3 * 1024**3
 
 
@@ -143,7 +142,7 @@ def fast_checkpoint_name(model_id):
     greift der Fast-Pfad bei einem Modellwechsel schlicht nicht mehr und der
     Lauf konvertiert neu.
     """
-    return model_id.replace("/", "--") + "-fast.pt"
+    return model_id.replace("/", "--") + FAST_CHECKPOINT_SUFFIX
 
 
 def should_write_fast_checkpoint(path, free_bytes, source_bytes):
@@ -154,7 +153,7 @@ def should_write_fast_checkpoint(path, free_bytes, source_bytes):
     "existiert die Datei schon?" beantwortet der Aufrufer. Geschrieben wird,
     wenn ein Pfad vorliegt UND nach dem Schreiben noch der Puffer aus
     FAST_CHECKPOINT_MIN_FREE_BYTES übrig bleibt. Fehlt der Platz, läuft alles
-    weiter wie bisher — nur eben mit dem langsameren Legacy-Load.
+    weiter wie bisher — nur eben mit dem langsameren Load des Originals.
     """
     if not path:
         return False
@@ -280,44 +279,51 @@ def heartbeat():
         thread.join(timeout=1)
 
 
-def _remove_stale_fast_checkpoints(current_path):
+def _remove_fast_checkpoints(directory, keep=None):
     """
-    Fast-Checkpoints anderer Modelle aus dem Verzeichnis räumen.
+    Nicht (mehr) benötigte Fast-Checkpoints aus dem Verzeichnis räumen.
 
-    Das Modellverzeichnis gehört der Gruppe, nicht dem Modell: nach einem
-    Modellwechsel bliebe die ~2.1 GB grosse Kopie des alten Modells sonst für
-    immer liegen. Es werden ausschliesslich Dateien der eigenen Namenskonvention
-    (…-fast.pt) angefasst, nie das Original oder fremde Dateien.
+    - Kopien anderer Modelle: das Verzeichnis gehört der Gruppe, nicht dem
+      Modell; nach einem Modellwechsel bliebe die ~2.1 GB grosse Kopie des
+      alten Modells sonst für immer liegen.
+    - Ohne `keep` (Dateiname) alle Kopien: der Fall eines kompakten Originals
+      (Artefakt v3), neben dem v0.8.10 noch eine Kopie angelegt hat.
+    - Halbe .tmp-Dateien eines Laufs, der beim Schreiben per SIGKILL endete
+      (Watchdog, 900-s-Wall): der nächste Lauf hat eine andere PID und würde
+      sie nie überschreiben. Eine .tmp, die ein parallel laufender Prozess
+      gerade schreibt, darf mit weg — dessen os.replace scheitert dann, und das
+      ist folgenlos (siehe _write_fast_checkpoint).
     """
-    directory = os.path.dirname(current_path) or "."
     for name in os.listdir(directory):
-        if not name.endswith("-fast.pt"):
-            continue
-        path = os.path.join(directory, name)
-        if os.path.abspath(path) == os.path.abspath(current_path):
+        is_copy = name.endswith(FAST_CHECKPOINT_SUFFIX)
+        is_orphan = FAST_CHECKPOINT_SUFFIX + "." in name and name.endswith(".tmp")
+        if not (is_copy or is_orphan) or name == keep:
             continue
         try:
-            os.remove(path)
-            _emit(f"Verwaisten Fast-Checkpoint eines anderen Modells entfernt: {name}")
+            os.remove(os.path.join(directory, name))
+            _emit(f"Nicht mehr benötigten Fast-Checkpoint entfernt: {name}")
         except OSError as e:
-            _emit(f"Verwaister Fast-Checkpoint {name} liess sich nicht entfernen: {e}")
+            _emit(f"Fast-Checkpoint {name} liess sich nicht entfernen: {e}")
 
 
 def _write_fast_checkpoint(tagger, fast_path):
     """
-    Den geladenen Tagger einmalig im modernen torch-Format ablegen.
+    Den geladenen Tagger einmalig im aktuellen flair-Layout ablegen (Fast-Kopie).
 
     Atomar über eine temporäre Datei plus os.replace: ein Abbruch mitten im
     Schreiben (SIGKILL, volle Platte) darf keinen halben Checkpoint
     hinterlassen, den der nächste Lauf für gültig hält. Jeder Fehler ist
     folgenlos — der nächste Lauf nimmt wieder den Original-Pfad.
     """
+    directory = os.path.dirname(fast_path)
+    tmp_path = f"{fast_path}.{os.getpid()}.tmp"
     try:
-        free_bytes = shutil.disk_usage(os.path.dirname(fast_path) or ".").free
-        # Zielgrösse aus dem Modell selbst statt geraten: Anzahl Gewichte mal
-        # Bytes pro Gewicht. Passt sich automatisch an, wenn der Checkpoint
-        # irgendwann in fp16 vorliegt (Issue #131) — eine feste Konstante würde
-        # die Konvertierung dann auf Platten blockieren, wo sie problemlos wäre.
+        # Vor der Platzmessung: Waisen und fremde Kopien geben Platz frei.
+        _remove_fast_checkpoints(directory, keep=os.path.basename(fast_path))
+        free_bytes = shutil.disk_usage(directory).free
+        # Zielgrösse aus dem geladenen Modell statt einer Konstante: Anzahl
+        # Gewichte mal Bytes pro Gewicht. Das ist immer fp32 (flair castet beim
+        # Laden hoch), und tagger.save() schreibt genau diesen In-Memory-Stand.
         source_bytes = sum(p.numel() * p.element_size() for p in tagger.parameters())
         if not should_write_fast_checkpoint(fast_path, free_bytes, source_bytes):
             _emit(
@@ -330,7 +336,6 @@ def _write_fast_checkpoint(tagger, fast_path):
         # zu einem App-Task laufen; zwei Prozesse auf derselben .tmp würden ihre
         # Schreibvorgänge verschränken und das Ergebnis per os.replace als
         # gültigen Checkpoint scharf schalten.
-        tmp_path = f"{fast_path}.{os.getpid()}.tmp"
         started = time.monotonic()
         tagger.save(tmp_path)
         os.replace(tmp_path, fast_path)
@@ -338,13 +343,147 @@ def _write_fast_checkpoint(tagger, fast_path):
             "Schneller Checkpoint geschrieben "
             f"({time.monotonic() - started:.1f}s) — nächster Lauf lädt schneller"
         )
-        _remove_stale_fast_checkpoints(fast_path)
     except Exception as e:  # noqa: BLE001 — reine Optimierung, nie fatal
         _emit(f"Schneller Checkpoint konnte nicht geschrieben werden: {e}")
+        _remove_silently(tmp_path)
+
+
+def is_zip_checkpoint(path):
+    """
+    True, wenn `path` ein Checkpoint im modernen (Zip-)Format von torch.save ist.
+
+    Gleiches Kriterium wie torch.serialization._is_zipfile: die Signatur am
+    Dateianfang. zipfile.is_zipfile wäre zu lax — es sucht die Signatur auch im
+    Dateiende und schlägt damit auf beliebigen Binärdaten an.
+    """
+    try:
+        with open(path, "rb") as f:
+            return f.read(4) == b"PK\x03\x04"
+    except OSError:
+        return False
+
+
+def needs_fast_checkpoint(path):
+    """
+    True, wenn der Original-Checkpoint von einer Fast-Kopie profitiert.
+
+    Zwei Generationen des Originals liegen bei Usern — beide im Zip-Format, das
+    alte Pickle-Format war nie die Ursache der Ladezeit:
+
+    - Artefakt v1/v2: so, wie HuggingFace ihn liefert — fp32, gespeichert von
+      einer alten flair-Version, die die Embeddings als OBJEKT mitpickelt
+      (TransformerWordEmbeddings samt Gewichten). Schon torch.load baut dabei
+      das komplette Transformer-Modell auf (gemessen 8.2 s), danach baut flair
+      es für den Tagger ein zweites Mal — 14–18 s gesamt. Eine einmal mit dem
+      aktuellen flair neu gespeicherte Kopie (tagger.save: Embeddings nur als
+      Param-Dict) lädt in ~8 s, bit-identisch dieselben fp32-Werte.
+    - Artefakt v3 (Issue #131): von scripts/convert-ner-fp16.py bereits in
+      diesem Layout UND als fp16 an die Stelle des Originals geschrieben. flair
+      castet beim Laden auf fp32 hoch (load_state_dict kopiert in frisch
+      gebaute fp32-Parameter), die Inferenz ist unverändert fp32. Eine Kopie
+      wäre hier doppelt so gross wie das Original und bringt nichts.
+
+    Unterschieden wird ohne Laden an den Klassenreferenzen in data.pkl (bei
+    beiden Varianten nur 0.1–17 MB). Im Zweifel True: eine überflüssige Kopie
+    kostet nur Platz, eine fehlende bei v1/v2 dagegen jeden Lauf ~8 s.
+    """
+    if not path:
+        return True
+    try:
+        with zipfile.ZipFile(path) as archive:
+            pickle_name = next(n for n in archive.namelist() if n.endswith("/data.pkl"))
+            return b"flair.embeddings" in archive.read(pickle_name)
+    except (OSError, StopIteration, zipfile.BadZipFile):
+        return True
+
+
+def _remove_silently(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def _resolve_original_checkpoint(model_id):
+    """Pfad des Original-Checkpoints im flair-Cache, None wenn nicht auflösbar."""
+    try:
+        from flair.file_utils import hf_download
+
+        return hf_download(model_id)
+    except Exception:  # noqa: BLE001 — Auflösung ist nur ein Hinweis, der Load entscheidet
+        return None
+
+
+def _install_mmap_loader():
+    """
+    flairs Checkpoint-Loader durch eine mmap-fähige Variante ersetzen.
+
+    flair ruft torch.load mit einem FILE-OBJEKT auf (flair/file_utils.py:
+    load_torch_state) — damit ist mmap nicht möglich, torch verlangt dafür einen
+    Pfad. mmap funktioniert laut torch-Doku nur mit dem Zip-Format; alles andere
+    geht unverändert durch flairs eigenen Loader. Damit kann der Patch für jeden
+    Load aktiv bleiben, auch für den Fallback.
+    flair.nn.model importiert den Namen direkt, deshalb muss er an BEIDEN
+    Stellen ersetzt werden.
+    """
+    import flair.file_utils
+    import flair.nn.model
+    import torch
+
+    flair_loader = flair.file_utils.load_torch_state
+
+    def load_torch_state(model_file):
+        if not is_zip_checkpoint(model_file):
+            return flair_loader(model_file)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            return torch.load(model_file, map_location="cpu", weights_only=False, mmap=True)
+
+    flair.file_utils.load_torch_state = load_torch_state
+    flair.nn.model.load_torch_state = load_torch_state
+
+
+def _load_tagger(model_dir, Classifier):
+    """
+    Den Tagger laden — aus dem Original oder seiner Fast-Kopie (siehe
+    needs_fast_checkpoint). Die Kopie ist reine Beschleunigung: schlägt ihr Load
+    fehl, wird sie verworfen und das Original geladen, damit ein korrupter
+    Checkpoint die Anonymisierung nie blockiert. Exit 2, wenn auch das scheitert.
+
+    Die Zeilen "Modell aus … geladen (Xs)" und "Original-Checkpoint ist kompakt"
+    sind ein Contract mit scripts/ner-parity.py bzw. smoke-packaged.sh.
+    """
+    _install_mmap_loader()
+    fast_path = os.path.join(model_dir, fast_checkpoint_name(NER_MODEL_ID))
+    wants_fast_copy = needs_fast_checkpoint(_resolve_original_checkpoint(NER_MODEL_ID))
+
+    if not wants_fast_copy:
+        _emit("Original-Checkpoint ist kompakt — keine Fast-Kopie nötig")
+        _remove_fast_checkpoints(model_dir)
+    elif os.path.isfile(fast_path):
         try:
-            os.remove(f"{fast_path}.{os.getpid()}.tmp")
-        except OSError:
-            pass
+            return _timed_load(Classifier, fast_path, "konvertiertem Checkpoint")
+        except Exception as fast_error:  # noqa: BLE001 — Fast-Pfad ist optional
+            _emit(f"Konvertierter Checkpoint unbrauchbar ({fast_error}) — nutze Original")
+            _remove_silently(fast_path)
+
+    try:
+        tagger = _timed_load(Classifier, NER_MODEL_ID, "Original-Checkpoint")
+    except Exception as e:
+        _emit(f"Fehler: NER-Modell konnte nicht geladen werden: {e}")
+        _emit("Führen Sie scripts/setup-ner.sh --model aus, um das Modell herunterzuladen.")
+        sys.exit(2)
+
+    if wants_fast_copy:
+        _write_fast_checkpoint(tagger, fast_path)
+    return tagger
+
+
+def _timed_load(Classifier, source, label):
+    started = time.monotonic()
+    tagger = Classifier.load(source)
+    _emit(f"Modell aus {label} geladen ({time.monotonic() - started:.1f}s)")
+    return tagger
 
 
 def run_ner(model_dir: str, segments: list) -> list:
@@ -391,68 +530,7 @@ def run_ner(model_dir: str, segments: list) -> list:
     except Exception as e:
         _emit(f"MPS nicht verfügbar, nutze CPU: {e}")
 
-    # Load NER model (Cache-Verzeichnis via FLAIR_CACHE_ROOT, gesetzt vor dem Import)
-    #
-    # Zwei Wege: bevorzugt aus dem konvertierten Checkpoint (modernes Format,
-    # mmap-fähig — siehe FAST_CHECKPOINT_NAME), sonst aus dem Original mit
-    # anschliessender einmaliger Konvertierung. Der Fast-Pfad ist reine
-    # Beschleunigung: schlägt er fehl, wird die Datei verworfen und das Original
-    # geladen, damit ein korrupter Checkpoint die Anonymisierung nie blockiert.
-    fast_path = os.path.join(model_dir, fast_checkpoint_name(NER_MODEL_ID))
-    tagger = None
-
-    if os.path.isfile(fast_path):
-        # flair ruft torch.load mit einem FILE-OBJEKT auf (flair/file_utils.py:
-        # load_torch_state) — damit ist mmap nicht möglich, torch verlangt dafür
-        # einen Pfad. Der Patch ersetzt genau diesen einen Aufruf.
-        # flair.nn.model importiert den Namen direkt, deshalb muss er an BEIDEN
-        # Stellen ersetzt werden.
-        import flair.file_utils
-        import flair.nn.model
-
-        original_loaders = (
-            flair.file_utils.load_torch_state,
-            flair.nn.model.load_torch_state,
-        )
-
-        def _load_mmap(model_file):
-            return torch.load(model_file, map_location="cpu", weights_only=False, mmap=True)
-
-        try:
-            flair.file_utils.load_torch_state = _load_mmap
-            flair.nn.model.load_torch_state = _load_mmap
-            started = time.monotonic()
-            tagger = Classifier.load(fast_path)
-            _emit(f"Modell aus konvertiertem Checkpoint geladen ({time.monotonic() - started:.1f}s)")
-        except Exception as fast_error:  # noqa: BLE001 — Fast-Pfad ist optional
-            _emit(f"Konvertierter Checkpoint unbrauchbar ({fast_error}) — nutze Original")
-            tagger = None
-            try:
-                os.remove(fast_path)
-            except OSError:
-                pass
-        finally:
-            if tagger is None:
-                # Patch zurücknehmen, BEVOR das Original geladen wird: mmap
-                # verlangt laut torch-Doku das moderne Zipfile-Format, das der
-                # Original-Checkpoint nicht hat. Aktuell toleriert torch das
-                # (getestet mit 2.10), aber der Fallback darf nicht davon
-                # abhängen — sonst scheitert er genau dann, wenn er gebraucht
-                # wird, und die Session landet in 'error'.
-                flair.file_utils.load_torch_state = original_loaders[0]
-                flair.nn.model.load_torch_state = original_loaders[1]
-
-    if tagger is None:
-        try:
-            started = time.monotonic()
-            tagger = Classifier.load(NER_MODEL_ID)
-            _emit(f"Modell aus Original-Checkpoint geladen ({time.monotonic() - started:.1f}s)")
-        except Exception as e:
-            _emit(f"Fehler: NER-Modell konnte nicht geladen werden: {e}")
-            _emit("Führen Sie scripts/setup-ner.sh --model aus, um das Modell herunterzuladen.")
-            sys.exit(2)
-
-        _write_fast_checkpoint(tagger, fast_path)
+    tagger = _load_tagger(model_dir, Classifier)
 
     report_progress(25)
 
@@ -678,7 +756,7 @@ def main() -> None:
         result = {
             "entities": [],
             "metadata": {
-                "model": "flair/ner-german-large",
+                "model": NER_MODEL_ID,
                 "segmentCount": 0,
                 "entityCount": 0,
             },
@@ -699,7 +777,7 @@ def main() -> None:
     result = {
         "entities": all_entities,
         "metadata": {
-            "model": "flair/ner-german-large",
+            "model": NER_MODEL_ID,
             "segmentCount": len(segments),
             "entityCount": len(all_entities),
         },

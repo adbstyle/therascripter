@@ -607,9 +607,9 @@
 
       // Model list
       const models = [
-        { name: 'Spracherkennung (Whisper)', size: '1.7 GB', icon: '🎙' },
-        { name: 'Sprechererkennung (Pyannote)', size: '0.2 GB', icon: '👥' },
-        { name: 'Anonymisierung (flair NER)', size: '2.2 GB', icon: '🔒' }
+        { name: 'Spracherkennung (Whisper)', size: '0.6 GB', icon: '🎙' },
+        { name: 'Sprechererkennung (Pyannote)', size: '0.06 GB', icon: '👥' },
+        { name: 'Anonymisierung (flair NER)', size: '1.0 GB', icon: '🔒' }
       ]
       let my = 208
       for (const m of models) {
@@ -626,7 +626,7 @@
       }
 
       // Total & disk note
-      const total = text('Gesamt: ~4.1 GB  ·  Benötigter Speicher: 5 GB', 12, C.textTertiary)
+      const total = text('Gesamt: ~1.7 GB  ·  Benötigter Speicher: 5 GB', 12, C.textTertiary)
       total.textAlignHorizontal = 'CENTER'
       total.resize(W, 18)
       place(screen, total, 0, my + 4)
@@ -694,7 +694,7 @@
       place(screen, progressBg, cx - 170, my2 + 12)
       const progressFill = rect(214, 8, C.primary, 4) // 63%
       place(screen, progressFill, cx - 170, my2 + 12)
-      const progressLbl = text('Gesamt: 63%  ·  1.2 GB / 4.1 GB', 11, C.textTertiary)
+      const progressLbl = text('Gesamt: 63%  ·  1.1 GB / 1.7 GB', 11, C.textTertiary)
       progressLbl.textAlignHorizontal = 'CENTER'
       progressLbl.resize(W, 16)
       place(screen, progressLbl, 0, my2 + 28)

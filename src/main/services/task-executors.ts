@@ -17,7 +17,7 @@ export interface ExecutorRuntime {
    * Reines Lebenszeichen: setzt die Stall-Uhr des Watchdogs zurück, ohne
    * den Fortschrittswert zu verändern. Für Subprozesse, die in einer
    * Phase ohne feingranularen Fortschritt stecken (NER-Modell-Load:
-   * 2.24 GB pytorch_model.bin, auf RAM-knappen Maschinen minutenlang) —
+   * 1.1–2.2 GB Checkpoint, auf RAM-knappen Maschinen minutenlang) —
    * ohne das killt der Watchdog nach 120 s einen gesunden Prozess.
    */
   heartbeat(): void

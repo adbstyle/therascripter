@@ -14,17 +14,17 @@ Before the user can start the download, `FirstLaunchScreen` calls `modelDownload
 
 ### Model Definitions
 
-Three models are defined in `MODEL_DEFINITIONS` inside `ModelDownloadService.ts`:
+The required models are defined in `MODEL_DEFINITIONS` in `src/shared/model-catalog.ts` (single source of truth for URL, size and SHA-256):
 
 | ID | Label | Download Size | Archive | Relative Path | Check Path |
 |----|-------|--------------|---------|---------------|------------|
 | `whisper-large-v3-turbo` | Spracherkennung (whisper-large-v3-turbo) | ~574 MB | No (flat `.bin`) | `asr/ggml-large-v3-turbo-q5_0.bin` | `asr/ggml-large-v3-turbo-q5_0.bin` |
-| `pyannote-community-1` | Sprechererkennung (pyannote-community-1) | ~30 MB | Yes (`.tar.gz`) | `diarization` | `diarization/models--pyannote--speaker-diarization-3.1` |
-| `flair-ner-german-large` | Anonymisierung (flair-ner-german-large) | ~1.74 GB | Yes (`.tar.gz`) | `ner` | `ner/hf/hub/models--xlm-roberta-large` |
+| `pyannote-suite` | Sprechererkennung (pyannote 3.1 + community-1) | ~61 MB | Yes (`.tar.gz`) | `diarization` | see catalog |
+| `flair-ner-german-large` | Anonymisierung (flair-ner-german-large) | ~1.04 GB (v3, fp16) | Yes (`.tar.gz`) | `ner` | `ner/hf/hub/models--xlm-roberta-large` |
 
-The NER check path deliberately points at the **v2-only** `hf/` tokenizer subtree (not the model payload): v1 installs (≤ 0.8.5, without `hf/`) read as "not installed", so the first-launch gate re-downloads the v2 tarball, which tar-merges over the existing `ner/`. The bootstrap reconciler shares this definition and clears the `ner` slot on such installs; `startModelDownload()` re-runs the reconciler after a successful download to re-promote the slot in the same session, and inverse repairs (X → null → X) collapse the pending reconcile event so the upgrade shows no "Modell entfernt" banner.
+The NER check path deliberately points at the **v2-only** `hf/` tokenizer subtree (not the model payload): v1 installs (≤ 0.8.5, without `hf/`) read as "not installed", so the first-launch gate re-downloads the current tarball, which tar-merges over the existing `ner/`. The bootstrap reconciler shares this definition and clears the `ner` slot on such installs; `startModelDownload()` re-runs the reconciler after a successful download to re-promote the slot in the same session, and inverse repairs (X → null → X) collapse the pending reconcile event so the upgrade shows no "Modell entfernt" banner.
 
-Total download: ~2.3 GB (combined archive sizes). All downloads come from the Cloudflare R2 CDN at `https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/`.
+Total download: ~1.7 GB (combined archive sizes). v2 installs keep counting as installed (same check path) and get v3 offered as a dismissible model update via the manifest. All downloads come from the Cloudflare R2 CDN at `https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/`.
 
 ### Model Paths
 

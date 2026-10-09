@@ -114,10 +114,12 @@ Note: The `dev` script uses `env -u ELECTRON_RUN_AS_NODE` to unset that environm
 
 | Model | Size | Location |
 |---|---|---|
-| Whisper Large V3 Turbo Q5_0 | ~547 MB | `~/.therascript/models/asr/` |
-| pyannote diarization | ~1.5 GB | `~/.therascript/models/diarization/` |
-| flair NER German Large | ~2.2 GB | `~/.therascript/models/ner/` |
-| **Total** | **~4.1 GB** | |
+| Whisper Large V3 Turbo Q5_0 | ~574 MB | `~/.therascript/models/asr/` |
+| pyannote diarization | ~60 MB | `~/.therascript/models/diarization/` |
+| flair NER German Large | ~2.2 GB (HF-Original, fp32) | `~/.therascript/models/ner/` |
+| **Total** | **~2.8 GB** | |
+
+End users download less (~1.7 GB): the NER artifact ships fp16 (~1.0 GB), see `docs/product/operations/model-pipeline.md`.
 
 Models are stored in `~/.therascript/models/` and persist across app builds and updates.
 

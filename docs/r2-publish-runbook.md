@@ -18,11 +18,13 @@ Dieser Runbook beschreibt, wie neue oder aktualisierte ML-Modelle auf Cloudflare
 - Python venv aufgesetzt: `python_sidecar/venv/` (einmalig via `scripts/setup-pyannote.sh --model` + `scripts/setup-ner.sh --model`)
 - Alle Modelle lokal vorhanden: `~/.therascript/models/asr/`, `diarization/`, `ner/`
 
-## Vollständige Pipeline (empfohlen)
+## Vollständige Pipeline (nur für eine komplette Neuveröffentlichung)
 
 ```bash
 npm run sidecar:deploy
 ```
+
+**Achtung:** packt `pyannote-suite.tar.gz` mit neuem gzip-Zeitstempel (neuer Hash) und lädt ohne Argumente ALLES aus `r2-upload/` hoch — das überschreibt R2-Objekte, gegen deren alte Hashes ausgelieferte App-Versionen verifizieren. Ein einzelnes Artefakt: `scripts/package-models.sh ner` + `scripts/upload-r2.sh r2-upload/<datei>`.
 
 Dies führt in einem Schritt aus:
 1. `sidecar:build` — PyInstaller bundelt Python-Sidecar → `python_sidecar/dist/ml_sidecar/`
@@ -49,11 +51,11 @@ Ergebnis in `r2-upload/`:
 
 | Datei | Inhalt |
 |-------|--------|
-| `whisper-ggml-large-v3-turbo-q5_0.bin` | Whisper-Modell (~1.7 GB) |
-| `pyannote-models.tar.gz` | Pyannote-Diarisierungsmodelle |
-| `flair-ner-german-large.tar.gz` | flair NER-Modell (~1.1 GB) |
+| `whisper-ggml-large-v3-turbo-q5_0.bin` | Whisper-Modell (~0.6 GB) |
+| `pyannote-suite.tar.gz` | Pyannote-Diarisierungsmodelle (~0.06 GB) |
+| `flair-ner-german-large-v3.tar.gz` | flair NER-Modell, fp16 (~1.0 GB) |
 
-Das Script gibt SHA-256-Hashes und Dateigrößen aus.
+Das Script gibt SHA-256-Hashes und Dateigrößen aus. Nur ein einzelnes Artefakt neu veröffentlichen: `scripts/package-models.sh ner` und `scripts/upload-r2.sh r2-upload/<datei>` — Details in `docs/product/operations/model-pipeline.md`.
 
 ### Schritt 3: Manifest generieren + hochladen
 

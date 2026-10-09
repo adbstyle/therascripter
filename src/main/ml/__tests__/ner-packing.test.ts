@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 
@@ -228,10 +228,10 @@ describeIfPython3('pack_by_budget (python_sidecar/ner_service.py)', () => {
   })
 
   it('only writes the fast checkpoint when the disk keeps a safety margin', () => {
-    // Der konvertierte Checkpoint (modernes torch-Format, mmap-fähig) belegt
-    // zusätzliche ~2.1 GB. Auf knappen Platten muss die Konvertierung
+    // Der konvertierte Checkpoint (Embeddings als Param-Dict, mmap-fähig)
+    // belegt zusätzliche ~2.1 GB. Auf knappen Platten muss die Konvertierung
     // ausbleiben, statt das Modellverzeichnis volllaufen zu lassen — die
-    // Anonymisierung läuft dann nur mit dem langsameren Legacy-Load weiter.
+    // Anonymisierung läuft dann nur mit dem langsameren Load des Originals weiter.
     const GB = 1024 ** 3
     const { diskDecisions } = runSidecar([[1, 64]], {
       diskCases: [
@@ -266,5 +266,125 @@ describeIfPython3('pack_by_budget (python_sidecar/ner_service.py)', () => {
       [3, 512],
       [4, 512]
     ])
+  })
+})
+
+// Synthetische Checkpoints statt echter Modelle: die Erkennung liest nur den
+// Dateianfang und data.pkl, beides lässt sich mit stdlib nachbauen.
+const PY_CHECKPOINTS = `
+import json
+import os
+import sys
+import tempfile
+import zipfile
+
+sys.path.insert(0, sys.argv[1])
+
+from ner_service import is_zip_checkpoint, needs_fast_checkpoint, _remove_fast_checkpoints
+
+tmp = tempfile.mkdtemp()
+
+def zip_checkpoint(name, pickle_bytes):
+    path = os.path.join(tmp, name)
+    with zipfile.ZipFile(path, 'w') as archive:
+        archive.writestr('archive/data.pkl', pickle_bytes)
+        archive.writestr('archive/data/0', b'\\x00' * 64)
+    return path
+
+def raw_file(name, content):
+    path = os.path.join(tmp, name)
+    with open(path, 'wb') as f:
+        f.write(content)
+    return path
+
+files = {
+    # HF-Original (Artefakt v1/v2): Embeddings als gepickeltes flair-Objekt.
+    'hfOriginal': zip_checkpoint('orig.bin', b'\\x80\\x02X\\x16flair.embeddings.token\\x94'),
+    # Artefakt v3 / Fast-Kopie: Embeddings als Param-Dict.
+    'compact': zip_checkpoint('v3.bin', b'\\x80\\x02X\\x0bstate_dict\\x94'),
+    # Echtes Legacy-Pickle ohne Zip-Container.
+    'rawPickle': raw_file('legacy.bin', b'\\x80\\x02\\x8a\\x0al\\xfc\\x9cF\\xf9 j\\xa8'),
+    # Zip-Signatur nur am ENDE (zipfile.is_zipfile schlüge an, torch nicht).
+    'trailingSignature': raw_file('tail.bin', b'\\x80\\x02' + b'\\x00' * 32 + b'PK\\x05\\x06' + b'\\x00' * 18),
+    'missing': os.path.join(tmp, 'gibt-es-nicht.bin'),
+}
+
+# Aufräumen: eigenes Verzeichnis, damit nur die Fast-Checkpoint-Konvention zählt.
+model_dir = tempfile.mkdtemp()
+for name in ['pytorch_model.bin', 'notizen.txt', 'flair--ner-german-large-fast.pt',
+             'anderes--modell-fast.pt', 'flair--ner-german-large-fast.pt.4711.tmp']:
+    raw_file(os.path.join(model_dir, name), b'x')
+_remove_fast_checkpoints(model_dir, keep='flair--ner-german-large-fast.pt')
+after_keep = sorted(os.listdir(model_dir))
+_remove_fast_checkpoints(model_dir)
+after_all = sorted(os.listdir(model_dir))
+
+print(json.dumps({
+    'isZip': {k: is_zip_checkpoint(p) for k, p in files.items()},
+    'needsFast': {**{k: needs_fast_checkpoint(p) for k, p in files.items()},
+                  'none': needs_fast_checkpoint(None)},
+    'afterKeep': after_keep,
+    'afterAll': after_all,
+}))
+`
+
+interface CheckpointResult {
+  isZip: Record<string, boolean>
+  needsFast: Record<string, boolean>
+  afterKeep: string[]
+  afterAll: string[]
+}
+
+describeIfPython3('fast-checkpoint detection (python_sidecar/ner_service.py)', () => {
+  // In beforeAll statt im describe-Body: Vitest führt den Body auch bei
+  // describe.skip aus, ohne python3 wäre der Lauf sonst rot statt übersprungen.
+  let result: CheckpointResult
+  beforeAll(() => {
+    result = JSON.parse(
+      execFileSync('python3', ['-c', PY_CHECKPOINTS, sidecarDir], {
+        encoding: 'utf-8',
+        env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' }
+      })
+    ) as CheckpointResult
+  })
+
+  it('recognizes torch zip checkpoints by their leading signature only', () => {
+    // Gleiches Kriterium wie torch selbst. Der HF-Original-Checkpoint ist
+    // ebenfalls Zip — mit zipfile.is_zipfile (sucht auch im Dateiende) galt er
+    // im Prototyp fälschlich als "kompakt" und die Fast-Kopie wurde gelöscht.
+    expect(result.isZip).toEqual({
+      hfOriginal: true,
+      compact: true,
+      rawPickle: false,
+      trailingSignature: false,
+      missing: false
+    })
+  })
+
+  it('only wants a fast copy for checkpoints that pickle flair embedding objects', () => {
+    // Artefakt v3 (fp16) liegt bereits im Layout der Fast-Kopie; eine Kopie
+    // wäre dort doppelt so gross wie das Original. Alles Unklare fällt auf
+    // true — eine überflüssige Kopie kostet Platz, eine fehlende bei v1/v2
+    // jeden Lauf ~8 s Ladezeit.
+    expect(result.needsFast).toEqual({
+      hfOriginal: true,
+      compact: false,
+      rawPickle: true,
+      trailingSignature: true,
+      missing: true,
+      none: true
+    })
+  })
+
+  it('removes foreign copies and orphaned tmp files, never the original', () => {
+    // Eine .tmp bleibt liegen, wenn der Watchdog den Prozess mitten im
+    // Schreiben killt — bis zu 2 GB, die sonst nie wieder angefasst würden.
+    expect(result.afterKeep).toEqual([
+      'flair--ner-german-large-fast.pt',
+      'notizen.txt',
+      'pytorch_model.bin'
+    ])
+    // Kompaktes Original (v3): auch die eigene Kopie fällt weg.
+    expect(result.afterAll).toEqual(['notizen.txt', 'pytorch_model.bin'])
   })
 })

@@ -245,7 +245,7 @@ usage() {
 Usage: scripts/sim-clean-install.sh [A|B|C] [--launch-clean] [--status | --restore | --help]
 
 Szenario als Argument (nicht-interaktiv) oder ohne Argument interaktiv:
-  A — Brand-neu (FirstLaunchScreen + voller ~4.1 GB Modell-Download)
+  A — Brand-neu (FirstLaunchScreen + voller ~1.7 GB Modell-Download)
   B — Update v0.7.x → neu (Daten + Modelle bleiben, nur App wird ersetzt)
   C — Nur Modelle neu (Sessions + Settings bleiben)
 
@@ -288,7 +288,7 @@ if [ -z "$SCENARIO" ] && [ "$LAUNCH_CLEAN" = false ]; then
   require_app_closed
   bold "TheraScript Clean-Install Simulation"
   echo
-  echo "  A) Brand-neu (FirstLaunchScreen + ~4.1 GB Modell-Download)"
+  echo "  A) Brand-neu (FirstLaunchScreen + ~1.7 GB Modell-Download)"
   echo "  B) Update-Szenario (Daten bleiben, App wird ersetzt)"
   echo "  C) Nur Modelle löschen + neu laden"
   echo

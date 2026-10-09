@@ -18,12 +18,12 @@ Models are never loaded simultaneously. Each subprocess exits before the next ta
 
 | Model | File on disk | Quantization | Benchmark | Language |
 |---|---|---|---|---|
-| Whisper Large V3 Turbo | `~/.therascript/models/asr/ggml-large-v3-turbo-q5_0.bin` | Q5_0 (GGML) | ~1.7 GB | German (de) |
+| Whisper Large V3 Turbo | `~/.therascript/models/asr/ggml-large-v3-turbo-q5_0.bin` | Q5_0 (GGML), ~0.6 GB | WER see ADR-003 | German (de) |
 | pyannote speaker-diarization-community-1 | `~/.therascript/models/diarization/` | none (fp32) | DER 8.3% on German | Language-agnostic |
-| flair/ner-german-large | `~/.therascript/models/ner/` | none (fp32) | F1 ~92% | German |
+| flair/ner-german-large | `~/.therascript/models/ner/` | fp16 on disk (artifact v3), fp32 at inference | F1 ~92% | German |
 | Apple Vision OCR | system framework (no download) | n/a | n/a | Multilingual |
 
-All model directories are created at startup by `initDatabase()`. Total download size on first launch is approximately 4.1 GB.
+All model directories are created at startup by `initDatabase()`. Total download size on first launch is approximately 1.7 GB (Whisper 0.6 GB + pyannote 0.06 GB + flair NER 1.0 GB; source of truth: `src/shared/model-catalog.ts`).
 
 ---
 

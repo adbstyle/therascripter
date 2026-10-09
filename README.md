@@ -24,8 +24,8 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 - macOS 26 (Tahoe) oder neuer (die mitgelieferte Metal-GPU-Bibliothek für die Spracherkennung wurde gegen das macOS-26-SDK gebaut; eine niedrigere Untergrenze ist als [Issue #97](https://github.com/adbstyle/therascripter/issues/97) erfasst)
 - Apple Silicon
 - Mindestens 8 GB RAM
-- ~7 GB freier Speicherplatz (App + ML-Modelle 4.1 GB, plus ~2.1 GB für den beschleunigten
-  NER-Checkpoint, der beim ersten Lauf entsteht; zusätzlich ~2.5 GB optional für Zusammenfassung)
+- ~5 GB freier Speicherplatz (App ~1 GB + ML-Modelle ~1.8 GB; der Erststart prüft 5 GB für
+  Download und Entpacken; zusätzlich ~2.5 GB optional für Zusammenfassung)
 
 ## Installation
 
@@ -43,7 +43,7 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
    entfernt aber die Quarantäne der mitgelieferten ML-Werkzeuge nicht (die
    Zusammenfassungs-Funktion bliebe stumm deaktiviert).
 4. Therascript starten
-5. Beim ersten Start lädt Therascript die ML-Modelle herunter (~4.1 GB; Zusammenfassungs-Modell ist optional und kann später nachgeladen werden)
+5. Beim ersten Start lädt Therascript die ML-Modelle herunter (~1.7 GB; Zusammenfassungs-Modell ist optional und kann später nachgeladen werden)
 
 > **Empfehlung:** FileVault-Verschlüsselung aktivieren — Therascript warnt, falls deaktiviert.
 

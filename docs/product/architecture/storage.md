@@ -181,9 +181,9 @@ All application data lives under `~/.therascript/`. Every directory is created a
 ├── recovery/
 │   └── <session-id>.pcm        # In-progress recording buffer (raw PCM); deleted on completion
 ├── models/
-│   ├── asr/                    # Whisper model files (~1.7 GB, Q5_0 quantized GGUF)
-│   ├── diarization/            # pyannote model files (~0.2 GB)
-│   └── ner/                    # flair NER model files (~2.2 GB)
+│   ├── asr/                    # Whisper model files (~0.6 GB, Q5_0 quantized GGUF)
+│   ├── diarization/            # pyannote model files (~0.06 GB)
+│   └── ner/                    # flair NER model files (~1.1 GB, fp16)
 ```
 
 ---

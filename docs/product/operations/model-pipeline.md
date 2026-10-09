@@ -4,13 +4,15 @@ This document describes how ML models are built, packaged, and published to Clou
 
 ## Overview
 
-Therascript ships three ML models that are downloaded on first launch (~4.1 GB total):
+Therascript ships three required ML models that are downloaded on first launch (~1.7 GB total; source of truth for URLs, sizes and hashes: `src/shared/model-catalog.ts`):
 
 | Model | Archive | Size |
 |-------|---------|------|
-| Whisper Large V3 Turbo (Q5_0) | `whisper-ggml-large-v3-turbo-q5_0.bin` | ~1.7 GB |
-| pyannote speaker-diarization-3.1 | `pyannote-models.tar.gz` | ~0.2 GB |
-| flair/ner-german-large | `flair-ner-german-large.tar.gz` | ~2.2 GB |
+| Whisper Large V3 Turbo (Q5_0) | `whisper-ggml-large-v3-turbo-q5_0.bin` | ~0.6 GB |
+| pyannote suite (3.1 + community-1 + sub-models) | `pyannote-suite.tar.gz` | ~0.06 GB |
+| flair/ner-german-large (fp16, Issue #131) | `flair-ner-german-large-v3.tar.gz` | ~1.0 GB |
+
+Older artifacts (`flair-ner-german-large.tar.gz`, `-v2.tar.gz`, `pyannote-models.tar.gz`) stay on R2 because shipped app versions verify first-launch downloads against their built-in hashes.
 
 Models are hosted on Cloudflare R2 behind a public CDN. A `manifest.json` on R2 describes available model versions (SHA-256 checksums, sizes, download URLs). The app checks this manifest at startup to detect updates.
 
@@ -39,13 +41,13 @@ Generate an R2 API token in the Cloudflare Dashboard under R2 > Manage R2 API To
 
 ## Pipeline steps
 
-### Full deploy (recommended)
+### Full deploy (full republish only)
 
 ```bash
 npm run sidecar:deploy
 ```
 
-This runs all three steps sequentially: build, package, upload.
+This runs all three steps sequentially: build, package, upload. **Only for a full republish of every artifact under new file names.** `package-models.sh` re-creates `pyannote-suite.tar.gz` with a new gzip timestamp (new hash) and `upload-r2.sh` without arguments uploads everything in `r2-upload/` — that would overwrite R2 objects whose old hashes are built into shipped app versions. To publish one artifact, see "Publishing a single artifact" below.
 
 ### Step 1: Build the sidecar (`npm run sidecar:build`)
 
@@ -69,14 +71,22 @@ Options:
 Runs `scripts/package-models.sh`. Reads models from `~/.therascript/models/` and writes archives to `r2-upload/`.
 
 - **Whisper**: Copied as a flat `.bin` file (no archiving needed).
-- **Pyannote**: The contents of `~/.therascript/models/diarization/` are archived into `pyannote-models.tar.gz`.
-- **flair**: The contents of `~/.therascript/models/ner/` are archived into `flair-ner-german-large.tar.gz`.
+- **Pyannote**: The four required HF-cache folders from `~/.therascript/models/diarization/` are archived into `pyannote-suite.tar.gz`.
+- **flair**: A staging copy of `~/.therascript/models/ner/` (without `*-fast.pt` copies and without the fp32 blob) gets a fp16 checkpoint written by `scripts/convert-ner-fp16.py` at the original blob's place, then is archived into `flair-ner-german-large-v3.tar.gz`. The converter re-loads the result and fails unless all parameters come back as fp32.
 
 The script prints SHA-256 hashes and file sizes for each archive.
 
+**Publishing a single artifact:** `scripts/package-models.sh ner` packages only the NER artifact, `scripts/upload-r2.sh r2-upload/<file>` uploads only that file. A full packaging run re-creates `pyannote-suite.tar.gz` with a new gzip timestamp and therefore a new hash — never upload that over the existing R2 object. Before uploading a NER artifact, verify it end to end:
+
+```bash
+mkdir -p /tmp/ner-v3 && tar -xzf r2-upload/flair-ner-german-large-v3.tar.gz -C /tmp/ner-v3
+scripts/smoke-packaged.sh --staging --ner-model-dir /tmp/ner-v3
+python3 scripts/ner-parity.py ~/.therascript/models/ner /tmp/ner-v3
+```
+
 ### Step 3: Upload to R2 (`npm run sidecar:upload`)
 
-Runs `scripts/upload-r2.sh`. Uploads all files in `r2-upload/` to the `therascript` R2 bucket using the AWS CLI S3 compatibility API. Uses multipart upload, so there is no 300 MB file size limit.
+Runs `scripts/upload-r2.sh`. Without arguments it uploads all files in `r2-upload/` (see the warning above); `scripts/upload-r2.sh <file>...` uploads only those files. It uploads to the `therascript` R2 bucket using the AWS CLI S3 compatibility API. Uses multipart upload, so there is no 300 MB file size limit.
 
 After uploading, the script lists bucket contents for verification.
 

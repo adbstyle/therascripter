@@ -102,7 +102,7 @@ export function registerSystemHandlers(): void {
       title: 'TheraScript vollständig entfernen',
       message: 'Alle Daten werden unwiderruflich gelöscht:',
       detail:
-        '• ML-Modelle (~4 GB)\n' +
+        '• ML-Modelle (mehrere GB)\n' +
         '• Alle Transkriptionen und Audiodateien\n' +
         '• Sperrliste\n' +
         '• Einstellungen\n\n' +

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Therascript Deinstallations-Script
-# Löscht alle App-Daten: Modelle (~4 GB), Datenbank, PDFs und Aufnahmen.
+# Löscht alle App-Daten: Modelle (2–8 GB je nach Installation), Datenbank, PDFs und Aufnahmen.
 # Die App selbst (/Applications/Therascript.app) muss manuell in den Papierkorb gezogen werden.
 set -euo pipefail
 
