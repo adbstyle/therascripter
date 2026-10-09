@@ -26,6 +26,16 @@ describe('buildSummarizationPrompt', () => {
     expect(prompt).toContain('[PERSON 1]')
   })
 
+  it('tells the model to keep placeholders verbatim and not invent names for them', () => {
+    // Ohne Erklärung sieht ein 4B-Modell "[PERSON 1]" als Rauschen: es lässt
+    // den Platzhalter weg oder ersetzt ihn durch einen erfundenen Namen — eine
+    // klinische Zusammenfassung mit fiktiver Identität.
+    const prompt = buildSummarizationPrompt('test')
+    expect(prompt).toContain('Platzhalter')
+    expect(prompt).toContain('unverändert')
+    expect(prompt).toContain('erfinde keine Namen')
+  })
+
   it('does NOT diktat the line-by-line format (the JSON schema enforces structure)', () => {
     const prompt = buildSummarizationPrompt('test')
     // The old prompt forced "TITEL:" / "ZUSAMMENFASSUNG:" headers via text

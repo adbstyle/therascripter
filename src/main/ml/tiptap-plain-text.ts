@@ -19,7 +19,8 @@ export function tiptapToPlainText(doc: TipTapNode | null | undefined): string {
         return
       case 'placeholderChip': {
         const { type, number } = (node.attrs ?? {}) as Partial<TipTapPlaceholderChipAttrs>
-        if (type !== undefined && number !== undefined) {
+        // `!= null`: persistiertes JSON kennt kein undefined, wohl aber null.
+        if (type != null && number != null) {
           into.push(formatPlaceholder({ type, number }))
         }
         return
@@ -30,7 +31,9 @@ export function tiptapToPlainText(doc: TipTapNode | null | undefined): string {
       case 'paragraph': {
         const buf: string[] = []
         for (const child of node.content ?? []) walk(child, buf)
-        into.push(buf.join(''))
+        // Trim entfernt die ' '-Spacer, die tiptap-builder bei Multi-Speaker
+        // um die (hier verworfenen) Timestamp-/Speaker-Nodes setzt.
+        into.push(buf.join('').trim())
         return
       }
       default:
