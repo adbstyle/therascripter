@@ -1,7 +1,10 @@
+import type { TipTapPlaceholderChipAttrs } from '../../shared/types'
+import { formatPlaceholder } from '../../shared/utils/formatPlaceholder'
+
 interface TipTapNode {
   type?: string
   text?: string
-  attrs?: Record<string, unknown>
+  attrs?: object
   content?: TipTapNode[]
 }
 
@@ -14,9 +17,13 @@ export function tiptapToPlainText(doc: TipTapNode | null | undefined): string {
       case 'text':
         into.push(node.text ?? '')
         return
-      case 'placeholderChip':
-        into.push(String(node.attrs?.label ?? ''))
+      case 'placeholderChip': {
+        const { type, number } = (node.attrs ?? {}) as Partial<TipTapPlaceholderChipAttrs>
+        if (type !== undefined && number !== undefined) {
+          into.push(formatPlaceholder({ type, number }))
+        }
         return
+      }
       case 'speakerLabel':
       case 'timestamp':
         return

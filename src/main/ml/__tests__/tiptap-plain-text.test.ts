@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { tiptapToPlainText } from '../tiptap-plain-text'
+import { buildTipTapDocument } from '../tiptap-builder'
+import { buildEntityMap } from '../entity-map-builder'
+import type { TranscriptSegment } from '../../../shared/types'
+import type { MergedEntity } from '../../../shared/types/NerTypes'
 
 describe('tiptapToPlainText', () => {
   it('joins text nodes across paragraphs with newlines', () => {
@@ -13,7 +17,7 @@ describe('tiptapToPlainText', () => {
     expect(tiptapToPlainText(doc)).toBe('Satz A.\nSatz B.')
   })
 
-  it('renders placeholderChip nodes using their label attribute', () => {
+  it('renders placeholderChip nodes as [TYPE NUMBER], never the original', () => {
     const doc = {
       type: 'doc',
       content: [
@@ -21,13 +25,47 @@ describe('tiptapToPlainText', () => {
           type: 'paragraph',
           content: [
             { type: 'text', text: 'Der Patient ' },
-            { type: 'placeholderChip', attrs: { label: '[PERSON 1]' } },
+            {
+              type: 'placeholderChip',
+              attrs: {
+                entityId: 'person-1',
+                type: 'PERSON',
+                number: 1,
+                source: 'ner',
+                original: 'Hans Muster'
+              }
+            },
             { type: 'text', text: ' war müde.' }
           ]
         }
       ]
     }
-    expect(tiptapToPlainText(doc)).toBe('Der Patient [PERSON 1] war müde.')
+    const text = tiptapToPlainText(doc)
+    expect(text).toBe('Der Patient [PERSON 1] war müde.')
+    expect(text).not.toContain('Hans Muster')
+  })
+
+  it('keeps placeholders from a document built by buildTipTapDocument', () => {
+    const segments: TranscriptSegment[] = [
+      { text: 'Dr. Müller wohnt in Bern.', start: 0, end: 1, speaker: 'Person A' }
+    ]
+    const entities: MergedEntity[] = [
+      {
+        text: 'Dr. Müller',
+        type: 'PERSON',
+        source: 'ner',
+        segmentIndex: 0,
+        charStart: 0,
+        charEnd: 10
+      },
+      { text: 'Bern', type: 'ORT', source: 'ner', segmentIndex: 0, charStart: 20, charEnd: 24 }
+    ]
+    const doc = buildTipTapDocument(segments, buildEntityMap(entities), entities, 1)
+
+    const text = tiptapToPlainText(doc)
+    expect(text).toBe('[PERSON 1] wohnt in [ORT 1].')
+    expect(text).not.toContain('Müller')
+    expect(text).not.toContain('Bern')
   })
 
   it('drops speakerLabel and timestamp nodes (noise for LLM)', () => {
