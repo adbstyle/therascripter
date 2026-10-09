@@ -378,10 +378,38 @@ PYBUDGET
       else
         fail_check 'ner precision' "erwartet '$NER_EXPECTED_WEIGHTS', gefunden: $(grep -m1 'Gewichte:' "$LAST_OUTPUT" || echo 'keine Gewichte-Zeile')"
       fi
+
+      # OOM-Notpfad. Auf Dev-Macs reisst MPS nie sein Limit — Budget-Halbierung
+      # und CPU-Fallback in run_ner liefen deshalb nur auf 8-GB-Macs, und genau
+      # dort endete ein Fehler darin (to(cpu, float32) castete auf der GPU)
+      # als Exit 3 statt als CPU-Lauf. Hier wird das MPS-Limit auf 1.6 GiB
+      # gedrückt: genug für die fp16-Gewichte (1.1 GiB), zu wenig für eine
+      # Seiten-Gruppe — der Lauf MUSS halbieren, auf die CPU wechseln und
+      # trotzdem fertig werden. Die Watermarks sind Faktoren auf torchs
+      # recommended_max_memory, deshalb aus dieser Maschine berechnet.
+      if grep -q 'MPS-Backend aktiv' "$LAST_OUTPUT"; then
+        NER_OOM_RATIOS=$(PYTHONDONTWRITEBYTECODE=1 "$SIDECAR_PY" -c '
+import torch
+high = 1.6 * 1024**3 / torch.mps.recommended_max_memory()
+print(f"{high:.6f} {high * 0.8:.6f}")
+' 2>/dev/null || true)
+        if [ -z "$NER_OOM_RATIOS" ]; then
+          fail_check 'ner oom fallback' 'MPS-Limit nicht berechenbar (torch.mps.recommended_max_memory)'
+        else
+          read -r NER_OOM_HIGH NER_OOM_LOW <<< "$NER_OOM_RATIOS"
+          run_check_capture 'ner oom fallback' 'wechsle auf CPU' \
+            env PYTORCH_MPS_HIGH_WATERMARK_RATIO="$NER_OOM_HIGH" \
+            PYTORCH_MPS_LOW_WATERMARK_RATIO="$NER_OOM_LOW" \
+            "$SIDECAR_PY" "$NER_SCRIPT" --transcript "$FIXTURE" --model-dir "$NER_MODEL_DIR" || true
+        fi
+      else
+        skip_check 'ner oom fallback' 'kein MPS-Backend aktiv'
+      fi
     else
       fail_check 'ner token budget' 'übersprungen — ner offline e2e ist rot'
       fail_check 'ner load path' 'übersprungen — ner offline e2e ist rot'
       fail_check 'ner precision' 'übersprungen — ner offline e2e ist rot'
+      fail_check 'ner oom fallback' 'übersprungen — ner offline e2e ist rot'
     fi
   fi
   rm -f "$FIXTURE"
@@ -390,6 +418,7 @@ else
   skip_check 'ner token budget' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
   skip_check 'ner load path' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
   skip_check 'ner precision' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
+  skip_check 'ner oom fallback' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
 fi
 
 # 4a. load_waveform (diarize.py) setzt das Resampling blockweise zusammen

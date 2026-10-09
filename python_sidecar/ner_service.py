@@ -120,9 +120,10 @@ WINDOW_STRIDE = 256
 
 NER_MODEL_ID = "flair/ner-german-large"
 
-# Nur für Messwerkzeuge (scripts/ner-parity.py): "cpu" erzwingt den fp32-Pfad
-# auf der CPU als Referenz für den fp16-Pfad auf MPS. Die App setzt die
-# Variable nie — Subprozesse bekommen eine Whitelist-Env (subprocess.ts).
+# Nur für Messwerkzeuge (scripts/ner-parity.py): "cpu" erzwingt einen
+# fp32-Referenzlauf auf der CPU aus dem Original-Checkpoint — ohne die Fast-Kopie
+# zu lesen oder zu schreiben (siehe _load_tagger). Die App setzt die Variable
+# nie — Subprozesse bekommen eine Whitelist-Env (subprocess.ts).
 DEVICE_OVERRIDE_ENV = "THERASCRIPT_NER_DEVICE"
 
 # Namenskonvention der Fast-Kopie (siehe needs_fast_checkpoint). Aufräumen fasst
@@ -511,8 +512,16 @@ def _load_tagger(model_dir, Classifier):
     _install_mmap_loader()
     fast_path = os.path.join(model_dir, fast_checkpoint_name(NER_MODEL_ID))
     wants_fast_copy = needs_fast_checkpoint(_resolve_original_checkpoint(NER_MODEL_ID))
+    # Referenzlauf (DEVICE_OVERRIDE_ENV): die Fast-Kopie eines v1/v2-Originals
+    # ist seit der fp16-Inferenz selbst fp16 — gelesen, rechnete die
+    # fp32-Referenz mit gerundeten Gewichten; geschrieben, legte sie eine
+    # 2.1-GB-fp32-Kopie ins Modellverzeichnis des Users.
+    reference_run = os.environ.get(DEVICE_OVERRIDE_ENV) == "cpu"
 
-    if not wants_fast_copy:
+    if reference_run:
+        _emit("Referenzlauf — lade das Original, Fast-Kopie bleibt unberührt")
+        wants_fast_copy = False
+    elif not wants_fast_copy:
         _emit("Original-Checkpoint ist kompakt — keine Fast-Kopie nötig")
         _remove_fast_checkpoints(model_dir)
     elif os.path.isfile(fast_path):
@@ -599,10 +608,6 @@ def _timed_load(Classifier, source, label):
     with _half_precision_on(flair.device):
         tagger = Classifier.load(source)
     _emit(f"Modell aus {label} geladen ({time.monotonic() - started:.1f}s)")
-    # Contract mit smoke-packaged.sh (Check 'ner precision'): mit MPS muss hier
-    # torch.float16 stehen, sonst ist der Speicher-Fix still verloren.
-    weights = next(tagger.parameters())
-    _emit(f"Gewichte: {weights.dtype} auf {weights.device}")
     return tagger
 
 
@@ -653,6 +658,13 @@ def run_ner(model_dir: str, segments: list) -> list:
         _emit(f"MPS nicht verfügbar, nutze CPU: {e}")
 
     tagger = _load_tagger(model_dir, Classifier)
+
+    # Contract mit smoke-packaged.sh (Check 'ner precision'): mit MPS muss hier
+    # torch.float16 stehen, sonst ist der Speicher-Fix still verloren. Bewusst
+    # NACH _load_tagger statt in _timed_load: dort zählte jeder Fehler als
+    # unbrauchbare Fast-Kopie und löschte sie.
+    weights = next(tagger.parameters())
+    _emit(f"Gewichte: {weights.dtype} auf {weights.device}")
 
     report_progress(25)
 
