@@ -74,7 +74,7 @@ All three subprocess types communicate with the Main Process only. The Renderer 
 | **Python sidecar** | `python_sidecar/` | Speaker diarization (pyannote.audio), alignment, and NER anonymization (flair). Shared across pipeline stages. | pyannote speaker-diarization-3.1 (~0.06 GB) + flair/ner-german-large (~1.1 GB, fp16 on disk) |
 | **Swift Vision OCR CLI** | `resources/bin/vision-ocr` | OCR for scanned PDF pages using Apple Vision Framework. Invoked per page only when pdfjs-dist finds no text. | Apple Vision (OS-provided, no model file) |
 
-The task queue enforces strict sequential execution — only one ML executor runs at any given time, respecting the 8 GB RAM budget (~5.2 GB peak during flair NER).
+The task queue enforces strict sequential execution — only one ML executor runs at any given time, respecting the 8 GB RAM budget (~3.5 GB process peak during flair NER on 8-GB Macs).
 
 ---
 
@@ -97,7 +97,7 @@ All application data lives under `~/.therascript/`. Directories are created with
     ├── asr/                    # Whisper model (~0.6 GB)
     │   └── ggml-large-v3-turbo-q5_0.bin
     ├── diarization/            # Pyannote model (~0.06 GB, HuggingFace cache format)
-    └── ner/                    # flair/ner-german-large (~1.1 GB fp16; v1/v2 installs: 2.2 GB + 2.1 GB fast copy)
+    └── ner/                    # flair/ner-german-large (~1.1 GB fp16; v1/v2 installs: 2.2 GB + 1.1 GB fp16 fast copy, 2.1 GB on the CPU path)
 ```
 
 Models persist across app updates. Total disk requirement: ~2.8 GB (app ~1 GB + models ~1.8 GB) (first launch checks for 5 GB free to cover download + extraction).

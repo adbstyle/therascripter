@@ -3,11 +3,19 @@
 Paritätstest NER: vergleicht die Entities zweier Modellverzeichnisse (Issue #131).
 
 Usage:
-    python3 scripts/ner-parity.py <referenz-ner-dir> <kandidat-ner-dir> [--runs N]
+    python3 scripts/ner-parity.py <referenz-ner-dir> <kandidat-ner-dir> [--runs N] [--ref-cpu]
 
-Beispiel fp32 (installiert) gegen fp16 (entpacktes v3-Artefakt):
+Beispiel fp32-Artefakt (installiert) gegen fp16-Artefakt (entpacktes v3):
     mkdir -p /tmp/ner-v3 && tar -xzf r2-upload/flair-ner-german-large-v3.tar.gz -C /tmp/ner-v3
-    python3 scripts/ner-parity.py ~/.therascript/models/ner /tmp/ner-v3
+    python3 scripts/ner-parity.py ~/.therascript/models/ner /tmp/ner-v3 --ref-cpu
+
+Auf MPS baut ner_service.py den Tagger IMMER als fp16 und rechnet in fp16
+(_half_precision_on) — ohne --ref-cpu vergleicht das Script also nur die
+Gewichte zweier Artefakte, beide in fp16 gerechnet. --ref-cpu lässt die
+Referenz über THERASCRIPT_NER_DEVICE=cpu als fp32 auf der CPU laufen und misst
+damit die ganze Abweichung des Produktionspfads gegen fp32; mit demselben
+Verzeichnis zweimal prüft es allein die fp16-Inferenz. Die Ladezeiten sind
+dann nicht vergleichbar (CPU gegen MPS).
 
 Läuft über ner_service.py selbst — also exakt der Produktionspfad inklusive
 Budget-Packing und dokumentweitem FLERT-Kontext — mit den synthetischen Texten
@@ -47,8 +55,10 @@ def build_segments():
     return [{"text": t} for t in paragraphs + pages]
 
 
-def run(model_dir, transcript):
+def run(model_dir, transcript, cpu=False):
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    if cpu:
+        env["THERASCRIPT_NER_DEVICE"] = "cpu"
     proc = subprocess.run(
         [SIDECAR_PY, NER_SCRIPT, "--transcript", transcript, "--model-dir", model_dir],
         capture_output=True,
@@ -70,6 +80,9 @@ def main():
     parser.add_argument("reference")
     parser.add_argument("candidate")
     parser.add_argument("--runs", type=int, default=1, help="Läufe pro Modell (Ladezeit-Median)")
+    parser.add_argument(
+        "--ref-cpu", action="store_true", help="Referenz als fp32 auf der CPU statt fp16 auf MPS"
+    )
     args = parser.parse_args()
 
     segments = build_segments()
@@ -79,10 +92,11 @@ def main():
 
     try:
         results = {}
-        for label, model_dir in (("Referenz", args.reference), ("Kandidat", args.candidate)):
+        runs = (("Referenz", args.reference, args.ref_cpu), ("Kandidat", args.candidate, False))
+        for label, model_dir, cpu in runs:
             loads = []
             for _ in range(args.runs):
-                entities, load = run(os.path.expanduser(model_dir), transcript)
+                entities, load = run(os.path.expanduser(model_dir), transcript, cpu)
                 loads.append(load)
             results[label] = entities
             known = sorted(t for t in loads if t is not None)

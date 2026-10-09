@@ -36,7 +36,7 @@ Dreistufige Hybrid-Pipeline: flair NER + Regex-Engine + Sperrliste (Blocklist). 
 
 ## Konsequenzen
 
-- **Grosses Modell:** ~1.0 GB Download (fp16-Artefakt), ~2.7 GB RAM während Anonymisierung (Peak ~5.2 GB mit Electron + OS).
+- **Grosses Modell:** ~1.0 GB Download (fp16-Artefakt). Auf Apple Silicon wird es direkt als fp16 auf der GPU gebaut und gerechnet; Prozess-Peak inkl. GPU-Speicher ~3.5 GB auf 8-GB-Macs (45-min-Sitzung, vorher fp32: ~9.4 GB und damit Swap bis zum 900-s-Timeout).
 - **Python-Sidecar:** flair läuft im gleichen Python-Sidecar wie pyannote — gemeinsame PyTorch-Dependency.
 - **7 User-sichtbare Entitätstypen:** PERSON, ORT, DATUM, KONTAKT, ORGANISATION, MEDIZINISCH, SONSTIGES. Platzhalter-Format: `[PERSON 1]`, `[ORT 2]` etc.
 - **Review-Pflicht:** Trotz ~92% F1 sind False Negatives möglich — der Review-Modus mit TipTap-Editor ist essentiell als Sicherheitsnetz.

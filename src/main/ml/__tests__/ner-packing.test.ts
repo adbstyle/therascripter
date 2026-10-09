@@ -21,6 +21,7 @@ from ner_service import (
     estimate_item,
     fast_checkpoint_name,
     should_write_fast_checkpoint,
+    max_sentences_for_ram,
     TOKEN_BUDGET,
     MAX_SENTENCES_PER_BATCH,
     MIN_TOKEN_BUDGET
@@ -36,6 +37,7 @@ print(json.dumps({
     'diskDecisions': [should_write_fast_checkpoint('/tmp/x.pt', free, size)
                       for free, size in payload.get('diskCases', [])],
     'checkpointNames': [fast_checkpoint_name(m) for m in payload.get('modelIds', [])],
+    'ramCaps': [max_sentences_for_ram(ram) for ram in payload.get('ramCases', [])],
     'tokenBudget': TOKEN_BUDGET,
     'maxSentences': MAX_SENTENCES_PER_BATCH,
     'minTokenBudget': MIN_TOKEN_BUDGET
@@ -50,6 +52,7 @@ interface PackResult {
   estimates: PackItem[]
   diskDecisions: boolean[]
   checkpointNames: string[]
+  ramCaps: number[]
   tokenBudget: number
   maxSentences: number
   minTokenBudget: number
@@ -63,6 +66,7 @@ function runSidecar(
     charLengths?: number[]
     diskCases?: number[][]
     modelIds?: string[]
+    ramCases?: (number | null)[]
   } = {}
 ): PackResult {
   const kwargs: Record<string, number> = {}
@@ -73,7 +77,8 @@ function runSidecar(
     kwargs,
     charLengths: opts.charLengths ?? [],
     diskCases: opts.diskCases ?? [],
-    modelIds: opts.modelIds ?? []
+    modelIds: opts.modelIds ?? [],
+    ramCases: opts.ramCases ?? []
   })
   const stdout = execFileSync('python3', ['-c', PY_PROGRAM, sidecarDir, payload], {
     encoding: 'utf-8',
@@ -211,6 +216,16 @@ describeIfPython3('pack_by_budget (python_sidecar/ner_service.py)', () => {
     ])
   })
 
+  it('caps batches at 8 segments on Macs with 8 GB RAM or less', () => {
+    // Begründung und Messwerte: Docstring von max_sentences_for_ram.
+    // Unbekannter RAM zählt als knapp: der Preis ist nur die Laufzeit.
+    const GB = 1024 ** 3
+    const { ramCaps } = runSidecar([[1, 64]], {
+      ramCases: [8 * GB, 8 * GB + 1, 16 * GB, 4 * GB, null, 0]
+    })
+    expect(ramCaps).toEqual([8, 32, 32, 8, 8, 8])
+  })
+
   it('derives the fast-checkpoint filename from the model id', () => {
     // Das Modellverzeichnis heisst nach der Gruppe ("ner"), nicht nach dem
     // Modell. Ein fester Dateiname würde bei einem zweiten NER-Modell (Slot
@@ -229,7 +244,8 @@ describeIfPython3('pack_by_budget (python_sidecar/ner_service.py)', () => {
 
   it('only writes the fast checkpoint when the disk keeps a safety margin', () => {
     // Der konvertierte Checkpoint (Embeddings als Param-Dict, mmap-fähig)
-    // belegt zusätzliche ~2.1 GB. Auf knappen Platten muss die Konvertierung
+    // belegt zusätzliche ~1.1 GB (fp16 auf MPS) bis ~2.1 GB (fp32 auf der CPU,
+    // hier als Worst Case). Auf knappen Platten muss die Konvertierung
     // ausbleiben, statt das Modellverzeichnis volllaufen zu lassen — die
     // Anonymisierung läuft dann nur mit dem langsameren Load des Originals weiter.
     const GB = 1024 ** 3

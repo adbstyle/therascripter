@@ -9,7 +9,7 @@ Therascript processes audio recordings and PDF documents through a strictly sequ
 | ASR (transcription) | Whisper Large V3 Turbo Q5_0 | ~1.8 GB |
 | Diarization | pyannote speaker-diarization-community-1 | ~0.2 GB |
 | Alignment | In-process (no model) | < 50 MB |
-| NER / Anonymization | flair/ner-german-large | ~5.2 GB |
+| NER / Anonymization | flair/ner-german-large | ~3.5 GB on 8-GB Macs, ~4.8 GB above (process incl. GPU memory, fp16 on MPS) |
 | OCR (PDF only) | Apple Vision (Swift subprocess) | < 100 MB |
 
 Models are never loaded simultaneously. Each subprocess exits before the next task begins.
@@ -20,7 +20,7 @@ Models are never loaded simultaneously. Each subprocess exits before the next ta
 |---|---|---|---|---|
 | Whisper Large V3 Turbo | `~/.therascript/models/asr/ggml-large-v3-turbo-q5_0.bin` | Q5_0 (GGML), ~0.6 GB | WER see ADR-003 | German (de) |
 | pyannote speaker-diarization-community-1 | `~/.therascript/models/diarization/` | none (fp32) | DER 8.3% on German | Language-agnostic |
-| flair/ner-german-large | `~/.therascript/models/ner/` | fp16 on disk (artifact v3), fp32 at inference | F1 ~92% | German |
+| flair/ner-german-large | `~/.therascript/models/ner/` | fp16 on disk (artifact v3) and at inference on MPS; fp32 only on the CPU path | F1 ~92% | German |
 | Apple Vision OCR | system framework (no download) | n/a | n/a | Multilingual |
 
 All model directories are created at startup by `initDatabase()`. Total download size on first launch is approximately 1.7 GB (Whisper 0.6 GB + pyannote 0.06 GB + flair NER 1.0 GB; source of truth: `src/shared/model-catalog.ts`).
@@ -122,7 +122,7 @@ Session status after completion: `review`.
     |
     v
 [Step 4] AnonymizationService (Python subprocess: ner_service.py + in-process)
-         Model: flair/ner-german-large, ~5.2 GB peak RAM
+         Model: flair/ner-german-large, ~3.5 GB peak RAM (8-GB Macs)
          Sources: flair NER + regex engine + blocklist
          Output: TipTap JSON document with placeholderChip nodes
     |
@@ -183,7 +183,7 @@ Session status after completion: `review`.
     |
     v
 [Step 3] AnonymizationService (Python subprocess: ner_service.py + in-process)
-         Model: flair/ner-german-large, ~5.2 GB peak RAM
+         Model: flair/ner-german-large, ~3.5 GB peak RAM (8-GB Macs)
          Output: TipTap JSON document with placeholderChip nodes
     |
     v
@@ -253,7 +253,7 @@ The queue does not continue to the next task for that session once any task fail
 |---|---|
 | Transcription | 4x estimated audio duration, min 60 s |
 | Diarization | 4x estimated audio duration, min 120 s |
-| NER | Fixed 300 s (5 minutes) |
+| NER | Fixed 900 s (15 minutes) |
 | OCR (per page) | Fixed 30 s per page |
 
 On timeout, `SIGTERM` is sent to the child process and the executor rejects with a timeout error, triggering the same failure path as a non-zero exit code.
