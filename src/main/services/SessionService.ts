@@ -163,7 +163,7 @@ export class SessionService {
   /**
    * Reads the persisted anonymized TipTap document for a session and flattens it
    * to plain text suitable for LLM input (drops speaker labels + timestamps,
-   * inlines placeholder chips by label).
+   * inlines placeholder chips as `[TYPE NUMBER]`).
    */
   getAnonymizedPlainText(sessionId: string): string {
     const session = this.repository.findById(sessionId)

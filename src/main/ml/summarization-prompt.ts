@@ -1,5 +1,5 @@
 // Muss mit LLAMA_CONTEXT_SIZE (-c 8192) in LlamaSummarizer zusammenpassen:
-// 24k Zeichen ≈ 6k deutsche Tokens + Instruction (~250 Tokens) + 400 Output-
+// 24k Zeichen ≈ 6k deutsche Tokens + Instruction (~300 Tokens) + 400 Output-
 // Tokens < 8192. Der frühere 120k-Wert lief gegen llama-clis 4096-Default —
 // der Großteil der Prompt-Eval-Zeit war bezahlt, aber ohne Wirkung auf die
 // Summary (stille Truncation/Context-Shift).
@@ -17,6 +17,8 @@ const INSTRUCTION = `Du bist ein professioneller Assistent für die Kurz-Beschre
 
 - title: Ein prägnanter deutscher Titel (Nominalphrase, 3–8 Wörter, max. 80 Zeichen). Kein vollständiger Satz, keine Anführungszeichen, keine Einleitung.
 - summary: Eine Zusammenfassung in genau zwei prägnanten deutschen Sätzen mit den zentralen Themen und Schlüsselpunkten.
+
+Der Text ist anonymisiert: Platzhalter wie [PERSON 1] oder [ORT 2] stehen für entfernte Angaben. Übernimm sie unverändert, wenn du dich auf sie beziehst, und erfinde keine Namen, Orte oder sonstigen Angaben dafür.
 
 Antworte ausschließlich mit dem JSON-Objekt — keine Einleitung, keine Erklärung, keine Markdown-Code-Fences.`
 

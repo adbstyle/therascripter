@@ -1,7 +1,10 @@
+import type { TipTapPlaceholderChipAttrs } from '../../shared/types'
+import { formatPlaceholder } from '../../shared/utils/formatPlaceholder'
+
 interface TipTapNode {
   type?: string
   text?: string
-  attrs?: Record<string, unknown>
+  attrs?: object
   content?: TipTapNode[]
 }
 
@@ -14,16 +17,23 @@ export function tiptapToPlainText(doc: TipTapNode | null | undefined): string {
       case 'text':
         into.push(node.text ?? '')
         return
-      case 'placeholderChip':
-        into.push(String(node.attrs?.label ?? ''))
+      case 'placeholderChip': {
+        const { type, number } = (node.attrs ?? {}) as Partial<TipTapPlaceholderChipAttrs>
+        // `!= null`: persistiertes JSON kennt kein undefined, wohl aber null.
+        if (type != null && number != null) {
+          into.push(formatPlaceholder({ type, number }))
+        }
         return
+      }
       case 'speakerLabel':
       case 'timestamp':
         return
       case 'paragraph': {
         const buf: string[] = []
         for (const child of node.content ?? []) walk(child, buf)
-        into.push(buf.join(''))
+        // Trim entfernt die ' '-Spacer, die tiptap-builder bei Multi-Speaker
+        // um die (hier verworfenen) Timestamp-/Speaker-Nodes setzt.
+        into.push(buf.join('').trim())
         return
       }
       default:
