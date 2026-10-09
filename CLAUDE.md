@@ -44,6 +44,7 @@ npm run sidecar:deploy             # Build + package + upload (full pipeline)
 scripts/publish-manifest.sh       # Generate manifest.json from r2-upload/ + upload to R2 (run after sidecar:package); --from-catalog baut es aus model-catalog.ts + HEAD-Prüfung gegen R2 (ruft release.sh auf)
 scripts/sim-clean-install.sh       # Simulate fresh/upgrade/models-only install; A|B|C als Arg (non-interactive), --launch-clean (sandboxed App-Start ohne Homebrew/Dev-Caches), --status, --restore
 scripts/smoke-packaged.sh          # Runtime-Smoke aller gebundelten ML-Tools in Homebrew-/Cache-freier Sandbox; --app <pfad> | --dist | --staging, optional --ner-model-dir <pfad> (z. B. entpacktes Artefakt vor dem Upload)
+scripts/fetch-test-podcasts.sh     # Echte Test-Audios: 3 SRF-«Input»-Folgen (28–45 min, mehrere Sprecher) als SHA-verifizierte MP3 + WAV im Aufnahmeformat (48 kHz mono 16-bit, 44-Byte-Header — afconvert-Output wird neu geschrieben, sein FLLR-Chunk bräche AudioStitchService) nach tests/fixtures/podcast-audio/ (gitignored, urheberrechtlich geschützt, ~680 MB); Exit ≠ 0 bei fehlender/geänderter Folge
 python3 scripts/ner-parity.py <ref-ner-dir> <kandidat-ner-dir>  # NER-Entity-Parität zweier Modellverzeichnisse (tests/fixtures/ner-parity/)
 scripts/verify-bundles.sh          # Statische Bundle-Verifikation; --app <pfad> prüft die gepackte .app, --smoke chained smoke-packaged.sh
 ```
