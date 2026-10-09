@@ -446,25 +446,38 @@ import struct
 import sys
 import wave
 
-# 5 s, 16 kHz, mono, 16-bit. Deterministisches Rauschen mit sehr kleiner
+# 5 s, 48 kHz, mono, 16-bit. Deterministisches Rauschen mit sehr kleiner
 # Amplitude statt digitaler Stille: energiebasierte Normalisierungsschritte
 # mögen einen Nullvektor nicht, und ein fester Seed hält den Check stabil.
+# 48 kHz wie die App-Aufnahmen: so läuft auch der Resampling-Schritt in
+# diarize.py (torchaudio.functional.resample → 16 kHz) gegen den gebundelten
+# Interpreter — bei 16 kHz würde er übersprungen.
 state = 12345
 frames = bytearray()
-for _ in range(16000 * 5):
+for _ in range(48000 * 5):
     state = (1103515245 * state + 12345) & 0x7FFFFFFF
     frames += struct.pack("<h", (state % 601) - 300)
 
 with wave.open(sys.argv[1], "wb") as out:
     out.setnchannels(1)
     out.setsampwidth(2)
-    out.setframerate(16000)
+    out.setframerate(48000)
     out.writeframes(bytes(frames))
 PYWAV
   then
-    run_check 'diarize offline e2e' '\[PROGRESS\] 100' \
+    if run_check_capture 'diarize offline e2e' '\[PROGRESS\] 100' \
       "$SIDECAR_PY" "$DIARIZE_SCRIPT" --audio "$FIXTURE" \
-      --model-dir "$DIARIZE_MODEL_DIR" --hf-model "$DIARIZE_HF_MODEL"
+      --model-dir "$DIARIZE_MODEL_DIR" --hf-model "$DIARIZE_HF_MODEL"; then
+      # Ohne Preload liest pyannote jeden Embedding-Chunk einzeln von der
+      # Platte (Issue #141) — funktional korrekt, deshalb fiele ein Rückfall
+      # nach einem pyannote-Update sonst durch jeden anderen Check.
+      if grep -q 'Audio vorab geladen' "$LAST_OUTPUT"; then
+        echo "ok   [diarize waveform preload]"
+        PASS_LIST="$PASS_LIST diarize-waveform-preload"
+      else
+        fail_check 'diarize waveform preload' 'diarize.py liest vom Dateipfad statt aus dem Speicher'
+      fi
+    fi
   fi
   rm -f "$FIXTURE"
 else

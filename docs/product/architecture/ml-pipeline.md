@@ -55,7 +55,8 @@ Session status during this step: `transcribing`.
 - Spawns the Python sidecar script `diarize.py` via `resolvePythonSidecar()`.
 - Arguments: `--audio`, `--model-dir`, `--min-speakers 1`, `--max-speakers 4`.
 - `OMP_NUM_THREADS=4` and `MKL_NUM_THREADS=4` are set to prevent PyTorch from saturating all CPU cores.
-- Timeout: 4x estimated audio duration, minimum 2 minutes.
+- `diarize.py` loads the WAV once, downmixes it to mono and resamples it to the embedding model's rate (16 kHz), then passes it to pyannote as an in-memory `{"waveform", "sample_rate"}` dict. Passing the file path instead would make pyannote read and resample every embedding chunk (~3000 per 50 min) from disk through the torchcodec shim. Loading and resampling run in 60-s blocks: resampling the whole file in one call makes torchaudio's `conv1d` unfold it (im2col) — measured 19 GiB extra for a 2-h recording versus 0.6 GiB blockwise.
+- Timeout: 4x estimated audio duration, minimum 10 minutes (covers the model load, which does not scale with input length).
 - Output: RTTM-format text on stdout, parsed by `parseRTTM()`.
 - Post-processing: segments shorter than 0.5 seconds are discarded as segmentation noise; segments are sorted by start time.
 - Result: a `DiarizationData` JSON file saved to `~/.therascript/diarizations/{sessionId}.json`.
