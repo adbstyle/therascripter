@@ -293,8 +293,15 @@ def _remove_fast_checkpoints(directory, keep=None):
       sie nie überschreiben. Eine .tmp, die ein parallel laufender Prozess
       gerade schreibt, darf mit weg — dessen os.replace scheitert dann, und das
       ist folgenlos (siehe _write_fast_checkpoint).
+
+    Nie fatal: Aufräumen ist Hygiene, ein Fehler darf den Lauf nicht beenden.
     """
-    for name in os.listdir(directory):
+    try:
+        names = os.listdir(directory)
+    except OSError as e:
+        _emit(f"Modellverzeichnis nicht lesbar, überspringe Aufräumen: {e}")
+        return
+    for name in names:
         is_copy = name.endswith(FAST_CHECKPOINT_SUFFIX)
         is_orphan = FAST_CHECKPOINT_SUFFIX + "." in name and name.endswith(".tmp")
         if not (is_copy or is_orphan) or name == keep:
@@ -421,8 +428,11 @@ def _install_mmap_loader():
     flair ruft torch.load mit einem FILE-OBJEKT auf (flair/file_utils.py:
     load_torch_state) — damit ist mmap nicht möglich, torch verlangt dafür einen
     Pfad. mmap funktioniert laut torch-Doku nur mit dem Zip-Format; alles andere
-    geht unverändert durch flairs eigenen Loader. Damit kann der Patch für jeden
-    Load aktiv bleiben, auch für den Fallback.
+    geht unverändert durch flairs eigenen Loader. Scheitert mmap selbst (z. B.
+    ENOMEM unter Speicherdruck, ein Volume ohne mmap-Support), lädt derselbe
+    Aufruf ohne mmap nach — sonst scheiterte der Fallback aufs Original aus
+    demselben Grund wie die Fast-Kopie, und die Session landete in 'error'.
+    Damit kann der Patch für jeden Load aktiv bleiben.
     flair.nn.model importiert den Namen direkt, deshalb muss er an BEIDEN
     Stellen ersetzt werden.
     """
@@ -433,11 +443,16 @@ def _install_mmap_loader():
     flair_loader = flair.file_utils.load_torch_state
 
     def load_torch_state(model_file):
-        if not is_zip_checkpoint(model_file):
-            return flair_loader(model_file)
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore")
-            return torch.load(model_file, map_location="cpu", weights_only=False, mmap=True)
+        if is_zip_checkpoint(model_file):
+            try:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore")
+                    return torch.load(
+                        model_file, map_location="cpu", weights_only=False, mmap=True
+                    )
+            except Exception as e:  # noqa: BLE001 — mmap ist nur Beschleunigung
+                _emit(f"mmap-Load fehlgeschlagen ({e}) — lade ohne mmap")
+        return flair_loader(model_file)
 
     flair.file_utils.load_torch_state = load_torch_state
     flair.nn.model.load_torch_state = load_torch_state

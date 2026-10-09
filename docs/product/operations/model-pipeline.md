@@ -92,6 +92,10 @@ After uploading, the script lists bucket contents for verification.
 
 ### Step 4: Publish manifest (`scripts/publish-manifest.sh`)
 
+`release.sh` publishes the manifest automatically at the end of every release with `scripts/publish-manifest.sh --from-catalog`: model entries (URL, sha256, size) come straight from `src/shared/model-catalog.ts`, every artifact is checked against R2 via HEAD (exists, `Content-Length` matches), no local files are needed. Upload a new artifact **before** releasing, otherwise this step aborts. `--from-catalog --dry-run` writes `manifest.json` locally without uploading.
+
+The modes below build the manifest from local files instead:
+
 Generates `manifest.json` from the files in `r2-upload/` and uploads it to R2. For each model the manifest records:
 
 - `id` -- model identifier (e.g. `whisper-large-v3-turbo`)

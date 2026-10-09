@@ -103,11 +103,18 @@ fi
 # Ohne `|| exit 1` aufgerufen: in einem ||-Kontext ignoriert bash errexit für
 # den GANZEN Funktionsrumpf — ein an voller Platte gescheitertes tar lieferte
 # dann still Hash und Grösse eines abgeschnittenen Tarballs.
+# Der trap räumt auch das .partial weg: sonst lädt upload-r2.sh ohne Argumente
+# (sidecar:deploy) ein abgeschnittenes Tarball hoch, und die Hash-Liste unten
+# gäbe es als zu kopierenden Katalogwert aus.
+NER_OUTPUT_NAME="flair-ner-german-large-v3.tar.gz"
 NER_STAGING=""
-trap '[ -n "$NER_STAGING" ] && rm -rf "$NER_STAGING"' EXIT
+cleanup_ner() {
+  [ -n "$NER_STAGING" ] && rm -rf "$NER_STAGING"
+  rm -f "$OUTPUT_DIR/$NER_OUTPUT_NAME.partial"
+}
+trap cleanup_ner EXIT
 
 package_ner() {
-  local OUTPUT_NAME="flair-ner-german-large-v3.tar.gz"
   local SRC="$MODELS_DIR/ner"
 
   if [ ! -d "$SRC" ]; then
@@ -137,11 +144,11 @@ package_ner() {
 
   # Erst in eine .partial schreiben: ein abgebrochener Lauf hinterlässt nie ein
   # Tarball unter dem finalen Namen, das upload-r2.sh hochladen könnte.
-  tar -czf "$OUTPUT_DIR/$OUTPUT_NAME.partial" -C "$NER_STAGING" .
-  mv "$OUTPUT_DIR/$OUTPUT_NAME.partial" "$OUTPUT_DIR/$OUTPUT_NAME"
+  tar -czf "$OUTPUT_DIR/$NER_OUTPUT_NAME.partial" -C "$NER_STAGING" .
+  mv "$OUTPUT_DIR/$NER_OUTPUT_NAME.partial" "$OUTPUT_DIR/$NER_OUTPUT_NAME"
   rm -rf "$NER_STAGING"
   NER_STAGING=""
-  echo "  -> $OUTPUT_NAME"
+  echo "  -> $NER_OUTPUT_NAME"
 }
 
 package_ner

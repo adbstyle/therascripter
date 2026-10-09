@@ -332,20 +332,34 @@ PYBUDGET
         PASS_LIST="$PASS_LIST ner-token-budget"
       fi
 
-      # Ladepfad: neben einem kompakten Original (Artefakt v3, fp16) darf nach
-      # dem Lauf KEINE Fast-Kopie liegen — sie wäre doppelt so gross wie das
-      # Original (2.1 GB fp32 neben 1.1 GB fp16). Dass v3 als kompakt erkannt
-      # wird, sichert scripts/convert-ner-fp16.py schon beim Packaging.
-      if grep -q 'Original-Checkpoint ist kompakt' "$LAST_OUTPUT"; then
-        if compgen -G "$NER_MODEL_DIR/*-fast.pt" > /dev/null; then
-          fail_check 'ner load path' 'Fast-Kopie neben kompaktem Original'
+      # Ladepfad. Erwartung aus einem Signal, das NICHT aus ner_service.py
+      # stammt — sonst prüfte der Check die Erkennung gegen sich selbst: die
+      # Grösse des Original-Blobs. fp16 (Artefakt v3, 1.1 GB) muss als kompakt
+      # gelten und darf keine Fast-Kopie hinterlassen (sie wäre 2.1 GB gross);
+      # fp32 (v1/v2, 2.2 GB) muss den Fast-Kopie-Pfad nehmen (sonst lädt jeder
+      # Lauf ~8 s länger).
+      NER_ORIGINAL=$(compgen -G "$NER_MODEL_DIR/models/ner-german-large/models--flair--ner-german-large/snapshots/*/pytorch_model.bin" | head -1 || true)
+      if [ -z "$NER_ORIGINAL" ]; then
+        fail_check 'ner load path' 'Original-Checkpoint nicht gefunden'
+      else
+        NER_ORIGINAL_BYTES=$(stat -L -f%z "$NER_ORIGINAL")
+        NER_SAYS_COMPACT=false
+        grep -q 'Original-Checkpoint ist kompakt' "$LAST_OUTPUT" && NER_SAYS_COMPACT=true
+        if [ "$NER_ORIGINAL_BYTES" -lt 1600000000 ]; then
+          if [ "$NER_SAYS_COMPACT" != true ]; then
+            fail_check 'ner load path' "fp16-Original ($NER_ORIGINAL_BYTES Bytes) nicht als kompakt erkannt"
+          elif compgen -G "$NER_MODEL_DIR/*-fast.pt" > /dev/null; then
+            fail_check 'ner load path' 'Fast-Kopie neben kompaktem fp16-Original'
+          else
+            echo "ok   [ner load path] (fp16-Original, keine Fast-Kopie)"
+            PASS_LIST="$PASS_LIST ner-load-path"
+          fi
+        elif [ "$NER_SAYS_COMPACT" = true ]; then
+          fail_check 'ner load path' "fp32-Original ($NER_ORIGINAL_BYTES Bytes) fälschlich als kompakt erkannt"
         else
-          echo "ok   [ner load path] (kompaktes Original, keine Fast-Kopie)"
+          echo "ok   [ner load path] (fp32-Original mit Fast-Kopie-Pfad)"
           PASS_LIST="$PASS_LIST ner-load-path"
         fi
-      else
-        echo "ok   [ner load path] (Original mit Fast-Kopie-Pfad)"
-        PASS_LIST="$PASS_LIST ner-load-path"
       fi
     else
       fail_check 'ner token budget' 'übersprungen — ner offline e2e ist rot'

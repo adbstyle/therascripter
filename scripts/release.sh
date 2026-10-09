@@ -316,11 +316,16 @@ gh release create "v$NEW_VERSION" \
 
 # ── Update manifest ──────────────────────────────────────────────────────────
 
+# Modell-Einträge UND latestAppVersion aus dem Katalog dieses Releases — nicht
+# nur die App-Version patchen: sonst zeigte das Manifest nach einem neuen
+# Artefakt weiter aufs alte, und frische Installationen bekämen ein "Update"
+# zurück darauf angeboten (Trigger ist der sha-Vergleich).
 echo ""
-echo "→ Aktualisiere manifest.json mit latestAppVersion=$NEW_VERSION …"
-if ! "$ROOT_DIR/scripts/publish-manifest.sh" --app-version-only; then
-  echo "⚠️  Manifest-Update fehlgeschlagen. Bitte manuell ausführen:"
-  echo "   scripts/publish-manifest.sh --app-version-only"
+echo "→ Veröffentliche manifest.json aus dem Modell-Katalog (latestAppVersion=$NEW_VERSION) …"
+if ! "$ROOT_DIR/scripts/publish-manifest.sh" --from-catalog; then
+  echo "⚠️  Manifest-Update fehlgeschlagen — das Release ist draussen, das Manifest NICHT."
+  echo "   Frische Installationen bekommen sonst ein Modell-Update aufs alte Artefakt angeboten."
+  echo "   Artefakte prüfen/hochladen, dann: scripts/publish-manifest.sh --from-catalog"
 fi
 
 echo ""

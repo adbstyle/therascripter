@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # Generate manifest.json from packaged model archives in r2-upload/ and upload to R2.
 # Run AFTER scripts/package-models.sh has populated r2-upload/ with the model files.
-# Usage: scripts/publish-manifest.sh [--dry-run | --app-version-only]
+# Usage: scripts/publish-manifest.sh [--dry-run | --app-version-only | --from-catalog [--dry-run]]
+#   --from-catalog      Modell-Einträge direkt aus src/shared/model-catalog.ts (URL, sha256,
+#                       Grösse), jedes Artefakt per HEAD gegen R2 geprüft. Braucht KEINE
+#                       Dateien in r2-upload/. Das ruft release.sh auf — so passt das
+#                       Manifest immer zum Katalog der released App.
 #   --app-version-only  Download existing manifest from R2, patch latestAppVersion, re-upload.
-#                       Does NOT require model files in r2-upload/.
+#                       Does NOT require model files in r2-upload/. Lässt die Modell-
+#                       Einträge unverändert — nach einem neuen Artefakt NICHT ausreichend.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -19,6 +24,40 @@ if [ -f "$ENV_FILE" ]; then
   set -a
   source "$ENV_FILE"
   set +a
+fi
+
+# ── From-catalog mode ────────────────────────────────────────────────────────
+if [ "$MODE" = "--from-catalog" ]; then
+  APP_VERSION=$(node -e "process.stdout.write(require('$PROJECT_ROOT/package.json').version)")
+  echo "=== Manifest aus Katalog (latestAppVersion=$APP_VERSION) ==="
+  # Erst in eine Temp-Datei: bricht die R2-Prüfung ab, bleibt manifest.json unberührt.
+  (cd "$PROJECT_ROOT" && npx tsx "$SCRIPT_DIR/manifest-from-catalog.ts" "$APP_VERSION") > "$MANIFEST_FILE.tmp"
+  mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
+  echo "  -> $MANIFEST_FILE"
+
+  if [ "${2:-}" = "--dry-run" ]; then
+    echo "(Dry-run: kein Upload)"
+    cat "$MANIFEST_FILE"
+    exit 0
+  fi
+
+  if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ] || [ -z "${R2_ACCESS_KEY_ID:-}" ] || [ -z "${R2_SECRET_ACCESS_KEY:-}" ]; then
+    echo "Error: R2-Credentials fehlen. CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY in .env setzen"
+    exit 1
+  fi
+  if ! command -v aws &>/dev/null; then
+    echo "Error: AWS CLI nicht gefunden. Installieren: brew install awscli"
+    exit 1
+  fi
+  export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+  export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+  export AWS_DEFAULT_REGION="auto"
+  aws s3 cp "$MANIFEST_FILE" "s3://$BUCKET/manifest.json" \
+    --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+    --content-type "application/json" \
+    --no-progress
+  echo "  -> OK (manifest.json auf R2)"
+  exit 0
 fi
 
 # ── App-version-only mode ────────────────────────────────────────────────────

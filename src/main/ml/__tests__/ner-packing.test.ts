@@ -318,6 +318,8 @@ _remove_fast_checkpoints(model_dir, keep='flair--ner-german-large-fast.pt')
 after_keep = sorted(os.listdir(model_dir))
 _remove_fast_checkpoints(model_dir)
 after_all = sorted(os.listdir(model_dir))
+# Nicht lesbares bzw. fehlendes Verzeichnis: darf den Lauf nicht beenden.
+_remove_fast_checkpoints(os.path.join(tmp, 'gibt-es-nicht'))
 
 print(json.dumps({
     'isZip': {k: is_zip_checkpoint(p) for k, p in files.items()},
@@ -386,5 +388,6 @@ describeIfPython3('fast-checkpoint detection (python_sidecar/ner_service.py)', (
     ])
     // Kompaktes Original (v3): auch die eigene Kopie fällt weg.
     expect(result.afterAll).toEqual(['notizen.txt', 'pytorch_model.bin'])
+    // Ein fehlendes Verzeichnis wirft nicht — sonst wäre result gar nicht gesetzt.
   })
 })

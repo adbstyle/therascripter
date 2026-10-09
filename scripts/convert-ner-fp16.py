@@ -15,11 +15,20 @@ Classifier.load('flair/ner-german-large') laden. Diese Versionen finden den
 Checkpoint nur über die HF-Cache-Struktur; ihr flair-Loader liest das moderne
 Format über ein File-Objekt problemlos und castet beim Laden auf fp32 hoch.
 
+Warum der Blob den Namen des fp32-Originals behält, obwohl HF Blobs nach ihrem
+Inhalts-Hash benennt: v1-Installationen (App bis v0.8.5) bekommen das Artefakt
+per tar-Merge über ihr bestehendes ner/ (siehe checkPath in model-catalog.ts).
+Mit gleichem Namen überschreibt der Merge den 2.2-GB-fp32-Blob; mit eigenem
+Namen bliebe er verwaist liegen. Der Preis: der Cache ist nicht mehr
+inhaltsadressiert. Endnutzer laufen ausschliesslich offline (HF_HUB_OFFLINE)
+und merken davon nichts — aber Online-HF-Werkzeuge (scan-cache --verify,
+setup-ner.sh) gehören nie auf ein entpacktes v3-Verzeichnis.
+
 Warum über flair statt direkt über torch.load + .half(): der HF-Original-Checkpoint
 enthält neben dem state_dict die kompletten Embeddings als fp32-Objekt.
-Ein Cast nur des state_dict ergab 3.4 GB statt 1.1 GB. tagger._get_state_dict()
-(dasselbe, was Model.save schreibt) legt die Embeddings dagegen ohne Gewichte
-ab — die Gewichte stecken dann ausschliesslich im state_dict.
+Ein Cast nur des state_dict ergab 3.4 GB statt 1.1 GB. tagger.save() legt die
+Embeddings dagegen ohne Gewichte ab — die Gewichte stecken dann ausschliesslich
+im state_dict, und genau das wird anschliessend nach fp16 gecastet.
 """
 
 import os
@@ -58,10 +67,11 @@ def main():
     if not os.path.isdir(os.path.dirname(target_blob)):
         sys.exit(f"Zielstruktur fehlt: {os.path.dirname(target_blob)}")
 
-    tagger = Classifier.load(NER_MODEL_ID)
-    state = tagger._get_state_dict()
-    if tagger.model_card is not None:
-        state["model_card"] = tagger.model_card
+    # Über die öffentliche API (Model.save) in das kompakte Layout bringen,
+    # erst danach casten — kein Griff in flair-Interna wie _get_state_dict.
+    fp32_blob = f"{target_blob}.fp32.tmp"
+    Classifier.load(NER_MODEL_ID).save(fp32_blob)
+    state = torch.load(fp32_blob, map_location="cpu", weights_only=False, mmap=True)
     state["state_dict"] = {
         key: value.half() if value.dtype == torch.float32 else value
         for key, value in state["state_dict"].items()
@@ -69,8 +79,8 @@ def main():
     tmp_blob = f"{target_blob}.tmp"
     torch.save(state, tmp_blob, pickle_protocol=4)
     os.replace(tmp_blob, target_blob)
-    # Vor der Gegenprobe freigeben: sonst lägen zwei Modelle gleichzeitig im RAM.
-    del tagger, state
+    del state
+    os.remove(fp32_blob)
 
     # Gegenprobe aus dem ZIEL über dieselbe HF-Auflösung, die die App nutzt:
     # Zip-Format, vom Sidecar als kompakt erkannt (sonst legte jede v3-
