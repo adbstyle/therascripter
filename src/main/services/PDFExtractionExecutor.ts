@@ -11,6 +11,7 @@ import { buildPDFTranscript } from '../utils/pdf-transcript-builder'
 import { writeFileAtomic } from '../utils/file-ops'
 import { abortable } from '../utils/abortable'
 import { openPdfDocument } from '../utils/pdfjs-loader'
+import { joinTextItems } from '../utils/pdf-text-join'
 
 /** Minimum characters on a page to consider it a text page (not scanned) */
 const TEXT_PAGE_THRESHOLD = 50
@@ -67,11 +68,7 @@ export class PDFExtractionExecutor implements TaskExecutor {
       const page = await abortable<PDFPageProxy>(doc.getPage(i), signal)
       const textContent = await abortable<TextContent>(page.getTextContent(), signal)
 
-      const text = textContent.items
-        .map((item) => ('str' in item ? item.str : ''))
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim()
+      const text = joinTextItems(textContent.items)
 
       const contentType: PageData['contentType'] =
         text.length > TEXT_PAGE_THRESHOLD ? 'text' : 'scanned'
