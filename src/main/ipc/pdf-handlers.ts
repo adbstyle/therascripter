@@ -2,7 +2,7 @@ import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { existsSync, copyFileSync, readFileSync, unlinkSync } from 'fs'
 import { basename, join } from 'path'
 import { getDatabase, getDataDir } from '../db/connection'
-import { openPdfDocument } from '../utils/pdfjs-loader'
+import { openPdfDocument, releasePdfDocument } from '../utils/pdfjs-loader'
 import { SessionService } from '../services/SessionService'
 import { getTaskQueue } from '../services/TaskQueueService'
 import { ImportPDFSchema } from '../../shared/validation/import-schemas'
@@ -29,16 +29,20 @@ async function detectScannedPages(pdfPath: string): Promise<boolean | null> {
   try {
     const data = new Uint8Array(readFileSync(pdfPath))
     const doc = await openPdfDocument(data)
-    const samplePages = Math.min(3, doc.numPages)
+    try {
+      const samplePages = Math.min(3, doc.numPages)
 
-    let totalText = ''
-    for (let i = 1; i <= samplePages; i++) {
-      const page = await doc.getPage(i)
-      const content = await page.getTextContent()
-      totalText += content.items.map((it) => ('str' in it ? it.str : '')).join('')
-      if (totalText.length >= 50) break
+      let totalText = ''
+      for (let i = 1; i <= samplePages; i++) {
+        const page = await doc.getPage(i)
+        const content = await page.getTextContent()
+        totalText += content.items.map((it) => ('str' in it ? it.str : '')).join('')
+        if (totalText.length >= 50) break
+      }
+      return totalText.trim().length < 50
+    } finally {
+      releasePdfDocument(doc)
     }
-    return totalText.trim().length < 50
   } catch {
     return null
   }
