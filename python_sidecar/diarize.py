@@ -131,6 +131,13 @@ def heartbeat():
         thread.join(timeout=1)
 
 
+def _attr_path(obj, *names):
+    """getattr-Kette, die bei einem fehlenden Glied None liefert statt zu werfen."""
+    for name in names:
+        obj = getattr(obj, name, None)
+    return obj
+
+
 def load_waveform(path: str, sample_rate: int):
     """
     Audiodatei EINMAL laden, auf Mono mischen und auf `sample_rate` bringen.
@@ -158,25 +165,39 @@ def load_waveform(path: str, sample_rate: int):
     die torchaudios Null-Padding sehen, werden verworfen; nur am Dateianfang
     und -ende bleibt es — wie am Stück. Abweichungen gegenüber am Stück: Float-
     Rundung der BLAS-Reduktion (≤ 1 ULP) und ggf. ein Sample mehr am Ende
-    (torchaudio rechnet die Ziel-Länge in float32).
+    (torchaudio rechnet die Ziel-Länge in float32). smoke-packaged.sh (Check
+    `diarize waveform blocks`) vergleicht beides über mehrere Blockgrenzen.
     """
     import math
 
     import soundfile as sf
     import torch
-    import torchaudio.functional
+    import torchaudio.transforms
 
     with sf.SoundFile(path) as audio_file:
         file_sample_rate = audio_file.samplerate
         n_in = audio_file.frames
-        resample = file_sample_rate != sample_rate
         gcd = math.gcd(file_sample_rate, sample_rate)
         orig = file_sample_rate // gcd
         new = sample_rate // gcd
-        # Kernel-Halbbreite wie torchaudio (Defaults lowpass_filter_width=6,
-        # rolloff=0.99); ein Frame braucht Eingang bis `width + orig` rechts.
-        width = math.ceil(6 * orig / (min(orig, new) * 0.99))
-        context = math.ceil((width + orig) / orig) * orig if resample else 0
+        if file_sample_rate != sample_rate:
+            # Einmal gebaut statt pro Block: functional.resample baut den
+            # Sinc-Kernel bei jedem Aufruf neu. Filter-Defaults wie in pyannotes
+            # downmix_and_resample; dtype float32, weil functional.resample den
+            # Kernel in der dtype der Waveform baut (ohne dtype rechnete die
+            # Transform in float64 — gemessen 3x grössere Abweichung).
+            resampler = torchaudio.transforms.Resample(
+                file_sample_rate, sample_rate, dtype=torch.float32
+            )
+            # Kontext aus der Halbbreite des tatsächlich gebauten Kernels statt
+            # aus einer nachgebauten Formel — sonst entstünden nach einer
+            # Änderung der torchaudio-Defaults still Artefakte an jeder
+            # Blockgrenze. torchaudio paddet (width, width + orig); auf
+            # Frame-Grenzen gerundet, damit `skip` ganzzahlig bleibt.
+            context = math.ceil((resampler.width + orig) / orig) * orig
+        else:
+            resampler = None
+            context = 0
         n_out = math.ceil(new * n_in / orig)
         step = max(1, (file_sample_rate * BLOCK_SECONDS) // orig) * orig
 
@@ -191,14 +212,22 @@ def load_waveform(path: str, sample_rate: int):
             block = torch.from_numpy(data.T)
             if block.shape[0] > 1:
                 block = block.mean(dim=0, keepdim=True)
-            if resample:
-                block = torchaudio.functional.resample(block, file_sample_rate, sample_rate)
+            if resampler is not None:
+                block = resampler(block)
             out_start = start // orig * new
             out_end = min(n_out, (start + step) // orig * new)
             skip = (start - lo) // orig * new
-            # torchaudio rechnet die Ziel-Länge in float32 und kann im letzten
-            # Block ein Sample weniger liefern als ceil(new * n / orig).
             chunk = block[:, skip : skip + out_end - out_start]
+            # Nur der letzte Block darf kürzer sein: torchaudio rechnet die
+            # Ziel-Länge in float32 und liefert dort ggf. ein Sample weniger
+            # als ceil(new * n / orig). Mitten in der Datei bliebe eine Lücke
+            # aus torch.empty-Müll stehen — lieber scheitern (Exit 3) als auf
+            # korruptem Audio diarisieren.
+            if chunk.shape[1] < out_end - out_start and start + step < n_in:
+                raise RuntimeError(
+                    f"Resampling-Block bei Sample {start} zu kurz: "
+                    f"{chunk.shape[1]} statt {out_end - out_start} Samples"
+                )
             waveform[:, out_start : out_start + chunk.shape[1]] = chunk
             written = out_start + chunk.shape[1]
     return waveform[:, :written]
@@ -284,14 +313,19 @@ def run_diarization(args):
                 report_progress(min(base + step_progress, 95))
 
         # Ziel-Rate ist die des Embedding-Modells (pyannote croppt die
-        # Embedding-Chunks über pipeline._audio). Fehlt das Attribut, weil sich
-        # pyannote-Interna verschoben haben, bleibt es beim Dateipfad —
-        # langsamer, aber korrekt.
-        # Beide Zweige melden sich auf stderr: smoke-packaged.sh assertet auf
-        # die Preload-Zeile, damit ein stiller Rückfall auf den langsamen Pfad
-        # nach einem pyannote-Update das Release-Gate nicht grün passiert.
-        sample_rate = getattr(getattr(pipeline, "_audio", None), "sample_rate", None)
-        if sample_rate:
+        # Embedding-Chunks über pipeline._audio). Die Segmentierung muss
+        # dieselbe Rate haben, sonst resampelt ihr Inference.__call__ die
+        # vorgeladene Waveform am Stück — genau die im2col-Spitze, die
+        # load_waveform vermeidet. Fehlt ein Attribut (pyannote-Interna
+        # verschoben) oder weichen die Raten ab, bleibt es beim Dateipfad:
+        # korrekt, aber mit der alten Speicherspitze (gemessen 5.4–8.4 GB bei
+        # 28–45 min, auf 8-GB-Macs OOM-gefährdet) und Chunk-Reads von der
+        # Platte. Beide Zweige melden sich auf stderr: smoke-packaged.sh
+        # assertet auf die Preload-Zeile, damit ein solcher Rückfall das
+        # Release-Gate nicht grün passiert.
+        sample_rate = _attr_path(pipeline, "_audio", "sample_rate")
+        segmentation_rate = _attr_path(pipeline, "_segmentation", "model", "audio", "sample_rate")
+        if sample_rate and sample_rate == segmentation_rate:
             audio_input = {
                 "waveform": load_waveform(args.audio, sample_rate),
                 "sample_rate": sample_rate,
@@ -299,7 +333,11 @@ def run_diarization(args):
             _emit(f"Audio vorab geladen ({sample_rate} Hz)")
         else:
             audio_input = args.audio
-            _emit("Audio-Preload nicht möglich (pipeline._audio fehlt), lese vom Dateipfad")
+            _emit(
+                f"Audio-Preload nicht möglich (Embedding-Rate {sample_rate}, "
+                f"Segmentierungs-Rate {segmentation_rate}), lese vom Dateipfad "
+                "— alte Speicherspitze"
+            )
 
         hook = ProgressHook()
         diarization = pipeline(audio_input, hook=hook, **diarization_params)

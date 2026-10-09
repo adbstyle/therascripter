@@ -373,6 +373,54 @@ else
   skip_check 'ner load path' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
 fi
 
+# 4a. load_waveform (diarize.py) setzt das Resampling blockweise zusammen
+#     (Issue #141) — die Grenz-Arithmetik muss dasselbe liefern wie
+#     torchaudio am Stück. Der e2e-Check unten deckt das nicht ab: seine 5-s-
+#     Fixture passt in einen einzigen Block. Geprüft wird mit 2-s-Blöcken auf
+#     7.3 s (vier Blöcke, kurzer letzter Block) — die Arithmetik hängt nicht
+#     von der Blocklänge ab, und die 60-s-Produktionsblöcke bräuchten eine
+#     >2-min-Fixture plus ~1 GB für die Referenz am Stück (im2col). Drei Fälle:
+#     48 kHz (App-Aufnahmen), 44.1 kHz Stereo (andere GCD-Kürzung + Downmix)
+#     und 16 kHz (Zweig ohne Resampling). Braucht kein Modell.
+if [ -x "$SIDECAR_PY" ] && [ -f "$DIARIZE_SCRIPT" ]; then
+  run_check 'diarize waveform blocks' 'waveform blocks ok' \
+    "$SIDECAR_PY" - "$DIARIZE_SCRIPT" <<'PYBLOCKS'
+import importlib.util
+import os
+import sys
+import tempfile
+
+import numpy as np
+import soundfile as sf
+import torch
+import torchaudio.functional
+
+spec = importlib.util.spec_from_file_location("diarize", sys.argv[1])
+diarize = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(diarize)
+diarize.BLOCK_SECONDS = 2
+
+rng = np.random.default_rng(141)
+with tempfile.TemporaryDirectory() as tmp:
+    for rate, channels in ((48000, 1), (44100, 2), (16000, 1)):
+        path = os.path.join(tmp, f"{rate}-{channels}.wav")
+        noise = rng.standard_normal((int(rate * 7.3), channels)) * 0.1
+        sf.write(path, noise.astype("float32"), rate, subtype="PCM_16")
+        got = diarize.load_waveform(path, 16000)
+        data, _ = sf.read(path, dtype="float32", always_2d=True)
+        ref = torch.from_numpy(data.T).mean(dim=0, keepdim=True)
+        if rate != 16000:
+            ref = torchaudio.functional.resample(ref, rate, 16000)
+        if got.shape != ref.shape:
+            sys.exit(f"{rate} Hz/{channels} ch: Form {tuple(got.shape)} statt {tuple(ref.shape)}")
+        diff = (got - ref).abs().max().item()
+        if diff > 1e-6:
+            sys.exit(f"{rate} Hz/{channels} ch: max. Abweichung {diff:.1e} > 1e-6")
+        print(f"{rate} Hz/{channels} ch: max. Abweichung {diff:.1e}")
+print("waveform blocks ok")
+PYBLOCKS
+fi
+
 # 4b. Diarization end-to-end: beweist den Offline-Load der Pipeline (inkl. der
 #     transitiven Sub-Modelle segmentation-3.0 und wespeaker-…) aus
 #     ~/.therascript/models/diarization, ohne ~/.cache/huggingface und
