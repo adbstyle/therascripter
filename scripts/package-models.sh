@@ -98,7 +98,7 @@ fi
 # keine App-Version mehr darauf zeigt.
 #
 # Gepackt wird eine Staging-Kopie, nie ner/ selbst: dort liegen lokal auch der
-# fp32-Original-Blob und ggf. eine ~2.1 GB grosse Fast-Kopie (*-fast.pt).
+# fp32-Original-Blob und ggf. eine bis zu ~2.1 GB grosse Fast-Kopie (*-fast.pt).
 #
 # Ohne `|| exit 1` aufgerufen: in einem ||-Kontext ignoriert bash errexit für
 # den GANZEN Funktionsrumpf — ein an voller Platte gescheitertes tar lieferte

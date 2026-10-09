@@ -120,11 +120,17 @@ WINDOW_STRIDE = 256
 
 NER_MODEL_ID = "flair/ner-german-large"
 
+# Nur für Messwerkzeuge (scripts/ner-parity.py): "cpu" erzwingt den fp32-Pfad
+# auf der CPU als Referenz für den fp16-Pfad auf MPS. Die App setzt die
+# Variable nie — Subprozesse bekommen eine Whitelist-Env (subprocess.ts).
+DEVICE_OVERRIDE_ENV = "THERASCRIPT_NER_DEVICE"
+
 # Namenskonvention der Fast-Kopie (siehe needs_fast_checkpoint). Aufräumen fasst
 # ausschliesslich Dateien mit diesem Suffix an, nie das Original.
 FAST_CHECKPOINT_SUFFIX = "-fast.pt"
 
-# Die Fast-Kopie eines v1/v2-Originals belegt zusätzliche ~2.1 GB. Unter diesem
+# Die Fast-Kopie eines v1/v2-Originals belegt zusätzliche ~1.1 GB (fp16 auf
+# MPS, siehe _write_fast_checkpoint) bzw. ~2.1 GB (fp32 auf der CPU). Unter diesem
 # Schwellwert wird nicht konvertiert, damit das Modellverzeichnis auf knappen
 # Platten nicht volläuft.
 FAST_CHECKPOINT_MIN_FREE_BYTES = 3 * 1024**3
@@ -238,6 +244,38 @@ def pack_by_budget(items, token_budget=TOKEN_BUDGET, max_sentences=MAX_SENTENCES
     return groups
 
 
+LOW_RAM_BYTES = 8 * 1024**3
+LOW_RAM_MAX_SENTENCES_PER_BATCH = 8
+
+
+def max_sentences_for_ram(ram_bytes):
+    """
+    Segment-Deckel pro Mini-Batch für eine Maschine mit `ram_bytes` RAM.
+
+    Das Token-Budget zählt nur die Segment-Tokens. flair hängt als FLERT-Modell
+    aber jedem Segment ±64 Wörter Nachbar-Kontext an — bei kurzen
+    Audio-Segmenten ist der Forward-Pass dadurch ein Mehrfaches grösser als
+    gezählt, und der Segment-Deckel bestimmt die echte Grösse der Batch.
+    Gemessen (45-min-Podcast, fp16 auf MPS): 4.75 GiB Prozess-Peak bei 32
+    Segmenten, 3.46 GiB bei 8 — für ~20 % mehr Inferenzzeit. Auf 8-GB-Macs ist
+    diese Differenz der Abstand zum Swap, auf grösseren Macs nur verschenkte
+    Zeit.
+
+    Unbekannter RAM (None/0) zählt als knapp: der Preis ist nur Laufzeit.
+    """
+    if not ram_bytes or ram_bytes <= LOW_RAM_BYTES:
+        return LOW_RAM_MAX_SENTENCES_PER_BATCH
+    return MAX_SENTENCES_PER_BATCH
+
+
+def physical_ram_bytes():
+    """Physischer RAM in Bytes, None wenn nicht ermittelbar."""
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+    except (ValueError, OSError):
+        return None
+
+
 def report_progress(percent: int) -> None:
     """Print progress to stderr for TaskExecutor parsing."""
     _emit(f"[PROGRESS] {percent}")
@@ -284,7 +322,7 @@ def _remove_fast_checkpoints(directory, keep=None):
     Nicht (mehr) benötigte Fast-Checkpoints aus dem Verzeichnis räumen.
 
     - Kopien anderer Modelle: das Verzeichnis gehört der Gruppe, nicht dem
-      Modell; nach einem Modellwechsel bliebe die ~2.1 GB grosse Kopie des
+      Modell; nach einem Modellwechsel bliebe die bis zu ~2.1 GB grosse Kopie des
       alten Modells sonst für immer liegen.
     - Ohne `keep` (Dateiname) alle Kopien: der Fall eines kompakten Originals
       (Artefakt v3), neben dem v0.8.10 noch eine Kopie angelegt hat.
@@ -329,8 +367,10 @@ def _write_fast_checkpoint(tagger, fast_path):
         _remove_fast_checkpoints(directory, keep=os.path.basename(fast_path))
         free_bytes = shutil.disk_usage(directory).free
         # Zielgrösse aus dem geladenen Modell statt einer Konstante: Anzahl
-        # Gewichte mal Bytes pro Gewicht. Das ist immer fp32 (flair castet beim
-        # Laden hoch), und tagger.save() schreibt genau diesen In-Memory-Stand.
+        # Gewichte mal Bytes pro Gewicht, und tagger.save() schreibt genau
+        # diesen In-Memory-Stand. Auf MPS ist das fp16 (_half_precision_on) —
+        # die Kopie eines v1/v2-Originals entspricht dann dem v3-Artefakt
+        # (1.1 statt 2.2 GB); nur auf der CPU entsteht sie als fp32.
         source_bytes = sum(p.numel() * p.element_size() for p in tagger.parameters())
         if not should_write_fast_checkpoint(fast_path, free_bytes, source_bytes):
             _emit(
@@ -383,12 +423,12 @@ def needs_fast_checkpoint(path):
       das komplette Transformer-Modell auf (gemessen 8.2 s), danach baut flair
       es für den Tagger ein zweites Mal — 14–18 s gesamt. Eine einmal mit dem
       aktuellen flair neu gespeicherte Kopie (tagger.save: Embeddings nur als
-      Param-Dict) lädt in ~8 s, bit-identisch dieselben fp32-Werte.
+      Param-Dict) lädt in ~8 s.
     - Artefakt v3 (Issue #131): von scripts/convert-ner-fp16.py bereits in
-      diesem Layout UND als fp16 an die Stelle des Originals geschrieben. flair
-      castet beim Laden auf fp32 hoch (load_state_dict kopiert in frisch
-      gebaute fp32-Parameter), die Inferenz ist unverändert fp32. Eine Kopie
-      wäre hier doppelt so gross wie das Original und bringt nichts.
+      diesem Layout UND als fp16 an die Stelle des Originals geschrieben. Auf
+      MPS wird er unverändert als fp16 geladen, auf der CPU castet
+      load_state_dict in frisch gebaute fp32-Parameter hoch. Eine Kopie
+      brächte hier nichts.
 
     Unterschieden wird ohne Laden an den Klassenreferenzen in data.pkl (bei
     beiden Varianten nur 0.1–17 MB). Im Zweifel True: eine überflüssige Kopie
@@ -494,10 +534,75 @@ def _load_tagger(model_dir, Classifier):
     return tagger
 
 
+@contextmanager
+def _half_precision_on(device):
+    """
+    Den Tagger direkt als fp16 auf `device` bauen — nur auf MPS.
+
+    flair baut XLM-R über AutoModel.from_config im Default-dtype auf dem
+    Default-Device: also zuerst 2.24 GB zufällige fp32-Gewichte auf der CPU,
+    in die load_state_dict den Checkpoint kopiert, danach legt
+    `model.to(flair.device)` eine ZWEITE Kopie auf der GPU an. Mit fp16 als
+    Default-dtype und MPS als Default-Device entsteht das Modell gleich in
+    seiner Endform (1.12 GB, keine CPU-Kopie) — gemessen sinkt der Lade-Peak
+    von 5.16 auf 1.87 GiB, die Ladezeit von 6 auf 0.6 s. Auch die Inferenz
+    läuft damit in fp16 (Inferenz-Peak 45-min-Audio 9.40 → 7.10 GiB). Parität
+    gegen fp32: identische Spans und Typen auf allen drei Mess-Eingaben
+    (277/277, 93/93, 419/419), maximale Konfidenz-Abweichung 0.014.
+
+    Nicht auf der CPU: fp16-Matmuls sind dort langsam, und der Speicher ist
+    dort nicht das Problem (siehe CPU-Fallback in run_ner, der auf fp32
+    zurückcastet). torch dokumentiert set_default_dtype nur für fp32/fp64;
+    fp16 funktioniert für den Modellbau, ist aber globaler Zustand — deshalb
+    strikt auf den Load begrenzt und im finally zurückgesetzt.
+    """
+    import torch
+
+    if device.type != "mps":
+        yield
+        return
+
+    previous = torch.get_default_dtype()
+    torch.set_default_dtype(torch.float16)
+    try:
+        with device:
+            yield
+    finally:
+        torch.set_default_dtype(previous)
+
+
+def _release_mps_cache():
+    """
+    Den Cache des MPS-Allokators an das System zurückgeben.
+
+    Der Allokator behält freigegebene Blöcke für spätere Allokationen;
+    gemessen hielt er nach einem 45-min-Transkript 6.4 GiB (fp16), die kein
+    Forward-Pass mehr brauchte. Seine eigene Aufräum-Schwelle (Low-Watermark,
+    1.4 × ⅔ × RAM) liegt auf 8-GB-Macs bei ~7.5 GiB — der Cache wächst dort
+    also in den Swap, bevor sie greift. Nach jeder Gruppe geleert:
+    Prozess-Peak 7.10 → 4.75 GiB, Laufzeit unverändert. Ohne MPS ein No-op.
+    """
+    import torch
+
+    if not torch.backends.mps.is_available():
+        return
+    try:
+        torch.mps.empty_cache()
+    except Exception as cache_error:  # noqa: BLE001 — best effort
+        _emit(f"torch.mps.empty_cache() fehlgeschlagen: {cache_error}")
+
+
 def _timed_load(Classifier, source, label):
+    import flair
+
     started = time.monotonic()
-    tagger = Classifier.load(source)
+    with _half_precision_on(flair.device):
+        tagger = Classifier.load(source)
     _emit(f"Modell aus {label} geladen ({time.monotonic() - started:.1f}s)")
+    # Contract mit smoke-packaged.sh (Check 'ner precision'): mit MPS muss hier
+    # torch.float16 stehen, sonst ist der Speicher-Fix still verloren.
+    weights = next(tagger.parameters())
+    _emit(f"Gewichte: {weights.dtype} auf {weights.device}")
     return tagger
 
 
@@ -539,7 +644,9 @@ def run_ner(model_dir: str, segments: list) -> list:
     try:
         import torch
 
-        if torch.backends.mps.is_available():
+        if os.environ.get(DEVICE_OVERRIDE_ENV) == "cpu":
+            _emit(f"{DEVICE_OVERRIDE_ENV}=cpu — nutze CPU (fp32-Referenz)")
+        elif torch.backends.mps.is_available():
             flair.device = torch.device("mps")
             _emit("MPS-Backend aktiv (Apple Silicon GPU)")
     except Exception as e:
@@ -626,6 +733,8 @@ def run_ner(model_dir: str, segments: list) -> list:
         def on_mps():
             return flair.device.type == "mps"
 
+        max_sentences = max_sentences_for_ram(physical_ram_bytes())
+
         sentences = build_sentences()
 
         # Adaptive Batch-Grösse: ein MPS-OOM heisst, dass das Budget für DIESE
@@ -645,7 +754,7 @@ def run_ner(model_dir: str, segments: list) -> list:
             # for-Schleife weiter (damit ein `break` beim Neu-Packen an der
             # richtigen Stelle fortsetzt), taugt deshalb NICHT als Offset-Basis.
             base = start
-            groups = pack_by_budget(items[base:], budget)
+            groups = pack_by_budget(items[base:], budget, max_sentences)
             repacked = False
 
             for local_group in groups:
@@ -659,6 +768,12 @@ def run_ner(model_dir: str, segments: list) -> list:
                     f"padded={group_padded} budget={budget}"
                 )
 
+                # Die Reaktion auf ein OOM läuft bewusst NACH dem except-Block:
+                # solange er aktiv ist, hält die Exception über ihren Traceback
+                # die Aktivierungen des gescheiterten Passes auf der GPU fest —
+                # empty_cache() gäbe nichts frei, und der CPU-Lauf liefe neben
+                # diesem toten Speicher her.
+                oom = False
                 try:
                     tagger.predict(
                         [sentences[i] for i in group], mini_batch_size=len(group)
@@ -666,27 +781,35 @@ def run_ner(model_dir: str, segments: list) -> list:
                 except RuntimeError as e:
                     if not (on_mps() and "out of memory" in str(e).lower()):
                         raise
+                    oom = True
 
-                    if len(group) > 1 and budget > MIN_TOKEN_BUDGET:
-                        budget //= 2
-                        _emit(
-                            f"MPS out of memory — halbiere Token-Budget auf {budget} "
-                            "und packe die verbleibenden Segmente neu"
-                        )
-                        sentences = build_sentences()
-                        repacked = True
-                        break
+                _release_mps_cache()
 
+                if oom and len(group) > 1 and budget > MIN_TOKEN_BUDGET:
+                    budget //= 2
+                    _emit(
+                        f"MPS out of memory — halbiere Token-Budget auf {budget} "
+                        "und packe die verbleibenden Segmente neu"
+                    )
+                    sentences = build_sentences()
+                    repacked = True
+                    break
+
+                if oom:
                     _emit(
                         "MPS out of memory bei einem unteilbaren Segment — "
                         "wechsle auf CPU"
                     )
                     flair.device = torch.device("cpu")
+                    # Zurück auf fp32: auf der CPU ist fp16 langsam (siehe
+                    # _half_precision_on), und hier zählt nur noch, unter dem
+                    # 900-s-Timeout fertig zu werden. Erst verschieben, DANN
+                    # casten: `to(cpu, float32)` castet auf der GPU und braucht
+                    # dort neuen Speicher — genau der fehlt hier (gemessen:
+                    # Exit 3 statt CPU-Lauf bei knappem MPS-Limit).
                     tagger.to(flair.device)
-                    try:
-                        torch.mps.empty_cache()
-                    except Exception as cache_error:  # noqa: BLE001 — best effort
-                        _emit(f"torch.mps.empty_cache() fehlgeschlagen: {cache_error}")
+                    tagger.float()
+                    _release_mps_cache()
                     sentences = build_sentences()
                     tagger.predict(
                         [sentences[i] for i in group], mini_batch_size=len(group)

@@ -335,7 +335,7 @@ PYBUDGET
       # Ladepfad. Erwartung aus einem Signal, das NICHT aus ner_service.py
       # stammt — sonst prüfte der Check die Erkennung gegen sich selbst: die
       # Grösse des Original-Blobs. fp16 (Artefakt v3, 1.1 GB) muss als kompakt
-      # gelten und darf keine Fast-Kopie hinterlassen (sie wäre 2.1 GB gross);
+      # gelten und darf keine Fast-Kopie hinterlassen (sie brächte nichts);
       # fp32 (v1/v2, 2.2 GB) muss den Fast-Kopie-Pfad nehmen (sonst lädt jeder
       # Lauf ~8 s länger).
       NER_ORIGINAL=$(compgen -G "$NER_MODEL_DIR/models/ner-german-large/models--flair--ner-german-large/snapshots/*/pytorch_model.bin" | head -1 || true)
@@ -361,9 +361,27 @@ PYBUDGET
           PASS_LIST="$PASS_LIST ner-load-path"
         fi
       fi
+
+      # Präzision. Mit aktivem MPS MUSS der Tagger als fp16 auf der GPU liegen
+      # (_half_precision_on): fiele er still auf fp32 zurück (z. B. ein
+      # torch-Update, das set_default_dtype(float16) oder den Device-Kontext
+      # ändert), läge der Prozess-Peak auf 8-GB-Macs wieder bei ~9.4 GiB und
+      # die Anonymisierung endete im 900-s-Timeout — auf Dev-Macs unsichtbar.
+      if grep -q 'MPS-Backend aktiv' "$LAST_OUTPUT"; then
+        NER_EXPECTED_WEIGHTS='Gewichte: torch.float16 auf mps'
+      else
+        NER_EXPECTED_WEIGHTS='Gewichte: torch.float32 auf cpu'
+      fi
+      if grep -q "$NER_EXPECTED_WEIGHTS" "$LAST_OUTPUT"; then
+        echo "ok   [ner precision] ($NER_EXPECTED_WEIGHTS)"
+        PASS_LIST="$PASS_LIST ner-precision"
+      else
+        fail_check 'ner precision' "erwartet '$NER_EXPECTED_WEIGHTS', gefunden: $(grep -m1 'Gewichte:' "$LAST_OUTPUT" || echo 'keine Gewichte-Zeile')"
+      fi
     else
       fail_check 'ner token budget' 'übersprungen — ner offline e2e ist rot'
       fail_check 'ner load path' 'übersprungen — ner offline e2e ist rot'
+      fail_check 'ner precision' 'übersprungen — ner offline e2e ist rot'
     fi
   fi
   rm -f "$FIXTURE"
@@ -371,6 +389,7 @@ else
   skip_check 'ner offline e2e' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
   skip_check 'ner token budget' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
   skip_check 'ner load path' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
+  skip_check 'ner precision' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
 fi
 
 # 4a. load_waveform (diarize.py) setzt das Resampling blockweise zusammen
