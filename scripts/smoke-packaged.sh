@@ -15,6 +15,10 @@
 #   ./scripts/smoke-packaged.sh --dist             # dist/mac-arm64/Therascript.app
 #   ./scripts/smoke-packaged.sh --staging          # Repo-Staging-Tree (resources/,
 #                                                  #   python_sidecar/standalone/)
+#   ... --ner-model-dir <pfad>                     # NER-Checks gegen ein anderes
+#                                                  #   Modellverzeichnis, z. B. ein
+#                                                  #   entpacktes R2-Artefakt vor dem
+#                                                  #   Upload (Default ~/.therascript/models/ner)
 #
 # Exit: 0 wenn alle Checks grün, 1 sonst.
 #
@@ -25,6 +29,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 TARGET="/Applications/Therascript.app"
 MODE="app"
+NER_MODEL_DIR="$HOME/.therascript/models/ner"
 while [ $# -gt 0 ]; do
   case "$1" in
     --app)
@@ -32,6 +37,9 @@ while [ $# -gt 0 ]; do
       TARGET="$2"; MODE="app"; shift 2 ;;
     --dist) TARGET="$REPO_ROOT/dist/mac-arm64/Therascript.app"; MODE="app"; shift ;;
     --staging) MODE="staging"; shift ;;
+    --ner-model-dir)
+      if [ $# -lt 2 ]; then echo "FEHLER: --ner-model-dir braucht einen Pfad" >&2; exit 2; fi
+      NER_MODEL_DIR="$2"; shift 2 ;;
     *) echo "FEHLER: unbekannte Option: $1" >&2; exit 2 ;;
   esac
 done
@@ -233,7 +241,7 @@ else
 fi
 
 # 4. NER end-to-end + Token-Budget: EIN Sidecar-Lauf beweist beides, weil jeder
-#    Lauf den flair-Import und 2.24 GB pytorch_model.bin lädt — zwei getrennte
+#    Lauf den flair-Import und den 1.1–2.2 GB grossen Checkpoint lädt — zwei getrennte
 #    Checks verdoppelten das im Release-Gate.
 #    (a) Offline-Load aus ~/.therascript/models/ner (inkl. hf/-Tokenizer-Subtree)
 #        ohne ~/.flair und ohne ~/.cache/huggingface → Assert auf "entities".
@@ -246,7 +254,6 @@ fi
 #    Das Memory-Ceiling selbst ist hier NICHT reproduzierbar: es greift erst auf
 #    8-GB-Macs (MPS-Limit 1.7 × ⅔ × RAM = 9.07 GiB), Dev-Macs überleben auch
 #    die alte feste Batch-Grösse 32.
-NER_MODEL_DIR="$HOME/.therascript/models/ner"
 if [ -x "$SIDECAR_PY" ] && [ -f "$NER_SCRIPT" ] && [ -d "$NER_MODEL_DIR/models/ner-german-large" ]; then
   FIXTURE="$(mktemp -t therascript-ner-fixture).json"
   if write_fixture 'ner offline e2e' "$FIXTURE" <<'PYNER'
@@ -324,14 +331,46 @@ PYBUDGET
         echo "ok   [ner token budget]"
         PASS_LIST="$PASS_LIST ner-token-budget"
       fi
+
+      # Ladepfad. Erwartung aus einem Signal, das NICHT aus ner_service.py
+      # stammt — sonst prüfte der Check die Erkennung gegen sich selbst: die
+      # Grösse des Original-Blobs. fp16 (Artefakt v3, 1.1 GB) muss als kompakt
+      # gelten und darf keine Fast-Kopie hinterlassen (sie wäre 2.1 GB gross);
+      # fp32 (v1/v2, 2.2 GB) muss den Fast-Kopie-Pfad nehmen (sonst lädt jeder
+      # Lauf ~8 s länger).
+      NER_ORIGINAL=$(compgen -G "$NER_MODEL_DIR/models/ner-german-large/models--flair--ner-german-large/snapshots/*/pytorch_model.bin" | head -1 || true)
+      if [ -z "$NER_ORIGINAL" ]; then
+        fail_check 'ner load path' 'Original-Checkpoint nicht gefunden'
+      else
+        NER_ORIGINAL_BYTES=$(stat -L -f%z "$NER_ORIGINAL")
+        NER_SAYS_COMPACT=false
+        grep -q 'Original-Checkpoint ist kompakt' "$LAST_OUTPUT" && NER_SAYS_COMPACT=true
+        if [ "$NER_ORIGINAL_BYTES" -lt 1600000000 ]; then
+          if [ "$NER_SAYS_COMPACT" != true ]; then
+            fail_check 'ner load path' "fp16-Original ($NER_ORIGINAL_BYTES Bytes) nicht als kompakt erkannt"
+          elif compgen -G "$NER_MODEL_DIR/*-fast.pt" > /dev/null; then
+            fail_check 'ner load path' 'Fast-Kopie neben kompaktem fp16-Original'
+          else
+            echo "ok   [ner load path] (fp16-Original, keine Fast-Kopie)"
+            PASS_LIST="$PASS_LIST ner-load-path"
+          fi
+        elif [ "$NER_SAYS_COMPACT" = true ]; then
+          fail_check 'ner load path' "fp32-Original ($NER_ORIGINAL_BYTES Bytes) fälschlich als kompakt erkannt"
+        else
+          echo "ok   [ner load path] (fp32-Original mit Fast-Kopie-Pfad)"
+          PASS_LIST="$PASS_LIST ner-load-path"
+        fi
+      fi
     else
       fail_check 'ner token budget' 'übersprungen — ner offline e2e ist rot'
+      fail_check 'ner load path' 'übersprungen — ner offline e2e ist rot'
     fi
   fi
   rm -f "$FIXTURE"
 else
   skip_check 'ner offline e2e' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
   skip_check 'ner token budget' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
+  skip_check 'ner load path' "NER-Modell nicht installiert ($NER_MODEL_DIR)"
 fi
 
 # 4b. Diarization end-to-end: beweist den Offline-Load der Pipeline (inkl. der

@@ -108,23 +108,25 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
   {
     id: 'flair-ner-german-large',
     label: 'flair/ner-german-large',
-    // -v2: enthält den hf/-Tokenizer-Subtree (xlm-roberta-large, ~14 MB), den
-    // ner_service.py über HF_HOME=<model-dir>/hf offline auflöst. Neuer Datei-
-    // name statt R2-Overwrite, damit ältere App-Versionen (eingebaute Hashes)
-    // beim First-Launch weiter das alte Artefakt laden können.
-    url: `${R2_CDN}/flair-ner-german-large-v2.tar.gz`,
+    // -v3 (Issue #131): fp16-Checkpoint, flair castet beim Laden auf fp32 hoch
+    // (Hintergrund: needs_fast_checkpoint in python_sidecar/ner_service.py).
+    // Jede Artefakt-Generation bekommt einen neuen Dateinamen statt eines
+    // R2-Overwrites: ältere App-Versionen verifizieren den First-Launch gegen
+    // ihren eingebauten Hash und laden weiter ihr Artefakt (v1, v2).
+    url: `${R2_CDN}/flair-ner-german-large-v3.tar.gz`,
     relativePath: 'ner',
-    // checkPath zeigt bewusst auf den v2-ONLY-Bestandteil (hf/-Subtree), nicht
+    // checkPath zeigt bewusst auf den hf/-Tokenizer-Subtree (seit v2), nicht
     // auf das Modell selbst: v1-Installationen (ohne hf/) gelten damit als
-    // "nicht installiert" → First-Launch lädt gezielt das v2-Tarball nach
+    // "nicht installiert" → First-Launch lädt gezielt das aktuelle Tarball nach
     // (startModelDownload skippt Modelle mit existierendem checkPath; tar
     // extrahiert merge-artig über das bestehende ner/). Ohne diesen Marker
     // bliebe eine v1-Installation nach dem App-Update dauerhaft kaputt, sobald
     // der User das dismissbare Modell-Update wegklickt — ner_service.py läuft
-    // offline und braucht den Tokenizer unter ner/hf/.
+    // offline und braucht den Tokenizer unter ner/hf/. v2-Installationen
+    // funktionieren und bekommen v3 über das Manifest als Update angeboten.
     checkPath: 'ner/hf/hub/models--xlm-roberta-large',
-    sizeBytes: 1_747_844_368,
-    sha256: '1223f81f809adec2725034761db83817e1926e650a3f250af530bf08fa98e0ab',
+    sizeBytes: 1_036_271_860,
+    sha256: 'f80b005f1d0e18317376841e49dd4531a542419e60c644399f83f2a2fc428a20',
     archive: true,
     group: 'ner',
     isRequired: true,

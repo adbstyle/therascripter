@@ -19,7 +19,7 @@ Dreistufige Hybrid-Pipeline: flair NER + Regex-Engine + Sperrliste (Blocklist). 
 | F1 (CoNLL-2003 DE) | ~92.31% |
 | F1 (GermEval 2014) | ~90%+ |
 | Entitätstypen | PER, LOC, ORG, MISC |
-| Modellgrösse | ~2.2 GB (XLM-R Large) |
+| Modellgrösse | ~2.2 GB fp32 (XLM-R Large), ausgeliefert als fp16 mit ~1.1 GB (Issue #131) |
 | Lizenz | MIT |
 
 **ORG-Entities werden ignoriert** (Entscheidung #5/#158): Zu viele False Positives bei Institutionsnamen. Organisationen werden ausschliesslich über die Sperrliste oder manuelle Markierung erfasst.
@@ -36,7 +36,7 @@ Dreistufige Hybrid-Pipeline: flair NER + Regex-Engine + Sperrliste (Blocklist). 
 
 ## Konsequenzen
 
-- **Grosses Modell:** ~2.2 GB Download, ~2.7 GB RAM während Anonymisierung (Peak ~5.2 GB mit Electron + OS).
+- **Grosses Modell:** ~1.0 GB Download (fp16-Artefakt), ~2.7 GB RAM während Anonymisierung (Peak ~5.2 GB mit Electron + OS).
 - **Python-Sidecar:** flair läuft im gleichen Python-Sidecar wie pyannote — gemeinsame PyTorch-Dependency.
 - **7 User-sichtbare Entitätstypen:** PERSON, ORT, DATUM, KONTAKT, ORGANISATION, MEDIZINISCH, SONSTIGES. Platzhalter-Format: `[PERSON 1]`, `[ORT 2]` etc.
 - **Review-Pflicht:** Trotz ~92% F1 sind False Negatives möglich — der Review-Modus mit TipTap-Editor ist essentiell als Sicherheitsnetz.

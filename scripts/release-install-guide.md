@@ -6,7 +6,7 @@
 
 ## 📦 Installationsanleitung
 
-**Systemvoraussetzungen:** Mac mit Apple-Chip (M1–M4), macOS 26 (Tahoe) oder neuer, mindestens 8 GB Arbeitsspeicher, ca. 7 GB freier Speicherplatz. Für den ersten Start wird eine Internetverbindung benötigt (Modell-Download, ~4.1 GB) — danach arbeitet Therascript vollständig offline. Bei der ersten Anonymisierung legt Therascript einmalig eine ~2.1 GB grosse, schneller ladbare Kopie des Namenserkennungs-Modells an; ist zu wenig Platz frei, wird sie übersprungen und alles läuft wie bisher, nur langsamer.
+**Systemvoraussetzungen:** Mac mit Apple-Chip (M1–M4), macOS 26 (Tahoe) oder neuer, mindestens 8 GB Arbeitsspeicher, ca. 5 GB freier Speicherplatz. Für den ersten Start wird eine Internetverbindung benötigt (Modell-Download, ~1.7 GB) — danach arbeitet Therascript vollständig offline.
 
 ### Schritt 1: Herunterladen und installieren
 
@@ -31,7 +31,7 @@ macOS blockiert Apps, die nicht aus dem App Store stammen. Damit Therascript vol
 ### Schritt 3: Starten
 
 1. Therascript aus dem Ordner **Programme** (oder über das Launchpad) starten.
-2. Beim ersten Start lädt die App die benötigten Sprachmodelle herunter (~4.1 GB, je nach Internetverbindung 10–30 Minuten). Der Fortschritt wird angezeigt.
+2. Beim ersten Start lädt die App die benötigten Sprachmodelle herunter (~1.7 GB, je nach Internetverbindung 5–15 Minuten). Der Fortschritt wird angezeigt.
 3. Fertig — ab jetzt arbeitet Therascript komplett lokal auf Ihrem Mac, ohne Cloud.
 
 **Update von einer früheren Version:** Einfach Schritt 1 und 2 wiederholen (alte App im Programme-Ordner ersetzen). Ihre Transkriptionen, Einstellungen und die bereits heruntergeladenen Modelle bleiben erhalten.

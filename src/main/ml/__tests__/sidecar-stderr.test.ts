@@ -14,7 +14,7 @@ describe('parseSidecarStderrLine', () => {
 
   it('never turns a heartbeat into progress', () => {
     // Regression: der Heartbeat überbrückt die Lücke zwischen [PROGRESS] 10
-    // und [PROGRESS] 25 (2.24 GB Modell-Load). Würde er Progress schreiben,
+    // und [PROGRESS] 25 (Modell-Load, 1.1–2.2 GB Checkpoint). Würde er Progress schreiben,
     // liefe der Fortschrittsbalken während des Ladens hoch und der in der DB
     // persistierte Wert wäre gelogen.
     const event = parseSidecarStderrLine('[HEARTBEAT]')

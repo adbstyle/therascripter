@@ -22,7 +22,7 @@ export interface DownloadResult {
   error?: string
   /**
    * SHA-256 des heruntergeladenen Inhalts, beim Streamen mitberechnet —
-   * erspart den zweiten Full-Read von verifyFileSha256 (2.4 GB beim
+   * erspart den zweiten Full-Read von verifyFileSha256 (1.7 GB beim
    * First-Launch). Undefined bei Resume (Hash-State des Partials unbekannt)
    * — Caller fällt dann auf verifyFileSha256 zurück.
    */
@@ -117,7 +117,7 @@ export function downloadFile(
       let downloaded = existingBytes
 
       // Throttle auf ~4 Hz (Muster von TaskQueueService): ungedrosselt
-      // feuerte onProgress pro HTTP-Chunk — ~37 000 Events für den 2.4-GB-
+      // feuerte onProgress pro HTTP-Chunk — ~25 000 Events für den 1.7-GB-
       // First-Launch-Download, jeder davon ein IPC-Send + Renderer-Rerender.
       // Der finale Zustand (downloaded === totalBytes) kommt immer durch.
       const PROGRESS_THROTTLE_MS = 250

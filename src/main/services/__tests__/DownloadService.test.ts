@@ -157,8 +157,8 @@ describe('DownloadService', () => {
   })
 
   it('throttles onProgress to ~4 Hz while always emitting the final state', async () => {
-    // Ungedrosselt feuerte onProgress pro HTTP-Chunk (~37 000 IPC-Events für
-    // 2.4 GB First-Launch-Download) — jeder Event weckt den Renderer.
+    // Ungedrosselt feuerte onProgress pro HTTP-Chunk (~25 000 IPC-Events für
+    // 1.7 GB First-Launch-Download) — jeder Event weckt den Renderer.
     server.on('request', (_req, res) => {
       res.writeHead(200, { 'content-length': String(PAYLOAD.length) })
       // 20 Chunks à 500 Bytes über ~600 ms

@@ -33,7 +33,7 @@ Electron mit React + TypeScript als UI-Framework, electron-vite als Build-Toolin
 
 ## Konsequenzen
 
-- **Bundle-Grösse:** ~180 MB für Electron Runtime allein — akzeptabel im Kontext der ~4 GB ML-Modelle.
+- **Bundle-Grösse:** ~180 MB für Electron Runtime allein — akzeptabel im Kontext der ~2 GB ML-Modelle.
 - **RAM-Overhead:** Chromium-Renderer braucht ~600-800 MB Baseline. Bei 8 GB RAM-Budget ist das knapp, daher strikt sequenzielle ML-Pipeline.
 - **3-Prozess-Architektur:** Main Process (Node.js), Renderer (Chromium/React), Preload (Context Bridge). Alle IPC-Channels mit Zod-Schema-Validierung.
 - **Electron Fuses:** Build-Time-Hardening (RunAsNode disabled, EnableCookieEncryption, kein Node CLI Inspect). Ad-hoc Code Signing da kein Apple Developer Certificate.
