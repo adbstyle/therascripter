@@ -25,5 +25,5 @@ Alle Verarbeitung — ASR, Diarization, NER-Anonymisierung und OCR — erfolgt a
 - **Hohe Hardwareanforderungen:** Minimum 8 GB RAM, Apple Silicon (M1+), macOS 26 (Tahoe) oder neuer (in der aktuellen Build, weil die mitgelieferte `libggml-metal.0.dylib` aus dem Homebrew-`whisper-cpp` gegen das macOS-26-SDK gelinkt ist; Senken der Untergrenze ist als Issue #97 erfasst). Ältere Intel-Macs werden nicht unterstützt.
 - **Längere Verarbeitungszeit:** Lokale ML-Inferenz braucht ~21-40 Minuten für eine 60-Minuten-Sitzung (M3 8 GB), statt Sekunden bei Cloud-APIs.
 - **Sequenzielle Pipeline:** Nur ein ML-Modell gleichzeitig geladen (8 GB RAM-Constraint), was die Gesamtdauer erhöht.
-- **Kein Auto-Updater:** Electron Auto-Updater deaktiviert; Updates via manuellen DMG-Download.
+- **Kein Auto-Updater:** Electron Auto-Updater deaktiviert; Updates via manuellen DMG-Download. *Abgelöst durch ADR-008 (App-Updates in der App, signiertes Update-Manifest).*
 - **Spotlight-Ausschluss, FileVault-Check, chmod 700:** Ergänzende Massnahmen zum Schutz der lokalen Daten.

@@ -37,5 +37,5 @@ Electron mit React + TypeScript als UI-Framework, electron-vite als Build-Toolin
 - **RAM-Overhead:** Chromium-Renderer braucht ~600-800 MB Baseline. Bei 8 GB RAM-Budget ist das knapp, daher strikt sequenzielle ML-Pipeline.
 - **3-Prozess-Architektur:** Main Process (Node.js), Renderer (Chromium/React), Preload (Context Bridge). Alle IPC-Channels mit Zod-Schema-Validierung.
 - **Electron Fuses:** Build-Time-Hardening (RunAsNode disabled, EnableCookieEncryption, kein Node CLI Inspect). Ad-hoc Code Signing da kein Apple Developer Certificate.
-- **Kein Auto-Updater:** Electron Auto-Updater deaktiviert (Entscheidung #155). Updates via manuelle DMG-Installation von GitHub Releases.
+- **Kein Auto-Updater:** Electron Auto-Updater deaktiviert (Entscheidung #155). Updates via manuelle DMG-Installation von GitHub Releases. *Abgelöst durch ADR-008: App-Updates laufen in der App über einen eigenen Ablauf; Electrons Updater bleibt deaktiviert, weil er eine Developer-ID-Signatur voraussetzt.*
 - **TipTap-Performance:** Bei ~15'000 Wörtern (typische Sitzung) performant. Lazy Rendering als Fallback bei Bedarf.
