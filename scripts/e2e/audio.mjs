@@ -17,7 +17,7 @@
  * zur Diagnose erhalten.
  */
 import { execFileSync } from 'child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { evalInApp, closeCdp } from './cdp.mjs'
@@ -43,10 +43,22 @@ function visibleText(node, out = []) {
 // Text NICHT mehr auftauchen.
 const PII = ['Bergmann', 'Maria', 'Winterthur', 'Zürich', 'Thomas']
 const TURNS = [
-  ['Anna', 'Guten Tag Herr Doktor. Ich bin Maria Bergmann aus Winterthur. Seit drei Wochen schlafe ich sehr schlecht und grüble viel über meine Arbeit.'],
-  ['Reed', 'Danke, dass Sie gekommen sind, Frau Bergmann. Erzählen Sie mir bitte, wann diese Schlafprobleme angefangen haben.'],
-  ['Anna', 'Es begann nach dem Umzug nach Zürich im Juni. Mein Bruder Thomas meint, ich solle mehr Sport machen, aber die Physiotherapie hilft nur wenig.'],
-  ['Reed', 'Das klingt belastend. Wir schauen uns das gemeinsam an und besprechen heute erste Schritte für einen besseren Schlafrhythmus.']
+  [
+    'Anna',
+    'Guten Tag Herr Doktor. Ich bin Maria Bergmann aus Winterthur. Seit drei Wochen schlafe ich sehr schlecht und grüble viel über meine Arbeit.'
+  ],
+  [
+    'Reed',
+    'Danke, dass Sie gekommen sind, Frau Bergmann. Erzählen Sie mir bitte, wann diese Schlafprobleme angefangen haben.'
+  ],
+  [
+    'Anna',
+    'Es begann nach dem Umzug nach Zürich im Juni. Mein Bruder Thomas meint, ich solle mehr Sport machen, aber die Physiotherapie hilft nur wenig.'
+  ],
+  [
+    'Reed',
+    'Das klingt belastend. Wir schauen uns das gemeinsam an und besprechen heute erste Schritte für einen besseren Schlafrhythmus.'
+  ]
 ]
 
 log('Synthetisiere Session-Audio (2 Stimmen, 1.5 s Stille zwischen Turns) …')
@@ -127,13 +139,22 @@ check('Transkript enthält erkennbaren Inhalt ("Physiotherapie")', /physiotherap
 check('Transkript enthält das Thema ("Schlaf")', /schlaf/i.test(text))
 const leaks = PII.filter((n) => new RegExp(n, 'i').test(text))
 check('Kein PII-Klartext im sichtbaren Text', leaks.length === 0, leaks.join(', ') || 'sauber')
-check('Platzhalter-Chips vorhanden', docJson.includes('placeholderChip'), `anonymizationCount=${session.anonymizationCount}`)
+check(
+  'Platzhalter-Chips vorhanden',
+  docJson.includes('placeholderChip'),
+  `anonymizationCount=${session.anonymizationCount}`
+)
 check(
   'AudioStats vorhanden (StitchMap-Pfad lief, Stille entfernt)',
-  review.audioStats != null && review.audioStats.stitchedDurationSec < review.audioStats.originalDurationSec,
+  review.audioStats != null &&
+    review.audioStats.stitchedDurationSec < review.audioStats.originalDurationSec,
   `original=${review.audioStats?.originalDurationSec?.toFixed(1)}s stitched=${review.audioStats?.stitchedDurationSec?.toFixed(1)}s`
 )
-check('Diarization erkennt 2 Sprecher', review.audioStats?.speakerCount === 2, `speakerCount=${review.audioStats?.speakerCount}`)
+check(
+  'Diarization erkennt 2 Sprecher',
+  review.audioStats?.speakerCount === 2,
+  `speakerCount=${review.audioStats?.speakerCount}`
+)
 
 // ── 5. Aufräumen ────────────────────────────────────────────────────────────
 log('Aufräumen …')
@@ -141,5 +162,7 @@ const deleted = await evalInApp(`window.api.sessions.delete(${JSON.stringify(ses
 check('Test-Session gelöscht', deleted === true)
 
 closeCdp()
-console.log(failures === 0 ? '\nAUDIO-E2E: ALLE CHECKS GRÜN' : `\nAUDIO-E2E: ${failures} CHECK(S) ROT`)
+console.log(
+  failures === 0 ? '\nAUDIO-E2E: ALLE CHECKS GRÜN' : `\nAUDIO-E2E: ${failures} CHECK(S) ROT`
+)
 process.exit(failures === 0 ? 0 : 1)
