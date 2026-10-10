@@ -15,10 +15,14 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules', 'out', 'dist'],
     setupFiles: ['./tests/setup.ts'],
-    pool: 'threads',
+    // forks statt threads: better-sqlite3 (natives Addon) segfaultet beim
+    // Teardown von worker_threads sporadisch — Exit 139 ohne Testfehler in
+    // ~20 % der Läufe (lokal und in CI). Vitest-Doku: "Segfaults and native
+    // code errors". Kostet ~2.5 s pro Lauf.
+    pool: 'forks',
     poolOptions: {
-      threads: {
-        maxThreads: 2
+      forks: {
+        maxForks: 2
       }
     }
   }
