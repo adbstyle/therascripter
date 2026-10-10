@@ -27,6 +27,7 @@ import {
   reconcileEntityMapWithDoc
 } from '../utils/editorCommands'
 import { serializeDocument } from '../../../shared/utils/serializeDocument'
+import { formatPlaceholderToken } from '../../../shared/utils/formatPlaceholderToken'
 import { serializeClipboardText } from '../utils/clipboardText'
 import { useAnonymizationOverview } from '../hooks/useAnonymizationOverview'
 import type {
@@ -188,7 +189,10 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
                       const updated = { ...entityMapRef.current }
                       updated[stackEntry.entityId] = {
                         original: stackEntry.term,
-                        placeholder: `[${stackEntry.placeholderType} ${number}]`,
+                        placeholder: formatPlaceholderToken({
+                          type: stackEntry.placeholderType,
+                          number
+                        }),
                         type: stackEntry.placeholderType,
                         source: 'blocklist'
                       }

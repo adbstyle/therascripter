@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { Editor } from '@tiptap/core'
 import type { PlaceholderType, EntitySource } from '../../../shared/types'
+import { formatPlaceholderToken } from '../../../shared/utils/formatPlaceholderToken'
 import { PLACEHOLDER_TYPE_ORDER, TYPE_LABELS } from '../constants/editorConstants'
 
 export interface OriginalVariant {
@@ -131,7 +132,7 @@ export function useAnonymizationOverview(
         entityId: entry.entityId,
         type: entry.type,
         number: entry.number,
-        placeholder: `[${entry.type} ${entry.number}]`,
+        placeholder: formatPlaceholderToken({ type: entry.type, number: entry.number }),
         variants,
         totalCount: variants.reduce((sum, v) => sum + v.count, 0),
         canonicalVariant,

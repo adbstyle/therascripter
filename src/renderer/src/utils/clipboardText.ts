@@ -1,4 +1,5 @@
 import type { Slice } from '@tiptap/pm/model'
+import { formatPlaceholderToken } from '../../../shared/utils/formatPlaceholderToken'
 
 /**
  * Plain-text flavor of a Cmd+C in the Review Editor (ProseMirror
@@ -13,7 +14,7 @@ export function serializeClipboardText(slice: Slice): string {
         if (child.type.name === 'text') {
           text += child.text ?? ''
         } else if (child.type.name === 'placeholderChip') {
-          text += `[${child.attrs.type} ${child.attrs.number}]`
+          text += formatPlaceholderToken({ type: child.attrs.type, number: child.attrs.number })
         } else if (child.type.name === 'speakerLabel') {
           text += `[${child.attrs.label}]:`
         } else if (child.type.name === 'timestamp') {

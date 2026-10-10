@@ -1,5 +1,5 @@
 import type { TipTapPlaceholderChipAttrs } from '../../shared/types'
-import { formatPlaceholder } from '../../shared/utils/formatPlaceholder'
+import { formatPlaceholderToken } from '../../shared/utils/formatPlaceholderToken'
 
 interface TipTapNode {
   type?: string
@@ -21,7 +21,7 @@ export function tiptapToPlainText(doc: TipTapNode | null | undefined): string {
         const { type, number } = (node.attrs ?? {}) as Partial<TipTapPlaceholderChipAttrs>
         // `!= null`: persistiertes JSON kennt kein undefined, wohl aber null.
         if (type != null && number != null) {
-          into.push(formatPlaceholder({ type, number }))
+          into.push(formatPlaceholderToken({ type, number }))
         }
         return
       }
