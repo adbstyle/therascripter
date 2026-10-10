@@ -1,0 +1,8 @@
+# Eigenes Venv für scripts/eval-embeddings.py — NICHT in python_sidecar/venv installieren.
+#   uv venv --python 3.12 <dir> && VIRTUAL_ENV=<dir> uv pip install -r scripts/eval-embeddings-requirements.txt
+sentence-transformers>=5.1
+transformers>=4.56
+torch
+rank-bm25
+snowballstemmer
+huggingface_hub
