@@ -109,7 +109,7 @@ The manifest also includes `latestAppVersion` (read from `package.json`) and `ge
 
 Options:
 - `scripts/publish-manifest.sh --dry-run` generates the manifest locally without uploading.
-- `scripts/publish-manifest.sh --app-version-only` downloads the existing manifest from R2, patches only the `latestAppVersion` field, and re-uploads. This does not require model files in `r2-upload/`.
+- `scripts/publish-manifest.sh --app-version-only` downloads the existing manifest from R2, patches only the `latestAppVersion` field, and re-uploads. This does not require model files in `r2-upload/`. **Not sufficient after a new artifact:** model entries stay on the old artifact, and fresh installs of the new app (which carry the new hash) get offered a "model update" back to it. Use `--from-catalog` instead.
 
 ### After upload
 
@@ -138,6 +138,11 @@ Every artifact generation has its own file name and stays on R2 (shipped app ver
 2. Release as usual with `scripts/release.sh`. It publishes the manifest from the catalog, and existing installs get the previous artifact offered as a model update.
 
 Never re-package and re-upload under an existing file name: gzip timestamps change the hash and break every app version that has the old hash built in.
+
+Two caveats:
+
+- The released code must still handle the previous artifact. Reverting the catalog entry alone is only safe if the sidecar/app code shipped with the rollback release still supports the old layout. Check the PR that introduced the new artifact for code changes it depended on.
+- Installs that already took the bad artifact only get a dismissible model update. Anyone who dismisses it stays on the bad artifact until they accept the offer or reinstall.
 
 ## Troubleshooting
 
