@@ -1,5 +1,6 @@
 import type { EntityMap, PlaceholderType } from '../../shared/types'
 import type { MergedEntity } from '../../shared/types/NerTypes'
+import { formatPlaceholderToken } from '../../shared/utils/formatPlaceholderToken'
 
 /**
  * Build the EntityMap from merged + coreference-resolved entities.
@@ -39,7 +40,7 @@ export function buildEntityMap(entities: MergedEntity[]): EntityMap {
 
     entityMap[entityId] = {
       original: entity.canonicalText ?? entity.text,
-      placeholder: `[${entity.type} ${number}]`,
+      placeholder: formatPlaceholderToken({ type: entity.type, number }),
       type: entity.type,
       source: entity.source
     }

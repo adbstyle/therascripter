@@ -113,4 +113,121 @@ describe('tiptapToPlainText', () => {
     expect(tiptapToPlainText(undefined)).toBe('')
     expect(tiptapToPlainText({})).toBe('')
   })
+
+  it('renders a single-speaker audio document from buildTipTapDocument', () => {
+    const segments: TranscriptSegment[] = [
+      { text: 'Hans wohnt hier.', start: 0, end: 2, speaker: 'Person A' },
+      { text: 'Seit Jahren.', start: 3, end: 4, speaker: 'Person A' }
+    ]
+    const entities: MergedEntity[] = [
+      { text: 'Hans', type: 'PERSON', source: 'ner', segmentIndex: 0, charStart: 0, charEnd: 4 }
+    ]
+    const doc = buildTipTapDocument(segments, buildEntityMap(entities), entities, 1)
+
+    expect(tiptapToPlainText(doc)).toBe('[PERSON 1] wohnt hier.\nSeit Jahren.')
+  })
+
+  it('renders a PDF document (segments without speaker) from buildTipTapDocument', () => {
+    const segments: TranscriptSegment[] = [
+      { text: 'Befund von Dr. Keller.', start: 0, end: 0 },
+      { text: 'Kontrolle in Basel.', start: 0, end: 0 }
+    ]
+    const entities: MergedEntity[] = [
+      {
+        text: 'Dr. Keller',
+        type: 'PERSON',
+        source: 'ner',
+        segmentIndex: 0,
+        charStart: 11,
+        charEnd: 21
+      },
+      { text: 'Basel', type: 'ORT', source: 'ner', segmentIndex: 1, charStart: 13, charEnd: 18 }
+    ]
+    const doc = buildTipTapDocument(segments, buildEntityMap(entities), entities, 0)
+
+    const text = tiptapToPlainText(doc)
+    expect(text).toBe('Befund von [PERSON 1].\nKontrolle in [ORT 1].')
+    expect(text).not.toContain('Keller')
+    expect(text).not.toContain('Basel')
+  })
+
+  it('returns an empty string for an empty transcript from buildTipTapDocument', () => {
+    expect(tiptapToPlainText(buildTipTapDocument([], {}, [], 0))).toBe('')
+  })
+
+  it('trims each paragraph and drops empty ones, keeping inner whitespace', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: '  A  b ' }] },
+        { type: 'paragraph', content: [] },
+        { type: 'paragraph', content: [{ type: 'text', text: '   ' }] },
+        { type: 'paragraph' },
+        { type: 'paragraph', content: [{ type: 'text', text: ' C' }] }
+      ]
+    }
+    expect(tiptapToPlainText(doc)).toBe('A  b\nC')
+  })
+
+  it('ignores text marks and hard breaks from editor JSON', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Zeile ', marks: [{ type: 'bold' }] },
+            { type: 'hardBreak' },
+            { type: 'text', text: 'zwei' }
+          ]
+        }
+      ]
+    }
+    expect(tiptapToPlainText(doc)).toBe('Zeile zwei')
+  })
+
+  it('tolerates text nodes without text and chips without attrs', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text' }, { type: 'text', text: 'a' }, { type: 'placeholderChip' }]
+        }
+      ]
+    }
+    expect(tiptapToPlainText(doc)).toBe('a')
+  })
+
+  it('descends into unknown container nodes', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'blockquote',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Zitat' }] }]
+        },
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Vor ' },
+            { type: 'mystery', content: [{ type: 'text', text: 'innen' }] },
+            { type: 'text', text: ' nach' }
+          ]
+        }
+      ]
+    }
+    expect(tiptapToPlainText(doc)).toBe('Zitat\nVor innen nach')
+  })
+
+  it('emits stray text outside any paragraph as its own line', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        { type: 'text', text: 'lose' },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Absatz' }] }
+      ]
+    }
+    expect(tiptapToPlainText(doc)).toBe('lose\nAbsatz')
+  })
 })
