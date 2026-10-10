@@ -62,3 +62,7 @@ python_sidecar/build/
 
 # SRF-Podcast-Testaudios (urheberrechtlich geschützt, via scripts/fetch-test-podcasts.sh)
 tests/fixtures/podcast-audio/
+
+# Embedding-Eval: Podcast-Transkripte sind urheberrechtlich geschützt (Quelle: podcast-audio/)
+tests/fixtures/embedding-eval/podcast/
+tests/fixtures/embedding-eval/results/run-*.json
