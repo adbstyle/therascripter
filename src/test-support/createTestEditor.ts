@@ -1,68 +1,13 @@
-import { Editor, Node, mergeAttributes } from '@tiptap/core'
+import { Editor } from '@tiptap/core'
 import type { EditorView } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
+import {
+  PlaceholderChipNode,
+  SpeakerLabelNode,
+  TimestampNode
+} from '../renderer/src/extensions/transcriptNodes'
 import type { TipTapDocument } from '../shared/types/TipTapDocument'
 import type { EntitySource, PlaceholderType } from '../shared/types'
-
-const PlaceholderChipForTests = Node.create({
-  name: 'placeholderChip',
-  group: 'inline',
-  inline: true,
-  atom: true,
-  addAttributes() {
-    return {
-      entityId: { default: '' },
-      type: { default: 'PERSON' },
-      number: { default: 1 },
-      source: { default: 'ner' },
-      original: { default: '' }
-    }
-  },
-  parseHTML() {
-    return [{ tag: 'span[data-type="placeholderChip"]' }]
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes({ 'data-type': 'placeholderChip' }, HTMLAttributes)]
-  }
-})
-
-const SpeakerLabelForTests = Node.create({
-  name: 'speakerLabel',
-  group: 'inline',
-  inline: true,
-  atom: true,
-  addAttributes() {
-    return {
-      speaker: { default: 'A' },
-      label: { default: 'Person A' }
-    }
-  },
-  parseHTML() {
-    return [{ tag: 'span[data-type="speakerLabel"]' }]
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes({ 'data-type': 'speakerLabel' }, HTMLAttributes)]
-  }
-})
-
-const TimestampForTests = Node.create({
-  name: 'timestamp',
-  group: 'inline',
-  inline: true,
-  atom: true,
-  addAttributes() {
-    return {
-      seconds: { default: 0 },
-      formatted: { default: '00:00:00' }
-    }
-  },
-  parseHTML() {
-    return [{ tag: 'span[data-type="timestamp"]' }]
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes({ 'data-type': 'timestamp' }, HTMLAttributes)]
-  }
-})
 
 export interface ChipAttrs {
   entityId: string
@@ -111,9 +56,9 @@ export function createTestEditor(
         heading: false,
         horizontalRule: false
       }),
-      PlaceholderChipForTests,
-      SpeakerLabelForTests,
-      TimestampForTests
+      PlaceholderChipNode,
+      SpeakerLabelNode,
+      TimestampNode
     ],
     content: opts.initialDoc ?? { type: 'doc', content: [{ type: 'paragraph' }] }
   }

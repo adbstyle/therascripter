@@ -225,7 +225,16 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
       },
       clipboardTextSerializer: serializeClipboardText
     },
-    onUpdate: () => {
+    onUpdate: ({ editor: current, transaction }) => {
+      // Eingefügte Chips können Entitäten zurückbringen, die seit dem Copy
+      // aus der EntityMap entfernt wurden — ohne Eintrag vergäbe
+      // getNextNumber ihre Nummer neu (entityId-Kollision).
+      const uiEvent = transaction.getMeta('uiEvent')
+      if (uiEvent === 'paste' || uiEvent === 'drop') {
+        const next = reconcileEntityMapWithDoc(current.state.doc, entityMapRef.current)
+        if (next !== null) updateEntityMap(next)
+      }
+
       // Debounced: updateCounter treibt Wortzählung + Anonymisierungs-
       // Übersicht (voller Doc-Walk) — pro Tastendruck ausgeführt machte das
       // Tippen in langen Transkripten spürbar zäh. Der Autosave hängt
