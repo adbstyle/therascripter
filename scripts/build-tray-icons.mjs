@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* global console */
 // Rasterize tray SVG sources into macOS template-image PNGs.
 // Run with: npm run icons:tray
 

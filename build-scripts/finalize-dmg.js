@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports, no-undef */
 const { execSync, execFileSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
@@ -35,7 +34,7 @@ async function finalizeSingleDmg(dmgPath) {
 
   try {
     fs.unlinkSync(tmpDmg)
-  } catch (_) {
+  } catch {
     // ignore
   }
 
@@ -43,10 +42,9 @@ async function finalizeSingleDmg(dmgPath) {
   execSync(`hdiutil convert "${dmgPath}" -format UDRW -ov -o "${tmpDmg}"`, { stdio: 'inherit' })
 
   console.log('[finalize-dmg]   → mounting read-write')
-  const attachOutput = execSync(
-    `hdiutil attach "${tmpDmg}" -readwrite -noverify -noautoopen`,
-    { encoding: 'utf8' }
-  )
+  const attachOutput = execSync(`hdiutil attach "${tmpDmg}" -readwrite -noverify -noautoopen`, {
+    encoding: 'utf8'
+  })
   const mountLine = attachOutput
     .split('\n')
     .reverse()
@@ -72,10 +70,9 @@ async function finalizeSingleDmg(dmgPath) {
   }
 
   console.log('[finalize-dmg]   → converting UDRW → UDZO')
-  execSync(
-    `hdiutil convert "${tmpDmg}" -format UDZO -ov -imagekey zlib-level=9 -o "${dmgPath}"`,
-    { stdio: 'inherit' }
-  )
+  execSync(`hdiutil convert "${tmpDmg}" -format UDZO -ov -imagekey zlib-level=9 -o "${dmgPath}"`, {
+    stdio: 'inherit'
+  })
 
   fs.unlinkSync(tmpDmg)
   console.log(`[finalize-dmg]   ✓ done`)
