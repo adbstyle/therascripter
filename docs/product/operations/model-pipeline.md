@@ -109,13 +109,14 @@ The manifest also includes `latestAppVersion` (read from `package.json`) and `ge
 
 Options:
 - `scripts/publish-manifest.sh --dry-run` generates the manifest locally without uploading.
-- `scripts/publish-manifest.sh --app-version-only` downloads the existing manifest from R2, patches only the `latestAppVersion` field, and re-uploads. This does not require model files in `r2-upload/`.
+- `scripts/publish-manifest.sh --app-version-only` downloads the existing manifest from R2, patches only the `latestAppVersion` field, and re-uploads. This does not require model files in `r2-upload/`. **Not sufficient after a new artifact:** model entries stay on the old artifact, and fresh installs of the new app (which carry the new hash) get offered a "model update" back to it. Use `--from-catalog` instead.
 
 ### After upload
 
-1. Run `npm run typecheck` to verify nothing is broken.
-2. Commit the manifest: `git add manifest.json && git commit -m "chore: update model manifest"`.
-3. Verify via CDN: `curl https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/manifest.json | jq .`.
+1. Update `url`, `sha256` and `sizeBytes` in `src/shared/model-catalog.ts` for the new artifact and run `npm run typecheck`.
+2. Verify the artifact via CDN (size and hash must match the catalog):
+   `curl -sI https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/<file> | grep -i content-length` and `curl -s https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/<file> | shasum -a 256`.
+3. The manifest goes live with the next `scripts/release.sh` run. Check it afterwards with `curl https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/manifest.json | jq .`. `manifest.json` is gitignored, so there is nothing to commit.
 
 ## torchcodec shim
 
@@ -131,13 +132,17 @@ The shim is loaded automatically at Python startup via `sitecustomize.py`, which
 
 ## Rollback
 
-R2 does not version files automatically. To roll back a model:
+Every artifact generation has its own file name and stays on R2 (shipped app versions verify against their built-in hashes), so a rollback never needs re-packaging or re-uploading:
 
-1. Restore the old model locally (e.g. from Time Machine).
-2. Run `npm run sidecar:package` with the old model files.
-3. Run `npm run sidecar:upload`.
-4. Run `scripts/publish-manifest.sh` to regenerate and upload the manifest.
-5. Commit: `git add manifest.json && git commit -m "chore: rollback model manifest"`.
+1. Point the model's entry in `src/shared/model-catalog.ts` back to the previous artifact (`url`, `sha256`, `sizeBytes` from git history).
+2. Release as usual with `scripts/release.sh`. It publishes the manifest from the catalog, and existing installs get the previous artifact offered as a model update.
+
+Never re-package and re-upload under an existing file name: gzip timestamps change the hash and break every app version that has the old hash built in.
+
+Two caveats:
+
+- The released code must still handle the previous artifact. Reverting the catalog entry alone is only safe if the sidecar/app code shipped with the rollback release still supports the old layout. Check the PR that introduced the new artifact for code changes it depended on.
+- Installs that already took the bad artifact only get a dismissible model update. Anyone who dismisses it stays on the bad artifact until they accept the offer or reinstall.
 
 ## Troubleshooting
 
@@ -148,5 +153,5 @@ R2 does not version files automatically. To roll back a model:
 | R2 credentials missing | Check `.env` file for all three keys |
 | Model file not found during packaging | Verify models exist in `~/.therascript/models/` |
 | Sidecar build verification fails | Try `scripts/build-sidecar.sh --clean` for a fresh build |
-| SHA-256 mismatch on client | Re-run package + upload + publish-manifest |
+| SHA-256 mismatch on client | Catalog/manifest hash differs from the R2 object. Compare `curl -s <url> \| shasum -a 256` against `src/shared/model-catalog.ts`; never overwrite the R2 object, publish a new file name instead |
 | Codesigning failures during build | Non-critical for most files; only matters if macOS kills the process at runtime |
