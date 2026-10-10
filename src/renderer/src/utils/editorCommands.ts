@@ -7,6 +7,7 @@ import {
   isWholeWord,
   normalizeWithPositionMap
 } from '../../../shared/utils/blocklist-matching'
+import { formatPlaceholderToken } from '../../../shared/utils/formatPlaceholderToken'
 
 /**
  * Get the next available number for a placeholder type.
@@ -288,7 +289,7 @@ export function addToBlocklistRetroactive(
   const updated = { ...entityMap }
   updated[entityId] = {
     original: term.trim(),
-    placeholder: `[${type} ${number}]`,
+    placeholder: formatPlaceholderToken({ type, number }),
     type,
     source: 'blocklist'
   }
@@ -345,7 +346,7 @@ export function addToBlocklistFromTerm(
   const updated = { ...entityMap }
   updated[entityId] = {
     original: trimmed,
-    placeholder: `[${type} ${number}]`,
+    placeholder: formatPlaceholderToken({ type, number }),
     type,
     source: 'blocklist'
   }
@@ -432,7 +433,7 @@ export function changeChipTypeForEntity(
   delete updated[entityId]
   updated[newEntityId] = {
     original: representative.original,
-    placeholder: `[${newType} ${newNumber}]`,
+    placeholder: formatPlaceholderToken({ type: newType, number: newNumber }),
     type: newType,
     source: representativeSource
   }
@@ -525,7 +526,7 @@ export function anonymizeSelectionWithPropagation(
   const updated = { ...entityMap }
   updated[entityId] = {
     original: originalText,
-    placeholder: `[${type} ${number}]`,
+    placeholder: formatPlaceholderToken({ type, number }),
     type,
     source: 'manual'
   }
@@ -580,7 +581,7 @@ export function reconcileEntityMapWithDoc(doc: PMNode, currentMap: EntityMap): E
 
     result[entityId] = {
       original: chipOriginal,
-      placeholder: `[${chipType} ${chipNumber}]`,
+      placeholder: formatPlaceholderToken({ type: chipType, number: chipNumber }),
       type: chipType,
       source: chipSource
     }

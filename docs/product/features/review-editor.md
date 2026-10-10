@@ -109,11 +109,13 @@ The serialization logic (`serializeDocument`) converts the TipTap JSON document 
 - **Speaker labels** become `[Person A]:` (audio sessions only; omitted for PDF sessions).
 - **Timestamps** become `[00:12:34]` (audio sessions only; omitted for PDF sessions).
 - **Regular text** is preserved as-is.
-- Paragraphs are joined with newlines.
+- Paragraphs are joined with newlines; only the ends of the whole text are trimmed (blank lines between paragraphs survive).
 
 A toast notification confirms success ("In Zwischenablage kopiert") or reports failure.
 
-The editor also has a custom `clipboardTextSerializer` for partial copy (Cmd+C on a selection), which uses the same bracket notation for chips, speaker labels, and timestamps within the copied range.
+The editor also has a custom `clipboardTextSerializer` (`serializeClipboardText` in `utils/clipboardText.ts`) for partial copy (Cmd+C on a selection), which uses the same bracket notation for chips, speaker labels, and timestamps within the copied range — copied verbatim, without trimming.
+
+All text outputs of a transcript — this export, the Cmd+C serializer and the LLM input for the summary (`tiptapToPlainText`, without speaker labels/timestamps, one trimmed line per non-empty paragraph) — run through one walker, `tiptapToText` in `src/shared/utils/tiptapToText.ts`, and render chips via `formatPlaceholderToken`. New node types or format changes belong there, not in the callers. `formatPlaceholderToken` (`[PERSON 1]`) is not the same as the renderer's `formatPlaceholderLabel` (`Person 1`, localized UI label).
 
 ## Undo / Redo
 
