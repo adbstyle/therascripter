@@ -101,8 +101,11 @@ MODELS = {
 BM25_KEY = "bm25"
 ALL_KEYS = list(MODELS) + [BM25_KEY]
 
-# Entscheidungsregel (vorab festgelegt, siehe README.md)
-GATE_PEAK_GIB = 2.0
+# Entscheidungsregel (siehe README.md). Speicher: absoluter Prozess-Peak im sparsamen Modus
+# darf den heutigen Pipeline-Peak (flair-NER, fp16 auf MPS: ~3.5 GiB phys_footprint) nicht
+# übersteigen — die Modelle laufen strikt nacheinander. Ursprünglich vorab 2 GiB Zuwachs,
+# geändert 2026-10-10, weil der Zuwachs pro Modell 0.5–1 GiB Lade-Overhead enthält.
+GATE_PEAK_GIB = 3.5
 GATE_INDEX_SECONDS = 20.0
 PERMISSIVE = {"MIT", "Apache-2.0"}
 
@@ -688,6 +691,12 @@ def cmd_report(args):
         diffs = [per_query[key][q["id"]]["ndcg10"] - per_query[best][q["id"]]["ndcg10"] for q in positives]
         summary[key]["diff_to_best_ci"] = bootstrap_ci(diffs)
 
+    def clearly_best(key):
+        """Lizenz-Ausnahme (Gemma ToU): nur für das beste Modell, wenn das Δ-Intervall
+        JEDES anderen reinen Modells unter 0 liegt."""
+        others = [k for k in summary if k in MODELS and k != key]
+        return key == best and all(summary[k]["diff_to_best_ci"][1] < 0 for k in others)
+
     wpm = podcast_words_per_minute()
     for key, s in summary.items():
         perf = s["perf"]
@@ -703,8 +712,8 @@ def cmd_report(args):
         perf["encode_delta_gib"] = perf["encode_peak_gib"] - perf["baseline_gib"]
         perf["lean_delta_gib"] = perf["lean_peak_gib"] - perf["baseline_gib"]
         s["gates"] = {
-            "lizenz": MODELS[key]["license"] in PERMISSIVE,
-            "speicher": perf["lean_delta_gib"] <= GATE_PEAK_GIB,
+            "lizenz": MODELS[key]["license"] in PERMISSIVE or clearly_best(key),
+            "speicher": perf["lean_peak_gib"] <= GATE_PEAK_GIB,
             "indexierung": words is not None and perf["lean_index_45min_s"] <= GATE_INDEX_SECONDS,
         }
 
@@ -743,9 +752,10 @@ def cmd_report(args):
         print(f"{key:22} " + " ".join(f"{summary[key]['by_part'][t][0]:14.3f}" for t in parts))
     print("\nPraxis:")
     print("Speicher = Zuwachs phys_footprint über den Prozess-Sockel (torch importiert); "
-          "Laden / Indexieren Batch 8 / sparsam (Batch 4 + empty_cache)")
+          "Laden / Indexieren Batch 8 / sparsam (Batch 4 + empty_cache); "
+          f"Abs = absoluter Prozess-Peak sparsam (Bedingung ≤ {GATE_PEAK_GIB} GiB)")
     print(f"{'Modell':22} {'dtype':>8} {'Dim':>5} {'Gewichte':>9} {'Laden':>7} {'Idx-B8':>7} {'sparsam':>8} "
-          f"{'45min B8':>9} {'45min sp':>9} {'Query':>6}  Gates")
+          f"{'Abs':>6} {'45min B8':>9} {'45min sp':>9} {'Query':>6}  Gates")
     for key in order:
         p = summary[key]["perf"]
         if key not in MODELS:
@@ -753,7 +763,7 @@ def cmd_report(args):
         gates = summary[key]["gates"]
         gate_txt = " ".join(f"{n}:{'ok' if v else 'NEIN'}" for n, v in gates.items())
         print(f"{key:22} {p['dtype']:>8} {p['dim']:5d} {p['weights_gib']:8.2f}G {p['load_delta_gib']:6.2f}G "
-              f"{p['encode_delta_gib']:6.2f}G {p['lean_delta_gib']:7.2f}G {p['index_45min_s']:8.1f}s "
+              f"{p['encode_delta_gib']:6.2f}G {p['lean_delta_gib']:7.2f}G {p['lean_peak_gib']:5.2f}G {p['index_45min_s']:8.1f}s "
               f"{p['lean_index_45min_s']:8.1f}s {p['query_latency_ms_median']:4.0f}ms  {gate_txt}"
               f"{'  ' + p['fallback'] if p['fallback'] else ''}{'  TRUNC ' + str(p['truncated']) if p['truncated'] else ''}")
     print(f"\n→ {out_json}")

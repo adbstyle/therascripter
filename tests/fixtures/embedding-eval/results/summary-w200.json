@@ -87,7 +87,7 @@
    ],
    "gates": {
     "lizenz": true,
-    "speicher": false,
+    "speicher": true,
     "indexierung": true
    }
   },
@@ -171,7 +171,7 @@
    ],
    "gates": {
     "lizenz": true,
-    "speicher": false,
+    "speicher": true,
     "indexierung": true
    }
   },
@@ -255,7 +255,7 @@
    ],
    "gates": {
     "lizenz": true,
-    "speicher": false,
+    "speicher": true,
     "indexierung": true
    }
   },
@@ -338,8 +338,8 @@
     0.0
    ],
    "gates": {
-    "lizenz": false,
-    "speicher": false,
+    "lizenz": true,
+    "speicher": true,
     "indexierung": true
    }
   },

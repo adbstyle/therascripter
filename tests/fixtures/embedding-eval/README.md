@@ -50,18 +50,25 @@ lädt zuerst auf die CPU und kopiert dann auf MPS, die CPU-Kopie bleibt im Footp
 Implementierung kann das vermeiden. Die Indexierzeit ist bei allen Modellen
 vernachlässigbar.
 
-### Entscheidungsregel (vorab festgelegt) und Befund
+### Entscheidung (2026-10-10): EmbeddingGemma 300M
 
-Bedingungen: Lizenz MIT/Apache (Gemma ToU nur bei klarem Vorsprung), Speicher-Peak
-≤ 2 GB, Indexierung einer 45-min-Sitzung ≤ 20 s. Gewinner ist das beste nDCG@10 unter den
-Modellen, die alle Bedingungen erfüllen.
+Bedingungen: Lizenz MIT/Apache (Gemma ToU nur bei klarem Vorsprung, d. h. das Δ-Intervall
+jedes anderen Modells liegt unter 0), absoluter Prozess-Peak im sparsamen Modus
+≤ 3.5 GiB, Indexierung einer 45-min-Sitzung ≤ 20 s. Gewinner ist das beste nDCG@10 unter
+den Modellen, die alle Bedingungen erfüllen. Erfüllt werden sie von allen Modellen ausser
+bge-m3 (3.81 GiB). Gewinner ist EmbeddingGemma (2.90 GiB absolut).
 
-- Streng angewendet erfüllt nur granite-311m-r2 die Speicher-Bedingung, obwohl es das
-  schwächste Embedding-Modell ist. Die 2-GB-Schwelle war gesetzt, bevor bekannt war, dass
-  der gemessene Footprint pro Modell rund 0.5–1 GB Lade-Overhead enthält.
-- Die Lizenz-Ausnahme für EmbeddingGemma greift, weil der Vorsprung signifikant ist.
-- Für die Pipeline zählt der Prozess-Peak, weil die Modelle strikt nacheinander laufen: Der
-  liegt mit flair-NER bei ~3.5 GB, und alle Modelle ausser bge-m3 bleiben deutlich darunter.
+- **Speicher-Schwelle geändert:** Vorab galten ≤ 2 GB Zuwachs, streng angewendet hätte nur
+  granite-311m-r2 bestanden. Die Schwelle war gesetzt, bevor bekannt war, dass der Footprint
+  pro Modell rund 0.5–1 GB Lade-Overhead enthält. Weil die Modelle strikt nacheinander
+  laufen, zählt der Pipeline-Peak; der liegt heute mit flair-NER bei ~3.5 GiB. Die neue
+  Schwelle ist «nicht über dem NER-Peak».
+- **Lizenz:** Die Ausnahme für EmbeddingGemma greift, weil der Vorsprung signifikant ist.
+  Vor der Auslieferung muss geklärt sein, wie die Gemma-Nutzungsbedingungen an die Nutzer
+  weitergegeben werden und ob die Prohibited Use Policy für den Therapie-Kontext passt.
+- **Für die Umsetzung:** nur fp32 oder bf16 (fp16 liefert NaN, siehe Model Card), Prompts
+  `task: search result | query: ` für Anfragen und `title: none | text: ` für Abschnitte,
+  max. 2048 Tokens, Matryoshka-Dimensionen 768/512/256/128 möglich (nicht getestet).
 
 ## Design
 
