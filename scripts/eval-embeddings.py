@@ -19,13 +19,15 @@ Ablauf:
     PY=<eval-venv>/bin/python   # Abhängigkeiten: scripts/eval-embeddings-requirements.txt
     $PY scripts/eval-embeddings.py podcast-turns --rttm-dir <dir> --whisper-dir <dir>
     $PY scripts/eval-embeddings.py units [--doc a1]          # Units zum Bewerten anzeigen
-    $PY scripts/eval-embeddings.py run --all                 # jedes Modell im eigenen Prozess
-    $PY scripts/eval-embeddings.py pool --k 10               # unbewertete Top-Treffer
-    $PY scripts/eval-embeddings.py report
+    $PY scripts/eval-embeddings.py run --all                 # je Modell zwei frische Prozesse
+    $PY scripts/eval-embeddings.py pool                      # Audit-Dateien: Top-3 ohne Treffer
+    $PY scripts/eval-embeddings.py merge-qrels <audit>.jsonl # nachgeprüfte Bewertungen dazu
+    $PY scripts/eval-embeddings.py report [--hybrid]
 
 Speicher wird als phys_footprint gemessen (proc_pid_rusage), nie als RSS — RSS zählt
-MPS-Allokationen nicht mit (siehe NER-RAM-Gotcha in CLAUDE.md). Jedes Modell läuft in
-einem eigenen Prozess, damit der Lifetime-Peak nur dieses Modell enthält.
+MPS-Allokationen nicht mit (siehe NER-RAM-Gotcha in CLAUDE.md). Jedes Modell läuft pro
+Messung (Durchsatz, sparsam) in einem eigenen Prozess, damit kein Peak den Rest einer
+anderen Messung enthält.
 """
 
 import argparse
@@ -229,7 +231,8 @@ def load_queries():
 
 
 def load_qrels():
-    """→ {query_id: {unit_id: grade}} inklusive expliziter 0-Bewertungen."""
+    """→ {query_id: {unit_id: grade}}, nur Noten 1 und 2. Nicht gelistete Units gelten als 0:
+    die Bewertung war pro Dokument erschöpfend (jede Unit gegen jede Anfrage)."""
     qrels = {}
     for row in load_jsonl(QRELS_FILE):
         qrels.setdefault(row["q"], {})[row["unit"]] = int(row["grade"])
@@ -287,6 +290,9 @@ def cmd_podcast_turns(args):
                 turns[-1]["end"] = end
             else:
                 turns.append({"speaker": speaker, "start": start, "end": end, "text": text})
+        if not turns:
+            print(f"{name}: keine Sprache im whisper-Output, übersprungen")
+            continue
         duration = max([t["end"] for t in turns] + [s[1] for s in segments])
         doc = "p-" + name.split("_", 1)[-1]
         out = os.path.join(PODCAST_DIR, f"{doc}.turns.json")
@@ -418,129 +424,145 @@ def weights_size(model_id):
 NAN_EXIT = 3
 
 
-def run_model(key, chunks, queries, dtype_override=None):
+def run_model(key, chunks, queries, words, mode, dtype_override=None):
+    """mode "throughput": Batch 8 ohne Cache-Freigabe, liefert Rankings, Latenz und Tokens.
+    mode "lean": Batch 4 + empty_cache pro Batch (so liefe es in der App), liefert nur den
+    Speicher-Peak für die Bedingung. Beide laufen in getrennten Prozessen (cmd_run), sonst
+    erbte die zweite Messung den Rest der ersten — reset_interval() beginnt beim aktuellen
+    Footprint, nicht bei null."""
     import numpy as np
     import torch
     from sentence_transformers import SentenceTransformer
 
     spec = MODELS[key]
     device = "mps" if torch.backends.mps.is_available() else "cpu"
+    dtype = dtype_override or spec["dtype"]
+    lean = mode == "lean"
     base_now = footprint()[0]
 
-    def load(dtype):
-        t = time.perf_counter()
-        m = SentenceTransformer(
-            spec["id"], device=device, model_kwargs={"torch_dtype": getattr(torch, dtype)}
-        )
-        m.max_seq_length = MAX_SEQ_LENGTH
-        return m, time.perf_counter() - t
-
-    def encode_docs(m, batch_size, release_cache):
-        """release_cache: GPU-Cache nach jedem Batch freigeben, wie ner_service.py
-        (_release_mps_cache) — so liefe es in der App, der Peak ist dann der echte
-        Arbeitsspeicher statt des Caching-Allocators."""
-        texts = [c["text"] for c in chunks]
-        reset_interval()
-        t = time.perf_counter()
-        parts = []
-        step = batch_size if release_cache else len(texts)
-        for i in range(0, len(texts), step):
-            parts.append(
-                m.encode(
-                    texts[i : i + step],
-                    prompt_name=spec.get("doc_prompt_name"),
-                    batch_size=batch_size,
-                    normalize_embeddings=True,
-                    convert_to_numpy=True,
-                )
-            )
-            if device == "mps":
-                torch.mps.synchronize()
-                if release_cache:
-                    torch.mps.empty_cache()
-        elapsed = time.perf_counter() - t
-        return np.concatenate(parts), elapsed, footprint()[2]
-
-    dtype = dtype_override or spec["dtype"]
-    model, load_s = load(dtype)
+    t = time.perf_counter()
+    model = SentenceTransformer(spec["id"], device=device, model_kwargs={"torch_dtype": getattr(torch, dtype)})
+    model.max_seq_length = MAX_SEQ_LENGTH
+    load_s = time.perf_counter() - t
     _, load_peak, _ = footprint()
-    after_load = footprint()[0]
-    doc_emb, encode_s, encode_peak = encode_docs(model, BATCH_SIZE, release_cache=False)
-    if not np.isfinite(doc_emb).all():
-        # fp16-Überlauf: cmd_run wiederholt das Modell in einem FRISCHEN Prozess mit
-        # float32 — ein Retry hier würde den Lifetime-Peak um den gescheiterten Lauf
-        # verfälschen.
-        sys.exit(NAN_EXIT)
-    if device == "mps":
-        torch.mps.empty_cache()
-    _, lean_encode_s, lean_peak = encode_docs(model, LEAN_BATCH_SIZE, release_cache=True)
+
+    texts = [c["text"] for c in chunks]
+    batch_size = LEAN_BATCH_SIZE if lean else BATCH_SIZE
+    step = batch_size if lean else len(texts)
+    reset_interval()
+    t = time.perf_counter()
+    parts = []
+    for i in range(0, len(texts), step):
+        parts.append(
+            model.encode(
+                texts[i : i + step],
+                prompt_name=spec.get("doc_prompt_name"),
+                batch_size=batch_size,
+                normalize_embeddings=True,
+                convert_to_numpy=True,
+            )
+        )
+        if device == "mps":
+            torch.mps.synchronize()
+            if lean:
+                torch.mps.empty_cache()
+    encode_s = time.perf_counter() - t
+    encode_peak = footprint()[2]
+    doc_emb = np.concatenate(parts)
 
     q_texts = [q["text"] for q in queries]
     q_prompt = spec.get("query_prompt_name")
     q_emb = model.encode(q_texts, prompt_name=q_prompt, batch_size=BATCH_SIZE, normalize_embeddings=True)
+    if not (np.isfinite(doc_emb).all() and np.isfinite(q_emb).all()):
+        # fp16-Überlauf: cmd_run wiederholt das Modell in einem FRISCHEN Prozess mit
+        # float32 — ein Retry hier würde den Lifetime-Peak um den gescheiterten Lauf
+        # verfälschen.
+        sys.exit(NAN_EXIT)
+
+    perf = {
+        "device": device,
+        "dtype": dtype,
+        "fallback": f"{spec['dtype']} lieferte NaN/Inf" if dtype != spec["dtype"] else None,
+        "baseline_gib": base_now / GIB,
+        "load_peak_gib": load_peak / GIB,
+        "load_s": load_s,
+    }
+    if lean:
+        return None, {**perf, "lean_encode_s": encode_s, "lean_peak_gib": encode_peak / GIB}
+
     latencies = []
     for text in q_texts[:40]:
         t = time.perf_counter()
         model.encode([text], prompt_name=q_prompt, normalize_embeddings=True)
         latencies.append((time.perf_counter() - t) * 1000)
-
-    tokenizer = model.tokenizer
-    token_counts = [len(tokenizer(c["text"])["input_ids"]) for c in chunks]
+    # Mit Prompt zählen: das Modell sieht Prompt + Text, abgeschnitten wird beides zusammen.
+    doc_prompt = model.prompts.get(spec.get("doc_prompt_name") or "", "")
+    token_counts = [len(model.tokenizer(doc_prompt + text)["input_ids"]) for text in texts]
     scores = q_emb @ doc_emb.T
     ids = [c["id"] for c in chunks]
     rankings = {q["id"]: rank_all(scores[i], ids) for i, q in enumerate(queries)}
-    perf = {
-        "device": device,
-        "dtype": dtype,
-        "fallback": f"{spec['dtype']} lieferte NaN/Inf" if dtype != spec["dtype"] else None,
+    return rankings, {
+        **perf,
         "dim": int(doc_emb.shape[1]),
-        "load_s": load_s,
         "encode_s": encode_s,
-        "words": sum(c["words"] for c in chunks),
+        "encode_peak_gib": encode_peak / GIB,
+        "words": words,
         "tokens": sum(token_counts),
         "truncated": sum(1 for n in token_counts if n > MAX_SEQ_LENGTH),
         "query_latency_ms_median": statistics.median(latencies),
-        "lean_encode_s": lean_encode_s,
-        "baseline_gib": base_now / GIB,
-        "load_peak_gib": load_peak / GIB,
-        "after_load_gib": after_load / GIB,
-        "encode_peak_gib": encode_peak / GIB,
-        "lean_peak_gib": lean_peak / GIB,
         "weights_gib": weights_size(spec["id"]) / GIB,
     }
-    return rankings, perf
+
+
+def run_path(key, target_words):
+    return os.path.join(RESULTS_DIR, f"run-{key}-w{target_words}.json")
 
 
 def cmd_run_one(args):
-    corpus = load_corpus()
-    chunks = build_chunks(build_units(corpus), args.target_words)
+    units = build_units(load_corpus())
+    chunks = build_chunks(units, args.target_words)
     queries = load_queries()
+    # Jede Unit einmal: Überlappungs-Units stecken in zwei Chunks und würden den
+    # Durchsatz sonst schönrechnen.
+    words = sum(u["words"] for u in units)
+    out = run_path(args.model, args.target_words)
     if args.model == BM25_KEY:
         rankings, perf = run_bm25(chunks, queries)
     else:
-        rankings, perf = run_model(args.model, chunks, queries, args.dtype)
+        rankings, perf = run_model(args.model, chunks, queries, words, args.mode, args.dtype)
+    if args.mode == "lean":
+        # Nur den Speicher-Teil in den Lauf des Durchsatz-Prozesses eintragen.
+        with open(out, encoding="utf-8") as f:
+            run = json.load(f)
+        run["perf"].update(lean_encode_s=perf["lean_encode_s"], lean_peak_gib=perf["lean_peak_gib"])
+    else:
+        run = {"model": args.model, "target_words": args.target_words, "chunks": len(chunks), "perf": perf,
+               "rankings": rankings}
     os.makedirs(RESULTS_DIR, exist_ok=True)
-    out = os.path.join(RESULTS_DIR, f"run-{args.model}-w{args.target_words}.json")
     with open(out, "w", encoding="utf-8") as f:
-        json.dump(
-            {"model": args.model, "target_words": args.target_words, "chunks": len(chunks), "perf": perf, "rankings": rankings},
-            f,
-            ensure_ascii=False,
-        )
-    print(f"{args.model}: {len(chunks)} Chunks, {len(queries)} Queries → {out}")
+        json.dump(run, f, ensure_ascii=False)
+    print(f"{args.model} ({args.mode}): {len(chunks)} Chunks, {len(queries)} Queries → {out}")
 
 
 def cmd_run(args):
     keys = ALL_KEYS if args.all else args.models
+    if not keys:
+        sys.exit("Nichts zu tun: --all oder --models angeben")
     env = dict(os.environ, HF_HUB_OFFLINE="1", TOKENIZERS_PARALLELISM="false")
     for key in keys:
-        cmd = [sys.executable, os.path.abspath(__file__), "run-one", "--model", key, "--target-words", str(args.target_words)]
-        rc = subprocess.call(cmd, env=env)
-        if rc == NAN_EXIT:
-            print(f"{key}: NaN/Inf in {MODELS[key]['dtype']}, wiederhole in float32", file=sys.stderr)
-            rc = subprocess.call(cmd + ["--dtype", "float32"], env=env)
-        if rc != 0:
-            print(f"{key}: Exit {rc}", file=sys.stderr)
+        base = [sys.executable, os.path.abspath(__file__), "run-one", "--model", key,
+                "--target-words", str(args.target_words)]
+        modes = ["throughput"] if key == BM25_KEY else ["throughput", "lean"]
+        dtype = []
+        for mode in modes:
+            rc = subprocess.call(base + ["--mode", mode] + dtype, env=env)
+            if rc == NAN_EXIT and not dtype:
+                print(f"{key}: NaN/Inf in {MODELS[key]['dtype']}, wiederhole in float32", file=sys.stderr)
+                dtype = ["--dtype", "float32"]
+                rc = subprocess.call(base + ["--mode", mode] + dtype, env=env)
+            if rc != 0:
+                print(f"{key} ({mode}): Exit {rc}", file=sys.stderr)
+                break
 
 
 # ---------------------------------------------------------------------------
@@ -566,27 +588,61 @@ def cmd_units(args):
 
 
 def cmd_pool(args):
-    corpus = load_corpus()
-    units = {u["id"]: u for u in build_units(corpus)}
+    """Pooling-Audit: pro Anfrage alle Chunks aus den Top-k ALLER Läufe, die laut qrels keine
+    relevante Unit enthalten. Verblindet (keine Modellnamen, Reihenfolge pro Anfrage
+    gemischt) und auf --groups Dateien verteilt, damit mehrere Bewerter parallel prüfen.
+    Ergebnisse (JSONL mit q/unit/grade) kommen über `merge-qrels` dazu. Die Dateien
+    enthalten Podcast-Text und liegen deshalb im gitignorten results/audit/."""
+    units = {u["id"]: u for u in build_units(load_corpus())}
     chunks = {c["id"]: c for c in build_chunks(list(units.values()), args.target_words)}
     qrels = load_qrels()
     runs = load_runs(args.target_words)
-    todo = []
+    todo = {}
     for q in load_queries():
-        judged = qrels.get(q["id"], {})
-        pooled = []
-        for run in runs.values():
-            for chunk_id, _ in run["rankings"].get(q["id"], [])[: args.k]:
-                for unit_id in chunks[chunk_id]["units"]:
-                    if unit_id not in judged and unit_id not in pooled:
-                        pooled.append(unit_id)
-        for unit_id in pooled:
-            todo.append({"q": q["id"], "query": q["text"], "unit": unit_id, "text": units[unit_id]["text"]})
-    out = os.path.join(RESULTS_DIR, f"pool-todo-w{args.target_words}.jsonl")
-    with open(out, "w", encoding="utf-8") as f:
-        for row in todo:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    print(f"{len(todo)} unbewertete Query-Unit-Paare → {out}")
+        rels = qrels.get(q["id"], {})
+        flagged = []
+        for key in sorted(runs):
+            for cid, _ in runs[key]["rankings"][q["id"]][: args.k]:
+                if cid not in flagged and max(rels.get(u, 0) for u in chunks[cid]["units"]) == 0:
+                    flagged.append(cid)
+        random.Random(q["id"]).shuffle(flagged)
+        if flagged:
+            todo[q["id"]] = (q["text"], flagged)
+    out_dir = os.path.join(RESULTS_DIR, "audit")
+    os.makedirs(out_dir, exist_ok=True)
+    qids = list(todo)
+    for g in range(args.groups):
+        path = os.path.join(out_dir, f"audit-w{args.target_words}-{g + 1}.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            for qid in qids[g :: args.groups]:
+                text, flagged = todo[qid]
+                f.write(f"\n######## {qid}: {text}\n")
+                for cid in flagged:
+                    f.write(f"--- Abschnitt {cid}\n")
+                    for u in chunks[cid]["units"]:
+                        f.write(f"[{u}] {units[u]['speaker']}: {units[u]['text']}\n")
+    total = sum(len(v[1]) for v in todo.values())
+    print(f"{total} Query-Chunk-Paare aus {len(todo)} Anfragen in {args.groups} Dateien → {out_dir}")
+
+
+def cmd_merge_qrels(args):
+    """Fügt Bewertungen aus JSONL-Dateien zu qrels.jsonl hinzu; bestehende Paare bleiben."""
+    unit_ids = {u["id"] for u in build_units(load_corpus())}
+    query_ids = {q["id"] for q in load_queries()}
+    rows = {(r["q"], r["unit"]): int(r["grade"]) for r in load_jsonl(QRELS_FILE)}
+    added = 0
+    for path in args.files:
+        for r in load_jsonl(path):
+            key, grade = (r["q"], r["unit"]), int(r["grade"])
+            if r["q"] not in query_ids or r["unit"] not in unit_ids or grade not in (1, 2):
+                sys.exit(f"{path}: ungültige Zeile {r}")
+            if key not in rows:
+                rows[key] = grade
+                added += 1
+    with open(QRELS_FILE, "w", encoding="utf-8") as f:
+        for (q, u), g in sorted(rows.items(), key=lambda x: (int(x[0][0][1:]), x[0][1])):
+            f.write(json.dumps({"q": q, "unit": u, "grade": g}, ensure_ascii=False) + "\n")
+    print(f"{added} neue Bewertungen, total {len(rows)} → {QRELS_FILE}")
 
 
 def chunk_grades(chunks, rels):
@@ -651,6 +707,18 @@ def cmd_report(args):
     if args.hybrid and BM25_KEY in runs:
         for key in [k for k in list(runs) if k != BM25_KEY]:
             runs[f"{key}+bm25"] = fuse_rrf(runs[key], runs[BM25_KEY])
+    unit_ids = {u["id"] for u in units}
+    unknown = sorted({u for rels in qrels.values() for u in rels} - unit_ids)
+    if unknown:
+        per_doc = {}
+        for u in unknown:
+            doc = u.split(":")[0]
+            per_doc[doc] = per_doc.get(doc, 0) + 1
+        sys.exit(
+            f"{len(unknown)} bewertete Units fehlen im Korpus ({per_doc}). Fehlen Podcast-"
+            "Transkripte, zuerst `podcast-turns` ausführen; wurden sie neu transkribiert, passen "
+            "die Unit-IDs nicht mehr zu qrels.jsonl und die Bewertung muss neu gemacht werden."
+        )
     positives = [q for q in queries if q["type"] != "negativ"]
     negatives = [q for q in queries if q["type"] == "negativ"]
     missing = [q["id"] for q in positives if not any(g > 0 for g in qrels.get(q["id"], {}).values())]
@@ -676,7 +744,8 @@ def cmd_report(args):
             "hit5": statistics.fmean(r["hit5"] for r in rows.values()),
             "mrr10": statistics.fmean(r["mrr10"] for r in rows.values()),
             "unit_recall10": statistics.fmean(r["unit_recall10"] for r in rows.values()),
-            "neg_auc": auc(top1_pos, top1_neg),
+            # RRF-Scores hängen nur vom Rang ab und sind fast immer gleich → keine Neg-AUC.
+            "neg_auc": None if run.get("hybrid") else auc(top1_pos, top1_neg),
             "by_type": {},
             "by_part": {},
             "perf": run["perf"],
@@ -686,7 +755,11 @@ def cmd_report(args):
                 vals = [rows[q["id"]]["ndcg10"] for q in positives if q[field] == value]
                 summary[key][bucket][value] = (statistics.fmean(vals), len(vals))
 
-    best = max(summary, key=lambda k: summary[k]["ndcg10"])
+    # Referenz für Δ-Intervalle und Lizenz-Ausnahme ist das beste REINE Modell, nicht BM25
+    # oder ein Hybrid — sonst ginge die Ausnahme verloren, sobald ein Hybrid vorne liegt.
+    best = max((k for k in summary if k in MODELS), key=lambda k: summary[k]["ndcg10"], default=None)
+    if best is None:
+        best = max(summary, key=lambda k: summary[k]["ndcg10"])
     for key in summary:
         diffs = [per_query[key][q["id"]]["ndcg10"] - per_query[best][q["id"]]["ndcg10"] for q in positives]
         summary[key]["diff_to_best_ci"] = bootstrap_ci(diffs)
@@ -782,6 +855,10 @@ def main():
     p.add_argument("--doc")
     p.set_defaults(func=cmd_units)
 
+    p = sub.add_parser("merge-qrels", help="Bewertungen aus dem Pooling-Audit zu qrels.jsonl hinzufügen")
+    p.add_argument("files", nargs="+")
+    p.set_defaults(func=cmd_merge_qrels)
+
     for name, func in (("run", cmd_run), ("run-one", cmd_run_one), ("pool", cmd_pool), ("report", cmd_report)):
         p = sub.add_parser(name)
         p.add_argument("--target-words", type=int, default=DEFAULT_TARGET_WORDS)
@@ -792,8 +869,10 @@ def main():
         if name == "run-one":
             p.add_argument("--model", required=True, choices=ALL_KEYS)
             p.add_argument("--dtype", choices=["float16", "float32"])
+            p.add_argument("--mode", choices=["throughput", "lean"], default="throughput")
         if name == "pool":
-            p.add_argument("--k", type=int, default=10)
+            p.add_argument("--k", type=int, default=3)
+            p.add_argument("--groups", type=int, default=7)
         if name == "report":
             p.add_argument("--hybrid", action="store_true", help="zusätzlich RRF-Fusion jedes Modells mit BM25")
 

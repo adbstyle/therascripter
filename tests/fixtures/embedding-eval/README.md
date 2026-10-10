@@ -34,17 +34,18 @@ nDCG@10 bei Chunks von ~200 Wörtern, 91 Anfragen mit Treffern, 95-%-Bootstrap-I
 
 ### Praxis (Zuwachs `phys_footprint` über den Prozess-Sockel)
 
-| Modell | dtype | Gewichte | Peak Laden | Peak Indexieren (sparsam) | 45-min-Sitzung indexieren |
-|---|---|---|---|---|---|
-| embeddinggemma-300m | fp32 (fp16 nicht unterstützt) | 1.15 GB | 1.50 GB | 2.55 GB | 1.5 s |
-| harrier-0.6b | fp16 | 1.11 GB | 2.32 GB | 2.36 GB | 1.9 s |
-| bge-m3 | fp16 (Checkpoint fp32) | 2.12 GB | 2.40 GB | 3.47 GB | 0.9 s |
-| qwen3-0.6b | fp16 | 1.11 GB | 2.32 GB | 2.36 GB | 2.1 s |
-| harrier-270m | fp32 (fp16 → NaN) | 0.50 GB | 1.94 GB | 2.71 GB | 1.5 s |
-| granite-311m-r2 | fp16 | 0.58 GB | 1.88 GB | 1.91 GB | 0.5 s |
+| Modell | dtype | Gewichte | Peak Laden | Peak Indexieren sparsam | Prozess-Peak absolut | 45-min-Sitzung indexieren |
+|---|---|---|---|---|---|---|
+| embeddinggemma-300m | fp32 (fp16 nicht unterstützt) | 1.15 GB | 1.50 GB | 1.74 GB | 2.09 GiB | 1.7 s |
+| harrier-0.6b | fp16 | 1.11 GB | 2.31 GB | 2.79 GB | 3.14 GiB | 2.2 s |
+| bge-m3 | fp16 (Checkpoint fp32) | 2.12 GB | 2.40 GB | 3.19 GB | 3.53 GiB | 1.0 s |
+| qwen3-0.6b | fp16 | 1.11 GB | 2.32 GB | 2.83 GB | 3.17 GiB | 2.2 s |
+| harrier-270m | fp32 (fp16 → NaN) | 0.50 GB | 2.25 GB | 2.67 GB | 3.02 GiB | 1.7 s |
+| granite-311m-r2 | fp16 | 0.58 GB | 1.88 GB | 1.72 GB | 2.07 GiB | 0.5 s |
 
 «Sparsam» bedeutet Batch 4 und `torch.mps.empty_cache()` nach jedem Batch, so wie es
-`ner_service.py` macht. Die Messwerte enthalten einen Lade-Overhead: sentence-transformers
+`ner_service.py` macht. Gemessen wird das in einem eigenen, frischen Prozess, getrennt vom
+Durchsatz-Lauf mit Batch 8, damit keine Messung den Rest der anderen erbt. Die Messwerte enthalten einen Lade-Overhead: sentence-transformers
 lädt zuerst auf die CPU und kopiert dann auf MPS, die CPU-Kopie bleibt im Footprint
 (gemessen bei harrier-0.6b: 1.66 GB im Ruhezustand bei 1.11 GB Gewichten). Eine App-
 Implementierung kann das vermeiden. Die Indexierzeit ist bei allen Modellen
@@ -56,7 +57,7 @@ Bedingungen: Lizenz MIT/Apache (Gemma ToU nur bei klarem Vorsprung, d. h. das Δ
 jedes anderen Modells liegt unter 0), absoluter Prozess-Peak im sparsamen Modus
 ≤ 3.5 GiB, Indexierung einer 45-min-Sitzung ≤ 20 s. Gewinner ist das beste nDCG@10 unter
 den Modellen, die alle Bedingungen erfüllen. Erfüllt werden sie von allen Modellen ausser
-bge-m3 (3.81 GiB). Gewinner ist EmbeddingGemma (2.90 GiB absolut).
+bge-m3 (3.53 GiB). Gewinner ist EmbeddingGemma (2.09 GiB absolut).
 
 - **Speicher-Schwelle geändert:** Vorab galten ≤ 2 GB Zuwachs, streng angewendet hätte nur
   granite-311m-r2 bestanden. Die Schwelle war gesetzt, bevor bekannt war, dass der Footprint
@@ -87,7 +88,8 @@ bge-m3 (3.81 GiB). Gewinner ist EmbeddingGemma (2.90 GiB absolut).
 - **Relevanz (`qrels.jsonl`):** Unabhängige Bewerter-Agents haben pro Dokument jede Unit
   gegen jede Anfrage geprüft (0/1/2). Danach folgte ein Pooling: 787 Top-3-Treffer aller
   Läufe ohne relevante Unit wurden verblindet nachgeprüft. Das ergab 31 neue Bewertungen
-  mit Note 1 und keine mit Note 2.
+  mit Note 1 und keine mit Note 2. Für ein neues Modell: `pool` erzeugt die Audit-Dateien
+  (gitignored, enthalten Podcast-Text), `merge-qrels` übernimmt die Nachbewertung.
 - **Modelle:** Prompts exakt aus `config_sentence_transformers.json` der Hersteller, max.
   1024 Tokens (kein Chunk wurde abgeschnitten), fp16 auf MPS, ausser bei Modellen mit
   NaN in fp16 (automatischer Neustart in fp32 in einem frischen Prozess).
@@ -112,5 +114,7 @@ scripts/fetch-test-podcasts.sh
 # Podcasts mit diarize.py + whisper-cli transkribieren (RTTM + <name>.wav.json), dann:
 $PY scripts/eval-embeddings.py podcast-turns --rttm-dir <dir> --whisper-dir <dir>
 HF_HOME=<cache> $PY scripts/eval-embeddings.py run --all [--target-words 200]
-$PY scripts/eval-embeddings.py report --hybrid
+$PY scripts/eval-embeddings.py pool               # nur bei neuen Modellen: Top-3 ohne Treffer nachprüfen
+$PY scripts/eval-embeddings.py merge-qrels <nachbewertung>.jsonl
+$PY scripts/eval-embeddings.py report --hybrid    # bricht ab, wenn bewertete Units fehlen
 ```
