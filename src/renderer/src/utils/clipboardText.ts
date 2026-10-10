@@ -1,5 +1,9 @@
-import type { Slice } from '@tiptap/pm/model'
-import { tiptapParagraphToText, type TipTapTextOptions } from '../../../shared/utils/tiptapToText'
+import type { Node as PMNode, Slice } from '@tiptap/pm/model'
+import {
+  tiptapNodeToText,
+  tiptapParagraphToText,
+  type TipTapTextOptions
+} from '../../../shared/utils/tiptapToText'
 
 // Ohne sessionType-Weiche: PDF-Dokumente enthalten keine Speaker-/Timestamp-
 // Nodes, und die editorProps-Closure sähe ohnehin nur den Initialwert.
@@ -24,4 +28,14 @@ export function serializeClipboardText(slice: Slice): string {
     text += tiptapParagraphToText(node.toJSON(), COPY_OPTIONS)
   })
   return text
+}
+
+/**
+ * Visible text of an atom node (chip, speaker label, timestamp) in the HTML
+ * flavor — the node's `renderHTML` content, identical to its text/plain token
+ * (`[PERSON 1]`, `[Person A]:`, `[00:12:34]`). Without it the spans arrive
+ * empty in mail/Word.
+ */
+export function clipboardNodeText(node: PMNode): string {
+  return tiptapNodeToText(node.toJSON(), COPY_OPTIONS)
 }

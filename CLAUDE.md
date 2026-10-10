@@ -89,7 +89,7 @@ Dev-Läufe mit dem ausgelieferten Python-Interpreter: `THERASCRIPT_USE_STANDALON
 
 **Python sidecar:** Two modes: (1) **Dev**: Python venv at `python_sidecar/venv/` — one-time setup after fresh clone: `scripts/setup-pyannote.sh --model` then `scripts/setup-ner.sh --model`. (2) **Production**: Standalone relocatable Python at `python_sidecar/standalone/` built via `uv` (no PyInstaller, no hidden import issues). Build with `npm run sidecar:build`. The torchcodec shim (`torchcodec_shim.py`) is loaded via `sitecustomize.py` in the standalone environment. Pyannote requires HuggingFace token (`huggingface-cli login`) and accepted terms for `pyannote/speaker-diarization-3.1` + `pyannote/speaker-diarization-community-1`. The venv and models persist across builds — no re-setup needed for `npm run dev/build`.
 
-**Review Editor extensions:** 3 custom TipTap node extensions in `src/renderer/src/extensions/` — `placeholderChip` (anonymized entity chips), `speakerLabel` (speaker diarization labels), `timestamp` (time markers). Corresponding NodeViews in `components/editor/`.
+**Review Editor extensions:** 3 custom TipTap node extensions in `src/renderer/src/extensions/` — `placeholderChip` (anonymized entity chips), `speakerLabel` (speaker diarization labels), `timestamp` (time markers). Corresponding NodeViews in `components/editor/`. Schema + serialization live in `extensions/transcriptNodes.ts` (also used by `createTestEditor`); the chip's `original` is `rendered: false` and must never reach clipboard HTML — `extensions/chipClipboard.ts` restores it on paste only for same-session copies (details: `docs/product/features/review-editor.md`, "Copy and paste inside the editor").
 
 **Storage:** better-sqlite3 (sessions, blocklist) + electron-store (settings).
 

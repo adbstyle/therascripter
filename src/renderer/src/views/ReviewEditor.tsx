@@ -81,6 +81,9 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
   const entityMapRef = useRef<EntityMap>({})
+  // Ref, not the prop: the editor (and its clipboard plugin) is created once
+  const sessionIdRef = useRef(sessionId)
+  sessionIdRef.current = sessionId
   const editorRef = useRef<Editor | null>(null)
   const editorScrollRef = useRef<HTMLDivElement | null>(null)
   const blocklistUndoStackRef = useRef<BlocklistUndoEntry[]>([])
@@ -121,7 +124,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
         heading: false,
         horizontalRule: false
       }),
-      PlaceholderChip,
+      PlaceholderChip.configure({ getSessionId: () => sessionIdRef.current }),
       SpeakerLabel,
       Timestamp
     ],
