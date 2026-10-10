@@ -29,7 +29,7 @@ The release script performs these steps in order:
 
 7. **GitHub Release** — If no notes were provided, generates them from commit history via `gh api repos/{owner}/{repo}/releases/generate-notes` (must run after the tag push; the built-in `--generate-notes` flag cannot be combined with `--notes-file`, which is needed for the appended install guide). A failed generation is reported loudly but does not abort — the release then ships with the install guide only. Creates the release via `gh release create vX.Y.Z --notes-file …` with the DMG attached.
 
-8. **Update manifest** — Runs `scripts/publish-manifest.sh --app-version-only` to update `latestAppVersion` in the R2 manifest so the in-app update check picks up the new version. Warns (but does not fail) if this step errors.
+8. **Publish manifest** — Runs `scripts/publish-manifest.sh --from-catalog`: model entries (URL, sha256, size) come from `src/shared/model-catalog.ts` of the release, `latestAppVersion` from `package.json`, and every artifact is checked against R2 via HEAD first. The manifest thus always matches the catalog of the released app; new artifacts must be on R2 before releasing (see `model-pipeline.md`). Warns loudly (but does not fail the release) if this step errors — rerun `scripts/publish-manifest.sh --from-catalog` then, otherwise fresh installs get offered a "model update" back to the previous artifact.
 
 ## Build Pipeline
 
