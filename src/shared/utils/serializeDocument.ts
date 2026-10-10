@@ -5,41 +5,14 @@
  * Audio sessions: includes speaker labels + timestamps.
  * PDF sessions: plain text with placeholders only (no labels/timestamps).
  */
-import type { SessionType, TipTapDocument, TipTapInlineNode } from '../types'
-import { formatPlaceholderToken } from './formatPlaceholderToken'
+import type { SessionType, TipTapDocument } from '../types'
+import { tiptapToText } from './tiptapToText'
 
 export function serializeDocument(doc: TipTapDocument, sessionType: SessionType): string {
-  const paragraphs: string[] = []
-
-  for (const paragraph of doc.content) {
-    if (paragraph.type !== 'paragraph') continue
-
-    let line = ''
-    const nodes: TipTapInlineNode[] = paragraph.content ?? []
-
-    for (const node of nodes) {
-      switch (node.type) {
-        case 'text':
-          line += node.text
-          break
-        case 'placeholderChip':
-          line += formatPlaceholderToken(node.attrs)
-          break
-        case 'speakerLabel':
-          if (sessionType === 'audio') {
-            line += `[${node.attrs.label}]:`
-          }
-          break
-        case 'timestamp':
-          if (sessionType === 'audio') {
-            line += `[${node.attrs.formatted}]`
-          }
-          break
-      }
-    }
-
-    paragraphs.push(line)
-  }
-
-  return paragraphs.join('\n').trim()
+  const isAudio = sessionType === 'audio'
+  return tiptapToText(doc, {
+    includeSpeakers: isAudio,
+    includeTimestamps: isAudio,
+    compact: false
+  })
 }
