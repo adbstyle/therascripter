@@ -533,6 +533,12 @@ describe('addToBlocklistRetroactive (regression after Task 2 refactor)', () => {
     const result = addToBlocklistRetroactive(handle.editor, 'Anna', 'PERSON', emptyMap())
 
     expect(result).not.toBeNull()
+    expect(result!.entityMap[result!.entityId]).toEqual({
+      original: 'Anna',
+      placeholder: '[PERSON 1]',
+      type: 'PERSON',
+      source: 'blocklist'
+    })
     expect(handle.getChips()).toHaveLength(3)
     handle.editor.commands.undo()
     expect(handle.getChips()).toHaveLength(0)
