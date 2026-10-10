@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports, no-undef */
 const { flipFuses, FuseVersion, FuseV1Options } = require('@electron/fuses')
 const { execFileSync } = require('child_process')
 const path = require('path')

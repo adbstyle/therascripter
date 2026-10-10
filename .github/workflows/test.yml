@@ -37,7 +37,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      # Lint ist bewusst NICHT Teil des Gates: der Bestand hat vorbestehende
-      # ESLint-Fehler. Erst nach deren Bereinigung hier aktivieren.
+      # Fehler brechen ab, Warnungen nicht. Vor den Tests: schlägt in Sekunden fehl.
+      - name: Lint
+        run: npm run lint
+
       - name: Tests
         run: npm test

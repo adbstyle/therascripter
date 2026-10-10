@@ -14,7 +14,6 @@ export default tseslint.config(
       // Nicht-App-Code: Python-Umgebungen, Build-Scratch, Standalone-Tools
       'python_sidecar',
       'build',
-      'build-scripts',
       'figma-plugin',
       'swift_cli',
       'website',
@@ -27,13 +26,19 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    // Node-Skripte (Release-Tooling, CDP-E2E gegen die gepackte App): ohne
-    // diese Globals meldete ESLint console/process/Buffer/fetch als undefiniert.
-    // WebSocket ist seit Node 22 global, globals@14 kennt es noch nicht.
-    files: ['scripts/**/*.mjs'],
+    // Node-Skripte (Release-Tooling, CDP-E2E gegen die gepackte App, Build-Hooks):
+    // ohne diese Globals meldet ESLint console/process/Buffer/fetch als undefiniert.
+    files: ['scripts/**/*.{js,mjs,cjs}', 'build-scripts/**/*.js'],
     languageOptions: {
-      globals: { ...globals.node, WebSocket: 'readonly' }
+      globals: globals.node
     }
+  },
+  {
+    // electron-builder lädt die Build-Hooks (afterPack, afterAllArtifactBuild)
+    // per require() — sie sind CommonJS.
+    files: ['build-scripts/**/*.js', 'scripts/**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': 'off' }
   },
   {
     files: ['src/renderer/**/*.{ts,tsx}'],
