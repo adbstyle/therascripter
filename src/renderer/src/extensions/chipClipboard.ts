@@ -1,22 +1,13 @@
 import { Plugin, PluginKey } from '@tiptap/pm/state'
+import type { EditorView } from '@tiptap/pm/view'
 import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model'
 import { formatPlaceholderToken } from '../../../shared/utils/formatPlaceholderToken'
 import type { TipTapPlaceholderChipAttrs } from '../../../shared/types/TipTapDocument'
 
 const CHIP = 'placeholderChip'
 
-/**
- * Chips of the last copy (Cmd+C, Cmd+X, drag start) out of a Review Editor:
- * identity in document order plus each chip's `original`. Module scope on
- * purpose — a paste after leaving and reopening the same session still finds
- * it. Lives only in renderer memory, never in the clipboard.
- */
-interface CopyRecord {
-  sessionId: string
-  chips: Array<{ key: string; original: string }>
-}
-
-let lastCopy: CopyRecord | null = null
+/** Identity and `original` of each copied chip, in document order. */
+type CopyRecord = Array<{ key: string; original: string }>
 
 function chipKey(chip: PMNode): string {
   const { entityId, type, number, source } = chip.attrs as TipTapPlaceholderChipAttrs
@@ -45,34 +36,27 @@ function mapChips(fragment: Fragment, map: (chip: PMNode) => PMNode): Fragment {
 /**
  * A chip's `original` (the clear name) is never rendered to HTML, so pasted
  * chips arrive without it. They get it back only when the paste provably
- * stems from the last copy in the same session — same chips in the same
- * order — and then each chip its own variant ("Ruth Gerber" vs.
- * "Frau Gerber" under one entityId). Everything else (another session, where
- * entityIds like `person-1` denote a different person; HTML from an older
- * app version or an external app) becomes inert text `[PERSON 1]`: a chip
- * without `original` would break "Platzhalter entfernen" and the
- * EntityMap reconciliation.
+ * stems from the editor's last copy — same chips in the same order — and then
+ * each chip its own variant ("Ruth Gerber" vs. "Frau Gerber" under one
+ * entityId). Everything else (another session, where entityIds like
+ * `person-1` denote a different person; HTML from an older app version or an
+ * external app; a copy from before the editor was closed) becomes inert text
+ * `[PERSON 1]`: a chip without `original` would break "Platzhalter entfernen"
+ * and the EntityMap reconciliation.
  */
-function restorePastedChips(slice: Slice, sessionId: string | null): Slice {
+function restorePastedChips(slice: Slice, record: CopyRecord | null): Slice {
   const chips = chipsOf(slice.content)
   if (chips.length === 0) return slice
 
-  const record = lastCopy
-  const fromThisSession =
+  const fromLastCopy =
     record !== null &&
-    sessionId !== null &&
-    record.sessionId === sessionId &&
-    record.chips.length === chips.length &&
-    chips.every((chip, i) => chipKey(chip) === record.chips[i].key)
+    record.length === chips.length &&
+    chips.every((chip, i) => chipKey(chip) === record[i].key)
 
   let index = 0
   const content = mapChips(slice.content, (chip) =>
-    fromThisSession
-      ? chip.type.create(
-          { ...chip.attrs, original: record.chips[index++].original },
-          null,
-          chip.marks
-        )
+    fromLastCopy
+      ? chip.type.create({ ...chip.attrs, original: record[index++].original }, null, chip.marks)
       : chip.type.schema.text(
           formatPlaceholderToken(chip.attrs as TipTapPlaceholderChipAttrs),
           chip.marks
@@ -81,28 +65,44 @@ function restorePastedChips(slice: Slice, sessionId: string | null): Slice {
   return new Slice(content, slice.openStart, slice.openEnd)
 }
 
-/** `getSessionId() === null` (not configured) never restores chips on paste. */
-export function chipClipboardPlugin(getSessionId: () => string | null): Plugin {
+/**
+ * Remembers the chips of every Cmd+C / Cmd+X and restores them on paste. The
+ * record belongs to this editor and dies with it — clear names live only as
+ * long as the session is open, which also scopes restoration to that session.
+ * Only real clipboard writes update it: a drag start must not replace the
+ * record while the clipboard still holds the earlier copy.
+ */
+export function chipClipboardPlugin(): Plugin {
+  let lastCopy: CopyRecord | null = null
+
+  const remember = (view: EditorView): boolean => {
+    const { selection } = view.state
+    // ProseMirror writes nothing to the clipboard for an empty selection
+    if (!selection.empty) {
+      lastCopy = chipsOf(selection.content().content).map((chip) => ({
+        key: chipKey(chip),
+        original: (chip.attrs as TipTapPlaceholderChipAttrs).original
+      }))
+    }
+    return false
+  }
+
   return new Plugin({
     key: new PluginKey('chipClipboard'),
     props: {
-      transformCopied(slice) {
-        const sessionId = getSessionId()
-        lastCopy =
-          sessionId === null
-            ? null
-            : {
-                sessionId,
-                chips: chipsOf(slice.content).map((chip) => ({
-                  key: chipKey(chip),
-                  original: (chip.attrs as TipTapPlaceholderChipAttrs).original
-                }))
-              }
-        return slice
-      },
-      transformPasted(slice) {
-        return restorePastedChips(slice, getSessionId())
+      handleDOMEvents: { copy: remember, cut: remember },
+      transformPasted(slice, view) {
+        // Internal drag: ProseMirror drops the dragged slice itself, originals included
+        if (view.dragging?.slice === slice) return slice
+        return restorePastedChips(slice, lastCopy)
       }
-    }
+    },
+    // Also fires when a new state replaces the plugin array (ReviewEditor's
+    // history reset at load, before any copy) — the record is dropped then too.
+    view: () => ({
+      destroy: () => {
+        lastCopy = null
+      }
+    })
   })
 }

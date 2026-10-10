@@ -106,11 +106,11 @@ describe('serializeClipboardText', () => {
     expect(copyAll(handle.editor)).toBe('Zeile 1Zeile 2')
   })
 
-  it('returns an empty string for a selected chip (slice holds the bare chip, no paragraph)', () => {
+  it('copies a selected chip as its token (slice holds the bare chip, no paragraph)', () => {
     handle = createTestEditor(multiSpeakerDoc())
     const chip = handle.getChips()[0]
 
     const slice = NodeSelection.create(handle.editor.state.doc, chip.pos).content()
-    expect(serializeClipboardText(slice)).toBe('')
+    expect(serializeClipboardText(slice)).toBe('[PERSON 1]')
   })
 })

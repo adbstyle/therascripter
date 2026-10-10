@@ -34,8 +34,6 @@ export interface TestEditorHandle {
 export interface CreateTestEditorOptions {
   initialDoc?: TipTapDocument
   handleKeyDown?: (view: EditorView, event: KeyboardEvent) => boolean | void
-  /** Session the editor belongs to — scopes chip restoration on paste. */
-  sessionId?: string
 }
 
 export function createTestEditor(
@@ -58,7 +56,7 @@ export function createTestEditor(
         heading: false,
         horizontalRule: false
       }),
-      PlaceholderChipNode.configure({ getSessionId: () => opts.sessionId ?? 'test-session' }),
+      PlaceholderChipNode,
       SpeakerLabelNode,
       TimestampNode
     ],

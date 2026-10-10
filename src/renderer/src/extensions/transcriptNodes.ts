@@ -12,20 +12,11 @@ import { chipClipboardPlugin } from './chipClipboard'
  * Cmd+C — and renders each node as its visible text token.
  */
 
-export interface PlaceholderChipOptions {
-  /** Scopes chip restoration on paste to the session the copy came from. */
-  getSessionId: () => string | null
-}
-
-export const PlaceholderChipNode = Node.create<PlaceholderChipOptions>({
+export const PlaceholderChipNode = Node.create({
   name: 'placeholderChip',
   group: 'inline',
   inline: true,
   atom: true,
-
-  addOptions() {
-    return { getSessionId: () => null }
-  },
 
   addAttributes() {
     return {
@@ -52,7 +43,7 @@ export const PlaceholderChipNode = Node.create<PlaceholderChipOptions>({
   },
 
   addProseMirrorPlugins() {
-    return [chipClipboardPlugin(() => this.options.getSessionId())]
+    return [chipClipboardPlugin()]
   }
 })
 

@@ -17,15 +17,19 @@ const COPY_OPTIONS: TipTapTextOptions = {
  * Plain-text flavor of a Cmd+C in the Review Editor (ProseMirror
  * `clipboardTextSerializer`). Node formats come from the shared walker; the
  * slice layout stays local on purpose: a selection is copied verbatim (no
- * trimming), and only top-level paragraphs count — a NodeSelection slice
- * holds a bare chip and falls through to ProseMirror's default.
+ * trimming), one line per top-level paragraph. A NodeSelection slice holds a
+ * bare chip (or speaker label/timestamp) and yields its token, like the HTML
+ * flavor.
  */
 export function serializeClipboardText(slice: Slice): string {
   let text = ''
   slice.content.forEach((node) => {
-    if (node.type.name !== 'paragraph') return
-    if (text.length > 0) text += '\n'
-    text += tiptapParagraphToText(node.toJSON(), COPY_OPTIONS)
+    if (node.type.name === 'paragraph') {
+      if (text.length > 0) text += '\n'
+      text += tiptapParagraphToText(node.toJSON(), COPY_OPTIONS)
+    } else if (node.isInline) {
+      text += clipboardNodeText(node)
+    }
   })
   return text
 }

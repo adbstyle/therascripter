@@ -81,9 +81,6 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
   const entityMapRef = useRef<EntityMap>({})
-  // Ref, not the prop: the editor (and its clipboard plugin) is created once
-  const sessionIdRef = useRef(sessionId)
-  sessionIdRef.current = sessionId
   const editorRef = useRef<Editor | null>(null)
   const editorScrollRef = useRef<HTMLDivElement | null>(null)
   const blocklistUndoStackRef = useRef<BlocklistUndoEntry[]>([])
@@ -124,7 +121,7 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
         heading: false,
         horizontalRule: false
       }),
-      PlaceholderChip.configure({ getSessionId: () => sessionIdRef.current }),
+      PlaceholderChip,
       SpeakerLabel,
       Timestamp
     ],
@@ -228,7 +225,16 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
       },
       clipboardTextSerializer: serializeClipboardText
     },
-    onUpdate: () => {
+    onUpdate: ({ editor: current, transaction }) => {
+      // Eingefügte Chips können Entitäten zurückbringen, die seit dem Copy
+      // aus der EntityMap entfernt wurden — ohne Eintrag vergäbe
+      // getNextNumber ihre Nummer neu (entityId-Kollision).
+      const uiEvent = transaction.getMeta('uiEvent')
+      if (uiEvent === 'paste' || uiEvent === 'drop') {
+        const next = reconcileEntityMapWithDoc(current.state.doc, entityMapRef.current)
+        if (next !== null) updateEntityMap(next)
+      }
+
       // Debounced: updateCounter treibt Wortzählung + Anonymisierungs-
       // Übersicht (voller Doc-Walk) — pro Tastendruck ausgeführt machte das
       // Tippen in langen Transkripten spürbar zäh. Der Autosave hängt
