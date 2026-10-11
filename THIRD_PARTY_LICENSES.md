@@ -6,6 +6,7 @@ Diese Übersicht dokumentiert die Lizenzen aller Drittkomponenten, die TheraScri
 
 - **Stand:** 11. Oktober 2026
 - **Erfasste Versionen:** v0.8.13 (zuletzt veröffentlichte Version) und der aktuelle Stand von `main` (Version 0.9.0). Die Laufzeit-Abhängigkeiten (npm-Pakete, Python-Sidecar, whisper.cpp, llama.cpp) sind in beiden Versionen identisch. Die beiden Versionen unterscheiden sich nur beim Zusammenfassungsmodell (v0.8.13: Gemma 3 4B, `main`: Gemma 4 E2B).
+- **Nach 0.9.0:** Auf `main` zeigt die Über-Seite der App seit PR #184 Lizenzhinweise für die Hauptkomponenten und alle Modelle (`src/renderer/src/constants/acknowledgments.ts`). Die Vermerke «Derzeit nicht erfüllt» in dieser Übersicht beschreiben die veröffentlichten Versionen bis 0.9.0; sie sind mit dem nächsten Release neu zu prüfen.
 - **Eigener Code:** Der Code von TheraScript steht unter der MIT-Lizenz, siehe [LICENSE](LICENSE).
 - **Datengrundlage:** Die npm- und Python-Listen stammen aus dem gebauten App-Paket (`Therascript.app`, Version 0.9.0, gebaut am 11. Oktober 2026): Header von `app.asar`, `package.json` der ausgelieferten Pakete, `METADATA` und Lizenzdateien der `*.dist-info` im Python-Sidecar. Die vom Renderer-Bundle eingebundenen Pakete wurden mit dem Vite-Build der Renderer-Konfiguration ermittelt (Module mit gerendertem Code). Modell-Lizenzen stammen aus den Model Cards und der API von Hugging Face (abgerufen am 11. Oktober 2026). Die SHA-256-Werte der R2-Dateien wurden mit den LFS-Objekten auf Hugging Face abgeglichen, wo die Datei unverändert weitergegeben wird.
 
