@@ -36,7 +36,7 @@ scripts/setup-ner.sh              # Install flair into existing Python venv
 scripts/setup-ner.sh --model      # Also download NER model (~2.2 GB HF-Original, fp32)
 scripts/setup-vision-ocr.sh       # Build Swift Vision OCR CLI helper → resources/bin/
 scripts/setup-llama.sh             # Install llama.cpp via Homebrew → resources/llama/{bin,lib}/
-scripts/setup-llama.sh --model     # Also download Gemma 4 E2B QAT q4_0 (~3.35 GB, Apache 2.0, not gated)
+scripts/setup-llama.sh --model     # Also download Gemma 4 E2B QAT q4_0 (~3.35 GB, Apache 2.0) from R2 — path/URL/sha256 from model-catalog.ts, hash-verified
 npm run sidecar:build              # Build standalone Python sidecar via uv → python_sidecar/standalone/
 npm run sidecar:package            # Package models for R2 upload (scripts/package-models.sh [all|ner])
 npm run sidecar:upload             # Upload model packages to Cloudflare R2

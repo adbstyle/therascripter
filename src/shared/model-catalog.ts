@@ -161,6 +161,8 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
 /** Ein aus dem Katalog entferntes Modell, dessen Datei noch auf Nutzer-Macs liegen kann. */
 export interface RetiredModel {
   id: string
+  /** Name, unter dem der Nutzer das Modell kannte — für das Banner. */
+  label: string
   group: ModelGroup
   /** Datei bzw. Verzeichnis relativ zu modelsDir, wie es der alte Katalog schrieb. */
   relativePath: string
@@ -178,6 +180,7 @@ export const RETIRED_MODELS: RetiredModel[] = [
   // Gemma 3 4B unter den Gemma Terms of Use — abgelöst durch Gemma 4 E2B (Apache 2.0).
   {
     id: 'gemma-summarization',
+    label: 'Gemma 3 4B Instruct',
     group: 'summarization',
     relativePath: 'summarization/google_gemma-3-4b-it-Q4_K_M.gguf'
   }

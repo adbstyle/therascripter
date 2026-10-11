@@ -67,9 +67,9 @@ export default function ReconcileEventsBanner({ events, onDismiss }: Props): Rea
                 <p className="font-medium text-text-primary">{GROUP_LABEL[e.group]}</p>
                 <dl className="mt-1.5 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 text-text-secondary">
                   <dt>Bisher aktiv:</dt>
-                  <dd>{e.fromModelId ?? '— (kein Modell)'}</dd>
+                  <dd>{e.fromLabel ?? e.fromModelId ?? '— (kein Modell)'}</dd>
                   <dt>Jetzt aktiv:</dt>
-                  <dd>{e.toModelId ?? '— (kein Modell)'}</dd>
+                  <dd>{e.toLabel ?? e.toModelId ?? '— (kein Modell)'}</dd>
                   <dt>Grund:</dt>
                   <dd>{REASON_LABEL[e.reason]}</dd>
                   <dt>Geändert am:</dt>

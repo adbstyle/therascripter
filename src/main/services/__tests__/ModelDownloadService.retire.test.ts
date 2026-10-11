@@ -96,7 +96,9 @@ describe('retireObsoleteModels', () => {
       expect.objectContaining({
         group: 'summarization',
         fromModelId: 'gemma-summarization',
+        fromLabel: 'Gemma 3 4B Instruct',
         toModelId: null,
+        toLabel: null,
         reason: 'model-retired',
         status: 'pending'
       })
@@ -120,20 +122,22 @@ describe('retireObsoleteModels', () => {
 
     retireObsoleteModels()
 
-    expect(rmSync).not.toHaveBeenCalled()
     expect(storeState.activeModels.summarization).toBeNull()
     expect(storeState.reconcileEvents).toHaveLength(1)
   })
 
   it('removes leftovers of an interrupted download and an interrupted update swap', () => {
     storeState = state(null)
-    files.add(`${GEMMA3}.partial`)
-    files.add('/tmp/therascript-test/models/.backup/gemma-summarization')
+    const leftovers = [
+      `${GEMMA3}.partial`,
+      '/tmp/therascript-test/models/.backup/gemma-summarization',
+      '/tmp/therascript-test/models/gemma-summarization.tar.gz.partial'
+    ]
+    leftovers.forEach((p) => files.add(p))
 
     retireObsoleteModels()
 
-    expect(files.has(`${GEMMA3}.partial`)).toBe(false)
-    expect(files.has('/tmp/therascript-test/models/.backup/gemma-summarization')).toBe(false)
+    for (const p of leftovers) expect(files.has(p)).toBe(false)
     expect(storeState.reconcileEvents).toEqual([])
   })
 
@@ -153,9 +157,10 @@ describe('retireObsoleteModels', () => {
     files.add(GEMMA3)
 
     retireObsoleteModels()
+    const settingsWrites = mockSettingsStore.set.mock.calls.length
     retireObsoleteModels()
 
-    expect(rmSync).toHaveBeenCalledTimes(1)
+    expect(mockSettingsStore.set.mock.calls.length).toBe(settingsWrites)
     expect(storeState.reconcileEvents).toHaveLength(1)
   })
 
