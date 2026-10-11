@@ -181,4 +181,4 @@ Historische Planungsdokumente: [`docs/archive/`](docs/archive).
 
 ## Lizenz
 
-MIT
+[MIT](LICENSE). Lizenzen der mitgelieferten Drittsoftware und der Modelle: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
