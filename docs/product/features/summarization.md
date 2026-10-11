@@ -14,7 +14,7 @@ Beide werden im Review-Editor als h1 + Panel angezeigt und sind inline editierba
 
 - **Default**: `google/gemma-4-E2B-it-qat-q4_0-gguf` (Googles offizielles QAT-GGUF,
   3.35 GB), Metal-beschleunigt via `llama.cpp`. Lizenz Apache 2.0 — der Lizenztext
-  steht in der App unter Über → "Modelle von Drittanbietern".
+  steht in der App unter Über → Acknowledgments (zusammen mit allen anderen Modellen und Komponenten, Quelle: `src/renderer/src/constants/acknowledgments.ts`).
 - **Optional** — nicht Teil des First-Launch-Downloads. Installation über
   Settings → Modelle → "Zusammenfassung (optional)".
 - **Abgelöst: Gemma 3 4B Instruct** (Gemma Terms of Use, Weitergabe nur mit

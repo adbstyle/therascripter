@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import AboutPage from '../AboutPage'
 
 beforeEach(() => {
@@ -16,11 +16,23 @@ beforeEach(() => {
 })
 
 describe('AboutPage', () => {
-  it('ships the Apache 2.0 license text for the redistributed Gemma 4 model', () => {
+  it('lists software and models with their license in Acknowledgments', () => {
     render(<AboutPage />)
 
+    expect(screen.getByText('whisper.cpp')).toBeInTheDocument()
     expect(screen.getByText('Gemma 4 E2B')).toBeInTheDocument()
     expect(screen.getByText(/© Google LLC/)).toHaveTextContent('Apache License 2.0')
-    expect(screen.getByText(/END OF TERMS AND CONDITIONS/)).toBeInTheDocument()
+    expect(screen.queryByText('Modelle von Drittanbietern')).not.toBeInTheDocument()
+  })
+
+  it('renders a license text only after its entry is opened', () => {
+    render(<AboutPage />)
+    expect(screen.queryByText(/The ggml authors/)).not.toBeInTheDocument()
+
+    const details = screen.getByText('llama.cpp').closest('details')!
+    details.open = true
+    fireEvent(details, new Event('toggle'))
+
+    expect(screen.getByText(/The ggml authors/)).toBeInTheDocument()
   })
 })
