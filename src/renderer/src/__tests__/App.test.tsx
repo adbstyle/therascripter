@@ -4,13 +4,14 @@ import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { ToastProvider } from '../contexts/ToastContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
+import { createValueStore } from '../utils/valueStore'
 
 // useRecording mocken: Aufnahme-Zustand pro Test steuerbar, ohne
 // getUserMedia/AudioWorklet in jsdom simulieren zu müssen.
 const mockRecordingState = {
   isRecording: false,
-  duration: 0,
-  level: 0,
+  level: createValueStore(0),
+  duration: createValueStore(0),
   error: null as string | null,
   startRecording: vi.fn(),
   stopRecording: vi.fn()
@@ -43,8 +44,7 @@ const mockModelUpdate = {
 
 beforeEach(() => {
   mockRecordingState.isRecording = false
-  mockRecordingState.duration = 0
-  mockRecordingState.level = 0
+  mockRecordingState.duration = createValueStore(0)
   mockRecordingState.error = null
 
   window.api = {
@@ -178,7 +178,7 @@ describe('App — Navigation während der Aufnahme', () => {
 
   it('rendert die Live-Karte für die Recording-Session in der Liste', async () => {
     mockRecordingState.isRecording = true
-    mockRecordingState.duration = 95
+    mockRecordingState.duration.set(95)
 
     window.api.sessions.list = vi.fn().mockResolvedValue([
       {
@@ -205,7 +205,7 @@ describe('App — Navigation während der Aufnahme', () => {
   it('zeigt die RecordingBar in Settings und navigiert per Klick zurück', async () => {
     const user = userEvent.setup()
     mockRecordingState.isRecording = true
-    mockRecordingState.duration = 61
+    mockRecordingState.duration.set(61)
 
     renderApp()
 

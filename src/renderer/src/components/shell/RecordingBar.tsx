@@ -1,7 +1,10 @@
+import { useSyncExternalStore } from 'react'
 import { formatTime } from '../../utils/formatTime'
+import type { ValueStore } from '../../utils/valueStore'
 
 interface RecordingBarProps {
-  duration: number
+  /** Store statt Wert: nur die Leiste rendert sekündlich, nicht die App */
+  duration: ValueStore<number>
   onOpenRecording: () => void
 }
 
@@ -15,6 +18,8 @@ export default function RecordingBar({
   duration,
   onOpenRecording
 }: RecordingBarProps): React.JSX.Element {
+  const seconds = useSyncExternalStore(duration.subscribe, duration.get)
+
   return (
     <button
       type="button"
@@ -28,7 +33,7 @@ export default function RecordingBar({
           aria-hidden="true"
         />
         <span className="text-sm font-medium text-recording">Aufnahme läuft</span>
-        <span className="font-mono text-sm text-text-primary">{formatTime(duration)}</span>
+        <span className="font-mono text-sm text-text-primary">{formatTime(seconds)}</span>
       </span>
       <span className="text-xs text-error-text-emphasis underline decoration-dotted">
         Zur Aufnahme

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Session, SessionStatus } from '../../../shared/types'
 import { useSessions } from '../hooks/useSessions'
+import { useStartOfToday } from '../hooks/useStartOfToday'
 import { groupSessionsByTime, GROUP_ORDER } from '../utils/groupSessionsByTime'
 import { SessionCard } from './SessionCard'
 import { RecordingSessionCard, type LiveRecording } from './RecordingSessionCard'
@@ -29,6 +30,8 @@ export default function SessionDashboard({
   liveRecording
 }: SessionDashboardProps): React.JSX.Element {
   const { sessions, loading, error, refresh, deleteSession } = useSessions()
+  // Rendert um Mitternacht neu: Zeitgruppen und memoisierte Karten ("Gestern")
+  const today = useStartOfToday()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -100,7 +103,9 @@ export default function SessionDashboard({
     }
   }, [])
 
-  const grouped = groupSessionsByTime(sessions)
+  // Gleiches "Heute" wie die Karten, sonst widersprechen sich Gruppe und
+  // Zeitstempel bis zur nächsten Tagesprüfung (≤ 60 s nach Mitternacht)
+  const grouped = groupSessionsByTime(sessions, new Date(today))
 
   const handleDelete = async (): Promise<void> => {
     if (!deleteTarget) return
@@ -214,14 +219,11 @@ export default function SessionDashboard({
                       key={session.id}
                       session={session}
                       data-session-id={session.id}
-                      onDelete={() => setDeleteTarget(session)}
-                      onRetry={
-                        session.status === 'error' ? () => handleRetry(session.id) : undefined
-                      }
+                      onDelete={setDeleteTarget}
+                      onRetry={session.status === 'error' ? handleRetry : undefined}
                       retryDisabled={isAnyProcessing}
-                      onClick={
-                        session.status === 'review' ? () => onOpenReview?.(session.id) : undefined
-                      }
+                      today={today}
+                      onClick={session.status === 'review' ? onOpenReview : undefined}
                     />
                   )
                 )}

@@ -6,9 +6,16 @@
  * buffered PCM chunks to the main thread via MessagePort.
  *
  * Messages sent:
- *   { type: 'level', value: number }   — RMS level (0–1), every 128 samples
+ *   { type: 'level', value: number }   — RMS level (0–1) over ~16 ms (768 samples)
  *   { type: 'data', samples: Float32Array } — PCM chunk, every ~100 ms
+ *
+ * The level is aggregated over 6 render quanta instead of posted per 128-sample
+ * block: 62.5 instead of 375 messages per second on the renderer main thread,
+ * which also forwards the PCM chunks. ~16 ms keeps one level per 60-Hz frame,
+ * so the VU meter's per-value smoothing behaves as before.
  */
+
+const LEVEL_WINDOW = 768 // 6 × 128 samples ≈ 16 ms at 48 kHz
 
 // eslint-disable-next-line no-undef
 class AudioProcessor extends AudioWorkletProcessor {
@@ -17,6 +24,8 @@ class AudioProcessor extends AudioWorkletProcessor {
     this._bufferSize = 4800 // ~100 ms at 48 kHz
     this._buffer = new Float32Array(this._bufferSize)
     this._writePos = 0
+    this._levelSumSquares = 0
+    this._levelSampleCount = 0
   }
 
   process(inputs) {
@@ -25,13 +34,17 @@ class AudioProcessor extends AudioWorkletProcessor {
 
     const channel = input[0]
 
-    // Calculate RMS for VU meter
-    let sum = 0
+    // Accumulate RMS for the VU meter, post once per LEVEL_WINDOW
     for (let i = 0; i < channel.length; i++) {
-      sum += channel[i] * channel[i]
+      this._levelSumSquares += channel[i] * channel[i]
     }
-    const rms = Math.sqrt(sum / channel.length)
-    this.port.postMessage({ type: 'level', value: rms })
+    this._levelSampleCount += channel.length
+    if (this._levelSampleCount >= LEVEL_WINDOW) {
+      const rms = Math.sqrt(this._levelSumSquares / this._levelSampleCount)
+      this.port.postMessage({ type: 'level', value: rms })
+      this._levelSumSquares = 0
+      this._levelSampleCount = 0
+    }
 
     // Copy samples into pre-allocated buffer
     const remaining = this._bufferSize - this._writePos

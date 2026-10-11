@@ -1,12 +1,15 @@
+import { useSyncExternalStore } from 'react'
 import { Square } from 'lucide-react'
 import type { Session } from '../../../shared/types'
 import { AUTO_STOP_SECONDS } from '../../../shared/constants/recording'
 import { VUMeter } from './VUMeter'
+import type { ValueStore } from '../utils/valueStore'
 import { formatTime } from '../utils/formatTime'
 
 export interface LiveRecording {
-  duration: number
-  level: number
+  /** Pegel und Dauer als Store statt Wert — siehe useRecording (Issue #140) */
+  duration: ValueStore<number>
+  level: ValueStore<number>
   onStop: () => void
 }
 
@@ -26,7 +29,8 @@ export function RecordingSessionCard({
   live,
   'data-session-id': dataSessionId
 }: RecordingSessionCardProps): React.JSX.Element {
-  const remaining = Math.max(0, AUTO_STOP_SECONDS - live.duration)
+  const duration = useSyncExternalStore(live.duration.subscribe, live.duration.get)
+  const remaining = Math.max(0, AUTO_STOP_SECONDS - duration)
   const displayTitle =
     session.title && session.title.trim().length > 0 ? session.title : 'Unbenannte Transkription'
 
@@ -52,9 +56,9 @@ export function RecordingSessionCard({
               Live-Region würde Screenreader für die gesamte Sitzung fluten. */}
           <time
             className="font-mono text-xl font-semibold text-text-primary"
-            aria-label={`Aufnahmedauer ${formatTime(live.duration)}`}
+            aria-label={`Aufnahmedauer ${formatTime(duration)}`}
           >
-            {formatTime(live.duration)}
+            {formatTime(duration)}
           </time>
           <VUMeter level={live.level} />
         </div>

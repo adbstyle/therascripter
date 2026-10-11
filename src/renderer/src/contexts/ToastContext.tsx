@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Toast, type ToastData } from '../components/Toast'
 import { ToastContext, type ToastContextValue } from './toastTypes'
 
@@ -16,10 +16,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
     setToasts((prev) => prev.filter((t) => t.id !== id))
   }, [])
 
-  const value: ToastContextValue = {
-    success: useCallback((message: string) => addToast(message, 'success'), [addToast]),
-    error: useCallback((message: string) => addToast(message, 'error'), [addToast])
-  }
+  // Stabiler Wert: sonst rendert jeder neue Toast alle Konsumenten neu, und
+  // Effekte mit `toast` als Dependency (z. B. ModelsSettings) laufen erneut.
+  const value = useMemo<ToastContextValue>(
+    () => ({
+      success: (message: string) => addToast(message, 'success'),
+      error: (message: string) => addToast(message, 'error')
+    }),
+    [addToast]
+  )
 
   return (
     <ToastContext.Provider value={value}>
