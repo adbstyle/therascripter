@@ -60,7 +60,7 @@ Testumgebung: macOS 26.5, Apple Silicon, selbstverwaltetes Konto mit Administrat
 
 - **Automatisch (bestehend):** `verify-bundles.sh` schlägt bei Dateien ohne Owner-Write-Bit fehl. Diese Prüfung entscheidet jetzt auch darüber, ob die Erstinstallation ohne Terminal klappt.
 - **Automatisch (neu, Issue #170):** Start ohne Daten, Start mit dem Seed-Bestand der Vorversion samt Datenerhalt, Verarbeitung einer kurzen Aufnahme und eines PDFs bis zur Zusammenfassung. Ab dem zweiten Release mit Updater kommt das Update aus der Vorversion hinzu (Issue #164).
-- **Manuell:** Die Gatekeeper-Prüfung geht nicht per Skript (siehe Befunde). Ablauf:
+- **Manuell, bei Releases, die Installation, Update-Weg, Signatur oder Aufbau des App-Pakets ändern** (PO-Entscheid 2026-10-11): Die Gatekeeper-Prüfung geht nicht per Skript (siehe Befunde). Ablauf:
   1. DMG über einen Browser laden und über den Finder installieren.
   2. «Dennoch öffnen» bestätigen.
   3. Ein Text-PDF, ein Bild-PDF und eine kurze Aufnahme verarbeiten. Alle drei Sitzungen müssen «review» mit Zusammenfassung erreichen.
