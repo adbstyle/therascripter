@@ -392,8 +392,8 @@ describe('SessionCard — memo und Zeitstempel', () => {
     vi.useRealTimers()
   })
 
-  // Issue #140: Während der Aufnahme rendert das Dashboard sekündlich neu —
-  // Karten mit unveränderten Props dürfen dabei nicht mitrendern.
+  // Issue #140: Rendert das Dashboard neu (Refresh-Trigger, Import, Aufnahme-
+  // Start), dürfen Karten mit unveränderten Props nicht mitrendern.
   it('rendert bei identischen Props nicht neu', () => {
     const session = makeSession()
     const onDelete = vi.fn()
@@ -402,6 +402,20 @@ describe('SessionCard — memo und Zeitstempel', () => {
 
     rerender(<SessionCard session={session} onDelete={onDelete} />)
     expect(vi.mocked(useTaskProgress).mock.calls.length).toBe(callsAfterMount)
+  })
+
+  it('wechselt bei neuem Tag auf "Gestern", obwohl die Session gleich bleibt', () => {
+    const session = makeSession({ createdAt: new Date(2026, 3, 28, 14, 2).toISOString() })
+    const onDelete = vi.fn()
+    const { rerender } = render(
+      <SessionCard session={session} onDelete={onDelete} today={new Date(2026, 3, 28).getTime()} />
+    )
+    expect(screen.getByText('14:02')).toBeInTheDocument()
+
+    rerender(
+      <SessionCard session={session} onDelete={onDelete} today={new Date(2026, 3, 29).getTime()} />
+    )
+    expect(screen.getByText('Gestern, 14:02')).toBeInTheDocument()
   })
 
   it.each([

@@ -18,8 +18,7 @@ import type { PendingModelUpdate } from '../../shared/types/ModelUpdate'
 type View = 'sessions' | 'settings' | 'review'
 
 export default function App(): React.JSX.Element {
-  const { isRecording, duration, subscribeLevel, error, startRecording, stopRecording } =
-    useRecording()
+  const { isRecording, level, duration, error, startRecording, stopRecording } = useRecording()
   const { availableUpdates, clearUpdates } = useModelUpdates()
   const toast = useToast()
   const [modelsReady, setModelsReady] = useState<boolean | null>(null)
@@ -269,9 +268,7 @@ export default function App(): React.JSX.Element {
               onOpenReview={handleOpenReview}
               scrollToSessionId={scrollToSessionId.current}
               onScrollComplete={handleScrollComplete}
-              liveRecording={
-                isRecording ? { duration, subscribeLevel, onStop: stopRecording } : null
-              }
+              liveRecording={isRecording ? { duration, level, onStop: stopRecording } : null}
             />
           </>
         ) : (

@@ -1,24 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { VUMeter } from '../VUMeter'
-import type { LevelCallback } from '../../services/AudioRecorder'
-
-// Steuerbare Pegel-Quelle wie useRecording().subscribeLevel
-function createLevelSource(): {
-  subscribeLevel: (listener: LevelCallback) => () => void
-  emit: (level: number) => void
-  listenerCount: () => number
-} {
-  const listeners = new Set<LevelCallback>()
-  return {
-    subscribeLevel: (listener) => {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
-    emit: (level) => listeners.forEach((l) => l(level)),
-    listenerCount: () => listeners.size
-  }
-}
+import { createValueStore } from '../../utils/valueStore'
 
 // rAF manuell auslösen, um das Malen pro Frame prüfen zu können
 let frames: FrameRequestCallback[] = []
@@ -48,8 +31,8 @@ const barHeightsPx = (container: HTMLElement): number[] =>
 
 describe('VUMeter', () => {
   it('renders meter element with aria attributes', () => {
-    const source = createLevelSource()
-    render(<VUMeter subscribeLevel={source.subscribeLevel} />)
+    const level = createValueStore(0)
+    render(<VUMeter level={level} />)
     const meter = screen.getByRole('meter')
     expect(meter).toHaveAttribute('aria-label', 'Audiopegel')
     expect(meter).toHaveAttribute('aria-valuenow', '0')
@@ -58,8 +41,8 @@ describe('VUMeter', () => {
   })
 
   it('renders 6 bars at minimum height before the first level', () => {
-    const source = createLevelSource()
-    const { container } = render(<VUMeter subscribeLevel={source.subscribeLevel} />)
+    const level = createValueStore(0)
+    const { container } = render(<VUMeter level={level} />)
     const heights = barHeightsPx(container)
     expect(heights).toHaveLength(6)
     // max(0.03, 0) * 18 px < 3 px minimum
@@ -67,11 +50,11 @@ describe('VUMeter', () => {
   })
 
   it('reflects level in aria-valuenow and bar heights after the next frame', () => {
-    const source = createLevelSource()
-    const { container } = render(<VUMeter subscribeLevel={source.subscribeLevel} />)
+    const level = createValueStore(0)
+    const { container } = render(<VUMeter level={level} />)
     const meter = screen.getByRole('meter')
 
-    source.emit(0.5)
+    level.set(0.5)
     // Gemalt wird erst im Frame
     expect(meter).toHaveAttribute('aria-valuenow', '0')
 
@@ -84,11 +67,11 @@ describe('VUMeter', () => {
   })
 
   it('smooths 0.5/0.5 per level value and paints at most once per frame', () => {
-    const source = createLevelSource()
-    render(<VUMeter subscribeLevel={source.subscribeLevel} />)
+    const level = createValueStore(0)
+    render(<VUMeter level={level} />)
 
-    source.emit(0.5)
-    source.emit(0.5)
+    level.set(0.5)
+    level.set(0.5)
     expect(window.requestAnimationFrame).toHaveBeenCalledTimes(1)
 
     flushFrame()
@@ -97,11 +80,56 @@ describe('VUMeter', () => {
   })
 
   it('unsubscribes on unmount', () => {
-    const source = createLevelSource()
-    const { unmount } = render(<VUMeter subscribeLevel={source.subscribeLevel} />)
-    expect(source.listenerCount()).toBe(1)
+    const level = createValueStore(0)
+    const { unmount } = render(<VUMeter level={level} />)
 
     unmount()
-    expect(source.listenerCount()).toBe(0)
+    level.set(0.5)
+    expect(window.requestAnimationFrame).not.toHaveBeenCalled()
+  })
+
+  // Mikro abgezogen / AudioContext unterbrochen: kein Pegel mehr — das Meter
+  // darf nicht auf dem letzten Sprachpegel stehen bleiben.
+  it('fällt auf null ab, wenn keine Pegelwerte mehr kommen', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const level = createValueStore(0)
+      const { container } = render(<VUMeter level={level} />)
+      const meter = screen.getByRole('meter')
+
+      level.set(0.5)
+      flushFrame()
+      expect(meter).toHaveAttribute('aria-valuenow', '50')
+
+      // Innerhalb der Toleranz bleibt der Wert stehen
+      vi.advanceTimersByTime(99)
+      flushFrame()
+      expect(meter).toHaveAttribute('aria-valuenow', '50')
+
+      vi.advanceTimersByTime(1000)
+      flushFrame()
+      expect(meter).toHaveAttribute('aria-valuenow', '0')
+      barHeightsPx(container).forEach((h) => expect(h).toBe(3))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('klingt nicht ab, solange Pegelwerte kommen', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const level = createValueStore(0)
+      render(<VUMeter level={level} />)
+
+      for (let i = 0; i < 20; i++) {
+        level.set(0.5)
+        vi.advanceTimersByTime(16)
+      }
+      flushFrame()
+      // Konvergiert gegen ~100, ohne Einbruch durch das Abklingen
+      expect(Number(screen.getByRole('meter').getAttribute('aria-valuenow'))).toBeGreaterThan(95)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

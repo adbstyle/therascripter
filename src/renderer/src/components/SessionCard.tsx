@@ -3,6 +3,7 @@ import { FileText, Info, Mic, Trash2 } from 'lucide-react'
 import type { Session, SessionStatus } from '../../../shared/types'
 import { STEP_LABELS_DE, PIPELINE_UI_STRINGS } from '../../../shared/constants/pipelineWording'
 import { useTaskProgress } from '../hooks/useTaskProgress'
+import { startOfDay } from '../hooks/useStartOfToday'
 
 // Callbacks bekommen die Session bzw. ihre ID, damit SessionDashboard stabile
 // Handler statt Closures pro Karte durchreichen kann — sonst griffe memo nie.
@@ -12,6 +13,9 @@ interface SessionCardProps {
   onClick?: (sessionId: string) => void
   onRetry?: (sessionId: string) => void
   retryDisabled?: boolean
+  /** Beginn des aktuellen Tags (ms) — wechselt um Mitternacht und rendert
+   *  die memoisierte Karte dann neu ("Gestern"). Default: jetzt berechnet. */
+  today?: number
   'data-session-id'?: string
 }
 
@@ -44,19 +48,16 @@ const FULL_TIMESTAMP_FORMAT = new Intl.DateTimeFormat('de-CH', {
   minute: '2-digit'
 })
 
-function formatCardTimestamp(iso: string): string {
+function formatCardTimestamp(iso: string, today: number): string {
   const date = new Date(iso)
-  const now = new Date()
   const time = TIME_FORMAT.format(date)
 
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-  const dayDiff = Math.round((startOfToday.getTime() - startOfDate.getTime()) / 86_400_000)
+  const dayDiff = Math.round((today - startOfDay(date)) / 86_400_000)
 
   if (dayDiff === 0) return time
   if (dayDiff === 1) return `Gestern, ${time}`
 
-  if (date.getFullYear() === now.getFullYear()) {
+  if (date.getFullYear() === new Date(today).getFullYear()) {
     return `${DAY_MONTH_FORMAT.format(date)}, ${time}`
   }
 
@@ -69,6 +70,7 @@ export const SessionCard = memo(function SessionCard({
   onClick,
   onRetry,
   retryDisabled,
+  today,
   'data-session-id': dataSessionId
 }: SessionCardProps): React.JSX.Element {
   // Subscribe to progress events for both queued (to receive queue:positions)
@@ -190,7 +192,7 @@ export const SessionCard = memo(function SessionCard({
             dateTime={session.createdAt}
             title={fullTimestamp}
           >
-            {formatCardTimestamp(session.createdAt)}
+            {formatCardTimestamp(session.createdAt, today ?? startOfDay())}
           </time>
           {/* Kein Löschen für eine laufende Aufnahme — normalerweise rendert
               SessionDashboard dafür die RecordingSessionCard, aber im kurzen

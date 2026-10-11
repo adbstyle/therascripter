@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RecordingSessionCard } from '../RecordingSessionCard'
 import type { Session } from '../../../../shared/types'
+import { createValueStore } from '../../utils/valueStore'
 
 const session: Session = {
   id: 'rec-1',
@@ -13,7 +14,11 @@ const session: Session = {
   updatedAt: new Date().toISOString()
 } as Session
 
-const defaultLive = { duration: 0, subscribeLevel: () => () => {}, onStop: () => {} }
+const defaultLive = {
+  duration: createValueStore(0),
+  level: createValueStore(0),
+  onStop: () => {}
+}
 
 describe('RecordingSessionCard', () => {
   it('rendert Titel und REC-Indikator', () => {
@@ -23,13 +28,23 @@ describe('RecordingSessionCard', () => {
   })
 
   it('rendert den formatierten Live-Timer', () => {
-    render(<RecordingSessionCard session={session} live={{ ...defaultLive, duration: 3661 }} />)
+    render(
+      <RecordingSessionCard
+        session={session}
+        live={{ ...defaultLive, duration: createValueStore(3661) }}
+      />
+    )
     expect(screen.getByText('01:01:01')).toBeInTheDocument()
     expect(screen.getByLabelText('Aufnahmedauer 01:01:01')).toBeInTheDocument()
   })
 
   it('zeigt den Auto-Stop-Countdown', () => {
-    render(<RecordingSessionCard session={session} live={{ ...defaultLive, duration: 60 }} />)
+    render(
+      <RecordingSessionCard
+        session={session}
+        live={{ ...defaultLive, duration: createValueStore(60) }}
+      />
+    )
     // 7200 - 60 = 7140 s = 01:59:00
     expect(screen.getByText('Auto-Stop nach 01:59:00')).toBeInTheDocument()
   })

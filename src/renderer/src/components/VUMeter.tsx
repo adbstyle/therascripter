@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react'
-import type { SubscribeLevel } from '../hooks/useRecording'
+import type { ValueStore } from '../utils/valueStore'
 
 interface VUMeterProps {
   /** Pegel-Quelle (RMS 0.0–1.0 aus dem AudioWorklet), siehe useRecording */
-  subscribeLevel: SubscribeLevel
+  level: ValueStore<number>
 }
 
 // Kompakte Ausprägung für die RecordingSessionCard — der einzige Aufrufer,
@@ -15,6 +15,14 @@ const METER_HEIGHT = 18
 const MIN_DB = -60
 const MAX_DB = -6
 
+// Kommt länger kein Pegel (Mikro abgezogen, AudioContext unterbrochen), fällt
+// das Meter ab, statt auf dem letzten Sprachpegel einzufrieren — ein stehendes
+// Meter täuschte eine laufende Aufnahme vor. Abgeklungen wird im Takt des
+// Worklets, als kämen Nullwerte.
+const STALE_MS = 100
+const DECAY_STEP_MS = 16
+const SILENT_BELOW = 0.005
+
 const IDLE_HEIGHTS = barHeights(0)
 
 /**
@@ -23,13 +31,14 @@ const IDLE_HEIGHTS = barHeights(0)
  * Über React-State würde jede Pegeländerung (~60 pro Sekunde) mindestens die
  * Karte neu rendern — vorher sogar die ganze App (Issue #140).
  */
-export function VUMeter({ subscribeLevel }: VUMeterProps): React.JSX.Element {
+export function VUMeter({ level }: VUMeterProps): React.JSX.Element {
   const meterRef = useRef<HTMLDivElement>(null)
   const barRefs = useRef<(HTMLDivElement | null)[]>([])
 
   useEffect(() => {
     let smoothed = 0
     let frame = 0
+    let staleTimer: ReturnType<typeof setTimeout> | undefined
 
     const paint = (): void => {
       frame = 0
@@ -42,19 +51,32 @@ export function VUMeter({ subscribeLevel }: VUMeterProps): React.JSX.Element {
       })
     }
 
-    const unsubscribe = subscribeLevel((level) => {
+    const update = (scaled: number): void => {
       // Light exponential smoothing (0.5/0.5) per worklet value (~16 ms) for
       // visual continuity without sluggishness. No CSS transition —
       // double-damping makes bars appear static.
-      smoothed = smoothed * 0.5 + scaleLevel(level) * 0.5
+      smoothed = smoothed * 0.5 + scaled * 0.5
+      if (smoothed < SILENT_BELOW) smoothed = 0
       if (frame === 0) frame = requestAnimationFrame(paint)
+    }
+
+    const decay = (): void => {
+      update(0)
+      staleTimer = smoothed > 0 ? setTimeout(decay, DECAY_STEP_MS) : undefined
+    }
+
+    const unsubscribe = level.subscribe((rms) => {
+      update(scaleLevel(rms))
+      clearTimeout(staleTimer)
+      staleTimer = setTimeout(decay, STALE_MS)
     })
 
     return () => {
       unsubscribe()
       cancelAnimationFrame(frame)
+      clearTimeout(staleTimer)
     }
-  }, [subscribeLevel])
+  }, [level])
 
   return (
     <div

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Session, SessionStatus } from '../../../shared/types'
 import { useSessions } from '../hooks/useSessions'
+import { useStartOfToday } from '../hooks/useStartOfToday'
 import { groupSessionsByTime, GROUP_ORDER } from '../utils/groupSessionsByTime'
 import { SessionCard } from './SessionCard'
 import { RecordingSessionCard, type LiveRecording } from './RecordingSessionCard'
@@ -29,6 +30,8 @@ export default function SessionDashboard({
   liveRecording
 }: SessionDashboardProps): React.JSX.Element {
   const { sessions, loading, error, refresh, deleteSession } = useSessions()
+  // Rendert um Mitternacht neu: Zeitgruppen und memoisierte Karten ("Gestern")
+  const today = useStartOfToday()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -217,6 +220,7 @@ export default function SessionDashboard({
                       onDelete={setDeleteTarget}
                       onRetry={session.status === 'error' ? handleRetry : undefined}
                       retryDisabled={isAnyProcessing}
+                      today={today}
                       onClick={session.status === 'review' ? onOpenReview : undefined}
                     />
                   )

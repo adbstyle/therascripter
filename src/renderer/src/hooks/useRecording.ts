@@ -1,18 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AudioRecorder, type LevelCallback } from '../services/AudioRecorder'
-
-/**
- * Abonniert den Live-Pegel (RMS 0–1, ein Wert pro ~16-ms-Fenster des Worklets).
- * Gibt die Abmeldung zurück. Der Pegel liegt bewusst NICHT im React-State:
- * ~60 Werte pro Sekunde liessen sonst die ganze App mit jedem Wert neu
- * rendern (Issue #140). Konsumenten zeichnen selbst (siehe VUMeter).
- */
-export type SubscribeLevel = (listener: LevelCallback) => () => void
+import { AudioRecorder } from '../services/AudioRecorder'
+import { createValueStore, type ValueStore } from '../utils/valueStore'
 
 interface UseRecordingResult {
   isRecording: boolean
-  duration: number
-  subscribeLevel: SubscribeLevel
+  // Pegel und Dauer liegen bewusst NICHT im React-State: sonst rendert die
+  // ganze App mit jedem Wert neu (Issue #140) — beim Pegel ~60× pro Sekunde.
+  // Nur die Anzeigen abonnieren sie (VUMeter, RecordingSessionCard, RecordingBar).
+  /** Live-Pegel: RMS 0–1, ein Wert pro ~16-ms-Fenster des Worklets */
+  level: ValueStore<number>
+  /** Aufnahmedauer in Sekunden, sekündlich vom Main-Prozess */
+  duration: ValueStore<number>
   error: string | null
   startRecording: () => Promise<void>
   stopRecording: () => Promise<void>
@@ -20,20 +18,13 @@ interface UseRecordingResult {
 
 export function useRecording(): UseRecordingResult {
   const [isRecording, setIsRecording] = useState(false)
-  const [duration, setDuration] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const recorderRef = useRef<AudioRecorder | null>(null)
   const startingRef = useRef(false)
   const stoppingRef = useRef(false)
-  const levelListenersRef = useRef(new Set<LevelCallback>())
-
-  const subscribeLevel = useCallback<SubscribeLevel>((listener) => {
-    const listeners = levelListenersRef.current
-    listeners.add(listener)
-    return () => {
-      listeners.delete(listener)
-    }
-  }, [])
+  // Lazy-Initializer: ein Store pro Hook-Instanz, nicht pro Render
+  const [level] = useState(() => createValueStore(0))
+  const [duration] = useState(() => createValueStore(0))
 
   const stopRecording = useCallback(async () => {
     if (stoppingRef.current) return
@@ -48,10 +39,10 @@ export function useRecording(): UseRecordingResult {
       setError(err instanceof Error ? err.message : 'Fehler beim Stoppen der Aufnahme')
     } finally {
       setIsRecording(false)
-      setDuration(0)
+      duration.set(0)
       stoppingRef.current = false
     }
-  }, [])
+  }, [duration])
 
   const startRecording = useCallback(async () => {
     if (startingRef.current || recorderRef.current) return
@@ -63,9 +54,7 @@ export function useRecording(): UseRecordingResult {
     recorderRef.current = recorder
 
     try {
-      await recorder.start((rmsLevel) => {
-        for (const listener of levelListenersRef.current) listener(rmsLevel)
-      })
+      await recorder.start(level.set)
       setIsRecording(true)
     } catch (err) {
       recorderRef.current = null
@@ -82,18 +71,18 @@ export function useRecording(): UseRecordingResult {
     } finally {
       startingRef.current = false
     }
-  }, [])
+  }, [level])
 
   // Listen for duration updates from main process
   useEffect(() => {
     if (!isRecording) return
 
     const cleanup = window.api.recording.onDuration(({ seconds }) => {
-      setDuration(seconds)
+      duration.set(seconds)
     })
 
     return cleanup
-  }, [isRecording])
+  }, [isRecording, duration])
 
   // Listen for recording errors from main process
   useEffect(() => {
@@ -120,12 +109,12 @@ export function useRecording(): UseRecordingResult {
         recorderRef.current = null
       }
       setIsRecording(false)
-      setDuration(0)
+      duration.set(0)
       stoppingRef.current = false
     })
 
     return cleanup
-  }, [isRecording])
+  }, [isRecording, duration])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -136,5 +125,5 @@ export function useRecording(): UseRecordingResult {
     }
   }, [])
 
-  return { isRecording, duration, subscribeLevel, error, startRecording, stopRecording }
+  return { isRecording, level, duration, error, startRecording, stopRecording }
 }

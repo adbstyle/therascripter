@@ -746,13 +746,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
       {/* Footer status bar */}
       <footer className="flex items-center justify-between border-t border-border px-6 py-2">
         <div className="flex items-center gap-4">
-          <span className="text-xs text-text-tertiary">
-            {saving
-              ? 'Speichern...'
-              : lastSavedAt
-                ? `Gespeichert ${formatTimeAgo(lastSavedAt)}`
-                : ''}
-          </span>
+          <SaveStatus saving={saving} lastSavedAt={lastSavedAt} />
           {liveWordCount != null && (
             <span className="text-xs text-text-tertiary">
               {liveWordCount.toLocaleString('de-CH')} Wörter
@@ -768,9 +762,35 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
   )
 }
 
-// memo: App rendert während einer Aufnahme sekündlich neu (Dauer) — der
-// Editor hängt nur an sessionId und dem stabilen onBack.
+// memo: App rendert bei eigenen Zustandswechseln neu (Aufnahme-Start/-Stopp,
+// Update-Banner, Import) — der Editor hängt nur an sessionId und dem stabilen onBack.
 export default memo(ReviewEditor)
+
+/**
+ * Eigener Sekundentakt für die relative Zeitangabe: der Editor selbst rendert
+ * dank memo nicht periodisch neu, "Gespeichert vor 12s" bliebe sonst stehen.
+ */
+function SaveStatus({
+  saving,
+  lastSavedAt
+}: {
+  saving: boolean
+  lastSavedAt: number | null
+}): React.JSX.Element {
+  const [, setTick] = useState(0)
+
+  useEffect(() => {
+    if (saving || lastSavedAt == null) return
+    const id = setInterval(() => setTick((t) => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [saving, lastSavedAt])
+
+  return (
+    <span className="text-xs text-text-tertiary">
+      {saving ? 'Speichern...' : lastSavedAt ? `Gespeichert ${formatTimeAgo(lastSavedAt)}` : ''}
+    </span>
+  )
+}
 
 function formatTimeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000)
