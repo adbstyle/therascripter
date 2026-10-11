@@ -10,6 +10,13 @@ describe('acknowledgments', () => {
     for (const m of MODEL_DEFINITIONS) expect(covered, m.id).toContain(m.id)
   })
 
+  it('has no entry for a model the catalog no longer distributes', () => {
+    const catalog = new Set(MODEL_DEFINITIONS.map((m) => m.id))
+    for (const id of MODEL_ACKNOWLEDGMENTS.flatMap((a) => a.catalogIds ?? [])) {
+      expect(catalog, id).toContain(id)
+    }
+  })
+
   it('ships the full license text with copyright for every MIT and Apache entry', () => {
     for (const a of all.filter((x) => x.license === 'MIT')) {
       expect(a.notice, a.name).toMatch(/Copyright/)

@@ -1,21 +1,25 @@
 import APACHE_2_0 from '../assets/licenses/apache-2.0.txt?raw'
-import BETTER_SQLITE3 from '../assets/licenses/better-sqlite3.txt?raw'
-import ELECTRON from '../assets/licenses/electron.txt?raw'
 import FAIRSEQ_XLM_ROBERTA from '../assets/licenses/fairseq-xlm-roberta.txt?raw'
 import FLAIR from '../assets/licenses/flair.txt?raw'
 import LLAMA_CPP from '../assets/licenses/llama-cpp.txt?raw'
 import OPENAI_WHISPER from '../assets/licenses/openai-whisper.txt?raw'
-import PDFJS_DIST from '../assets/licenses/pdfjs-dist.txt?raw'
 import PYANNOTE_AUDIO from '../assets/licenses/pyannote-audio.txt?raw'
 import PYANNOTE_SEGMENTATION from '../assets/licenses/pyannote-segmentation.txt?raw'
-import TIPTAP from '../assets/licenses/tiptap.txt?raw'
 import WHISPER_CPP from '../assets/licenses/whisper-cpp.txt?raw'
+// npm-Pakete: direkt aus node_modules, damit der Text nach Updates nicht veraltet
+// (Pfad statt Paketname, weil deren "exports" die LICENSE nicht freigeben).
+import BETTER_SQLITE3 from '../../../../node_modules/better-sqlite3/LICENSE?raw'
+import ELECTRON from '../../../../node_modules/electron/LICENSE?raw'
+import PDFJS_DIST from '../../../../node_modules/pdfjs-dist/LICENSE?raw'
+import TIPTAP from '../../../../node_modules/@tiptap/core/LICENSE.md?raw'
 
 /**
- * Lizenzhinweise für alles, was TheraScript mitliefert (App-Bundle) oder über
- * R2 weiterverteilt (Modelle). MIT und Apache 2.0 verlangen bei Weitergabe den
- * Lizenztext samt Copyright-Zeile — die Texte unter assets/licenses/ sind die
- * Original-Dateien der jeweiligen Pakete bzw. Repos, nicht nachgeschrieben.
+ * Lizenzhinweise für das, was TheraScript mitliefert (App-Bundle) oder über
+ * R2 weiterverteilt (Modelle). Hauptkomponenten und alle Katalog-Modelle
+ * einzeln, Python sowie weitere native und JavaScript-Bibliotheken als
+ * Sammeleintrag. MIT und Apache 2.0 verlangen bei Weitergabe den Lizenztext
+ * samt Copyright-Zeile — die Texte sind die Original-Dateien der jeweiligen
+ * Pakete bzw. Repos (npm direkt aus node_modules), nicht nachgeschrieben.
  * CC BY verlangt Namensnennung und einen Verweis auf die Lizenz.
  *
  * Beim Hinzufügen oder Austauschen einer Komponente oder eines Katalog-Modells
@@ -91,6 +95,14 @@ export const SOFTWARE_ACKNOWLEDGMENTS: Acknowledgment[] = [
     description: 'Lokale Datenbank — speichert Transkriptionen und Sperrliste auf dem Gerät',
     license: 'MIT',
     notice: BETTER_SQLITE3
+  },
+  {
+    name: 'Weitere Bibliotheken',
+    description: 'OpenSSL, LLVM OpenMP (libomp) und JavaScript-Bibliotheken aus npm',
+    license: 'Apache 2.0, MIT u. a.',
+    notice:
+      'TheraScript nutzt weitere Open-Source-Bibliotheken: OpenSSL und LLVM OpenMP (libomp) als Teil der lokalen Zusammenfassung sowie verschiedene JavaScript-Bibliotheken aus dem npm-Ökosystem. Jede steht unter ihrer eigenen Lizenz. OpenSSL und LLVM OpenMP stehen unter der Apache License 2.0 (libomp mit LLVM Exception):\n\n' +
+      APACHE_2_0
   }
 ]
 
@@ -121,11 +133,23 @@ export const MODEL_ACKNOWLEDGMENTS: Acknowledgment[] = [
     )
   },
   {
-    name: 'pyannote segmentation-3.0 / speaker-diarization-3.1',
+    name: 'pyannote segmentation-3.0',
     catalogIds: ['pyannote-suite'],
     description: 'Sprechererkennung — © CNRS',
     license: 'MIT',
     notice: PYANNOTE_SEGMENTATION
+  },
+  {
+    name: 'pyannote speaker-diarization-3.1',
+    catalogIds: ['pyannote-suite'],
+    description: 'Sprechererkennung — pyannote',
+    license: 'MIT',
+    // Das Repo enthält nur die Pipeline-Konfiguration und keine eigene
+    // Lizenzdatei — die Modellkarte nennt MIT.
+    notice:
+      'pyannote/speaker-diarization-3.1, https://huggingface.co/pyannote/speaker-diarization-3.1\n\n' +
+      'Lizenz laut Modellkarte: MIT. Das Repository enthält keine eigene Lizenzdatei; die Pipeline nutzt segmentation-3.0, dessen Lizenztext hier wiedergegeben ist:\n\n' +
+      PYANNOTE_SEGMENTATION
   },
   {
     name: 'pyannote speaker-diarization-community-1',

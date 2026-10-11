@@ -219,20 +219,34 @@ function AcknowledgmentList({
       </p>
       <div className="space-y-2">
         {items.map((item) => (
-          <details key={item.name} className="rounded-lg border border-border bg-surface-1">
-            <summary className="cursor-pointer px-3 py-2 text-sm">
-              <span className="font-medium text-text-secondary">{item.name}</span>
-              <span className="text-text-tertiary">
-                {' '}
-                — {item.description} · {item.license}
-              </span>
-            </summary>
-            <pre className="max-h-64 overflow-y-auto border-t border-border px-3 py-2 text-xs whitespace-pre-wrap text-text-tertiary">
-              {item.notice}
-            </pre>
-          </details>
+          <AcknowledgmentItem key={item.name} item={item} />
         ))}
       </div>
     </div>
+  )
+}
+
+// Lizenztext erst beim Aufklappen rendern — sonst hängen alle Texte (~40 KB)
+// bei jedem Besuch der Über-Seite im DOM.
+function AcknowledgmentItem({ item }: { item: Acknowledgment }): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  return (
+    <details
+      className="rounded-lg border border-border bg-surface-1"
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
+      <summary className="cursor-pointer px-3 py-2 text-sm">
+        <span className="font-medium text-text-secondary">{item.name}</span>
+        <span className="text-text-tertiary">
+          {' '}
+          — {item.description} · {item.license}
+        </span>
+      </summary>
+      {open && (
+        <pre className="max-h-64 overflow-y-auto border-t border-border px-3 py-2 text-xs whitespace-pre-wrap text-text-tertiary">
+          {item.notice}
+        </pre>
+      )}
+    </details>
   )
 }
