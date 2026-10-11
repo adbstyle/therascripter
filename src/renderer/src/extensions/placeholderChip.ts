@@ -1,31 +1,8 @@
-import { Node, mergeAttributes } from '@tiptap/core'
 import { ReactNodeViewRenderer } from '@tiptap/react'
 import { PlaceholderChipView } from '../components/editor/PlaceholderChipView'
+import { PlaceholderChipNode } from './transcriptNodes'
 
-export const PlaceholderChip = Node.create({
-  name: 'placeholderChip',
-  group: 'inline',
-  inline: true,
-  atom: true,
-
-  addAttributes() {
-    return {
-      entityId: { default: '' },
-      type: { default: 'PERSON' },
-      number: { default: 1 },
-      source: { default: 'ner' },
-      original: { default: '' }
-    }
-  },
-
-  parseHTML() {
-    return [{ tag: 'span[data-type="placeholderChip"]' }]
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes({ 'data-type': 'placeholderChip' }, HTMLAttributes)]
-  },
-
+export const PlaceholderChip = PlaceholderChipNode.extend({
   addNodeView() {
     return ReactNodeViewRenderer(PlaceholderChipView)
   }
