@@ -8,6 +8,9 @@ export type ReconcileReason =
   | 'default-promoted'
   // Optional slot had a missing model and was cleared to null (no replacement).
   | 'group-cleared'
+  // Active model was removed from the catalog (RETIRED_MODELS); its file was
+  // deleted at startup and the slot cleared. The successor must be downloaded.
+  | 'model-retired'
 
 export interface ReconcileEvent {
   /** ULID-ish unique id; generated via crypto.randomUUID(). */

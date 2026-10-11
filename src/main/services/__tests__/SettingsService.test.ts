@@ -52,7 +52,7 @@ function freshState(over: Partial<FakeStoreState> = {}): void {
       diarizationPipeline: 'pyannote/speaker-diarization-3.1',
       ner: 'flair-ner-german-large',
       ocr: 'apple-vision',
-      summarization: 'gemma-summarization'
+      summarization: 'gemma-4-e2b-summarization'
     },
     reconcileEvents: [],
     dismissedManifestVersions: [],
@@ -82,7 +82,7 @@ describe('initSettings — Issue #84 boot-loop regression guard', () => {
         diarizationPipeline: 'pyannote/speaker-diarization-3.1',
         ner: null,
         ocr: 'apple-vision',
-        summarization: 'gemma-summarization'
+        summarization: 'gemma-4-e2b-summarization'
       }
     })
 
@@ -99,7 +99,7 @@ describe('initSettings — Issue #84 boot-loop regression guard', () => {
         diarizationPipeline: 'pyannote/speaker-diarization-3.1',
         ner: 'flair-ner-german-large',
         ocr: 'apple-vision',
-        summarization: 'gemma-summarization'
+        summarization: 'gemma-4-e2b-summarization'
       }
     })
 
@@ -118,7 +118,7 @@ describe('initSettings — Issue #84 boot-loop regression guard', () => {
         // SHOULD reset this so AnonymizationService does not abort.
         ner: 'ai4privacy/gliner',
         ocr: 'apple-vision',
-        summarization: 'gemma-summarization'
+        summarization: 'gemma-4-e2b-summarization'
       }
     })
 

@@ -168,7 +168,7 @@ describe('reconcileActiveModels', () => {
         diarizationPipeline: 'pyannote/speaker-diarization-3.1',
         ner: 'flair-ner-german-large',
         ocr: 'apple-vision',
-        summarization: 'gemma-summarization' // explizit aktiviert vom User
+        summarization: 'gemma-4-e2b-summarization' // explizit aktiviert vom User
       }
     })
     pretendInstalled(
@@ -183,7 +183,7 @@ describe('reconcileActiveModels', () => {
     expect(repairs).toEqual([
       {
         group: 'summarization',
-        fromModelId: 'gemma-summarization',
+        fromModelId: 'gemma-4-e2b-summarization',
         toModelId: null,
         reason: 'group-cleared'
       }
@@ -481,7 +481,7 @@ describe('reconcile event lifecycle', () => {
         id: 'b',
         timestamp: '2026-04-30T10:00:01Z',
         group: 'summarization',
-        fromModelId: 'gemma-summarization',
+        fromModelId: 'gemma-4-e2b-summarization',
         toModelId: null,
         reason: 'group-cleared',
         status: 'pending'

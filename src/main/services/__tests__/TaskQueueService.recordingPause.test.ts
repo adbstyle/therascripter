@@ -11,7 +11,7 @@ vi.mock('../../utils/ipc-helpers', () => ({
 }))
 
 vi.mock('../ModelDownloadService', () => ({
-  getActiveModelId: vi.fn().mockReturnValue('gemma-3-4b'),
+  getActiveModelId: vi.fn().mockReturnValue('gemma-4-e2b-summarization'),
   getModelById: vi.fn().mockReturnValue({
     id: 'stub',
     label: 'Stub',

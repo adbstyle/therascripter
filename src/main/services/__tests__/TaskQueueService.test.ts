@@ -16,7 +16,7 @@ vi.mock('../../utils/ipc-helpers', () => ({
 // 4 PDF steps); mock ModelDownloadService so the summarization step survives
 // the filter. PDF sessions also need pdfHasScannedPages=true to include ocr.
 vi.mock('../ModelDownloadService', () => ({
-  getActiveModelId: vi.fn().mockReturnValue('gemma-3-4b'),
+  getActiveModelId: vi.fn().mockReturnValue('gemma-4-e2b-summarization'),
   // Issue #84 Story I — ProvenanceCapture (called from enqueuePipeline)
   // resolves the active id to a catalog entry. Stub a minimal shape so the
   // capture path doesn't NPE in tests; the snapshot itself is irrelevant

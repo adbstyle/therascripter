@@ -6,8 +6,8 @@
 const MAX_INPUT_CHARS = 24_000
 
 /**
- * The output format is enforced by `--json-schema` on the llama-cli side
- * (see SUMMARIZATION_JSON_SCHEMA in summarization-schema.ts), so the prompt
+ * The output format is enforced by `--grammar` on the llama-cli side
+ * (see SUMMARIZATION_GBNF in summarization-schema.ts), so the prompt
  * doesn't need TITEL/ZUSAMMENFASSUNG headers, line-format diktats, or any
  * "answer exactly so" instructions — the grammar engine constrains the
  * model's tokens directly. We just describe what the two fields should

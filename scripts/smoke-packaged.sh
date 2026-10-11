@@ -225,10 +225,26 @@ fi
 #     nur ein echter Modell-Load (make_cpu_buft_list) beweist, dass die
 #     libggml-cpu-apple_*.so lädt. Braucht das installierte Summarization-
 #     Modell (optional group — skip wenn nicht installiert).
-GEMMA_MODEL="$HOME/.therascript/models/summarization/google_gemma-3-4b-it-Q4_K_M.gguf"
+GEMMA_MODEL="$HOME/.therascript/models/summarization/gemma-4-E2B_q4_0-it.gguf"
 if [ -x "$LLAMA_CLI" ] && [ -f "$GEMMA_MODEL" ]; then
   run_check 'llama-cli generation (cpu buft)' '' \
-    "$LLAMA_CLI" -m "$GEMMA_MODEL" -p 'Sag Hallo.' -st -n 8 -c 512 --no-warmup
+    "$LLAMA_CLI" -m "$GEMMA_MODEL" -p 'Sag Hallo.' -st -n 8 -c 512 --no-warmup -rea off
+  # 2c. Grammatik-Sampling mit der ECHTEN Grammatik aus LlamaSummarizer
+  #     (--grammar SUMMARIZATION_GBNF + -rea off), gelesen aus dem Repo-Source
+  #     derselben Revision. Mit --json-schema scheitert der Sampler-Init bei
+  #     Gemma 4 und llama-cli exitet trotzdem 0 — nur der Output-Pattern fängt
+  #     diesen Fehlermodus.
+  SUMMARY_GBNF=$(cd "$REPO_ROOT" && node_modules/.bin/tsx -e \
+    "import { SUMMARIZATION_GBNF } from './src/main/ml/summarization-schema'; process.stdout.write(SUMMARIZATION_GBNF)" \
+    2>/dev/null || true)
+  if [ -n "$SUMMARY_GBNF" ]; then
+    run_check 'llama-cli grammar sampling' '"summary"' \
+      "$LLAMA_CLI" -m "$GEMMA_MODEL" -st -n 256 -c 1024 --no-warmup -rea off \
+      -p 'Fasse als JSON mit title und summary zusammen: Die Klientin berichtet von Schlafproblemen seit dem Jobwechsel. Vereinbart wird ein Schlaftagebuch.' \
+      --grammar "$SUMMARY_GBNF"
+  else
+    skip_check 'llama-cli grammar sampling' 'SUMMARIZATION_GBNF nicht lesbar (node_modules/.bin/tsx fehlt?)'
+  fi
 else
   skip_check 'llama-cli generation (cpu buft)' "Summarization-Modell nicht installiert ($GEMMA_MODEL)"
 fi

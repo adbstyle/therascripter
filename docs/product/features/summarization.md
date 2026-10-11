@@ -1,4 +1,4 @@
-# Lokale Zusammenfassung (Gemma 3 4B Instruct)
+# Lokale Zusammenfassung (Gemma 4 E2B)
 
 ## Zweck
 
@@ -12,12 +12,18 @@ Beide werden im Review-Editor als h1 + Panel angezeigt und sind inline editierba
 
 ## Modell
 
-- **Default**: `bartowski/gemma-3-4b-it-GGUF` Q4_K_M (~2.5 GB), Metal-beschleunigt
-  via `llama.cpp`.
+- **Default**: `google/gemma-4-E2B-it-qat-q4_0-gguf` (Googles offizielles QAT-GGUF,
+  3.35 GB), Metal-beschleunigt via `llama.cpp`. Lizenz Apache 2.0 — der Lizenztext
+  steht in der App unter Über → "Modelle von Drittanbietern".
 - **Optional** — nicht Teil des First-Launch-Downloads. Installation über
   Settings → Modelle → "Zusammenfassung (optional)".
-- Geplante Migration auf Gemma 4 E4B Instruct, sobald upstream eine GGUF-Konvertierung
-  verfügbar ist (siehe CLAUDE.md "Gemma 4 E4B GGUF source").
+- **Abgelöst: Gemma 3 4B Instruct** (Gemma Terms of Use, Weitergabe nur mit
+  Lizenzhinweis und weitergereichter Prohibited Use Policy). Beim ersten Start nach
+  dem Update löscht `retireObsoleteModels()` die Datei, leert den Slot und meldet ein
+  `model-retired`-Event (Banner in Settings → Modelle); der Nachfolger wird nicht
+  ungefragt geladen. Messwerte des Wechsels: Issue #57.
+- **Gemma 4 E4B** (5.15 GB) wäre qualitativ besser, braucht aber ~5.2 GB RAM während
+  der Inferenz — auf 8-GB-Macs am Metal-Limit, deshalb nicht im Katalog.
 
 ## Architektur
 
@@ -31,12 +37,11 @@ PDF:   extraction → ocr → anonymization → summarization
 Komponenten:
 
 - `summarization-schema.ts` — **Single source of truth für die Output-Form**.
-  Definiert das Zod-Schema (`SummarizationOutputSchema`) sowie die
-  korrespondierende JSON-Schema-Repräsentation (`SUMMARIZATION_JSON_SCHEMA`),
-  die an llama-cli durchgereicht wird. Beide werden via Unit-Test in Sync
-  gehalten.
+  Definiert die Längengrenzen einmal als Konstanten; daraus entstehen das
+  Zod-Schema (`SummarizationOutputSchema`) und die GBNF-Grammatik
+  (`SUMMARIZATION_GBNF`), die an llama-cli durchgereicht wird.
 - `LlamaSummarizer` (`src/main/ml/LlamaSummarizer.ts`) — wrappt `llama-cli` als
-  Subprozess. Übergibt das JSON-Schema via `--json-schema`-Argument; die
+  Subprozess. Übergibt die Grammatik via `--grammar`-Argument; die
   llama.cpp Grammar-Engine constrained Token-Sampling, sodass das Modell nur
   Token erzeugen kann, die zu validem Schema-Output führen. Parser
   (`extractFirstJSONObject` + `JSON.parse` + Zod-Validierung) ist robust gegen
@@ -56,29 +61,25 @@ Persistenz: Spalten `title` (existing, überschrieben), `summary`,
 ## Output-Garantien via Grammar-Constrained Sampling
 
 Anstatt das Modell durch Prompt-Anweisungen zur Format-Treue zu *bitten*, wird
-es durch llama.cpp's `--json-schema`-Flag zur Format-Treue *gezwungen*: Bei
-jedem Sampling-Schritt werden nur Token zugelassen, die zu einem JSON-Dokument
-führen können das zu folgendem Schema passt:
+es durch llama.cpp's `--grammar`-Flag zur Format-Treue *gezwungen*: Bei jedem
+Sampling-Schritt werden nur Token zugelassen, die zu einem `{title, summary}`-Objekt
+führen können (Titel 3–80 Zeichen, Zusammenfassung 20–1000 Zeichen, keine weiteren
+Felder).
 
-```json
-{
-  "type": "object",
-  "properties": {
-    "title":   { "type": "string", "minLength": 3,  "maxLength": 80   },
-    "summary": { "type": "string", "minLength": 20, "maxLength": 1000 }
-  },
-  "required": ["title", "summary"],
-  "additionalProperties": false
-}
-```
+Die Grammatik ist exakt das, was llama.cpp's eigener JSON-Schema-Konverter für dieses
+Schema erzeugt. `--json-schema` selbst ist tabu: mit Gemma 4 scheitert der
+Sampler-Init des gebundelten llama-cli (b9200) und der Prozess exitet trotzdem 0 —
+in der App ein stiller Skip jeder Zusammenfassung (Issue #57, upstream
+ggml-org/llama.cpp#22396).
 
 Konsequenz: Es ist physisch unmöglich, dass das Modell Prosa, Markdown, freien
 Text oder ein anderes Format ausgibt. Der Prompt beschreibt nur noch die
 *Semantik* der zwei Felder, nicht ihre Struktur.
 
-Sampling: `--temp 0.3 --top-p 0.9 -n 400 -st -ngl 999` — niedrige Temperatur für
-deterministische faktentreue Ausgabe, single-turn-Mode mit Jinja-Chat-Template
-aus dem GGUF, Metal full-GPU-offload.
+Sampling: `--temp 0.3 --top-p 0.9 -n 400 -st -rea off -ngl 999` — niedrige Temperatur
+für deterministische faktentreue Ausgabe, single-turn-Mode mit Jinja-Chat-Template
+aus dem GGUF, kein Reasoning-Block (Gemma 4 ist ein Reasoning-Modell), Metal
+full-GPU-offload.
 
 ## Failure Modes
 
@@ -103,9 +104,12 @@ ZUSAMMENFASSUNG-Parser, der am llama-cli Spinner-ASCII gescheitert ist) in
 
 ## RAM + Disk Cost
 
-- Inference: ~3 GB Working Set (4B Q4_K_M + KV-Cache für ~3k Tokens). Läuft
+- Inference: ~3.4–3.5 GB RSS (gemessen auf M5 Pro, kurze Texte bis 24k Zeichen).
+  Die Gewichte sind per mmap eingeblendet und zählen deshalb nicht in
+  `phys_footprint` (~0.3 GB) — bei llama.cpp ist RSS der richtige Massstab. Läuft
   sequenziell nach Anonymisierung — kein RAM-Konflikt.
-- Disk: 2.5 GB für das Modell + ~5 MB für `llama-cli` + dylibs.
+- Laufzeit: 3–8 s pro Sitzung auf dem M5 Pro (~75 Token/s Generierung).
+- Disk: 3.35 GB für das Modell + ~5 MB für `llama-cli` + dylibs.
 
 ## Privacy
 
