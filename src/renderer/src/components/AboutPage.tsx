@@ -4,51 +4,11 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { formatBytes } from '../utils/formatBytes'
 import { useAppUpdate } from '../hooks/useAppUpdate'
 import AppLogo from './AppLogo'
-import APACHE_2_0_TEXT from '../assets/licenses/apache-2.0.txt?raw'
-
-const ACKNOWLEDGMENTS = [
-  {
-    name: 'Whisper.cpp',
-    description: 'Automatische Spracherkennung (ASR) — wandelt Audiodaten in Text um'
-  },
-  {
-    name: 'pyannote.audio',
-    description: 'Sprecherdiarisierung — erkennt und trennt verschiedene Gesprächspersonen'
-  },
-  {
-    name: 'flair',
-    description:
-      'Named Entity Recognition (NER) — identifiziert Personen, Orte und andere Entitäten'
-  },
-  {
-    name: 'TipTap',
-    description: 'Review-Editor — ermöglicht die Bearbeitung des pseudonymisierten Textes'
-  },
-  {
-    name: 'Electron',
-    description: 'Desktop-App-Framework — ermöglicht die native macOS-Anwendung'
-  },
-  {
-    name: 'pdfjs-dist',
-    description: 'PDF-Textextraktion — liest Text aus importierten PDF-Dokumenten aus'
-  },
-  {
-    name: 'better-sqlite3',
-    description: 'Lokale Datenbank — speichert Transkriptionen und Sperrliste auf dem Gerät'
-  }
-]
-
-// Modelle, die TheraScript (via R2) weiterverteilt und deren Lizenz bei der
-// Weitergabe eine Kopie des Lizenztexts verlangt (Apache 2.0, Abschnitt 4a).
-const THIRD_PARTY_MODELS = [
-  {
-    name: 'Gemma 4 E2B',
-    purpose: 'Zusammenfassung',
-    copyright: '© Google LLC',
-    license: 'Apache License 2.0',
-    licenseText: APACHE_2_0_TEXT
-  }
-]
+import {
+  MODEL_ACKNOWLEDGMENTS,
+  SOFTWARE_ACKNOWLEDGMENTS,
+  type Acknowledgment
+} from '../constants/acknowledgments'
 
 export default function AboutPage(): React.JSX.Element {
   const [info, setInfo] = useState<AboutInfo | null>(null)
@@ -209,40 +169,11 @@ export default function AboutPage(): React.JSX.Element {
           </p>
         </div>
 
-        {/* Acknowledgments */}
+        {/* Acknowledgments — mit Lizenzhinweisen (MIT/Apache verlangen den Text bei Weitergabe) */}
         <div>
           <h4 className="mb-2 text-sm font-medium text-text-secondary">Acknowledgments</h4>
-          <div className="space-y-2">
-            {ACKNOWLEDGMENTS.map((item) => (
-              <div key={item.name}>
-                <span className="text-sm font-medium text-text-secondary">{item.name}</span>
-                <span className="text-sm text-text-tertiary"> — {item.description}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Modelle von Drittanbietern */}
-        <div>
-          <h4 className="mb-2 text-sm font-medium text-text-secondary">
-            Modelle von Drittanbietern
-          </h4>
-          <div className="space-y-2">
-            {THIRD_PARTY_MODELS.map((model) => (
-              <details key={model.name} className="rounded-lg border border-border bg-surface-1">
-                <summary className="cursor-pointer px-3 py-2 text-sm">
-                  <span className="font-medium text-text-secondary">{model.name}</span>
-                  <span className="text-text-tertiary">
-                    {' '}
-                    — {model.purpose} · {model.copyright} · {model.license}
-                  </span>
-                </summary>
-                <pre className="max-h-64 overflow-y-auto border-t border-border px-3 py-2 text-xs whitespace-pre-wrap text-text-tertiary">
-                  {model.licenseText}
-                </pre>
-              </details>
-            ))}
-          </div>
+          <AcknowledgmentList title="Software" items={SOFTWARE_ACKNOWLEDGMENTS} />
+          <AcknowledgmentList title="Modelle" items={MODEL_ACKNOWLEDGMENTS} />
         </div>
 
         {/* Uninstall button */}
@@ -270,6 +201,38 @@ export default function AboutPage(): React.JSX.Element {
           onCancel={() => setShowUninstall(false)}
         />
       )}
+    </div>
+  )
+}
+
+function AcknowledgmentList({
+  title,
+  items
+}: {
+  title: string
+  items: Acknowledgment[]
+}): React.JSX.Element {
+  return (
+    <div className="mb-4">
+      <p className="mb-1.5 text-xs font-medium tracking-wide text-text-tertiary uppercase">
+        {title}
+      </p>
+      <div className="space-y-2">
+        {items.map((item) => (
+          <details key={item.name} className="rounded-lg border border-border bg-surface-1">
+            <summary className="cursor-pointer px-3 py-2 text-sm">
+              <span className="font-medium text-text-secondary">{item.name}</span>
+              <span className="text-text-tertiary">
+                {' '}
+                — {item.description} · {item.license}
+              </span>
+            </summary>
+            <pre className="max-h-64 overflow-y-auto border-t border-border px-3 py-2 text-xs whitespace-pre-wrap text-text-tertiary">
+              {item.notice}
+            </pre>
+          </details>
+        ))}
+      </div>
     </div>
   )
 }
