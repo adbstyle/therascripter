@@ -181,4 +181,4 @@ Historische Planungsdokumente: [`docs/archive/`](docs/archive).
 
 ## Lizenz
 
-MIT
+[MIT](LICENSE)
