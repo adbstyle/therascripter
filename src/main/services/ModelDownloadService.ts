@@ -524,6 +524,32 @@ export async function downloadSingleModel(id: string): Promise<void> {
 }
 
 /**
+ * Entfernt ein Modell und alles, was ein Download oder Update dafür anlegen
+ * kann: `relativeTarget` (Datei oder Verzeichnis) samt `.partial` eines
+ * abgebrochenen Downloads, das Archiv `<id>.tar.gz` (auch `.partial`) und
+ * `.backup/<id>` eines abgebrochenen Update-Swaps. Ein Fehler beim Haupt-Ziel
+ * wird geworfen; Reste werden best effort entfernt.
+ */
+function removeModelArtifacts(id: string, relativeTarget: string): void {
+  const modelsDir = getModelsDir()
+  const target = join(modelsDir, relativeTarget)
+  rmSync(target, { recursive: true, force: true })
+  const archive = join(modelsDir, `${id}.tar.gz`)
+  for (const leftover of [
+    `${target}.partial`,
+    archive,
+    `${archive}.partial`,
+    join(modelsDir, '.backup', id)
+  ]) {
+    try {
+      rmSync(leftover, { recursive: true, force: true })
+    } catch {
+      /* non-fatal */
+    }
+  }
+}
+
+/**
  * Löscht ein einzelnes Modell von Disk. Verboten für:
  *   - unbekannte IDs
  *   - Pflicht-Modelle (isRequired, z.B. flair NER + pyannote-Suite)
@@ -554,20 +580,7 @@ export async function deleteModel(id: string): Promise<void> {
     )
   }
 
-  const modelsDir = getModelsDir()
-  const target = join(modelsDir, def.checkPath)
-  if (existsSync(target)) {
-    rmSync(target, { recursive: true, force: true })
-  }
-  const archivePath = join(modelsDir, `${def.id}.tar.gz`)
-  if (existsSync(archivePath)) {
-    try {
-      unlinkSync(archivePath)
-    } catch {
-      /* non-fatal */
-    }
-  }
-
+  removeModelArtifacts(id, def.checkPath)
   deleteInstalledVersion(id)
 
   // Optionale Gruppen: war das gelöschte Modell aktiv, Active-Slot räumen,
@@ -833,20 +846,31 @@ export function reconcileActiveModels(): ReadonlyArray<ReconcileRepair> {
   return repairs
 }
 
+/** Anzeigename für das Banner — auch für IDs, die nur noch in RETIRED_MODELS stehen. */
+function modelLabel(id: string | null): string | null {
+  if (id === null) return null
+  return getModelById(id)?.label ?? RETIRED_MODELS.find((m) => m.id === id)?.label ?? id
+}
+
 function newReconcileEvent(repair: ReconcileRepair): ReconcileEvent {
   return {
     id: randomUUID(),
     timestamp: new Date().toISOString(),
-    ...repair,
+    group: repair.group,
+    fromModelId: repair.fromModelId,
+    toModelId: repair.toModelId,
+    fromLabel: modelLabel(repair.fromModelId),
+    toLabel: modelLabel(repair.toModelId),
+    reason: repair.reason,
     status: 'pending'
   }
 }
 
 /**
  * Räumt aus dem Katalog entfernte Modelle (`RETIRED_MODELS`) auf: löscht die
- * Datei samt `.partial` eines abgebrochenen Downloads und `.backup/<id>` eines
- * abgebrochenen Update-Swaps (beides kennt sonst niemand mehr), verwirft
- * vorgemerkte Updates für die ID, löscht den Installed-Version-Eintrag und —
+ * Datei samt Download-/Update-Resten (`removeModelArtifacts` — kennt sonst
+ * niemand mehr), verwirft vorgemerkte Updates für die ID, löscht den
+ * Installed-Version-Eintrag (No-op, wenn schon weg) und —
  * falls das Modell aktiv war — den Slot. Ein geleerter Slot wird als
  * `model-retired`-ReconcileEvent gemeldet (BottomNav-Dot → Banner in
  * Einstellungen → Modelle), damit der Nutzer den Nachfolger herunterlädt;
@@ -860,21 +884,15 @@ function newReconcileEvent(repair: ReconcileRepair): ReconcileEvent {
  */
 export function retireObsoleteModels(): void {
   const settings = getSettings()
-  const modelsDir = getModelsDir()
   const retiredIds = new Set(RETIRED_MODELS.map((m) => m.id))
   const events: ReconcileEvent[] = []
   let active = settings.get('activeModels')
 
   for (const retired of RETIRED_MODELS) {
-    const file = join(modelsDir, retired.relativePath)
-    for (const path of [file, `${file}.partial`, join(modelsDir, '.backup', retired.id)]) {
-      if (!existsSync(path)) continue
-      try {
-        rmSync(path, { recursive: true, force: true })
-        console.log(`[retire] ${retired.id}: ${path} gelöscht`)
-      } catch (err) {
-        console.error(`[retire] ${retired.id}: Löschen fehlgeschlagen (${path})`, err)
-      }
+    try {
+      removeModelArtifacts(retired.id, retired.relativePath)
+    } catch (err) {
+      console.error(`[retire] ${retired.id}: Löschen fehlgeschlagen`, err)
     }
     deleteInstalledVersion(retired.id)
 

@@ -21,12 +21,6 @@ rm -f \
   "$REPO_ROOT/resources/lib/"libmtmd*.dylib \
   "$REPO_ROOT/resources/lib/"libggml*.dylib 2>/dev/null || true
 
-# Googles offizielles QAT-GGUF von Gemma 4 E2B (Apache 2.0, nicht gated).
-# Muss zu checkPath des Katalog-Eintrags gemma-4-e2b-summarization passen.
-GGUF_FILENAME='gemma-4-E2B_q4_0-it.gguf'
-GGUF_REPO='google/gemma-4-E2B-it-qat-q4_0-gguf'
-GGUF_URL="https://huggingface.co/${GGUF_REPO}/resolve/main/${GGUF_FILENAME}"
-
 mkdir -p "$BIN_DIR" "$LIB_DIR"
 
 echo '==> Installing llama.cpp via Homebrew'
@@ -179,19 +173,31 @@ echo '==> Verifying binary'
 "$BIN_DIR/llama-cli" --version
 
 if [[ "${1:-}" == '--model' ]]; then
-  MODEL_DIR="$HOME/.therascript/models/summarization"
-  mkdir -p "$MODEL_DIR"
-  MODEL_FILE="$MODEL_DIR/$GGUF_FILENAME"
+  # Pfad, URL (R2) und sha256 aus dem Katalog — dieselbe Datei, die die App
+  # lädt und gegen die sie verifiziert. Kein zweiter Hash zum Synchronhalten.
+  read -r GGUF_RELPATH GGUF_URL GGUF_SHA256 < <(cd "$REPO_ROOT" && node_modules/.bin/tsx -e \
+    "import { MODEL_DEFINITIONS } from './src/shared/model-catalog'
+     const m = MODEL_DEFINITIONS.find((d) => d.group === 'summarization')
+     if (m) console.log(m.relativePath, m.url, m.sha256)")
+  if [ -z "${GGUF_SHA256:-}" ]; then
+    echo 'Kein Summarization-Modell im Katalog gefunden (npm install gelaufen?)' >&2
+    exit 1
+  fi
+  MODEL_FILE="$HOME/.therascript/models/$GGUF_RELPATH"
+  mkdir -p "$(dirname "$MODEL_FILE")"
   if [ ! -f "$MODEL_FILE" ]; then
-    echo "==> Downloading Gemma 4 E2B QAT q4_0 (~3.35 GB)"
-    # Nicht gated — ein direkter Download reicht, kein HF-Login nötig.
+    echo "==> Downloading $(basename "$MODEL_FILE")"
     curl -L --fail -o "$MODEL_FILE.part" "$GGUF_URL"
     mv "$MODEL_FILE.part" "$MODEL_FILE"
   else
     echo "Model already present: $MODEL_FILE"
   fi
-  echo '==> SHA-256:'
-  shasum -a 256 "$MODEL_FILE"
+  echo '==> Verifying SHA-256 against model-catalog.ts'
+  if ! echo "$GGUF_SHA256  $MODEL_FILE" | shasum -a 256 -c -; then
+    echo "SHA-256 stimmt nicht mit dem Katalog überein — Datei gelöscht: $MODEL_FILE" >&2
+    rm -f "$MODEL_FILE"
+    exit 1
+  fi
 fi
 
 echo '==> Done'

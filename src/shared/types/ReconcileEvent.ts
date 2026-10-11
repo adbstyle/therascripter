@@ -20,6 +20,13 @@ export interface ReconcileEvent {
   group: ModelGroup
   fromModelId: string | null
   toModelId: string | null
+  /**
+   * Display names captured when the event was written — a retired model is no
+   * longer in the catalog, so the renderer could not resolve its id. Optional:
+   * events persisted by older versions have none (banner falls back to the id).
+   */
+  fromLabel?: string | null
+  toLabel?: string | null
   reason: ReconcileReason
   /**
    * Lifecycle:
