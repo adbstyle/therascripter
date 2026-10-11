@@ -219,44 +219,20 @@ function AcknowledgmentList({
       </p>
       <div className="space-y-2">
         {items.map((item) => (
-          <AcknowledgmentItem key={item.name} item={item} />
+          <details key={item.name} className="rounded-lg border border-border bg-surface-1">
+            <summary className="cursor-pointer px-3 py-2 text-sm">
+              <span className="font-medium text-text-secondary">{item.name}</span>
+              <span className="text-text-tertiary">
+                {' '}
+                — {item.description} · {item.license}
+              </span>
+            </summary>
+            <pre className="max-h-64 overflow-y-auto border-t border-border px-3 py-2 text-xs whitespace-pre-wrap text-text-tertiary">
+              {item.notice}
+            </pre>
+          </details>
         ))}
       </div>
     </div>
-  )
-}
-
-function AcknowledgmentItem({ item }: { item: Acknowledgment }): React.JSX.Element {
-  const [notice, setNotice] = useState<string | null>(
-    typeof item.notice === 'string' ? item.notice : null
-  )
-
-  const handleToggle = (e: React.SyntheticEvent<HTMLDetailsElement>): void => {
-    if (!e.currentTarget.open || notice !== null || typeof item.notice === 'string') return
-    item.notice().then(setNotice, () => setNotice('Lizenztexte konnten nicht geladen werden.'))
-  }
-
-  return (
-    <details className="rounded-lg border border-border bg-surface-1" onToggle={handleToggle}>
-      <summary className="cursor-pointer px-3 py-2 text-sm">
-        <span className="font-medium text-text-secondary">{item.name}</span>
-        <span className="text-text-tertiary">
-          {' '}
-          — {item.description} · {item.license}
-        </span>
-      </summary>
-      {item.packages && (
-        <ul className="max-h-48 overflow-y-auto border-t border-border px-3 py-2 text-xs text-text-tertiary">
-          {item.packages.map((p) => (
-            <li key={p.name}>
-              <span className="text-text-secondary">{p.name}</span> {p.version} — {p.license}
-            </li>
-          ))}
-        </ul>
-      )}
-      <pre className="max-h-64 overflow-y-auto border-t border-border px-3 py-2 text-xs whitespace-pre-wrap text-text-tertiary">
-        {notice ?? 'Lizenztexte werden geladen…'}
-      </pre>
-    </details>
   )
 }

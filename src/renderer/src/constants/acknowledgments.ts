@@ -10,7 +10,6 @@ import PYANNOTE_AUDIO from '../assets/licenses/pyannote-audio.txt?raw'
 import PYANNOTE_SEGMENTATION from '../assets/licenses/pyannote-segmentation.txt?raw'
 import TIPTAP from '../assets/licenses/tiptap.txt?raw'
 import WHISPER_CPP from '../assets/licenses/whisper-cpp.txt?raw'
-import PYTHON_PACKAGES from '../assets/licenses/python-packages.json'
 
 /**
  * Lizenzhinweise für alles, was TheraScript mitliefert (App-Bundle) oder über
@@ -26,14 +25,8 @@ export interface Acknowledgment {
   name: string
   description: string
   license: string
-  /**
-   * Vollständiger Lizenztext (MIT/Apache) oder Namensnennung mit Lizenz-URL (CC).
-   * Als Funktion erst beim Aufklappen geladen — die Python-Hinweise sind ~1.4 MB
-   * und landen so in einem eigenen Chunk statt im Start-Bundle.
-   */
-  notice: string | (() => Promise<string>)
-  /** Enthaltene Pakete (nur für Sammeleinträge wie die Python-Laufzeit). */
-  packages?: { name: string; version: string; license: string }[]
+  /** Vollständiger Lizenztext (MIT/Apache) oder Namensnennung mit Lizenz-URL (CC). */
+  notice: string
   /** Katalog-IDs (model-catalog.ts), deren Download dieses Werk enthält. */
   catalogIds?: string[]
 }
@@ -68,12 +61,12 @@ export const SOFTWARE_ACKNOWLEDGMENTS: Acknowledgment[] = [
     notice: LLAMA_CPP
   },
   {
-    name: 'Python-Laufzeit (Sidecar)',
-    description: `Sprechererkennung und Pseudonymisierung — ${PYTHON_PACKAGES.length} Komponenten, u. a. PyTorch und NumPy`,
-    license: 'je Komponente',
-    // Erzeugt von scripts/generate-python-notices.py aus dem gebundelten Sidecar.
-    notice: () => import('../assets/licenses/python-notices.txt?raw').then((m) => m.default),
-    packages: PYTHON_PACKAGES
+    name: 'Python',
+    description:
+      'Laufzeit für Sprechererkennung und Pseudonymisierung, mit Open-Source-Bibliotheken',
+    license: 'je Bibliothek',
+    notice:
+      'TheraScript nutzt Python und verschiedene Open-Source-Bibliotheken. Jede steht unter ihrer eigenen Lizenz; die Lizenztexte liegen den Bibliotheken im App-Paket bei.'
   },
   {
     name: 'TipTap',

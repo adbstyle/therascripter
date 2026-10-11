@@ -273,13 +273,6 @@ if [ "$VERIFY_FAILED" = true ]; then
   exit 1
 fi
 
-# Lizenzhinweise der gebundelten Python-Pakete neu erzeugen (Über-Seite →
-# Acknowledgments). Die Ausgabe ist eingecheckt — nach einem Rebuild mit
-# geänderten Paketen den Diff unter src/renderer/src/assets/licenses/ committen.
-echo ""
-echo "=== Lizenzhinweise der Python-Pakete ==="
-python3 -I "$SCRIPT_DIR/generate-python-notices.py" "$STANDALONE_DIR"
-
 # Report sizes
 echo ""
 echo "=== Build erfolgreich ==="
