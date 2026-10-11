@@ -8,7 +8,7 @@ The editor uses `@tiptap/react` with `StarterKit` as a base, deliberately disabl
 
 All three custom nodes are defined as **atomic inline nodes** (`atom: true`, `inline: true`, `group: 'inline'`). Atomic nodes behave as indivisible units within ProseMirror — the cursor moves around them rather than into them, they cannot be partially selected, and they are treated as a single entity for undo/redo. This is essential because placeholder chips, speaker labels, and timestamps must not be editable as free text: their content is derived from structured attributes, not user keystrokes.
 
-Each extension uses `ReactNodeViewRenderer` to delegate rendering to a React component (NodeView), giving full control over appearance and interaction while ProseMirror manages the document model.
+Schema and serialization of the three nodes (attributes, `parseHTML`, `renderHTML`, the chip clipboard plugin) live in `extensions/transcriptNodes.ts`; the extension files only add the NodeView. Each uses `ReactNodeViewRenderer` to delegate rendering to a React component, giving full control over appearance and interaction while ProseMirror manages the document model. `renderHTML` therefore only feeds serialization — chiefly the HTML clipboard flavor — and tests (`createTestEditor`) run against the same schema as the app.
 
 ## Custom Extensions
 
@@ -24,7 +24,7 @@ Represents an anonymized entity in the transcript. Each chip replaces a piece of
 | `type`     | string | `'PERSON'` | One of the 7 placeholder types: PERSON, ORT, DATUM, KONTAKT, ORGANISATION, MEDIZINISCH, SONSTIGES |
 | `number`   | number | `1`        | Sequential number within the type (e.g. PERSON 1, PERSON 2)                |
 | `source`   | string | `'ner'`    | How the entity was detected: `ner` (automatic NER), `blocklist`, or `manual` |
-| `original` | string | `''`       | The original sensitive text that was replaced                               |
+| `original` | string | `''`       | The original sensitive text that was replaced. Never rendered to or read from HTML (see [Copy and paste inside the editor](#copy-and-paste-inside-the-editor)) |
 
 **Rendering:** The `PlaceholderChipView` component renders each chip as a color-coded inline badge showing the type and number (e.g. "PERSON 1") plus a small source icon. Each of the 7 types has a distinct background/text color combination defined via Tailwind theme tokens (`bg-chip-person-bg`, `bg-chip-ort-bg`, etc.). When selected in ProseMirror, the chip shows a ring highlight.
 
@@ -113,9 +113,23 @@ The serialization logic (`serializeDocument`) converts the TipTap JSON document 
 
 A toast notification confirms success ("In Zwischenablage kopiert") or reports failure.
 
-The editor also has a custom `clipboardTextSerializer` (`serializeClipboardText` in `utils/clipboardText.ts`) for partial copy (Cmd+C on a selection), which uses the same bracket notation for chips, speaker labels, and timestamps within the copied range — copied verbatim, without trimming.
+### Copy and paste inside the editor
 
-All text outputs of a transcript — this export, the Cmd+C serializer and the LLM input for the summary (`tiptapToPlainText`, without speaker labels/timestamps, one trimmed line per non-empty paragraph) — run through one walker, `tiptapToText` in `src/shared/utils/tiptapToText.ts`, and render chips via `formatPlaceholderToken`. New node types or format changes belong there, not in the callers. `formatPlaceholderToken` (`[PERSON 1]`) is not the same as the renderer's `formatPlaceholderLabel` (`Person 1`, localized UI label).
+Cmd+C / Cmd+X on a selection writes two clipboard flavors, both pseudonymized:
+
+- **text/plain** — the custom `clipboardTextSerializer` (`serializeClipboardText` in `utils/clipboardText.ts`) uses the same bracket notation for chips, speaker labels, and timestamps within the copied range — copied verbatim, without trimming.
+- **text/html** — ProseMirror's default serializer over each node's `renderHTML`. Chips, speaker labels and timestamps render as `<span data-type=…>` carrying their visible token as text (`[PERSON 1]`, `[Person A]:`, `[00:12:34]`, via `clipboardNodeText`), so mail, Word or web forms show the same text as the plain flavor. The chip's `original` attribute is `rendered: false` and never appears in the HTML; `entityId`, `type`, `number` and `source` do (pseudonymous metadata, needed to rebuild the chip on paste).
+
+Because `original` is not in the clipboard, a pasted chip arrives without it. `chipClipboardPlugin` (`extensions/chipClipboard.ts`) handles this:
+
+- On Cmd+C / Cmd+X (`handleDOMEvents` copy/cut) it records the copied chips — identity and `original`, in document order. The record belongs to the editor instance and dies with it: clear names live only as long as the session is open, which also scopes restoration to that session. A drag start does not touch it — the system clipboard still holds the earlier copy.
+- On paste (`transformPasted`) the chips get their `original` back only if the paste provably stems from that record: exactly the same chips in the same order. Each chip then gets its own variant back (e.g. "Ruth Gerber" vs. "Frau Gerber" under one `entityId`), not just the EntityMap's representative value.
+- Any other chip HTML becomes inert text `[PERSON 1]` instead of a chip: a paste into **another session** (where `person-1` denotes a different person — before this guard, the clear name of session A's patient was carried into session B), HTML from an older app version or an external app, and copies made before the editor was closed (leaving and reopening the session, app restart). A chip without `original` would break "Platzhalter entfernen" and the EntityMap reconciliation, and the clear name of a foreign session must not enter the document.
+- After every paste and drop, `ReviewEditor` runs `reconcileEntityMapWithDoc`: pasted chips can bring back an entity removed from the EntityMap since the copy, and without its entry `getNextNumber` would hand out the same number again (entityId collision).
+
+Pasting with Shift+Cmd+V uses the plain flavor and always yields text. Dragging a selection within the editor keeps the chips: ProseMirror drops the dragged slice itself (originals included), which the plugin passes through unchanged. A selected single chip (NodeSelection) copies as its token in both flavors.
+
+All text outputs of a transcript — this export, the Cmd+C serializer (both flavors) and the LLM input for the summary (`tiptapToPlainText`, without speaker labels/timestamps, one trimmed line per non-empty paragraph) — run through one walker, `tiptapToText` in `src/shared/utils/tiptapToText.ts`, and render chips via `formatPlaceholderToken`. New node types or format changes belong there, not in the callers. `formatPlaceholderToken` (`[PERSON 1]`) is not the same as the renderer's `formatPlaceholderLabel` (`Person 1`, localized UI label).
 
 ## Undo / Redo
 

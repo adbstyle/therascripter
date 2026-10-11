@@ -2,7 +2,8 @@
  * Plain-text rendering of a TipTap transcript document — the one walker
  * behind every text output: clipboard export (`serializeDocument`), LLM input
  * (`tiptapToPlainText`) and, per paragraph, the editor's Cmd+C
- * (`serializeClipboardText`). Node formats live only here, so the outputs
+ * (`serializeClipboardText`, plus per node the visible text of the HTML
+ * flavor via `clipboardNodeText`). Node formats live only here, so the outputs
  * cannot drift apart again (PR #134: chips rendered as '' in one of them).
  *
  * Tolerant against unvalidated JSON (persisted documents, `editor.getJSON()`):
@@ -75,6 +76,13 @@ function walk(value: unknown, into: string[], options: TipTapTextOptions): void 
     default:
       for (const child of childrenOf(node)) walk(child, into, options)
   }
+}
+
+/** Text of a single node of any type — e.g. one chip, speaker label or timestamp. */
+export function tiptapNodeToText(node: unknown, options: TipTapTextOptions): string {
+  const buf: string[] = []
+  walk(node, buf, options)
+  return buf.join('')
 }
 
 /** Text of a single paragraph node (trimmed only when `compact`). */
