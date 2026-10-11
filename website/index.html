@@ -179,8 +179,7 @@
             <p>
               TheraScript erkennt, wer spricht, und kennzeichnet jeden Redebeitrag mit Person A,
               Person B und einer Zeitmarke. Hochdeutsch wird sehr gut transkribiert,
-              Schweizerdeutsch ordentlich – gelegentliche Korrekturen sind nötig. Für
-              Schweizerdeutsch lässt sich ein spezialisiertes Modell wählen.
+              Schweizerdeutsch ordentlich – gelegentliche Korrekturen sind nötig.
             </p>
           </div>
           <div class="feature-image">
@@ -201,11 +200,11 @@
           <div class="feature-text">
             <h3>Pseudonymisierung prüfen und ergänzen</h3>
             <p>
-              Namen, Orte, Datumsangaben und Kontaktangaben wie Telefon-, E-Mail- oder AHV-Nummern
-              ersetzt TheraScript automatisch durch Platzhalter. Diagnosen und eigene Begriffe
-              nehmen Sie direkt aus dem Text heraus in die Sperrliste auf. Sie werden dann in dieser
-              und allen künftigen Sitzungen ersetzt. Eine Seitenleiste listet alle
-              Pseudonymisierungen der Sitzung auf.
+              Namen, Orte und Kontaktangaben wie Telefon-, E-Mail- oder AHV-Nummern ersetzt
+              TheraScript automatisch durch Platzhalter, ebenso geschriebene Daten wie 12.03.2026.
+              Diagnosen und eigene Begriffe nehmen Sie direkt aus dem Text heraus in die Sperrliste
+              auf. Sie werden dann in dieser und allen künftigen Sitzungen ersetzt. Eine
+              Seitenleiste listet alle Pseudonymisierungen der Sitzung auf.
             </p>
           </div>
           <div class="feature-image">
@@ -403,11 +402,12 @@
         <details>
           <summary>Erkennt TheraScript alle persönlichen Angaben?</summary>
           <p>
-            Nein. TheraScript erkennt Namen, Orte, Datumsangaben und Kontaktangaben automatisch,
-            übersieht aber gelegentlich eine Angabe. Diagnosen, Institutionen und eigene Begriffe
-            ersetzt TheraScript, sobald sie auf der Sperrliste stehen. Prüfen Sie deshalb jedes
-            Transkript, bevor Sie es weiterverwenden – fehlende Angaben pseudonymisieren Sie mit
-            wenigen Klicks im Editor.
+            Nein. TheraScript erkennt Namen, Orte, Kontaktangaben und Daten im Format 12.03.2026
+            automatisch, übersieht aber gelegentlich eine Angabe. Ausgesprochene Daten wie «am
+            zwölften März» erkennt es nicht. Diagnosen, Institutionen und eigene Begriffe ersetzt
+            TheraScript, sobald sie auf der Sperrliste stehen. Prüfen Sie deshalb jedes Transkript,
+            bevor Sie es weiterverwenden – fehlende Angaben pseudonymisieren Sie mit wenigen Klicks
+            im Editor.
           </p>
         </details>
 
@@ -416,10 +416,10 @@
           <p>
             Für die Transkription kommt standardmässig Whisper Large V3 Turbo zum Einsatz – ein
             multilinguales Modell, das Hochdeutsch sehr gut versteht. Optional lässt sich ein auf
-            Schweizerdeutsch oder auf Hochdeutsch spezialisiertes Modell aktivieren. Die
-            Gesprächspartner:innen unterscheidet ein Modell von pyannote, für die Pseudonymisierung
-            wird ein deutsches Erkennungsmodell von flair verwendet. Die optionale Zusammenfassung
-            erstellt ein Sprachmodell aus Googles Gemma-Familie. Alle Modelle laufen lokal.
+            Hochdeutsch spezialisiertes Modell aktivieren. Die Gesprächspartner:innen unterscheidet
+            ein Modell von pyannote, für die Pseudonymisierung wird ein deutsches Erkennungsmodell
+            von flair verwendet. Die optionale Zusammenfassung erstellt ein Sprachmodell aus Googles
+            Gemma-Familie. Alle Modelle laufen lokal.
           </p>
         </details>
 

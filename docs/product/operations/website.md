@@ -31,9 +31,11 @@ Patientendaten gehören nie in ein Bild, auch nicht zu Testzwecken.
 | `og-image.png` | Link-Vorschau (Logo, Name, Kernbotschaft) | `render-og-image.sh` |
 
 Die Seite wählt die Variante per `<picture>`: `prefers-color-scheme` für hell/dunkel,
-`prefers-reduced-motion` für das Standbild statt des GIFs. Die GIFs laufen einmal und bleiben
-auf dem letzten Bild stehen (kein Loop). Besucher:innen können sie nicht anhalten; die
-Abweichung von WCAG 2.2.2 ist bewusst akzeptiert (Epic #172), damit die Seite ohne Skripte
+`prefers-reduced-motion` für das Standbild statt des GIFs. Die GIFs laufen in Schleife und
+bleiben am Ende 5 s auf dem Endzustand stehen (`END_PAUSE` in `build-gifs.sh`): Ein GIF startet
+beim Laden, und lazy lädt der Browser schon deutlich vor dem sichtbaren Bereich – einmal
+abgespielt sähen Besucher:innen oft nur das Ende. Anhalten lassen sich die Animationen nicht;
+die Abweichung von WCAG 2.2.2 ist bewusst akzeptiert (Epic #172), damit die Seite ohne Skripte
 auskommt.
 
 ### Demo-Sitzung neu erstellen
@@ -54,7 +56,9 @@ CDP_PORT=9224 node scripts/website/demo/load-demo.mjs /tmp/demo-assets --db /tmp
   setzt die Pfade per `app.setPath`, bevor der Main-Prozess startet.
 - Die Stimmen sind macOS-`say` «Anna», je Person in der Tonhöhe verschoben. Die übrigen
   deutschen `say`-Stimmen (Reed, Flo, Rocko, Sandy …) versteht Whisper kaum.
-- `load-demo.mjs` bricht ab, wenn die Instanz schon Sitzungen hat.
+- `load-demo.mjs` und `capture.mjs` brechen ab, wenn die Instanz die echten Daten unter
+  `~/.therascript` nutzt (`demo/guard.mjs`); `load-demo.mjs` zusätzlich, wenn sie schon
+  Sitzungen hat.
 - Die Modelle werden beim ersten Start per APFS-Klon aus `~/.therascript/models` übernommen.
 
 ### Bilder aufnehmen

@@ -48,7 +48,9 @@ function wavHeader(dataBytes) {
 }
 
 try {
-  const { sitzungen, aufnahmeAnimation } = JSON.parse(readFileSync(join(HERE, 'sitzungen.json'), 'utf8'))
+  const { sitzungen, aufnahmeAnimation } = JSON.parse(
+    readFileSync(join(HERE, 'sitzungen.json'), 'utf8')
+  )
   const silence = Buffer.alloc(Math.round(1.2 * RATE) * 2)
   for (const s of [...sitzungen, aufnahmeAnimation]) {
     const parts = []
@@ -59,9 +61,22 @@ try {
       execFileSync('say', ['-v', name, '-r', '172', '-o', aiff, text])
       // Tonhöhe um den Faktor verschieben, Tempo beibehalten; say liefert 22.05 kHz.
       const f = Number(pitch)
-      execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', aiff, '-af',
+      execFileSync('ffmpeg', [
+        '-loglevel',
+        'error',
+        '-y',
+        '-i',
+        aiff,
+        '-af',
         `asetrate=22050*${f},aresample=${RATE},atempo=${1 / f}`,
-        '-ac', '1', '-ar', String(RATE), '-c:a', 'pcm_s16le', wav])
+        '-ac',
+        '1',
+        '-ar',
+        String(RATE),
+        '-c:a',
+        'pcm_s16le',
+        wav
+      ])
       const data = readFileSync(wav)
       if (i > 0) parts.push(silence)
       parts.push(data.subarray(data.indexOf(Buffer.from('data')) + 8))
@@ -73,34 +88,60 @@ try {
   }
 
   const pdf = join(OUT, 'bericht.pdf')
-  execFileSync(CHROME, [
-    '--headless=new',
-    '--disable-gpu',
-    '--no-pdf-header-footer',
-    `--print-to-pdf=${pdf}`,
-    `file://${join(HERE, 'bericht.html')}`
-  ], { stdio: 'ignore' })
+  execFileSync(
+    CHROME,
+    [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-pdf-header-footer',
+      `--print-to-pdf=${pdf}`,
+      `file://${join(HERE, 'bericht.html')}`
+    ],
+    { stdio: 'ignore' }
+  )
   console.log(`bericht.pdf`)
 
   // «Scan»: erste Seite rastern, leicht drehen, Graustufen, Rauschen → Bild-PDF
   // ohne Textschicht (TheraScript erkennt es als gescannt und nutzt die OCR).
   execFileSync('qlmanage', ['-t', '-s', '1700', '-o', work, pdf], { stdio: 'ignore' })
-  const thumb = join(work, readdirSync(work).find((f) => f.startsWith('bericht.pdf')))
+  const thumb = join(
+    work,
+    readdirSync(work).find((f) => f.startsWith('bericht.pdf'))
+  )
   const scanned = join(work, 'scan.png')
   execFileSync('magick', [
     thumb,
-    '-background', 'white', '-alpha', 'remove',
-    '-colorspace', 'Gray',
-    '-rotate', '0.7',
-    '-attenuate', '0.35', '+noise', 'Gaussian',
-    '-blur', '0x0.4',
-    '-level', '8%,92%',
+    '-background',
+    'white',
+    '-alpha',
+    'remove',
+    '-colorspace',
+    'Gray',
+    '-rotate',
+    '0.7',
+    '-attenuate',
+    '0.35',
+    '+noise',
+    'Gaussian',
+    '-blur',
+    '0x0.4',
+    '-level',
+    '8%,92%',
     scanned
   ])
   // In einem Schritt mit dem PDF-Export kam eine leere Seite heraus.
   const scan = join(OUT, 'bericht-scan.pdf')
   execFileSync('magick', [
-    scanned, '-density', '150', '-units', 'PixelsPerInch', '-compress', 'jpeg', '-quality', '80', scan
+    scanned,
+    '-density',
+    '150',
+    '-units',
+    'PixelsPerInch',
+    '-compress',
+    'jpeg',
+    '-quality',
+    '80',
+    scan
   ])
   console.log(`bericht-scan.pdf`)
 } finally {

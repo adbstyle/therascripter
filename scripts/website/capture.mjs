@@ -21,13 +21,16 @@
 import { mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { send as rawSend, evalInApp, onEvent, closeCdp } from '../e2e/cdp.mjs'
+import { assertDemoInstance } from './demo/guard.mjs'
 
 /** CDP-Aufruf mit Timeout: ein hängender Befehl soll den Lauf abbrechen, nicht blockieren. */
 async function send(method, params) {
   let timer
   const r = await Promise.race([
     rawSend(method, params),
-    new Promise((_, rej) => (timer = setTimeout(() => rej(new Error(`CDP-Timeout: ${method}`)), 15_000)))
+    new Promise(
+      (_, rej) => (timer = setTimeout(() => rej(new Error(`CDP-Timeout: ${method}`)), 15_000))
+    )
   ])
   clearTimeout(timer)
   if (r.error) throw new Error(`${method}: ${r.error.message}`)
@@ -36,7 +39,9 @@ async function send(method, params) {
 
 const [MODE, OUT, ARG] = process.argv.slice(2)
 if (!MODE || !OUT) {
-  console.error('Usage: node scripts/website/capture.mjs <stills|editor|pdf|aufnahme> <out-dir> [pdf]')
+  console.error(
+    'Usage: node scripts/website/capture.mjs <stills|editor|pdf|aufnahme> <out-dir> [pdf]'
+  )
   process.exit(1)
 }
 mkdirSync(OUT, { recursive: true })
@@ -103,7 +108,10 @@ async function dismissBanners() {
 // ── DOM-Helfer und Maus ──────────────────────────────────────────────────────
 
 /** Mittelpunkt des sichtbaren Elements mit genau diesem Text (oder aria-label/title). */
-async function centerOf(text, { selector = 'button, [role="button"], [role="menuitem"], a, div, span', nth = 0 } = {}) {
+async function centerOf(
+  text,
+  { selector = 'button, [role="button"], [role="menuitem"], a, div, span', nth = 0 } = {}
+) {
   const r = await evalInApp(`(() => {
     const t = ${JSON.stringify(text)}
     const hits = [...document.querySelectorAll(${JSON.stringify(selector)})].filter((el) => {
@@ -124,8 +132,15 @@ async function centerOf(text, { selector = 'button, [role="button"], [role="menu
 }
 
 let mouse = { x: WIDTH / 2, y: HEIGHT / 2 }
+/** Blendet den Zeiger an der aktuellen Mausposition ein — nicht dort, wo er zuletzt stand. */
 async function showCursor(on) {
-  await evalInApp(`(document.getElementById('__cur').style.display = '${on ? 'block' : 'none'}', true)`)
+  await evalInApp(`(() => {
+    const c = document.getElementById('__cur')
+    c.style.left = '${mouse.x - 3}px'
+    c.style.top = '${mouse.y - 2}px'
+    c.style.display = '${on ? 'block' : 'none'}'
+    return true
+  })()`)
 }
 async function moveTo(x, y, { steps = 14, button = 'none' } = {}) {
   const from = { ...mouse }
@@ -133,10 +148,19 @@ async function moveTo(x, y, { steps = 14, button = 'none' } = {}) {
     const k = i / steps
     const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2
     const p = { x: from.x + (x - from.x) * e, y: from.y + (y - from.y) * e }
-    await evalInApp(`(() => { const c = document.getElementById('__cur'); c.style.left = '${p.x - 3}px'; c.style.top = '${p.y - 2}px'; return true })()`)
+    await evalInApp(
+      `(() => { const c = document.getElementById('__cur'); c.style.left = '${p.x - 3}px'; c.style.top = '${p.y - 2}px'; return true })()`
+    )
     const t = Date.now()
-    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x, y: p.y, button, buttons: button === 'left' ? 1 : 0 })
-    if (process.env.DEBUG && Date.now() - t > 500) console.log(`      langsam: mouseMoved ${Date.now() - t} ms`)
+    await send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x: p.x,
+      y: p.y,
+      button,
+      buttons: button === 'left' ? 1 : 0
+    })
+    if (process.env.DEBUG && Date.now() - t > 500)
+      console.log(`      langsam: mouseMoved ${Date.now() - t} ms`)
     await sleep(16)
   }
   mouse = { x, y }
@@ -145,21 +169,50 @@ async function click(x, y) {
   if (process.env.DEBUG) console.log(`      → ${Math.round(x)}/${Math.round(y)}`)
   await moveTo(x, y)
   await sleep(120)
-  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 })
+  await send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x,
+    y,
+    button: 'left',
+    buttons: 1,
+    clickCount: 1
+  })
   await sleep(70)
-  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 })
+  await send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x,
+    y,
+    button: 'left',
+    buttons: 0,
+    clickCount: 1
+  })
 }
 async function clickText(text, opts) {
-  if (process.env.DEBUG) console.log(`    ${new Date().toISOString().slice(14, 19)} klick «${text}»`)
+  if (process.env.DEBUG)
+    console.log(`    ${new Date().toISOString().slice(14, 19)} klick «${text}»`)
   const p = await centerOf(text, opts)
   await click(p.x, p.y)
 }
 async function drag(a, b) {
   await moveTo(a.x, a.y)
   await sleep(150)
-  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: a.x, y: a.y, button: 'left', buttons: 1, clickCount: 1 })
+  await send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: a.x,
+    y: a.y,
+    button: 'left',
+    buttons: 1,
+    clickCount: 1
+  })
   await moveTo(b.x, b.y, { steps: 24, button: 'left' })
-  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: b.x, y: b.y, button: 'left', buttons: 0, clickCount: 1 })
+  await send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: b.x,
+    y: b.y,
+    button: 'left',
+    buttons: 0,
+    clickCount: 1
+  })
 }
 
 /** Viewport-Rechteck eines Worts im Editor-Text (erstes Vorkommen). */
@@ -207,11 +260,27 @@ async function openSession(title) {
   await sleep(1200)
 }
 async function sidePanel(open) {
-  const isOpen = await evalInApp(`!!document.querySelector('[role="tablist"]')`)
+  // aria-pressed am Umschalter ist der verlässliche Zustand; die Tab-Liste der
+  // Seitenleiste bleibt auch geschlossen im DOM.
+  const isOpen = await evalInApp(
+    `document.querySelector('[aria-label="Seitenleiste anzeigen"]')?.getAttribute('aria-pressed') === 'true'`
+  )
   if (isOpen !== open) {
     await clickText('Seitenleiste anzeigen', { selector: 'button' })
     await sleep(500)
   }
+}
+
+/** Wartet, bis die Sitzung fertig verarbeitet ist (inkl. Zusammenfassung); Frist 15 min. */
+async function waitForSession(find, what) {
+  const deadline = Date.now() + 900_000
+  while (Date.now() < deadline) {
+    const s = find(await sessions())
+    if (s?.status === 'error') throw new Error(`${what}: ${s.errorMessage}`)
+    if (s?.status === 'review' && !(await evalInApp('window.api.tasks.isProcessing()'))) return s
+    await sleep(1000)
+  }
+  throw new Error(`${what}: nicht innerhalb von 15 min fertig`)
 }
 
 // ── Aufnahme ─────────────────────────────────────────────────────────────────
@@ -236,7 +305,15 @@ function startScreencast(name) {
     frames.push({ data, t: metadata.timestamp })
     send('Page.screencastFrameAck', { sessionId })
   })
-  send('Page.startScreencast', { format: 'png', maxWidth: WIDTH * 2, maxHeight: HEIGHT * 2, everyNthFrame: 1 })
+  // JPEG statt PNG: ~1400 Bilder pro Aufnahme-Animation, das GIF wird ohnehin auf 880 px
+  // verkleinert. Die doppelte Auflösung bleibt für das Endzustands-Standbild.
+  send('Page.startScreencast', {
+    format: 'jpeg',
+    quality: 92,
+    maxWidth: WIDTH * 2,
+    maxHeight: HEIGHT * 2,
+    everyNthFrame: 1
+  })
   return {
     /**
      * Wartezeiten ohne Bewegung (z. B. Verarbeitung) auf `maxGap` Sekunden kürzen;
@@ -250,8 +327,9 @@ function startScreencast(name) {
         const next = frames[i + 1]
         let d = next ? Math.min(next.t - f.t, maxGap) : holdEnd
         if (next && fast && f.t >= fast[0] && f.t <= fast[1]) d *= fastFactor
-        writeFileSync(join(dir, `f${String(i).padStart(4, '0')}.png`), Buffer.from(f.data, 'base64'))
-        return { file: `f${String(i).padStart(4, '0')}.png`, duration: Number(d.toFixed(3)) }
+        const file = `f${String(i).padStart(4, '0')}.jpg`
+        writeFileSync(join(dir, file), Buffer.from(f.data, 'base64'))
+        return { file, duration: Number(d.toFixed(3)) }
       })
       writeFileSync(join(dir, 'timeline.json'), JSON.stringify(timeline, null, 1))
       console.log(`  ${name}/ ${frames.length} Bilder`)
@@ -261,11 +339,16 @@ function startScreencast(name) {
 
 // ── Szenarien ────────────────────────────────────────────────────────────────
 
-
 async function stills() {
   const list = await sessions()
   const haupt = list.find((s) => s.type === 'audio' && (s.anonymizationCount ?? 0) >= 8) ?? list[0]
-  const multi = list.find((s) => s.type === 'audio' && s.id !== haupt.id && /Prüfung|Jonas|Schule/i.test(`${s.title} ${s.summary ?? ''}`)) ?? list.find((s) => s.type === 'audio' && s.id !== haupt.id)
+  const multi =
+    list.find(
+      (s) =>
+        s.type === 'audio' &&
+        s.id !== haupt.id &&
+        /Prüfung|Jonas|Schule/i.test(`${s.title} ${s.summary ?? ''}`)
+    ) ?? list.find((s) => s.type === 'audio' && s.id !== haupt.id)
   for (const theme of ['light', 'dark']) {
     await setTheme(theme)
     await toList()
@@ -288,34 +371,44 @@ async function editorAnimation() {
   // Ausgangszustand sichern: Die Animation ersetzt «Panikstörung» dauerhaft.
   const snapshot = await evalInApp(`window.api.review.load(${JSON.stringify(haupt.id)})`)
   for (const theme of ['light', 'dark']) {
-    await setTheme(theme)
-    await toList()
-    await openSession(haupt.title)
-    await sidePanel(true)
-    const w = await wordRect('Panikstörung')
-    if (!w) throw new Error('«Panikstörung» steht nicht (mehr) als Klartext im Transkript — Demo neu laden')
-    mouse = { x: w.left - 60, y: w.y + 70 }
-    await showCursor(true)
-    const rec = startScreencast(`editor-${theme}`)
-    await sleep(1500)
-    await drag({ x: w.left + 1, y: w.y }, { x: w.right - 1, y: w.y })
-    await sleep(900)
-    await clickText('Auf Sperrliste setzen', { selector: '[role="menuitem"]' })
-    await sleep(700)
-    await clickText('Medizinisch', { selector: '[role="menuitem"]' })
-    await sleep(1100)
-    await clickText('Hinzufügen', { selector: 'button' })
-    await sleep(1800)
-    await moveTo(mouse.x + 40, mouse.y + 140)
-    await rec.stop({ holdEnd: 3 })
-    // Für die zweite Fassung (dunkel) den Ausgangszustand wiederherstellen.
-    await showCursor(false)
-    await toList()
-    const entry = (await evalInApp('window.api.blocklist.list()')).find((e) => e.term === 'Panikstörung')
-    if (entry) await evalInApp(`window.api.blocklist.delete(${JSON.stringify(entry.id)})`)
-    await evalInApp(
-      `window.api.review.save(${JSON.stringify(haupt.id)}, ${JSON.stringify(snapshot.document)}, ${JSON.stringify(snapshot.entityMap)})`
-    )
+    try {
+      await setTheme(theme)
+      await toList()
+      await openSession(haupt.title)
+      // Ohne Seitenleiste bleibt der Text im GIF gross genug zum Lesen.
+      await sidePanel(false)
+      const w = await wordRect('Panikstörung')
+      if (!w) {
+        throw new Error(
+          '«Panikstörung» steht nicht (mehr) als Klartext im Transkript — Demo neu laden'
+        )
+      }
+      mouse = { x: w.left - 60, y: w.y + 70 }
+      await showCursor(true)
+      const rec = startScreencast(`editor-${theme}`)
+      await sleep(1500)
+      await drag({ x: w.left + 1, y: w.y }, { x: w.right - 1, y: w.y })
+      await sleep(900)
+      await clickText('Auf Sperrliste setzen', { selector: '[role="menuitem"]' })
+      await sleep(700)
+      await clickText('Medizinisch', { selector: '[role="menuitem"]' })
+      await sleep(1100)
+      await clickText('Hinzufügen', { selector: 'button' })
+      await sleep(1800)
+      await moveTo(mouse.x + 40, mouse.y + 140)
+      await rec.stop({ holdEnd: 3 })
+    } finally {
+      // Ausgangszustand wiederherstellen — auch wenn der Lauf abbricht.
+      await showCursor(false)
+      await toList()
+      const entry = (await evalInApp('window.api.blocklist.list()')).find(
+        (e) => e.term === 'Panikstörung'
+      )
+      if (entry) await evalInApp(`window.api.blocklist.delete(${JSON.stringify(entry.id)})`)
+      await evalInApp(
+        `window.api.review.save(${JSON.stringify(haupt.id)}, ${JSON.stringify(snapshot.document)}, ${JSON.stringify(snapshot.entityMap)})`
+      )
+    }
   }
 }
 
@@ -334,14 +427,8 @@ async function pdfAnimation(pdfPath) {
     await sleep(500)
     const [s] = await evalInApp(`window.api.import.pdf(${JSON.stringify([pdfPath])})`)
     await moveTo(p.x - 300, p.y + 260)
-    for (;;) {
-      const cur = (await sessions()).find((x) => x.id === s.id)
-      if (cur?.status === 'review' && !(await evalInApp('window.api.tasks.isProcessing()'))) break
-      if (cur?.status === 'error') throw new Error(cur.errorMessage)
-      await sleep(1000)
-    }
+    const done = await waitForSession((l) => l.find((x) => x.id === s.id), 'PDF-Import')
     await sleep(1200)
-    const done = (await sessions()).find((x) => x.id === s.id)
     await openSession(done.title)
     await sleep(1500)
     await rec.stop({ maxGap: 0.8, holdEnd: 3 })
@@ -369,13 +456,7 @@ async function recordingAnimation() {
     const fastTo = Date.now() / 1000 - 0.5
     await clickText('Aufnahme stoppen', { selector: 'button' })
     await moveTo(mouse.x - 200, mouse.y + 250)
-    let s
-    for (;;) {
-      s = (await sessions()).find((x) => !before.has(x.id))
-      if (s?.status === 'review' && !(await evalInApp('window.api.tasks.isProcessing()'))) break
-      if (s?.status === 'error') throw new Error(s.errorMessage)
-      await sleep(1000)
-    }
+    const s = await waitForSession((l) => l.find((x) => !before.has(x.id)), 'Aufnahme')
     await sleep(1200)
     await openSession(s.title)
     await sleep(1500)
@@ -387,6 +468,7 @@ async function recordingAnimation() {
 }
 
 try {
+  await assertDemoInstance(evalInApp)
   await setWindow()
   if (MODE === 'stills') await stills()
   else if (MODE === 'editor') await editorAnimation()

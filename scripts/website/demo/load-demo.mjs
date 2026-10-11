@@ -20,13 +20,16 @@ import { readFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { evalInApp, closeCdp } from '../../e2e/cdp.mjs'
+import { assertDemoInstance } from './guard.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ASSETS = process.argv[2]
 const dbIdx = process.argv.indexOf('--db')
 const DB = dbIdx > 0 ? process.argv[dbIdx + 1] : null
 if (!ASSETS) {
-  console.error('Usage: node scripts/website/demo/load-demo.mjs <assets-dir> [--db <therascript.db>]')
+  console.error(
+    'Usage: node scripts/website/demo/load-demo.mjs <assets-dir> [--db <therascript.db>]'
+  )
   process.exit(1)
 }
 
@@ -36,9 +39,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const { sitzungen } = JSON.parse(readFileSync(join(HERE, 'sitzungen.json'), 'utf8'))
 const { eintraege } = JSON.parse(readFileSync(join(HERE, 'sperrliste.json'), 'utf8'))
 
+await assertDemoInstance(evalInApp).catch((e) => {
+  console.error(e.message)
+  closeCdp()
+  process.exit(1)
+})
 const existing = await evalInApp('window.api.sessions.list()')
 if (existing.length > 0) {
-  console.error(`Abbruch: Die Instanz hat bereits ${existing.length} Sitzungen. Nur in eine leere Demo-Instanz einspielen.`)
+  console.error(
+    `Abbruch: Die Instanz hat bereits ${existing.length} Sitzungen. Nur in eine leere Demo-Instanz einspielen.`
+  )
   closeCdp()
   process.exit(1)
 }
@@ -61,7 +71,10 @@ async function waitDone(sessionId) {
 }
 
 log('Sperrliste …')
-for (const e of eintraege) await evalInApp(`window.api.blocklist.add(${JSON.stringify(e.begriff)}, ${JSON.stringify(e.typ)})`)
+for (const e of eintraege)
+  await evalInApp(
+    `window.api.blocklist.add(${JSON.stringify(e.begriff)}, ${JSON.stringify(e.typ)})`
+  )
 
 const created = []
 // Älteste zuerst, damit die Reihenfolge der Erstellung zur Liste passt.
@@ -90,7 +103,10 @@ for (const s of [...sitzungen].sort((a, b) => b.tageZurueck - a.tageZurueck)) {
   created.push({ id: sessionId, tageZurueck: s.tageZurueck, uhrzeit: s.uhrzeit })
 }
 
-for (const [file, tage, zeit] of [['bericht.pdf', 2, '09:10'], ['bericht-scan.pdf', 2, '09:12']]) {
+for (const [file, tage, zeit] of [
+  ['bericht.pdf', 2, '09:10'],
+  ['bericht-scan.pdf', 2, '09:12']
+]) {
   log(`PDF «${file}» …`)
   const [s] = await evalInApp(`window.api.import.pdf(${JSON.stringify([join(ASSETS, file)])})`)
   const done = await waitDone(s.id)
