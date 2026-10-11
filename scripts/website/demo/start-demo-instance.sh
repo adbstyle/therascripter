@@ -9,7 +9,7 @@
 # - Beim ersten Aufruf werden die Modelle aus ~/.therascript/models per APFS-Klon
 #   (cp -c, kein zusätzlicher Platz) in die Sandbox kopiert.
 # - --fake-mic ersetzt das Mikrofon durch eine WAV-Datei (Chromium-Fake-Device,
-#   einmal abgespielt) — für die Aufnahme-Animation.
+#   in Schleife; jede Aufnahme beginnt am Dateianfang) — für die Aufnahme-Animation.
 #
 # Warum nicht einfach HOME umbiegen: Electron löst app.getPath('home') auf macOS
 # nicht über $HOME auf, die gepackte App schrieb so in die echten Daten. Der Wrapper
@@ -22,7 +22,10 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 # dann nur alle paar Sekunden an (capture.mjs läuft, während man weiterarbeitet).
 EXTRA=(--disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling)
 if [ "${1:-}" = "--fake-mic" ]; then
-  EXTRA+=(--use-fake-ui-for-media-stream --use-fake-device-for-media-stream "--use-file-for-fake-audio-capture=${2:?wav fehlt}%noloop")
+  # Der Audio-Service läuft sonst in einem Sandbox-Prozess, der die WAV nicht lesen darf
+  # (Ergebnis: stumme Aufnahme ohne Fehlermeldung).
+  EXTRA+=(--use-fake-ui-for-media-stream --use-fake-device-for-media-stream "--use-file-for-fake-audio-capture=${2:?wav fehlt}"
+    --disable-features=AudioServiceOutOfProcess,AudioServiceSandbox)
 fi
 
 [ -f "$ROOT/out/main/index.js" ] || { echo "Zuerst npm run build"; exit 1; }

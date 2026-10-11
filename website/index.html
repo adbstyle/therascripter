@@ -152,13 +152,24 @@
             </p>
           </div>
           <div class="feature-image">
-            <img
-              src="assets/screenshot-recording.svg"
-              alt="Aufnahme-Ansicht mit grossem roten Aufnahmeknopf, Timer 00:14:32, sichtbarem Mikrofon-Pegelbalken und dem Hinweis ‚Auto-Stopp nach 2 Stunden‘."
-              width="1200"
-              height="800"
-              loading="lazy"
-            />
+            <picture>
+              <source
+                srcset="assets/aufnahme-dark-ende.webp"
+                media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)"
+              />
+              <source
+                srcset="assets/aufnahme-light-ende.webp"
+                media="(prefers-reduced-motion: reduce)"
+              />
+              <source srcset="assets/aufnahme-dark.gif" media="(prefers-color-scheme: dark)" />
+              <img
+                src="assets/aufnahme-light.gif"
+                alt="Animation in TheraScript: Ein Klick auf «Aufnahme starten» legt eine laufende Aufnahme mit Timer, Pegelanzeige und Einwilligungshinweis an. Nach «Aufnahme stoppen» durchläuft die Sitzung die Schritte Sprecher unterscheiden, Gespräch transkribieren und Persönliche Angaben pseudonymisieren. Das geöffnete Transkript trennt Person A und Person B, ersetzt Namen und Ort durch Platzhalter und zeigt oben die Zusammenfassung."
+                width="1600"
+                height="1056"
+                loading="lazy"
+              />
+            </picture>
           </div>
         </article>
 
@@ -198,13 +209,24 @@
             </p>
           </div>
           <div class="feature-image">
-            <img
-              src="assets/screenshot-blocklist.svg"
-              alt="Sperrlisten-Verwaltung in den Einstellungen mit gruppierten Einträgen für Personen, Orte und Diagnosen."
-              width="1200"
-              height="800"
-              loading="lazy"
-            />
+            <picture>
+              <source
+                srcset="assets/editor-dark-ende.webp"
+                media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)"
+              />
+              <source
+                srcset="assets/editor-light-ende.webp"
+                media="(prefers-reduced-motion: reduce)"
+              />
+              <source srcset="assets/editor-dark.gif" media="(prefers-color-scheme: dark)" />
+              <img
+                src="assets/editor-light.gif"
+                alt="Animation in TheraScript: Im Transkript wird das Wort «Panikstörung» markiert. Im Menü «Auf Sperrliste setzen» wird der Typ Medizinisch gewählt und das Hinzufügen bestätigt. Danach steht an der Stelle des Worts der Platzhalter Medizinisch 3."
+                width="1600"
+                height="1056"
+                loading="lazy"
+              />
+            </picture>
           </div>
         </article>
 
@@ -218,13 +240,24 @@
             </p>
           </div>
           <div class="feature-image">
-            <img
-              src="assets/screenshot-models.svg"
-              alt="Modell-Auswahl mit drei Karten: aktivem Whisper-Standardmodell, optionalem Schweizerdeutsch-Modell und einem optionalen Zusammenfassungs-Modell."
-              width="1200"
-              height="800"
-              loading="lazy"
-            />
+            <picture>
+              <source
+                srcset="assets/pdf-dark-ende.webp"
+                media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)"
+              />
+              <source
+                srcset="assets/pdf-light-ende.webp"
+                media="(prefers-reduced-motion: reduce)"
+              />
+              <source srcset="assets/pdf-dark.gif" media="(prefers-color-scheme: dark)" />
+              <img
+                src="assets/pdf-light.gif"
+                alt="Animation in TheraScript: Über «PDF importieren» kommt ein gescannter Arztbericht dazu. Die Sitzungsliste zeigt den Fortschritt bis «Persönliche Angaben pseudonymisieren», danach erhält der Bericht einen Titel und eine Zusammenfassung. Geöffnet zeigt der Bericht Namen, Adressen, Telefon- und AHV-Nummer als Platzhalter."
+                width="1600"
+                height="1056"
+                loading="lazy"
+              />
+            </picture>
           </div>
         </article>
 

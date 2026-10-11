@@ -230,7 +230,7 @@ code {
 
 .hero .hint {
   font-size: 0.9375rem;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   margin: var(--space-sm) 0 0;
 }
 

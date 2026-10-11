@@ -238,14 +238,18 @@ function startScreencast(name) {
   })
   send('Page.startScreencast', { format: 'png', maxWidth: WIDTH * 2, maxHeight: HEIGHT * 2, everyNthFrame: 1 })
   return {
-    /** Wartezeiten ohne Bewegung (z. B. Verarbeitung) auf `max` Sekunden kürzen. */
-    async stop({ maxGap = 1.6, holdEnd = 2.5 } = {}) {
+    /**
+     * Wartezeiten ohne Bewegung (z. B. Verarbeitung) auf `maxGap` Sekunden kürzen;
+     * `fast` = [von, bis] (Epoch-Sekunden) läuft mit `fastFactor` beschleunigt.
+     */
+    async stop({ maxGap = 1.6, holdEnd = 2.5, fast = null, fastFactor = 0.4 } = {}) {
       await sleep(400)
       await send('Page.stopScreencast', {})
       off()
       const timeline = frames.map((f, i) => {
         const next = frames[i + 1]
-        const d = next ? Math.min(next.t - f.t, maxGap) : holdEnd
+        let d = next ? Math.min(next.t - f.t, maxGap) : holdEnd
+        if (next && fast && f.t >= fast[0] && f.t <= fast[1]) d *= fastFactor
         writeFileSync(join(dir, `f${String(i).padStart(4, '0')}.png`), Buffer.from(f.data, 'base64'))
         return { file: `f${String(i).padStart(4, '0')}.png`, duration: Number(d.toFixed(3)) }
       })
@@ -281,6 +285,8 @@ async function stills() {
 async function editorAnimation() {
   const list = await sessions()
   const haupt = list.find((s) => s.type === 'audio' && (s.anonymizationCount ?? 0) >= 8) ?? list[0]
+  // Ausgangszustand sichern: Die Animation ersetzt «Panikstörung» dauerhaft.
+  const snapshot = await evalInApp(`window.api.review.load(${JSON.stringify(haupt.id)})`)
   for (const theme of ['light', 'dark']) {
     await setTheme(theme)
     await toList()
@@ -294,19 +300,22 @@ async function editorAnimation() {
     await sleep(1500)
     await drag({ x: w.left + 1, y: w.y }, { x: w.right - 1, y: w.y })
     await sleep(900)
-    await clickText('Auf Sperrliste setzen')
+    await clickText('Auf Sperrliste setzen', { selector: '[role="menuitem"]' })
     await sleep(700)
-    await clickText('Medizinisch')
+    await clickText('Medizinisch', { selector: '[role="menuitem"]' })
     await sleep(1100)
     await clickText('Hinzufügen', { selector: 'button' })
     await sleep(1800)
     await moveTo(mouse.x + 40, mouse.y + 140)
     await rec.stop({ holdEnd: 3 })
     // Für die zweite Fassung (dunkel) den Ausgangszustand wiederherstellen.
+    await showCursor(false)
+    await toList()
     const entry = (await evalInApp('window.api.blocklist.list()')).find((e) => e.term === 'Panikstörung')
     if (entry) await evalInApp(`window.api.blocklist.delete(${JSON.stringify(entry.id)})`)
-    await evalInApp(`document.execCommand('undo'), true`)
-    await showCursor(false)
+    await evalInApp(
+      `window.api.review.save(${JSON.stringify(haupt.id)}, ${JSON.stringify(snapshot.document)}, ${JSON.stringify(snapshot.entityMap)})`
+    )
   }
 }
 
@@ -344,7 +353,7 @@ async function pdfAnimation(pdfPath) {
 
 async function recordingAnimation() {
   // Erwartet eine Instanz, die mit Chromiums Fake-Mikrofon gestartet wurde
-  // (--use-fake-device-for-media-stream --use-file-for-fake-audio-capture=<wav>%noloop).
+  // (scripts/website/demo/start-demo-instance.sh … --fake-mic <wav>).
   for (const theme of ['light', 'dark']) {
     await setTheme(theme)
     await toList()
@@ -354,7 +363,10 @@ async function recordingAnimation() {
     const rec = startScreencast(`aufnahme-${theme}`)
     await sleep(1200)
     await clickText('Aufnahme starten', { selector: 'button' })
-    await sleep(6500)
+    const fastFrom = Date.now() / 1000 + 1.5
+    // Länge von aufnahme-animation.wav (Kurzdialog aus sitzungen.json) plus Reserve
+    await sleep(10_500)
+    const fastTo = Date.now() / 1000 - 0.5
     await clickText('Aufnahme stoppen', { selector: 'button' })
     await moveTo(mouse.x - 200, mouse.y + 250)
     let s
@@ -367,7 +379,7 @@ async function recordingAnimation() {
     await sleep(1200)
     await openSession(s.title)
     await sleep(1500)
-    await rec.stop({ maxGap: 0.8, holdEnd: 3 })
+    await rec.stop({ maxGap: 0.8, holdEnd: 3, fast: [fastFrom, fastTo] })
     await showCursor(false)
     await toList()
     await evalInApp(`window.api.sessions.delete(${JSON.stringify(s.id)})`)
