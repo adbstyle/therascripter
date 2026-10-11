@@ -3,7 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>TheraScript – Therapie-Sitzungen lokal transkribieren und pseudonymisieren | macOS</title>
+    <title>
+      TheraScript – Therapie-Sitzungen lokal transkribieren und pseudonymisieren | macOS
+    </title>
     <meta
       name="description"
       content="Mac-App für Therapie-Sitzungen: transkribiert Gespräche auf Hochdeutsch und Schweizerdeutsch und pseudonymisiert sie direkt auf Ihrem Mac. Spart Zeit bei der Dokumentation. Kostenlos und quelloffen."
@@ -18,12 +20,18 @@
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="de_CH" />
     <meta property="og:site_name" content="TheraScript" />
-    <meta property="og:title" content="TheraScript – Transkription, die Ihre Praxis nicht verlässt" />
+    <meta
+      property="og:title"
+      content="TheraScript – Transkription, die Ihre Praxis nicht verlässt"
+    />
     <meta
       property="og:description"
       content="Therapie-Sitzungen direkt auf Ihrem Mac transkribieren und pseudonymisieren. Spart Zeit bei der Dokumentation. Kostenlos und quelloffen."
     />
-    <meta property="og:image" content="https://adbstyle.github.io/therascripter/assets/og-image.png?v=4" />
+    <meta
+      property="og:image"
+      content="https://adbstyle.github.io/therascripter/assets/og-image.png?v=4"
+    />
     <meta
       property="og:image:alt"
       content="TheraScript-Logo mit dem Schriftzug TheraScript und der Botschaft: Transkription, die Ihre Praxis nicht verlässt."
@@ -89,13 +97,16 @@
           <p class="hint">Für Mac mit Apple-Silicon-Chip, macOS 26 (Tahoe) oder neuer</p>
         </div>
         <div class="hero-image">
-          <img
-            src="assets/hero.svg"
-            alt="Bildschirmfoto des TheraScript Review-Editors: Sitzungstext mit als Chips dargestellten Pseudonymisierungs-Begriffen wie [PERSON 1], [ORT 1] und [DIAGNOSE 1]."
-            width="1600"
-            height="1000"
-            fetchpriority="high"
-          />
+          <picture>
+            <source srcset="assets/editor-dark.webp" media="(prefers-color-scheme: dark)" />
+            <img
+              src="assets/editor-light.webp"
+              alt="TheraScript-Editor mit einer erfundenen Therapiesitzung: Namen, Orte und medizinische Angaben sind durch Platzhalter wie Person 1, Ort 1 und Medizinisch 1 ersetzt. Oben steht die Zusammenfassung der Sitzung, rechts listet die Seitenleiste alle Pseudonymisierungen mit ihrem Original auf."
+              width="1600"
+              height="1056"
+              fetchpriority="high"
+            />
+          </picture>
         </div>
       </section>
 
@@ -162,13 +173,16 @@
             </p>
           </div>
           <div class="feature-image">
-            <img
-              src="assets/screenshot-review.svg"
-              alt="Review-Editor mit fliessendem Sitzungstext, in dem Namen und Orte als anklickbare Chips dargestellt sind."
-              width="1200"
-              height="800"
-              loading="lazy"
-            />
+            <picture>
+              <source srcset="assets/sprecher-dark.webp" media="(prefers-color-scheme: dark)" />
+              <img
+                src="assets/sprecher-light.webp"
+                alt="Transkript in TheraScript mit drei Gesprächsbeteiligten, gekennzeichnet als Person A, Person B und Person C. Namen und Orte sind durch Platzhalter ersetzt, darüber steht die Zusammenfassung der Sitzung."
+                width="1600"
+                height="1056"
+                loading="lazy"
+              />
+            </picture>
           </div>
         </article>
 
@@ -178,8 +192,8 @@
             <p>
               Namen, Orte, Datumsangaben und Kontaktangaben wie Telefon-, E-Mail- oder AHV-Nummern
               ersetzt TheraScript automatisch durch Platzhalter. Diagnosen und eigene Begriffe
-              nehmen Sie direkt aus dem Text heraus in die Sperrliste auf. Sie werden dann in
-              dieser und allen künftigen Sitzungen ersetzt. Eine Seitenleiste listet alle
+              nehmen Sie direkt aus dem Text heraus in die Sperrliste auf. Sie werden dann in dieser
+              und allen künftigen Sitzungen ersetzt. Eine Seitenleiste listet alle
               Pseudonymisierungen der Sitzung auf.
             </p>
           </div>
@@ -219,19 +233,22 @@
             <h3>Zusammenfassung auf Wunsch</h3>
             <p>
               Optional fasst TheraScript jede Sitzung und jedes Dokument mit einem Titel und zwei
-              Sätzen zusammen – lokal und auf Grundlage des pseudonymisierten Texts. Dafür laden
-              Sie in den Einstellungen unter «Modelle» einmalig ein zusätzliches Sprachmodell
-              herunter. Alle Sitzungen sehen Sie in der Übersicht «Transkriptionen».
+              Sätzen zusammen – lokal und auf Grundlage des pseudonymisierten Texts. Dafür laden Sie
+              in den Einstellungen unter «Modelle» einmalig ein zusätzliches Sprachmodell herunter.
+              Alle Sitzungen sehen Sie in der Übersicht «Transkriptionen».
             </p>
           </div>
           <div class="feature-image">
-            <img
-              src="assets/screenshot-sessions.svg"
-              alt="Liste aller Sitzungen, jeweils mit Datum, Dauer, Status und einem ‚Öffnen‘-Knopf. Einzelne Einträge zeigen die verbleibende Zeit bis zur automatischen Löschung."
-              width="1200"
-              height="800"
-              loading="lazy"
-            />
+            <picture>
+              <source srcset="assets/sitzungen-dark.webp" media="(prefers-color-scheme: dark)" />
+              <img
+                src="assets/sitzungen-light.webp"
+                alt="Übersicht «Transkriptionen» in TheraScript mit Aufnahmen und importierten PDF-Berichten, gruppiert nach Heute, Gestern und Diese Woche. Jede Karte zeigt Titel, Zusammenfassung sowie die Zahl der Wörter und Pseudonymisierungen."
+                width="1600"
+                height="1056"
+                loading="lazy"
+              />
+            </picture>
           </div>
         </article>
 
@@ -266,9 +283,9 @@
             <h3>Ergebnis immer prüfen</h3>
             <p>
               Die automatische Pseudonymisierung erkennt nicht jede persönliche Angabe, und
-              Diagnosen ersetzt sie nur über die Sperrliste. Auch eine Zusammenfassung kann
-              Fehler enthalten. Prüfen Sie Pseudonymisierung und Zusammenfassung, bevor Sie
-              Inhalte weiterverwenden.
+              Diagnosen ersetzt sie nur über die Sperrliste. Auch eine Zusammenfassung kann Fehler
+              enthalten. Prüfen Sie Pseudonymisierung und Zusammenfassung, bevor Sie Inhalte
+              weiterverwenden.
             </p>
           </article>
           <article class="notice-card">
@@ -287,16 +304,16 @@
           <article>
             <h3>Automatische Löschung nach 30 Tagen</h3>
             <p>
-              Sitzungen werden 30 Tage nach Erstellung automatisch gelöscht, die Aufnahme oder
-              das PDF bereits 24 Stunden nach der Verarbeitung. Was Sie aufbewahren müssen,
-              kopieren Sie vorher in Ihre Praxis-Software oder Ihre Dokumentation.
+              Sitzungen werden 30 Tage nach Erstellung automatisch gelöscht, die Aufnahme oder das
+              PDF bereits 24 Stunden nach der Verarbeitung. Was Sie aufbewahren müssen, kopieren Sie
+              vorher in Ihre Praxis-Software oder Ihre Dokumentation.
             </p>
           </article>
           <article>
             <h3>Keine Verbindung nach aussen</h3>
             <p>
-              TheraScript verbindet sich nicht mit dem Internet. Keine Cloud, keine Telemetrie,
-              kein Konto.
+              TheraScript verbindet sich nicht mit dem Internet. Keine Cloud, keine Telemetrie, kein
+              Konto.
             </p>
           </article>
           <article>
@@ -311,8 +328,8 @@
             <p>
               Im Transkript werden echte Namen durch Platzhalter wie [PERSON 1] oder [ORT 1]
               ersetzt. Die Zuordnung zwischen Platzhalter und Original bleibt lokal auf Ihrem Mac
-              gespeichert – im Editor sehen Sie jederzeit, wer mit [PERSON 1] gemeint ist.
-              Kopierter Text enthält nur die Platzhalter.
+              gespeichert – im Editor sehen Sie jederzeit, wer mit [PERSON 1] gemeint ist. Kopierter
+              Text enthält nur die Platzhalter.
             </p>
           </article>
         </div>
@@ -334,11 +351,10 @@
         <details>
           <summary>Wo werden meine Daten gespeichert?</summary>
           <p>
-            Sämtliche Audio-, Transkript- und PDF-Daten werden ausschliesslich lokal auf Ihrem
-            Mac gespeichert (Standardpfad: <code>~/.therascript/</code>). TheraScript stellt im
+            Sämtliche Audio-, Transkript- und PDF-Daten werden ausschliesslich lokal auf Ihrem Mac
+            gespeichert (Standardpfad: <code>~/.therascript/</code>). TheraScript stellt im
             Produktivbetrieb keine ausgehenden Internet-Verbindungen her. Sie können das selbst
-            verifizieren, indem Sie die Internetverbindung trennen – die App funktioniert
-            weiterhin.
+            verifizieren, indem Sie die Internetverbindung trennen – die App funktioniert weiterhin.
           </p>
         </details>
 
@@ -368,10 +384,9 @@
             Für die Transkription kommt standardmässig Whisper Large V3 Turbo zum Einsatz – ein
             multilinguales Modell, das Hochdeutsch sehr gut versteht. Optional lässt sich ein auf
             Schweizerdeutsch oder auf Hochdeutsch spezialisiertes Modell aktivieren. Die
-            Gesprächspartner:innen unterscheidet ein Modell von pyannote, für die
-            Pseudonymisierung wird ein deutsches Erkennungsmodell von flair verwendet. Die
-            optionale Zusammenfassung erstellt ein Sprachmodell aus Googles Gemma-Familie. Alle
-            Modelle laufen lokal.
+            Gesprächspartner:innen unterscheidet ein Modell von pyannote, für die Pseudonymisierung
+            wird ein deutsches Erkennungsmodell von flair verwendet. Die optionale Zusammenfassung
+            erstellt ein Sprachmodell aus Googles Gemma-Familie. Alle Modelle laufen lokal.
           </p>
         </details>
 
@@ -380,9 +395,9 @@
           <p>
             TheraScript läuft auf Macs mit Apple-Silicon-Chip ab macOS 26 (Tahoe). Ältere
             macOS-Versionen werden in der aktuellen Version nicht unterstützt, weil die
-            mitgelieferte Metal-GPU-Bibliothek für die Spracherkennung gegen das macOS-26-SDK
-            gebaut wurde. Wir arbeiten daran, die Untergrenze in einer kommenden Version zu
-            senken. Für Intel-Macs gibt es keine Version von TheraScript.
+            mitgelieferte Metal-GPU-Bibliothek für die Spracherkennung gegen das macOS-26-SDK gebaut
+            wurde. Wir arbeiten daran, die Untergrenze in einer kommenden Version zu senken. Für
+            Intel-Macs gibt es keine Version von TheraScript.
           </p>
         </details>
 
@@ -401,8 +416,8 @@
             <a href="https://github.com/adbstyle/therascripter" rel="noopener"
               >github.com/adbstyle/therascripter</a
             >
-            einsehbar und kann unabhängig überprüft, kompiliert oder angepasst werden. Die
-            Lizenzen der mitgelieferten Drittsoftware und der Modelle finden Sie in der
+            einsehbar und kann unabhängig überprüft, kompiliert oder angepasst werden. Die Lizenzen
+            der mitgelieferten Drittsoftware und der Modelle finden Sie in der
             <a
               href="https://github.com/adbstyle/therascripter/blob/main/THIRD_PARTY_LICENSES.md"
               rel="noopener"
@@ -415,9 +430,8 @@
           <summary>Wie erhalte ich Updates?</summary>
           <p>
             TheraScript zeigt an, wenn eine neue Version verfügbar ist, und führt Sie zur
-            Release-Seite des Projekts auf GitHub. Dort laden Sie die DMG-Datei der neuesten
-            Version herunter und legen sie über die bestehende Installation. Lokale Daten bleiben
-            erhalten.
+            Release-Seite des Projekts auf GitHub. Dort laden Sie die DMG-Datei der neuesten Version
+            herunter und legen sie über die bestehende Installation. Lokale Daten bleiben erhalten.
           </p>
         </details>
       </section>
@@ -427,7 +441,9 @@
       <div class="footer-content">
         <p>TheraScript ist Open Source unter MIT-Lizenz.</p>
         <nav aria-label="Footer">
-          <a href="https://github.com/adbstyle/therascripter" rel="noopener">Quellcode auf GitHub</a>
+          <a href="https://github.com/adbstyle/therascripter" rel="noopener"
+            >Quellcode auf GitHub</a
+          >
           <a
             href="https://github.com/adbstyle/therascripter/blob/main/THIRD_PARTY_LICENSES.md"
             rel="noopener"

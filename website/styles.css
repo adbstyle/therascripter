@@ -108,7 +108,8 @@ summary:focus-visible {
 }
 
 img,
-svg {
+svg,
+picture {
   max-width: 100%;
   height: auto;
   display: block;
@@ -204,9 +205,10 @@ code {
 
 @media (min-width: 960px) {
   .hero {
-    grid-template-columns: 1.05fr 1fr;
-    align-items: center;
     padding-top: var(--space-2xl);
+  }
+  .hero-content {
+    max-width: 46rem;
   }
 }
 
@@ -374,8 +376,11 @@ p {
 
 @media (min-width: 800px) {
   .feature {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 2fr 3fr;
     gap: var(--space-xl);
+  }
+  .feature-right {
+    grid-template-columns: 3fr 2fr;
   }
   .feature-right .feature-text {
     order: 2;

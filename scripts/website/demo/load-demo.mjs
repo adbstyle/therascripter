@@ -11,7 +11,7 @@
  *
  * NIE gegen eine Instanz mit echten Daten laufen lassen: Die Demo gehört in eine
  * eigene Instanz mit eigenem Daten- und Settings-Ordner (siehe
- * docs/product/operations/website.md, Abschnitt Demo-Sitzung).
+ * docs/product/operations/website.md, «Demo-Sitzung neu erstellen»).
  *
  * Usage: CDP_PORT=9224 node scripts/website/demo/load-demo.mjs <assets-dir> [--db <therascript.db>]
  */

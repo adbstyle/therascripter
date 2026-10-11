@@ -18,9 +18,11 @@ set -euo pipefail
 SB="${1:?Usage: start-demo-instance.sh <sandbox-dir> [--fake-mic <wav>]}"
 shift
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-EXTRA=()
+# Verdeckte Fenster drosselt Chromium sonst: Eingaben und Screencast-Bilder kommen
+# dann nur alle paar Sekunden an (capture.mjs läuft, während man weiterarbeitet).
+EXTRA=(--disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling)
 if [ "${1:-}" = "--fake-mic" ]; then
-  EXTRA=(--use-fake-ui-for-media-stream --use-fake-device-for-media-stream "--use-file-for-fake-audio-capture=${2:?wav fehlt}%noloop")
+  EXTRA+=(--use-fake-ui-for-media-stream --use-fake-device-for-media-stream "--use-file-for-fake-audio-capture=${2:?wav fehlt}%noloop")
 fi
 
 [ -f "$ROOT/out/main/index.js" ] || { echo "Zuerst npm run build"; exit 1; }
@@ -69,5 +71,5 @@ fi
 env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" SHELL=/bin/zsh PATH=/usr/bin:/bin:/usr/sbin:/sbin \
   TMPDIR="$TMPDIR" LANG=de_CH.UTF-8 \
   "$ROOT/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron" "$SB/app" \
-  --remote-debugging-port=9224 ${EXTRA[@]+"${EXTRA[@]}"} > "$SB/app.log" 2>&1 &
+  --remote-debugging-port=9224 "${EXTRA[@]}" > "$SB/app.log" 2>&1 &
 echo "Demo-Instanz gestartet (PID $!), Log: $SB/app.log, CDP-Port 9224"
