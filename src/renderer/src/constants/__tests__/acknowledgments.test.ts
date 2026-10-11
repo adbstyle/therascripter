@@ -26,4 +26,14 @@ describe('acknowledgments', () => {
       expect(a.notice, a.name).toMatch(/https:\/\/creativecommons\.org\/licenses\//)
     }
   })
+
+  it('loads the generated Python notices with every bundled package on demand', async () => {
+    const python = SOFTWARE_ACKNOWLEDGMENTS.find((a) => a.packages)
+    expect(python).toBeDefined()
+    expect(typeof python!.notice).toBe('function')
+
+    const text = await (python!.notice as () => Promise<string>)()
+    for (const p of python!.packages!) expect(text, p.name).toContain(`${p.name} ${p.version}`)
+    expect(text).toMatch(/PYTHON SOFTWARE FOUNDATION LICENSE/)
+  })
 })

@@ -1,0 +1,607 @@
+[
+  {
+    "name": "Python (CPython)",
+    "version": "3.12",
+    "license": "PSF-2.0"
+  },
+  {
+    "name": "accelerate",
+    "version": "1.12.0",
+    "license": "Apache"
+  },
+  {
+    "name": "aiohappyeyeballs",
+    "version": "2.6.1",
+    "license": "PSF-2.0"
+  },
+  {
+    "name": "aiohttp",
+    "version": "3.13.3",
+    "license": "Apache-2.0 AND MIT"
+  },
+  {
+    "name": "aiosignal",
+    "version": "1.4.0",
+    "license": "Apache 2.0"
+  },
+  {
+    "name": "alembic",
+    "version": "1.18.4",
+    "license": "MIT"
+  },
+  {
+    "name": "asteroid-filterbanks",
+    "version": "0.4.0",
+    "license": "MIT"
+  },
+  {
+    "name": "attrs",
+    "version": "25.4.0",
+    "license": "MIT"
+  },
+  {
+    "name": "beautifulsoup4",
+    "version": "4.14.3",
+    "license": "MIT License"
+  },
+  {
+    "name": "bioc",
+    "version": "2.1",
+    "license": "MIT License"
+  },
+  {
+    "name": "boto3",
+    "version": "1.42.58",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "botocore",
+    "version": "1.42.58",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "certifi",
+    "version": "2026.2.25",
+    "license": "MPL-2.0"
+  },
+  {
+    "name": "cffi",
+    "version": "2.0.0",
+    "license": "MIT"
+  },
+  {
+    "name": "charset-normalizer",
+    "version": "3.4.4",
+    "license": "MIT"
+  },
+  {
+    "name": "colorlog",
+    "version": "6.10.1",
+    "license": "MIT License"
+  },
+  {
+    "name": "conllu",
+    "version": "4.5.3",
+    "license": "MIT License"
+  },
+  {
+    "name": "contourpy",
+    "version": "1.3.3",
+    "license": "BSD License"
+  },
+  {
+    "name": "cycler",
+    "version": "0.12.1",
+    "license": "BSD License"
+  },
+  {
+    "name": "Deprecated",
+    "version": "1.3.1",
+    "license": "MIT"
+  },
+  {
+    "name": "docopt",
+    "version": "0.6.2",
+    "license": "MIT"
+  },
+  {
+    "name": "einops",
+    "version": "0.8.2",
+    "license": "MIT"
+  },
+  {
+    "name": "filelock",
+    "version": "3.24.3",
+    "license": "MIT"
+  },
+  {
+    "name": "flair",
+    "version": "0.15.1",
+    "license": "MIT"
+  },
+  {
+    "name": "frozenlist",
+    "version": "1.8.0",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "fsspec",
+    "version": "2026.2.0",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "ftfy",
+    "version": "6.3.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "gdown",
+    "version": "5.2.1",
+    "license": "MIT"
+  },
+  {
+    "name": "googleapis-common-protos",
+    "version": "1.72.0",
+    "license": "Apache 2.0"
+  },
+  {
+    "name": "hf-xet",
+    "version": "1.3.2",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "huggingface_hub",
+    "version": "0.36.2",
+    "license": "Apache"
+  },
+  {
+    "name": "idna",
+    "version": "3.11",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "importlib_metadata",
+    "version": "8.7.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "intervaltree",
+    "version": "3.2.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "Jinja2",
+    "version": "3.1.6",
+    "license": "BSD License"
+  },
+  {
+    "name": "jmespath",
+    "version": "1.1.0",
+    "license": "MIT"
+  },
+  {
+    "name": "joblib",
+    "version": "1.5.3",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "jsonlines",
+    "version": "4.0.0",
+    "license": "BSD"
+  },
+  {
+    "name": "julius",
+    "version": "0.2.7",
+    "license": "MIT License"
+  },
+  {
+    "name": "kiwisolver",
+    "version": "1.4.9",
+    "license": "BSD License"
+  },
+  {
+    "name": "langdetect",
+    "version": "1.0.9",
+    "license": "MIT"
+  },
+  {
+    "name": "lightning",
+    "version": "2.6.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "lightning-utilities",
+    "version": "0.15.3",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "lxml",
+    "version": "6.0.2",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "Mako",
+    "version": "1.3.10",
+    "license": "MIT"
+  },
+  {
+    "name": "markdown-it-py",
+    "version": "4.0.0",
+    "license": "MIT License"
+  },
+  {
+    "name": "MarkupSafe",
+    "version": "3.0.3",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "matplotlib",
+    "version": "3.10.8",
+    "license": "Python Software Foundation License"
+  },
+  {
+    "name": "mdurl",
+    "version": "0.1.2",
+    "license": "MIT License"
+  },
+  {
+    "name": "more-itertools",
+    "version": "10.8.0",
+    "license": "MIT"
+  },
+  {
+    "name": "mpld3",
+    "version": "0.5.12",
+    "license": "BSD 3-clause"
+  },
+  {
+    "name": "mpmath",
+    "version": "1.3.0",
+    "license": "BSD"
+  },
+  {
+    "name": "multidict",
+    "version": "6.7.1",
+    "license": "Apache License 2.0"
+  },
+  {
+    "name": "networkx",
+    "version": "3.6.1",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "numpy",
+    "version": "2.4.2",
+    "license": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"
+  },
+  {
+    "name": "opentelemetry-api",
+    "version": "1.39.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "opentelemetry-exporter-otlp",
+    "version": "1.39.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "opentelemetry-exporter-otlp-proto-common",
+    "version": "1.39.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "opentelemetry-exporter-otlp-proto-grpc",
+    "version": "1.39.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "opentelemetry-exporter-otlp-proto-http",
+    "version": "1.39.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "opentelemetry-proto",
+    "version": "1.39.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "opentelemetry-sdk",
+    "version": "1.39.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "opentelemetry-semantic-conventions",
+    "version": "0.60b1",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "optuna",
+    "version": "4.7.0",
+    "license": "MIT License"
+  },
+  {
+    "name": "packaging",
+    "version": "26.0",
+    "license": "Apache-2.0 OR BSD-2-Clause"
+  },
+  {
+    "name": "pandas",
+    "version": "3.0.1",
+    "license": "BSD License"
+  },
+  {
+    "name": "pillow",
+    "version": "12.1.1",
+    "license": "MIT-CMU"
+  },
+  {
+    "name": "pptree",
+    "version": "3.1",
+    "license": "MIT (laut Upstream-Repo clemtoy/pptree)"
+  },
+  {
+    "name": "primePy",
+    "version": "1.3",
+    "license": "MIT License"
+  },
+  {
+    "name": "propcache",
+    "version": "0.4.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "protobuf",
+    "version": "6.33.5",
+    "license": "3-Clause BSD License"
+  },
+  {
+    "name": "psutil",
+    "version": "7.2.2",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "pyannote-audio",
+    "version": "4.0.4",
+    "license": "MIT License"
+  },
+  {
+    "name": "pyannote-core",
+    "version": "6.0.1",
+    "license": "The MIT License (MIT)"
+  },
+  {
+    "name": "pyannote-database",
+    "version": "6.1.1",
+    "license": "The MIT License (MIT)"
+  },
+  {
+    "name": "pyannote-metrics",
+    "version": "4.0.0",
+    "license": "The MIT License (MIT)"
+  },
+  {
+    "name": "pyannote-pipeline",
+    "version": "4.0.0",
+    "license": "The MIT License (MIT)"
+  },
+  {
+    "name": "pyannoteai-sdk",
+    "version": "0.4.0",
+    "license": "MIT License"
+  },
+  {
+    "name": "pycparser",
+    "version": "3.0",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "Pygments",
+    "version": "2.19.2",
+    "license": "BSD-2-Clause"
+  },
+  {
+    "name": "pyparsing",
+    "version": "3.3.2",
+    "license": "MIT"
+  },
+  {
+    "name": "PySocks",
+    "version": "1.7.1",
+    "license": "BSD"
+  },
+  {
+    "name": "python-dateutil",
+    "version": "2.9.0.post0",
+    "license": "Dual License"
+  },
+  {
+    "name": "pytorch-lightning",
+    "version": "2.6.1",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "pytorch-metric-learning",
+    "version": "2.9.0",
+    "license": "MIT License"
+  },
+  {
+    "name": "pytorch_revgrad",
+    "version": "0.2.0",
+    "license": "MIT License"
+  },
+  {
+    "name": "PyYAML",
+    "version": "6.0.3",
+    "license": "MIT"
+  },
+  {
+    "name": "regex",
+    "version": "2026.2.19",
+    "license": "Apache-2.0 AND CNRI-Python"
+  },
+  {
+    "name": "requests",
+    "version": "2.32.5",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "rich",
+    "version": "14.3.3",
+    "license": "MIT"
+  },
+  {
+    "name": "s3transfer",
+    "version": "0.16.0",
+    "license": "Apache License 2.0"
+  },
+  {
+    "name": "safetensors",
+    "version": "0.7.0",
+    "license": "Apache Software License"
+  },
+  {
+    "name": "scikit-learn",
+    "version": "1.8.0",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "scipy",
+    "version": "1.17.1",
+    "license": "BSD License"
+  },
+  {
+    "name": "segtok",
+    "version": "1.5.11",
+    "license": "MIT"
+  },
+  {
+    "name": "sentencepiece",
+    "version": "0.2.1",
+    "license": "Apache-2.0 (laut Upstream-Repo google/sentencepiece)"
+  },
+  {
+    "name": "six",
+    "version": "1.17.0",
+    "license": "MIT"
+  },
+  {
+    "name": "sortedcontainers",
+    "version": "2.4.0",
+    "license": "Apache 2.0"
+  },
+  {
+    "name": "soundfile",
+    "version": "0.13.1",
+    "license": "BSD 3-Clause License"
+  },
+  {
+    "name": "soupsieve",
+    "version": "2.8.3",
+    "license": "MIT"
+  },
+  {
+    "name": "sqlitedict",
+    "version": "2.1.0",
+    "license": "Apache 2.0"
+  },
+  {
+    "name": "sympy",
+    "version": "1.14.0",
+    "license": "BSD"
+  },
+  {
+    "name": "tabulate",
+    "version": "0.9.0",
+    "license": "MIT"
+  },
+  {
+    "name": "threadpoolctl",
+    "version": "3.6.0",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "tokenizers",
+    "version": "0.22.2",
+    "license": "Apache Software License"
+  },
+  {
+    "name": "torch",
+    "version": "2.10.0",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "torch-audiomentations",
+    "version": "0.12.0",
+    "license": "MIT"
+  },
+  {
+    "name": "torch_pitch_shift",
+    "version": "1.2.5",
+    "license": "MIT License"
+  },
+  {
+    "name": "torchaudio",
+    "version": "2.10.0",
+    "license": "BSD License"
+  },
+  {
+    "name": "torchcodec",
+    "version": "0.10.0",
+    "license": "BSD 3-Clause License"
+  },
+  {
+    "name": "torchmetrics",
+    "version": "1.8.2",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "tqdm",
+    "version": "4.67.3",
+    "license": "MPL-2.0 AND MIT"
+  },
+  {
+    "name": "transformer-smaller-training-vocab",
+    "version": "0.4.2",
+    "license": "MIT"
+  },
+  {
+    "name": "transformers",
+    "version": "4.57.6",
+    "license": "Apache 2.0 License"
+  },
+  {
+    "name": "typing_extensions",
+    "version": "4.15.0",
+    "license": "PSF-2.0"
+  },
+  {
+    "name": "urllib3",
+    "version": "2.6.3",
+    "license": "MIT"
+  },
+  {
+    "name": "wcwidth",
+    "version": "0.6.0",
+    "license": "MIT"
+  },
+  {
+    "name": "Wikipedia-API",
+    "version": "0.9.0",
+    "license": "MIT"
+  },
+  {
+    "name": "wrapt",
+    "version": "2.1.1",
+    "license": "BSD-2-Clause"
+  },
+  {
+    "name": "yarl",
+    "version": "1.22.0",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "zipp",
+    "version": "3.23.0",
+    "license": "MIT"
+  }
+]

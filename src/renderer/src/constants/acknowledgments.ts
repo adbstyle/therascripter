@@ -10,6 +10,7 @@ import PYANNOTE_AUDIO from '../assets/licenses/pyannote-audio.txt?raw'
 import PYANNOTE_SEGMENTATION from '../assets/licenses/pyannote-segmentation.txt?raw'
 import TIPTAP from '../assets/licenses/tiptap.txt?raw'
 import WHISPER_CPP from '../assets/licenses/whisper-cpp.txt?raw'
+import PYTHON_PACKAGES from '../assets/licenses/python-packages.json'
 
 /**
  * Lizenzhinweise für alles, was TheraScript mitliefert (App-Bundle) oder über
@@ -25,8 +26,14 @@ export interface Acknowledgment {
   name: string
   description: string
   license: string
-  /** Vollständiger Lizenztext (MIT/Apache) oder Namensnennung mit Lizenz-URL (CC). */
-  notice: string
+  /**
+   * Vollständiger Lizenztext (MIT/Apache) oder Namensnennung mit Lizenz-URL (CC).
+   * Als Funktion erst beim Aufklappen geladen — die Python-Hinweise sind ~1.4 MB
+   * und landen so in einem eigenen Chunk statt im Start-Bundle.
+   */
+  notice: string | (() => Promise<string>)
+  /** Enthaltene Pakete (nur für Sammeleinträge wie die Python-Laufzeit). */
+  packages?: { name: string; version: string; license: string }[]
   /** Katalog-IDs (model-catalog.ts), deren Download dieses Werk enthält. */
   catalogIds?: string[]
 }
@@ -59,6 +66,14 @@ export const SOFTWARE_ACKNOWLEDGMENTS: Acknowledgment[] = [
     description: 'Lokale Zusammenfassung — führt das Sprachmodell auf dem Mac aus',
     license: 'MIT',
     notice: LLAMA_CPP
+  },
+  {
+    name: 'Python-Laufzeit (Sidecar)',
+    description: `Sprechererkennung und Pseudonymisierung — ${PYTHON_PACKAGES.length} Komponenten, u. a. PyTorch und NumPy`,
+    license: 'je Komponente',
+    // Erzeugt von scripts/generate-python-notices.py aus dem gebundelten Sidecar.
+    notice: () => import('../assets/licenses/python-notices.txt?raw').then((m) => m.default),
+    packages: PYTHON_PACKAGES
   },
   {
     name: 'TipTap',
@@ -147,7 +162,9 @@ export const MODEL_ACKNOWLEDGMENTS: Acknowledgment[] = [
     description: 'Pseudonymisierung — Stefan Schweter, Alan Akbik',
     license: 'Lizenz nicht angegeben',
     notice:
-      'flair/ner-german-large, https://huggingface.co/flair/ner-german-large\n\nDie Modellkarte nennt keine Lizenz. Die flair-Bibliothek selbst steht unter MIT (siehe oben).'
+      'flair/ner-german-large von Stefan Schweter und Alan Akbik, https://huggingface.co/flair/ner-german-large\n\n' +
+      'Herzlichen Dank an die Autoren — dieses Modell erkennt die Namen, Orte und weiteren Angaben, die TheraScript pseudonymisiert.\n\n' +
+      'Transparenzhinweis: Die Modellkarte deklariert keine Lizenz. TheraScript verteilt das Modell weiter, für schnelleres Laden auf halbe Genauigkeit (fp16) umgespeichert. Die flair-Bibliothek, mit der es geladen wird, steht unter MIT (siehe Software).'
   },
   {
     name: 'XLM-RoBERTa Large (Tokenizer)',
