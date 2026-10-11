@@ -1,0 +1,172 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('electron', () => ({
+  app: { getPath: vi.fn().mockReturnValue('/tmp/therascript-test') },
+  BrowserWindow: { getAllWindows: vi.fn().mockReturnValue([]) }
+}))
+
+vi.mock('../../db/connection', () => ({
+  getDataDir: () => '/tmp/therascript-test'
+}))
+
+interface FakeStoreState {
+  activeModels: Record<string, string | null>
+  modelsDownloaded: boolean
+  reconcileEvents: Array<Record<string, unknown>>
+  pendingModelUpdates: Array<{ id: string }> | null
+}
+
+let storeState: FakeStoreState
+
+const mockSettingsStore = {
+  get: vi.fn((key: keyof FakeStoreState) => storeState[key]),
+  set: vi.fn(<K extends keyof FakeStoreState>(key: K, value: FakeStoreState[K]) => {
+    storeState = { ...storeState, [key]: value }
+  })
+}
+vi.mock('../SettingsService', () => ({
+  getSettings: () => mockSettingsStore,
+  initSettings: () => mockSettingsStore
+}))
+
+const deleteInstalledVersion = vi.fn()
+vi.mock('../InstalledVersionsStore', () => ({
+  deleteInstalledVersion: (id: string) => deleteInstalledVersion(id),
+  setInstalledVersion: vi.fn()
+}))
+
+let files: Set<string>
+const rmSync = vi.fn((p: string) => {
+  files.delete(p)
+})
+vi.mock('fs', () => {
+  const fsMock = {
+    existsSync: vi.fn((p: string) => files.has(p)),
+    mkdirSync: vi.fn(),
+    statSync: vi.fn(),
+    unlinkSync: vi.fn(),
+    rmSync: (p: string) => rmSync(p)
+  }
+  return { ...fsMock, default: fsMock }
+})
+
+import { retireObsoleteModels, reconcileActiveModels } from '../ModelDownloadService'
+
+const GEMMA3 = '/tmp/therascript-test/models/summarization/google_gemma-3-4b-it-Q4_K_M.gguf'
+const GEMMA4 = '/tmp/therascript-test/models/summarization/gemma-4-E2B_q4_0-it.gguf'
+const REQUIRED_FILES = [
+  '/tmp/therascript-test/models/asr/ggml-large-v3-turbo-q5_0.bin',
+  '/tmp/therascript-test/models/diarization/models--pyannote--speaker-diarization-community-1',
+  '/tmp/therascript-test/models/ner/hf/hub/models--xlm-roberta-large'
+]
+
+function state(summarization: string | null): FakeStoreState {
+  return {
+    activeModels: {
+      transcription: 'whisper-large-v3-turbo',
+      diarization: 'pyannote-suite',
+      diarizationPipeline: 'pyannote/speaker-diarization-3.1',
+      ner: 'flair-ner-german-large',
+      ocr: 'apple-vision',
+      summarization
+    },
+    modelsDownloaded: true,
+    reconcileEvents: [],
+    pendingModelUpdates: null
+  }
+}
+
+describe('retireObsoleteModels', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    files = new Set(REQUIRED_FILES)
+  })
+
+  it('deletes the active Gemma 3 file, clears the slot and reports model-retired', () => {
+    storeState = state('gemma-summarization')
+    files.add(GEMMA3)
+
+    retireObsoleteModels()
+
+    expect(rmSync).toHaveBeenCalledWith(GEMMA3)
+    expect(files.has(GEMMA3)).toBe(false)
+    expect(deleteInstalledVersion).toHaveBeenCalledWith('gemma-summarization')
+    expect(storeState.activeModels.summarization).toBeNull()
+    expect(storeState.reconcileEvents).toEqual([
+      expect.objectContaining({
+        group: 'summarization',
+        fromModelId: 'gemma-summarization',
+        toModelId: null,
+        reason: 'model-retired',
+        status: 'pending'
+      })
+    ])
+  })
+
+  it('deletes an inactive Gemma 3 file silently and keeps the active successor', () => {
+    storeState = state('gemma-4-e2b-summarization')
+    files.add(GEMMA3)
+    files.add(GEMMA4)
+
+    retireObsoleteModels()
+
+    expect(files.has(GEMMA3)).toBe(false)
+    expect(storeState.activeModels.summarization).toBe('gemma-4-e2b-summarization')
+    expect(storeState.reconcileEvents).toEqual([])
+  })
+
+  it('clears a slot that still names Gemma 3 even when the file is already gone', () => {
+    storeState = state('gemma-summarization')
+
+    retireObsoleteModels()
+
+    expect(rmSync).not.toHaveBeenCalled()
+    expect(storeState.activeModels.summarization).toBeNull()
+    expect(storeState.reconcileEvents).toHaveLength(1)
+  })
+
+  it('removes leftovers of an interrupted download and an interrupted update swap', () => {
+    storeState = state(null)
+    files.add(`${GEMMA3}.partial`)
+    files.add('/tmp/therascript-test/models/.backup/gemma-summarization')
+
+    retireObsoleteModels()
+
+    expect(files.has(`${GEMMA3}.partial`)).toBe(false)
+    expect(files.has('/tmp/therascript-test/models/.backup/gemma-summarization')).toBe(false)
+    expect(storeState.reconcileEvents).toEqual([])
+  })
+
+  it('drops a pending model update for the retired id so it is not re-downloaded', () => {
+    storeState = {
+      ...state(null),
+      pendingModelUpdates: [{ id: 'gemma-summarization' }, { id: 'whisper-large-v3-turbo' }]
+    }
+
+    retireObsoleteModels()
+
+    expect(storeState.pendingModelUpdates).toEqual([{ id: 'whisper-large-v3-turbo' }])
+  })
+
+  it('is a no-op on the second run', () => {
+    storeState = state('gemma-summarization')
+    files.add(GEMMA3)
+
+    retireObsoleteModels()
+    retireObsoleteModels()
+
+    expect(rmSync).toHaveBeenCalledTimes(1)
+    expect(storeState.reconcileEvents).toHaveLength(1)
+  })
+
+  it('leaves nothing for the reconciler to misreport as missing', () => {
+    storeState = state('gemma-summarization')
+    files.add(GEMMA3)
+
+    retireObsoleteModels()
+    const repairs = reconcileActiveModels()
+
+    expect(repairs).toEqual([])
+    expect(storeState.reconcileEvents.map((e) => e.reason)).toEqual(['model-retired'])
+  })
+})

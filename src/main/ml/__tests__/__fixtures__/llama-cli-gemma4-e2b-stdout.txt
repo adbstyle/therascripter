@@ -1,0 +1,39 @@
+
+Loading model... |-\|/-\|/-\ 
+
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b9200-3e12fbdea
+model      : gemma-4-E2B_q4_0-it.gguf
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+> Du bist ein professioneller Assistent für die Kurz-Beschreibung von Therapiesitzungen und medizinischen Dokumenten. Lies den folgenden Text und erzeuge ein JSON-Objekt mit zwei Feldern:
+
+- title: Ein prägnanter deutscher Titel (Nominalphrase, 3–8 Wörter, max. 80 Zeichen). Kein vollständiger Satz, keine Anführungszeichen, keine Einleitung.
+- summary: Eine Zusammenfassung in genau zwei prägnanten deutschen Sätzen mit den zentralen Themen und Schlüsselpunkten.
+
+Der Text ist anonymisiert:  ... (truncated)
+
+|-\ {
+  "title": "Kunstprojekte, familiäre Konflikte und Zukunftswünsche",
+  "summary": "Die Klientin berichtet über ihre wieder aufgenommenen Malaktivitäten und die damit verbundenen sozialen Reaktionen. Es werden tief verwurzelte Gefühle bezüglich der Wahrnehmung durch den Mann und die Beziehung zur Tochter thematisiert. Die Sitzung fokussiert auf die Klärung von Wünschen und die Entscheidung bezüglich der Ausstellung."
+}
+
+[ Prompt: 2964.3 t/s | Generation: 73.2 t/s ]
+
+Exiting...

@@ -35,7 +35,7 @@ describe('captureProcessedModels', () => {
       if (group === 'asr') return 'whisper-large-v3-turbo'
       if (group === 'diarization') return 'pyannote-suite'
       if (group === 'ner') return 'flair-ner-german-large'
-      if (group === 'summarization') return 'gemma-summarization'
+      if (group === 'summarization') return 'gemma-4-e2b-summarization'
       return null
     })
     mockGetModelById.mockImplementation((id: string) => ({
@@ -49,7 +49,7 @@ describe('captureProcessedModels', () => {
       'prod:whisper-large-v3-turbo': { version: '2025-02-01', sha256: SHA('a'), installedAt: '' },
       'prod:pyannote-suite': { version: '2025-03-12', sha256: SHA('a'), installedAt: '' },
       'prod:flair-ner-german-large': { version: '2025-02-08', sha256: SHA('a'), installedAt: '' },
-      'prod:gemma-summarization': { version: '2025-04-01', sha256: SHA('a'), installedAt: '' }
+      'prod:gemma-4-e2b-summarization': { version: '2025-04-01', sha256: SHA('a'), installedAt: '' }
     })
 
     const snap = captureProcessedModels([
@@ -65,7 +65,7 @@ describe('captureProcessedModels', () => {
     expect(snap.asr?.sizeBytes).toBe(100)
     expect(snap.diarization?.id).toBe('pyannote-suite')
     expect(snap.ner?.id).toBe('flair-ner-german-large')
-    expect(snap.summarization?.id).toBe('gemma-summarization')
+    expect(snap.summarization?.id).toBe('gemma-4-e2b-summarization')
     expect(snap.capturedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
 

@@ -4,6 +4,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { formatBytes } from '../utils/formatBytes'
 import { useAppUpdate } from '../hooks/useAppUpdate'
 import AppLogo from './AppLogo'
+import APACHE_2_0_TEXT from '../assets/licenses/apache-2.0.txt?raw'
 
 const ACKNOWLEDGMENTS = [
   {
@@ -34,6 +35,18 @@ const ACKNOWLEDGMENTS = [
   {
     name: 'better-sqlite3',
     description: 'Lokale Datenbank — speichert Transkriptionen und Sperrliste auf dem Gerät'
+  }
+]
+
+// Modelle, die TheraScript (via R2) weiterverteilt und deren Lizenz bei der
+// Weitergabe eine Kopie des Lizenztexts verlangt (Apache 2.0, Abschnitt 4a).
+const THIRD_PARTY_MODELS = [
+  {
+    name: 'Gemma 4 E2B',
+    purpose: 'Zusammenfassung',
+    copyright: '© Google LLC',
+    license: 'Apache License 2.0',
+    licenseText: APACHE_2_0_TEXT
   }
 ]
 
@@ -205,6 +218,29 @@ export default function AboutPage(): React.JSX.Element {
                 <span className="text-sm font-medium text-text-secondary">{item.name}</span>
                 <span className="text-sm text-text-tertiary"> — {item.description}</span>
               </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Modelle von Drittanbietern */}
+        <div>
+          <h4 className="mb-2 text-sm font-medium text-text-secondary">
+            Modelle von Drittanbietern
+          </h4>
+          <div className="space-y-2">
+            {THIRD_PARTY_MODELS.map((model) => (
+              <details key={model.name} className="rounded-lg border border-border bg-surface-1">
+                <summary className="cursor-pointer px-3 py-2 text-sm">
+                  <span className="font-medium text-text-secondary">{model.name}</span>
+                  <span className="text-text-tertiary">
+                    {' '}
+                    — {model.purpose} · {model.copyright} · {model.license}
+                  </span>
+                </summary>
+                <pre className="max-h-64 overflow-y-auto border-t border-border px-3 py-2 text-xs whitespace-pre-wrap text-text-tertiary">
+                  {model.licenseText}
+                </pre>
+              </details>
             ))}
           </div>
         </div>

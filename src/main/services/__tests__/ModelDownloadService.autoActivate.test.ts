@@ -56,7 +56,7 @@ vi.mock('fs', () => {
 import { autoActivateAfterDownload, getActiveModelIdBelief } from '../ModelDownloadService'
 
 const MODELS_DIR = '/tmp/therascript-test/models'
-const GEMMA_FILE = `${MODELS_DIR}/summarization/google_gemma-3-4b-it-Q4_K_M.gguf`
+const GEMMA_FILE = `${MODELS_DIR}/summarization/gemma-4-E2B_q4_0-it.gguf`
 
 function setState(state: FakeStoreState): void {
   ;(globalThis as unknown as { __autoActivateState: FakeStoreState }).__autoActivateState = state
@@ -91,10 +91,10 @@ describe('autoActivateAfterDownload', () => {
   })
 
   it('activates an optional model when its slot is null', () => {
-    autoActivateAfterDownload('gemma-summarization')
+    autoActivateAfterDownload('gemma-4-e2b-summarization')
 
-    expect(getActiveModelIdBelief('summarization')).toBe('gemma-summarization')
-    expect(getState().activeModels.summarization).toBe('gemma-summarization')
+    expect(getActiveModelIdBelief('summarization')).toBe('gemma-4-e2b-summarization')
+    expect(getState().activeModels.summarization).toBe('gemma-4-e2b-summarization')
   })
 
   it('does NOT override an already-set optional slot', () => {
@@ -102,7 +102,7 @@ describe('autoActivateAfterDownload', () => {
     state.activeModels.summarization = 'some-other-summarizer'
     setState(state)
 
-    autoActivateAfterDownload('gemma-summarization')
+    autoActivateAfterDownload('gemma-4-e2b-summarization')
 
     expect(getState().activeModels.summarization).toBe('some-other-summarizer')
   })

@@ -34,7 +34,7 @@ const makeDeps = (
     saveGeneratedSummary: over.sessionService?.saveGeneratedSummary ?? vi.fn()
   },
   isModelInstalled: over.isModelInstalled ?? ((): boolean => true),
-  getActiveModelId: over.getActiveModelId ?? ((): string | null => 'gemma-summarization'),
+  getActiveModelId: over.getActiveModelId ?? ((): string | null => 'gemma-4-e2b-summarization'),
   logger: { info: vi.fn(), error: vi.fn() }
 })
 
@@ -61,7 +61,7 @@ describe('SummarizationExecutor', () => {
       'abc',
       'Kurztitel',
       'Eine Zusammenfassung.',
-      'gemma-summarization'
+      'gemma-4-e2b-summarization'
     )
   })
 

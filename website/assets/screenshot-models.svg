@@ -33,8 +33,8 @@
     <g transform="translate(40,390)" font-family="-apple-system,system-ui,sans-serif">
       <rect width="1000" height="100" rx="12" fill="#fafaf9" stroke="#e7e5e4" stroke-width="1.5" />
       <circle cx="36" cy="50" r="10" fill="none" stroke="#a8a29e" stroke-width="2" />
-      <text x="64" y="36" font-size="16" fill="#171717" font-weight="600">Gemma 3 4B Instruct (Q4_K_M)</text>
-      <text x="64" y="58" font-size="13" fill="#78716c">Optional · Zusammenfassung · 2.5 GB · nicht installiert</text>
+      <text x="64" y="36" font-size="16" fill="#171717" font-weight="600">Gemma 4 E2B</text>
+      <text x="64" y="58" font-size="13" fill="#78716c">Optional · Zusammenfassung · 3.35 GB · nicht installiert</text>
       <rect x="850" y="32" width="120" height="32" rx="8" fill="none" stroke="#1884b5" stroke-width="1.5" />
       <text x="910" y="52" text-anchor="middle" font-size="13" fill="#1884b5" font-weight="500">Laden</text>
     </g>

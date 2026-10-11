@@ -45,7 +45,7 @@ vi.mock('../ModelDownloadService', () => ({
     { id: 'whisper-large-v3-turbo', group: 'asr' },
     { id: 'pyannote-suite', group: 'diarization' },
     { id: 'flair-ner-german-large', group: 'ner' },
-    { id: 'gemma-summarization', group: 'summarization' }
+    { id: 'gemma-4-e2b-summarization', group: 'summarization' }
   ],
   // Spiegelt das Production-Verhalten: optionale Gruppen → null,
   // required Groups → catalog default.
@@ -91,7 +91,7 @@ describe('summarization upgrade migration', () => {
     vi.clearAllMocks()
   })
 
-  it('writes null (not gemma-summarization) into a missing summarization slot for pre-LLM upgraders', () => {
+  it('writes null (not gemma-4-e2b-summarization) into a missing summarization slot for pre-LLM upgraders', () => {
     setStoreState(preLlmStoreState())
 
     initSettings()
@@ -99,18 +99,18 @@ describe('summarization upgrade migration', () => {
     expect(getStoreState().activeModels.summarization).toBeNull()
   })
 
-  it('preserves an explicit gemma-summarization slot for users who already activated it', () => {
+  it('preserves an explicit gemma-4-e2b-summarization slot for users who already activated it', () => {
     setStoreState({
       ...preLlmStoreState(),
       activeModels: {
         ...preLlmStoreState().activeModels,
-        summarization: 'gemma-summarization'
+        summarization: 'gemma-4-e2b-summarization'
       }
     })
 
     initSettings()
 
-    expect(getStoreState().activeModels.summarization).toBe('gemma-summarization')
+    expect(getStoreState().activeModels.summarization).toBe('gemma-4-e2b-summarization')
   })
 
   it('preserves an explicit null slot (user deactivated summarization)', () => {

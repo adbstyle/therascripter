@@ -52,7 +52,7 @@ describe('SummaryPanel', () => {
       get: vi.fn().mockResolvedValue({
         title: 'Kurztitel',
         text: 'Eine Zusammenfassung.',
-        modelId: 'gemma-summarization',
+        modelId: 'gemma-4-e2b-summarization',
         summarizedAt: '2026-04-24T10:00:00Z'
       })
     })
@@ -104,7 +104,7 @@ describe('SummaryPanel', () => {
     const get = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({
       title: 'Titel',
       text: 'Späte Zusammenfassung.',
-      modelId: 'gemma-summarization',
+      modelId: 'gemma-4-e2b-summarization',
       summarizedAt: '2026-04-24T10:00:00Z'
     })
     ;(globalThis as unknown as { window: { api: unknown } }).window.api = makeApi({ get })

@@ -52,7 +52,8 @@ import {
   getActiveModelPath,
   getActiveModelId,
   getModelsDir,
-  reconcileActiveModels
+  reconcileActiveModels,
+  retireObsoleteModels
 } from './services/ModelDownloadService'
 import { registerSummaryHandlers } from './ipc/summary-handlers'
 
@@ -203,6 +204,10 @@ app.whenReady().then(() => {
 
   // Clean up any incomplete model updates from a previous crashed update
   cleanupIncompleteUpdates()
+
+  // Delete models dropped from the catalog (e.g. Gemma 3) and clear their
+  // slot BEFORE the reconciler — it would otherwise report them as missing.
+  retireObsoleteModels()
 
   // Issue #84 / Story C — verify the invariant that every active-model slot
   // either points at an installed catalog model or is null. Heals stale slots

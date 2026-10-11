@@ -7,7 +7,7 @@ import { getSettings, type AppSettings } from './SettingsService'
 import { deleteInstalledVersion, setInstalledVersion } from './InstalledVersionsStore'
 import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
 import type { ModelGroup } from '../../shared/validation/model-catalog-schemas'
-import { MODEL_DEFINITIONS, type ModelDefinition } from '../../shared/model-catalog'
+import { MODEL_DEFINITIONS, RETIRED_MODELS, type ModelDefinition } from '../../shared/model-catalog'
 import type { ReconcileEvent, ReconcileReason } from '../../shared/types/ReconcileEvent'
 
 export type { ModelGroup, ModelDefinition }
@@ -817,18 +817,7 @@ export function reconcileActiveModels(): ReadonlyArray<ReconcileRepair> {
         eventsChanged = true
         continue
       }
-      events = [
-        ...events,
-        {
-          id: randomUUID(),
-          timestamp: new Date().toISOString(),
-          group: r.group,
-          fromModelId: r.fromModelId,
-          toModelId: r.toModelId,
-          reason: r.reason,
-          status: 'pending'
-        }
-      ]
+      events = [...events, newReconcileEvent(r)]
       eventsChanged = true
     }
     if (eventsChanged) {
@@ -842,6 +831,79 @@ export function reconcileActiveModels(): ReadonlyArray<ReconcileRepair> {
   }
 
   return repairs
+}
+
+function newReconcileEvent(repair: ReconcileRepair): ReconcileEvent {
+  return {
+    id: randomUUID(),
+    timestamp: new Date().toISOString(),
+    ...repair,
+    status: 'pending'
+  }
+}
+
+/**
+ * Räumt aus dem Katalog entfernte Modelle (`RETIRED_MODELS`) auf: löscht die
+ * Datei samt `.partial` eines abgebrochenen Downloads und `.backup/<id>` eines
+ * abgebrochenen Update-Swaps (beides kennt sonst niemand mehr), verwirft
+ * vorgemerkte Updates für die ID, löscht den Installed-Version-Eintrag und —
+ * falls das Modell aktiv war — den Slot. Ein geleerter Slot wird als
+ * `model-retired`-ReconcileEvent gemeldet (BottomNav-Dot → Banner in
+ * Einstellungen → Modelle), damit der Nutzer den Nachfolger herunterlädt;
+ * ungefragt geladen wird nichts.
+ *
+ * Muss VOR `reconcileActiveModels()` laufen: der sähe sonst eine unbekannte
+ * ID im Slot und meldete "nicht mehr gefunden". Idempotent — nach dem ersten
+ * Lauf ist alles weg und jeder weitere Aufruf ein No-op. Löschfehler (z. B.
+ * Rechte) werden geloggt; der Slot wird trotzdem geleert, weil der Katalog
+ * die ID nicht mehr kennt.
+ */
+export function retireObsoleteModels(): void {
+  const settings = getSettings()
+  const modelsDir = getModelsDir()
+  const retiredIds = new Set(RETIRED_MODELS.map((m) => m.id))
+  const events: ReconcileEvent[] = []
+  let active = settings.get('activeModels')
+
+  for (const retired of RETIRED_MODELS) {
+    const file = join(modelsDir, retired.relativePath)
+    for (const path of [file, `${file}.partial`, join(modelsDir, '.backup', retired.id)]) {
+      if (!existsSync(path)) continue
+      try {
+        rmSync(path, { recursive: true, force: true })
+        console.log(`[retire] ${retired.id}: ${path} gelöscht`)
+      } catch (err) {
+        console.error(`[retire] ${retired.id}: Löschen fehlgeschlagen (${path})`, err)
+      }
+    }
+    deleteInstalledVersion(retired.id)
+
+    const slot = GROUP_TO_SETTINGS_KEY[retired.group]
+    if (active[slot] !== retired.id) continue
+    active = { ...active, [slot]: null }
+    events.push(
+      newReconcileEvent({
+        group: retired.group,
+        fromModelId: retired.id,
+        toModelId: null,
+        reason: 'model-retired'
+      })
+    )
+  }
+
+  // Ein vor dem Upgrade vorgemerktes Update würde das Modell beim nächsten
+  // Neustart (ModelUpdateScreen) sonst wieder herunterladen.
+  const pending = settings.get('pendingModelUpdates')
+  if (Array.isArray(pending) && pending.some((u) => retiredIds.has(u.id))) {
+    const rest = pending.filter((u) => !retiredIds.has(u.id))
+    settings.set('pendingModelUpdates', rest.length > 0 ? rest : null)
+  }
+
+  if (events.length === 0) return
+  settings.set('activeModels', active)
+  // Kein Round-Trip-Collapse wie im Reconciler nötig: ein Retire wird nie
+  // rückgängig gemacht, die ID kommt nicht in den Katalog zurück.
+  settings.set('reconcileEvents', [...(settings.get('reconcileEvents') ?? []), ...events])
 }
 
 // ─── Reconcile event lifecycle ────────────────────────────────────────────────

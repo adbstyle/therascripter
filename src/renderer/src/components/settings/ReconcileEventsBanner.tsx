@@ -17,7 +17,9 @@ const GROUP_LABEL: Record<ModelGroup, string> = {
 const REASON_LABEL: Record<ReconcileReason, string> = {
   'model-removed': 'Vorheriges Modell nicht mehr gefunden — kein Ersatz installiert',
   'default-promoted': 'Vorheriges Modell nicht mehr gefunden — Standard wurde aktiviert',
-  'group-cleared': 'Vorheriges Modell nicht mehr gefunden — Schritt wird übersprungen'
+  'group-cleared': 'Vorheriges Modell nicht mehr gefunden — Schritt wird übersprungen',
+  'model-retired':
+    'Vorheriges Modell wird nicht mehr unterstützt und wurde entfernt — Nachfolger unten herunterladen'
 }
 
 function formatTimestamp(iso: string): string {
@@ -34,7 +36,8 @@ function formatTimestamp(iso: string): string {
 
 /**
  * Issue #84 / Story C — surfaces invariant repairs the bootstrap reconciler
- * made (active model deleted from disk → promoted to default / cleared). The
+ * made (active model deleted from disk → promoted to default / cleared) and
+ * models retired from the catalog (`retireObsoleteModels`). The
  * BottomNav dot routed the user here; this banner explains *what* was changed
  * and lets them dismiss the notice. Persisted reconcile events are deleted
  * server-side when the user clicks "Verstanden".
@@ -55,8 +58,7 @@ export default function ReconcileEventsBanner({ events, onDismiss }: Props): Rea
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-text-primary">Automatische Anpassung</h3>
           <p className="mt-1 text-sm text-text-secondary">
-            Beim Start der App wurden Inkonsistenzen zwischen aktiver Modell-Auswahl und tatsächlich
-            installierten Dateien gefunden und korrigiert.
+            Beim Start der App wurde die aktive Modell-Auswahl angepasst.
           </p>
 
           <ul className="mt-3 space-y-2 text-sm">

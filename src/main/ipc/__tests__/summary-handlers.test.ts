@@ -28,7 +28,7 @@ describe('summary:get', () => {
     const record = {
       title: 'Kurztitel',
       text: 'Cached.',
-      modelId: 'gemma-summarization',
+      modelId: 'gemma-4-e2b-summarization',
       summarizedAt: '2026-04-24T10:00:00Z'
     }
     const deps = makeDeps({ getSummary: vi.fn().mockReturnValue(record) })

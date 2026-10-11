@@ -25,7 +25,7 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 - Apple Silicon
 - Mindestens 8 GB RAM
 - ~5 GB freier Speicherplatz (App ~1 GB + ML-Modelle ~1.8 GB; der Erststart prüft 5 GB für
-  Download und Entpacken; zusätzlich ~2.5 GB optional für Zusammenfassung)
+  Download und Entpacken; zusätzlich ~3.4 GB optional für Zusammenfassung)
 
 ## Installation
 
@@ -55,7 +55,7 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 - Python 3.11+ und [uv](https://docs.astral.sh/uv/)
 - Xcode Command Line Tools (`xcode-select --install`)
 - [Homebrew](https://brew.sh)
-- HuggingFace-Account mit `huggingface-cli login` (für Pyannote- und Gemma-Modelle)
+- HuggingFace-Account mit `huggingface-cli login` (für die Pyannote-Modelle)
 
 ### Setup
 
@@ -75,11 +75,11 @@ scripts/setup-ner.sh --model
 # Swift Vision OCR CLI-Helper bauen
 scripts/setup-vision-ocr.sh
 
-# llama.cpp + Gemma 3 4B GGUF (optional, für Zusammenfassungen)
+# llama.cpp + Gemma 4 E2B GGUF (optional, für Zusammenfassungen)
 scripts/setup-llama.sh --model
 ```
 
-> **Hinweis:** Pyannote erfordert akzeptierte Nutzungsbedingungen für `pyannote/speaker-diarization-3.1` und `pyannote/speaker-diarization-community-1` auf HuggingFace. Das Gemma-GGUF (bartowski-Mirror von `google/gemma-3-4b-it`) ist ebenfalls gated.
+> **Hinweis:** Pyannote erfordert akzeptierte Nutzungsbedingungen für `pyannote/speaker-diarization-3.1` und `pyannote/speaker-diarization-community-1` auf HuggingFace.
 
 ### Befehle
 
@@ -114,7 +114,7 @@ Streng sequenziell — immer nur ein Modell geladen:
 1. **whisper.cpp** (Subprocess) — ASR mit Whisper Large V3 Turbo (Q5_0, Metal GPU)
 2. **Python-Sidecar** — pyannote.audio Diarization + Alignment
 3. **Python-Sidecar** — flair NER + Regex + Sperrliste → TipTap-Dokument
-4. **llama.cpp** (Subprocess) — Optionale Zusammenfassung (Gemma 3 4B Instruct, JSON-Schema-constrained)
+4. **llama.cpp** (Subprocess) — Optionale Zusammenfassung (Gemma 4 E2B, Grammatik-constrained)
 
 ### ML-Pipeline (PDF)
 
@@ -145,7 +145,7 @@ Streng sequenziell — immer nur ein Modell geladen:
 - **ASR:** whisper.cpp (Whisper Large V3 Turbo Q5_0)
 - **Diarization:** pyannote.audio (`speaker-diarization-3.1`, optional `speaker-diarization-community-1`)
 - **NER:** flair (`ner-german-large`, F1 ~92 %)
-- **Summarization:** llama.cpp (Gemma 3 4B Instruct Q4_K_M, JSON-Schema-Grammar)
+- **Summarization:** llama.cpp (Gemma 4 E2B QAT q4_0, Apache 2.0, GBNF-Grammatik)
 - **OCR:** Apple Vision Framework (Swift CLI) mit Tesseract-Fallback
 - **Datenbank:** better-sqlite3
 - **Validierung:** Zod-Schemas für alle IPC-Channels
