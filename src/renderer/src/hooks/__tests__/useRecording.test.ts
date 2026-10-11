@@ -89,4 +89,24 @@ describe('useRecording – Pegel und Dauer', () => {
     expect(result.current.level).toBe(level)
     expect(result.current.duration).toBe(duration)
   })
+
+  it('setzt den Pegel beim Stopp auf null', async () => {
+    const { result } = await renderRecording()
+    emitLevel(0.5)
+
+    await act(() => result.current.stopRecording())
+    expect(result.current.level.get()).toBe(0)
+  })
+
+  // Ein Dauer-Event kann nach dem Reset beim Stopp noch eintreffen —
+  // die nächste Aufnahme muss trotzdem bei 0 beginnen.
+  it('startet die Dauer bei jeder Aufnahme bei null', async () => {
+    const { result } = await renderRecording()
+    await act(() => result.current.stopRecording())
+    act(() => emitDuration({ seconds: 2820 }))
+    expect(result.current.duration.get()).toBe(2820)
+
+    await act(() => result.current.startRecording())
+    expect(result.current.duration.get()).toBe(0)
+  })
 })

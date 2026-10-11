@@ -40,15 +40,19 @@ export function useRecording(): UseRecordingResult {
     } finally {
       setIsRecording(false)
       duration.set(0)
+      level.set(0)
       stoppingRef.current = false
     }
-  }, [duration])
+  }, [duration, level])
 
   const startRecording = useCallback(async () => {
     if (startingRef.current || recorderRef.current) return
     startingRef.current = true
 
     setError(null)
+    // Ein verspätetes Dauer-Event der vorigen Aufnahme (nach dem Reset beim
+    // Stopp) darf die neue Karte nicht mit der alten Zeit starten lassen.
+    duration.set(0)
 
     const recorder = new AudioRecorder()
     recorderRef.current = recorder
@@ -71,7 +75,7 @@ export function useRecording(): UseRecordingResult {
     } finally {
       startingRef.current = false
     }
-  }, [level])
+  }, [duration, level])
 
   // Listen for duration updates from main process
   useEffect(() => {
@@ -110,11 +114,12 @@ export function useRecording(): UseRecordingResult {
       }
       setIsRecording(false)
       duration.set(0)
+      level.set(0)
       stoppingRef.current = false
     })
 
     return cleanup
-  }, [isRecording, duration])
+  }, [isRecording, duration, level])
 
   // Cleanup on unmount
   useEffect(() => {

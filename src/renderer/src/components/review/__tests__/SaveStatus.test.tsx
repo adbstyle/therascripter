@@ -15,11 +15,23 @@ afterEach(() => {
 // Der memoisierte ReviewEditor rendert nicht periodisch — das Label muss
 // selbst weiterlaufen (Issue #140).
 describe('SaveStatus', () => {
-  it('zählt in der ersten Minute sekündlich hoch', () => {
-    render(<SaveStatus saving={false} lastSavedAt={Date.now()} />)
+  it('rendert nicht, solange "gerade eben" gilt, und zählt danach sekündlich hoch', () => {
+    const onRender = vi.fn()
+    render(
+      <Profiler id="save-status" onRender={onRender}>
+        <SaveStatus saving={false} lastSavedAt={Date.now()} />
+      </Profiler>
+    )
     expect(screen.getByText('Gespeichert gerade eben')).toBeInTheDocument()
+    onRender.mockClear()
 
-    act(() => vi.advanceTimersByTime(12_000))
+    act(() => vi.advanceTimersByTime(4_999))
+    expect(onRender).not.toHaveBeenCalled()
+
+    act(() => vi.advanceTimersByTime(1))
+    expect(screen.getByText('Gespeichert vor 5s')).toBeInTheDocument()
+
+    act(() => vi.advanceTimersByTime(7_000))
     expect(screen.getByText('Gespeichert vor 12s')).toBeInTheDocument()
   })
 

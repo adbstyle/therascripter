@@ -103,7 +103,9 @@ export default function SessionDashboard({
     }
   }, [])
 
-  const grouped = groupSessionsByTime(sessions)
+  // Gleiches "Heute" wie die Karten, sonst widersprechen sich Gruppe und
+  // Zeitstempel bis zur nächsten Tagesprüfung (≤ 60 s nach Mitternacht)
+  const grouped = groupSessionsByTime(sessions, new Date(today))
 
   const handleDelete = async (): Promise<void> => {
     if (!deleteTarget) return

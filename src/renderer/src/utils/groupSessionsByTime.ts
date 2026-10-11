@@ -19,8 +19,10 @@ function startOfWeek(date: Date): Date {
   return d
 }
 
-export function groupSessionsByTime(sessions: Session[]): Map<TimeGroup, Session[]> {
-  const now = new Date()
+export function groupSessionsByTime(
+  sessions: Session[],
+  now: Date = new Date()
+): Map<TimeGroup, Session[]> {
   const today = startOfDay(now)
   const yesterday = new Date(today)
   yesterday.setDate(yesterday.getDate() - 1)
