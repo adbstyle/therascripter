@@ -16,6 +16,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EditableSessionTitle } from '../components/review/EditableSessionTitle'
 import { SummaryPanel } from '../components/review/SummaryPanel'
 import { ReviewSidePanel } from '../components/review/ReviewSidePanel'
+import { SaveStatus } from '../components/review/SaveStatus'
 import { ChipActionsContext, type ChipActions } from '../contexts/ChipActionsContext'
 import {
   batchRemovePlaceholder,
@@ -765,37 +766,3 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
 // memo: App rendert bei eigenen Zustandswechseln neu (Aufnahme-Start/-Stopp,
 // Update-Banner, Import) — der Editor hängt nur an sessionId und dem stabilen onBack.
 export default memo(ReviewEditor)
-
-/**
- * Eigener Sekundentakt für die relative Zeitangabe: der Editor selbst rendert
- * dank memo nicht periodisch neu, "Gespeichert vor 12s" bliebe sonst stehen.
- */
-function SaveStatus({
-  saving,
-  lastSavedAt
-}: {
-  saving: boolean
-  lastSavedAt: number | null
-}): React.JSX.Element {
-  const [, setTick] = useState(0)
-
-  useEffect(() => {
-    if (saving || lastSavedAt == null) return
-    const id = setInterval(() => setTick((t) => t + 1), 1000)
-    return () => clearInterval(id)
-  }, [saving, lastSavedAt])
-
-  return (
-    <span className="text-xs text-text-tertiary">
-      {saving ? 'Speichern...' : lastSavedAt ? `Gespeichert ${formatTimeAgo(lastSavedAt)}` : ''}
-    </span>
-  )
-}
-
-function formatTimeAgo(timestamp: number): string {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000)
-  if (seconds < 5) return 'gerade eben'
-  if (seconds < 60) return `vor ${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  return `vor ${minutes} Min`
-}
