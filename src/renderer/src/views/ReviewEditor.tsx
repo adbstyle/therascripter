@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ClipboardCopy, FileText, Mic, PanelRight, Trash2, X } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { EditorState, NodeSelection } from '@tiptap/pm/state'
+import type { EditorProps } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import { PlaceholderChip } from '../extensions/placeholderChip'
 import { SpeakerLabel } from '../extensions/speakerLabel'
@@ -41,6 +42,24 @@ import type {
 import type { TipTapDocument } from '../../../shared/types/TipTapDocument'
 import type { Editor } from '@tiptap/core'
 
+// Modulweit statt inline: useEditor vergleicht Extensions per Identität und
+// ruft sonst bei JEDEM Render editor.setOptions() samt View-Update auf.
+const EDITOR_EXTENSIONS = [
+  StarterKit.configure({
+    codeBlock: false,
+    code: false,
+    blockquote: false,
+    bulletList: false,
+    orderedList: false,
+    listItem: false,
+    heading: false,
+    horizontalRule: false
+  }),
+  PlaceholderChip,
+  SpeakerLabel,
+  Timestamp
+]
+
 interface BlocklistUndoEntry {
   entryId: string
   entityId: string
@@ -54,7 +73,7 @@ interface ReviewEditorProps {
   onBack: () => void
 }
 
-export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Element {
+function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Element {
   const toast = useToast()
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -109,23 +128,11 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     setUpdateCounter((c) => c + 1)
   }, [])
 
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        codeBlock: false,
-        code: false,
-        blockquote: false,
-        bulletList: false,
-        orderedList: false,
-        listItem: false,
-        heading: false,
-        horizontalRule: false
-      }),
-      PlaceholderChip,
-      SpeakerLabel,
-      Timestamp
-    ],
-    editorProps: {
+  // Stabil über Renders (aus demselben Grund wie EDITOR_EXTENSIONS). Die
+  // Handler lesen nur Refs und stabile Setter — daher reicht updateEntityMap
+  // als einzige Dependency.
+  const editorProps = useMemo(
+    (): EditorProps => ({
       attributes: {
         class: 'focus:outline-none min-h-[200px] px-6 py-4'
       },
@@ -224,7 +231,13 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
         return false
       },
       clipboardTextSerializer: serializeClipboardText
-    },
+    }),
+    [updateEntityMap]
+  )
+
+  const editor = useEditor({
+    extensions: EDITOR_EXTENSIONS,
+    editorProps,
     onUpdate: ({ editor: current, transaction }) => {
       // Eingefügte Chips können Entitäten zurückbringen, die seit dem Copy
       // aus der EntityMap entfernt wurden — ohne Eintrag vergäbe
@@ -352,8 +365,8 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
       }
 
       // Sync blocklistUndoStackRef so SQLite stays consistent when overwriting a
-      // blocklist-originated chip. The Cmd+Z redo branch at lines 156-175 will
-      // re-add the SQLite row if the user undoes the overwrite.
+      // blocklist-originated chip. The Cmd+Z redo branch in editorProps.handleKeyDown
+      // will re-add the SQLite row if the user undoes the overwrite.
       for (const entry of blocklistUndoStackRef.current) {
         if (result.overwrittenEntityIds.has(entry.entityId) && !entry.undone) {
           entry.undone = true
@@ -754,6 +767,10 @@ export default function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): 
     </div>
   )
 }
+
+// memo: App rendert während einer Aufnahme sekündlich neu (Dauer) — der
+// Editor hängt nur an sessionId und dem stabilen onBack.
+export default memo(ReviewEditor)
 
 function formatTimeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000)

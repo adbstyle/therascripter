@@ -1,6 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { SessionCard } from '../SessionCard'
+import { PIPELINE_UI_STRINGS } from '../../../../shared/constants/pipelineWording'
 import type { Session } from '../../../../shared/types'
 import { useTaskProgress } from '../../hooks/useTaskProgress'
 
@@ -341,5 +343,81 @@ describe('SessionCard — error state with 3-stage retry-limit UX', () => {
     )
     expect(screen.queryByText('Erneut versuchen')).toBeNull()
     expect(screen.getByText(/Wenden Sie sich an den Support/)).toBeInTheDocument()
+  })
+})
+
+// Issue #140: SessionDashboard reicht stabile Handler durch (memo) — die
+// Karte muss deshalb selbst Session bzw. ID mitgeben.
+describe('SessionCard — Callbacks', () => {
+  beforeEach(() => {
+    vi.mocked(useTaskProgress).mockReturnValue(emptyHookResult)
+  })
+
+  it('übergibt die Session an onDelete und die ID an onClick', async () => {
+    const user = userEvent.setup()
+    const session = makeSession({ title: 'Erstgespräch' })
+    const onDelete = vi.fn()
+    const onClick = vi.fn()
+    render(<SessionCard session={session} onDelete={onDelete} onClick={onClick} />)
+
+    await user.click(screen.getByLabelText('Transkription löschen'))
+    expect(onDelete).toHaveBeenCalledWith(session)
+
+    await user.click(screen.getByLabelText('Erstgespräch öffnen'))
+    expect(onClick).toHaveBeenCalledWith('s1')
+  })
+
+  it('übergibt die ID an onRetry', async () => {
+    const user = userEvent.setup()
+    const onRetry = vi.fn()
+    render(
+      <SessionCard
+        session={makeSession({ status: 'error', errorMessage: 'Fehler' })}
+        onDelete={vi.fn()}
+        onRetry={onRetry}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: PIPELINE_UI_STRINGS.retryButton }))
+    expect(onRetry).toHaveBeenCalledWith('s1')
+  })
+})
+
+describe('SessionCard — memo und Zeitstempel', () => {
+  beforeEach(() => {
+    vi.mocked(useTaskProgress).mockReturnValue(emptyHookResult)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  // Issue #140: Während der Aufnahme rendert das Dashboard sekündlich neu —
+  // Karten mit unveränderten Props dürfen dabei nicht mitrendern.
+  it('rendert bei identischen Props nicht neu', () => {
+    const session = makeSession()
+    const onDelete = vi.fn()
+    const { rerender } = render(<SessionCard session={session} onDelete={onDelete} />)
+    const callsAfterMount = vi.mocked(useTaskProgress).mock.calls.length
+
+    rerender(<SessionCard session={session} onDelete={onDelete} />)
+    expect(vi.mocked(useTaskProgress).mock.calls.length).toBe(callsAfterMount)
+  })
+
+  it.each([
+    ['heute', new Date(2026, 3, 29, 14, 2), '14:02'],
+    ['gestern', new Date(2026, 3, 28, 14, 2), 'Gestern, 14:02'],
+    ['im laufenden Jahr', new Date(2026, 3, 27, 14, 2), '27.04., 14:02'],
+    ['in einem früheren Jahr', new Date(2025, 3, 27, 14, 2), '27.04.25']
+  ])('formatiert den Zeitstempel %s', (_label, createdAt, expected) => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 3, 29, 18, 0))
+    render(
+      <SessionCard
+        session={makeSession({ createdAt: createdAt.toISOString() })}
+        onDelete={vi.fn()}
+      />
+    )
+    expect(screen.getByText(expected)).toBeInTheDocument()
   })
 })

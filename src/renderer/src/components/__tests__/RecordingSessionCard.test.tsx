@@ -13,7 +13,7 @@ const session: Session = {
   updatedAt: new Date().toISOString()
 } as Session
 
-const defaultLive = { duration: 0, level: 0, onStop: () => {} }
+const defaultLive = { duration: 0, subscribeLevel: () => () => {}, onStop: () => {} }
 
 describe('RecordingSessionCard', () => {
   it('rendert Titel und REC-Indikator', () => {

@@ -2,11 +2,12 @@ import { Square } from 'lucide-react'
 import type { Session } from '../../../shared/types'
 import { AUTO_STOP_SECONDS } from '../../../shared/constants/recording'
 import { VUMeter } from './VUMeter'
+import type { SubscribeLevel } from '../hooks/useRecording'
 import { formatTime } from '../utils/formatTime'
 
 export interface LiveRecording {
   duration: number
-  level: number
+  subscribeLevel: SubscribeLevel
   onStop: () => void
 }
 
@@ -56,7 +57,7 @@ export function RecordingSessionCard({
           >
             {formatTime(live.duration)}
           </time>
-          <VUMeter level={live.level} />
+          <VUMeter subscribeLevel={live.subscribeLevel} />
         </div>
 
         <button

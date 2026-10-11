@@ -214,14 +214,10 @@ export default function SessionDashboard({
                       key={session.id}
                       session={session}
                       data-session-id={session.id}
-                      onDelete={() => setDeleteTarget(session)}
-                      onRetry={
-                        session.status === 'error' ? () => handleRetry(session.id) : undefined
-                      }
+                      onDelete={setDeleteTarget}
+                      onRetry={session.status === 'error' ? handleRetry : undefined}
                       retryDisabled={isAnyProcessing}
-                      onClick={
-                        session.status === 'review' ? () => onOpenReview?.(session.id) : undefined
-                      }
+                      onClick={session.status === 'review' ? onOpenReview : undefined}
                     />
                   )
                 )}

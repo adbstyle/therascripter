@@ -10,7 +10,7 @@ import { ThemeProvider } from '../contexts/ThemeContext'
 const mockRecordingState = {
   isRecording: false,
   duration: 0,
-  level: 0,
+  subscribeLevel: vi.fn(() => () => {}),
   error: null as string | null,
   startRecording: vi.fn(),
   stopRecording: vi.fn()
@@ -44,7 +44,6 @@ const mockModelUpdate = {
 beforeEach(() => {
   mockRecordingState.isRecording = false
   mockRecordingState.duration = 0
-  mockRecordingState.level = 0
   mockRecordingState.error = null
 
   window.api = {

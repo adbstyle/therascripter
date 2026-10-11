@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ThemeContext, type ThemePreference } from './themeTypes'
 
 const isValidTheme = (v: unknown): v is ThemePreference =>
@@ -55,5 +55,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }): Reac
     window.api.settings.set('theme', preference).catch(console.error)
   }, [])
 
-  return <ThemeContext.Provider value={{ theme, setTheme }}>{children}</ThemeContext.Provider>
+  const value = useMemo(() => ({ theme, setTheme }), [theme, setTheme])
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
 }

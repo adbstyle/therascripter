@@ -1,13 +1,16 @@
+import { memo } from 'react'
 import { FileText, Info, Mic, Trash2 } from 'lucide-react'
 import type { Session, SessionStatus } from '../../../shared/types'
 import { STEP_LABELS_DE, PIPELINE_UI_STRINGS } from '../../../shared/constants/pipelineWording'
 import { useTaskProgress } from '../hooks/useTaskProgress'
 
+// Callbacks bekommen die Session bzw. ihre ID, damit SessionDashboard stabile
+// Handler statt Closures pro Karte durchreichen kann — sonst griffe memo nie.
 interface SessionCardProps {
   session: Session
-  onDelete: () => void
-  onClick?: () => void
-  onRetry?: () => void
+  onDelete: (session: Session) => void
+  onClick?: (sessionId: string) => void
+  onRetry?: (sessionId: string) => void
   retryDisabled?: boolean
   'data-session-id'?: string
 }
@@ -24,10 +27,27 @@ function isInPipeline(status: SessionStatus): boolean {
   return status === 'processing' || status === 'queued'
 }
 
+// Modulweit gecacht: toLocale*String mit Optionen baut pro Aufruf einen neuen
+// Intl-Formatter (~33 µs), bei vielen Karten pro Render spürbar.
+const TIME_FORMAT = new Intl.DateTimeFormat('de-CH', { hour: '2-digit', minute: '2-digit' })
+const DAY_MONTH_FORMAT = new Intl.DateTimeFormat('de-CH', { day: '2-digit', month: '2-digit' })
+const SHORT_DATE_FORMAT = new Intl.DateTimeFormat('de-CH', {
+  day: '2-digit',
+  month: '2-digit',
+  year: '2-digit'
+})
+const FULL_TIMESTAMP_FORMAT = new Intl.DateTimeFormat('de-CH', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
 function formatCardTimestamp(iso: string): string {
   const date = new Date(iso)
   const now = new Date()
-  const time = date.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })
+  const time = TIME_FORMAT.format(date)
 
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
@@ -37,18 +57,13 @@ function formatCardTimestamp(iso: string): string {
   if (dayDiff === 1) return `Gestern, ${time}`
 
   if (date.getFullYear() === now.getFullYear()) {
-    const dm = date.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })
-    return `${dm}, ${time}`
+    return `${DAY_MONTH_FORMAT.format(date)}, ${time}`
   }
 
-  return date.toLocaleDateString('de-CH', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit'
-  })
+  return SHORT_DATE_FORMAT.format(date)
 }
 
-export function SessionCard({
+export const SessionCard = memo(function SessionCard({
   session,
   onDelete,
   onClick,
@@ -72,13 +87,7 @@ export function SessionCard({
     session.title && session.title.trim().length > 0 ? session.title : 'Unbenannte Transkription'
   const summary = session.summary?.trim()
   const hasSummary = summary != null && summary.length > 0
-  const fullTimestamp = new Date(session.createdAt).toLocaleString('de-CH', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  const fullTimestamp = FULL_TIMESTAMP_FORMAT.format(new Date(session.createdAt))
 
   // ---- Status-Zeile-Inhalt ableiten -------------------------------------
   // Drei Zustände: review, queued (mit/ohne Position), processing (mit/ohne current).
@@ -159,7 +168,7 @@ export function SessionCard({
       {onClick && (
         <button
           type="button"
-          onClick={onClick}
+          onClick={() => onClick(session.id)}
           aria-label={`${displayTitle} öffnen`}
           className="absolute inset-0 z-0 rounded-lg focus:outline-none"
         />
@@ -190,7 +199,7 @@ export function SessionCard({
           {session.status !== 'recording' && (
             <button
               className="pointer-events-auto absolute -right-1.5 -top-1.5 z-10 rounded p-1.5 text-text-tertiary opacity-0 transition-opacity hover:bg-error-bg hover:text-error-text group-hover:opacity-100 focus-visible:opacity-100"
-              onClick={onDelete}
+              onClick={() => onDelete(session)}
               aria-label="Transkription löschen"
               title="Löschen"
             >
@@ -239,7 +248,7 @@ export function SessionCard({
       {session.status === 'error' && session.retryCount < 3 && onRetry && (
         <button
           className="pointer-events-auto relative z-10 mt-1.5 text-xs font-medium text-primary hover:text-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
-          onClick={onRetry}
+          onClick={() => onRetry(session.id)}
           disabled={retryDisabled}
           title={retryDisabled ? 'Eine andere Transkription wird gerade verarbeitet' : undefined}
         >
@@ -292,4 +301,4 @@ export function SessionCard({
       )}
     </div>
   )
-}
+})
