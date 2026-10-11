@@ -401,6 +401,32 @@ p {
   border: 1px solid var(--border);
 }
 
+/* === Notices (Prüfpflicht, Einwilligung) === */
+
+.notices-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-md);
+}
+
+.notice-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+}
+
+.notice-card h3 {
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.notice-card p {
+  margin: 0;
+  font-size: 1rem;
+}
+
 /* === Privacy === */
 
 .privacy {
