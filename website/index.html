@@ -114,8 +114,8 @@
             <h3>Daten bleiben auf Ihrem Mac</h3>
             <p>
               Aufnahme, Transkription, Pseudonymisierung und Zusammenfassung laufen auf Ihrem Mac.
-              Keine Cloud, kein Online-Konto, keine Drittdienste. TheraScript funktioniert
-              vollständig offline.
+              TheraScript übermittelt keine Inhalte aus Ihren Sitzungen. Keine Cloud, kein
+              Online-Konto, keine Telemetrie.
             </p>
           </article>
           <article class="benefit-card">
@@ -336,10 +336,12 @@
             </p>
           </article>
           <article>
-            <h3>Keine Verbindung nach aussen</h3>
+            <h3>Internet nur für Modelle und Updates</h3>
             <p>
-              TheraScript verbindet sich nicht mit dem Internet. Keine Cloud, keine Telemetrie, kein
-              Konto.
+              Mit dem Internet verbindet sich TheraScript nur, um Sprachmodelle herunterzuladen und
+              nach neuen Versionen zu suchen. Dabei sieht der Anbieter Cloudflare Ihre IP-Adresse,
+              den Zeitpunkt und die abgerufene Datei – keine Inhalte aus Ihren Sitzungen.
+              <a href="impressum.html#app-datenschutz">Mehr dazu</a>
             </p>
           </article>
           <article>
@@ -378,10 +380,38 @@
           <summary>Wo werden meine Daten gespeichert?</summary>
           <p>
             Sämtliche Audio-, Transkript- und PDF-Daten werden ausschliesslich lokal auf Ihrem Mac
-            gespeichert (Standardpfad: <code>~/.therascript/</code>). TheraScript stellt im
-            Produktivbetrieb keine ausgehenden Internet-Verbindungen her. Sie können das selbst
-            verifizieren, indem Sie die Internetverbindung trennen – die App funktioniert weiterhin.
+            gespeichert (Standardpfad: <code>~/.therascript/</code>). TheraScript übermittelt keine
+            Inhalte aus Ihren Sitzungen – sie verlassen Ihren Mac nur, wenn Sie sie selbst kopieren.
           </p>
+        </details>
+
+        <details id="faq-internet">
+          <summary>Wann verbindet sich TheraScript mit dem Internet?</summary>
+          <div>
+            <p>TheraScript verbindet sich nur in zwei Fällen mit dem Internet:</p>
+            <ul>
+              <li>
+                <strong>Sprachmodelle herunterladen:</strong> bei der Ersteinrichtung, wenn Sie in
+                den Einstellungen ein Modell hinzufügen und wenn Sie ein Modell-Update installieren.
+              </li>
+              <li>
+                <strong>Nach neuen Versionen suchen:</strong> bei jedem Start, danach alle 24
+                Stunden und wenn Sie unter «Über» auf «Nach Updates suchen» klicken.
+              </li>
+            </ul>
+            <p>
+              Beide Verbindungen gehen an den Dienst Cloudflare, bei dem die Modelle und die
+              Versionsliste liegen. Cloudflare sieht dabei Ihre IP-Adresse, den Zeitpunkt und die
+              abgerufene Datei. TheraScript sendet kein Konto, keine Kennung und keine Nutzungsdaten
+              mit. Aufnahmen, Transkripte, PDFs und Zusammenfassungen übermittelt TheraScript nie.
+              Links zu GitHub oder Hugging Face öffnen sich in Ihrem Browser, nur wenn Sie sie
+              anklicken.
+            </p>
+            <p>
+              Nach der Ersteinrichtung funktioniert TheraScript auch ohne Internet. Einzelheiten
+              stehen in der <a href="impressum.html#app-datenschutz">Datenschutzerklärung</a>.
+            </p>
+          </div>
         </details>
 
         <details>

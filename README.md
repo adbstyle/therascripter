@@ -2,7 +2,7 @@
 
 Lokale Therapiesitzungs-Transkription, Anonymisierung und Zusammenfassung für macOS.
 
-Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufnimmt, automatisch transkribiert, Sprecher erkennt, personenbezogene Daten anonymisiert und optional eine Zusammenfassung erstellt. Die gesamte Verarbeitung erfolgt lokal auf dem Gerät — keine Daten verlassen den Rechner.
+Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufnimmt, automatisch transkribiert, Sprecher erkennt, personenbezogene Daten anonymisiert und optional eine Zusammenfassung erstellt. Die gesamte Verarbeitung erfolgt lokal auf dem Mac, die App übermittelt keine Inhalte aus Sitzungen. Mit dem Internet verbindet sich die App nur für Modell-Downloads und die Suche nach neuen Versionen (siehe [Datenschutz](#datenschutz-und-internetverbindung)).
 
 ## Features
 
@@ -15,7 +15,7 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 - **Review-Editor** — TipTap-basierter Editor zur Nachbearbeitung mit Clipboard-Export und Quick-Add zur Sperrliste
 - **Modell-Management** — Austauschbare ML-Modelle pro Pipeline-Schritt, verwaltbar im Einstellungen-Bereich
 - **Auto-Update für Modelle** — Hintergrund-Check gegen Cloudflare R2-Manifest, atomarer Tausch beim Neustart
-- **Datenschutz** — Komplett offline, CSP `connect-src 'none'` in Production, Electron Fuses gehärtet, FileVault-Prüfung
+- **Datenschutz** — keine Übermittlung von Sitzungsinhalten; Renderer ohne Netzwerkzugriff (CSP `connect-src 'none'`), Netzwerk nur im Main-Prozess für Modelle und Versionsprüfung, Electron Fuses gehärtet, FileVault-Prüfung
 - **System-Tray** — App läuft im Hintergrund weiter, Aufnahme über Menüleisten-Icon stoppbar
 - **Auto-Löschung** — Sitzungen werden 30 Tage nach Erstellung automatisch gelöscht
 
@@ -41,6 +41,15 @@ Ausführliche Anleitung mit Erklärungen: [adbstyle.github.io/therascripter/inst
 **Auf eine neue Version aktualisieren:** Therascript über das Symbol in der Menüleiste («Therascript beenden») oder mit `⌘ Q` beenden (das Schliessen des Fensters beendet die App nicht), die neue Version herunterladen, die App im Ordner **Programme** ersetzen und Schritt 2 und 3 wiederholen. Transkriptionen, Einstellungen und Modelle bleiben erhalten. Beim ersten Update auf eine Version, die Berechtigungen über Updates hinweg behält, fragt macOS einmalig erneut: Mikrofon erlauben, beim Schlüsselbund **Immer erlauben** wählen. Spätere Updates fragen nicht mehr.
 
 > **Empfehlung:** FileVault-Verschlüsselung aktivieren — Therascript warnt, falls deaktiviert.
+
+## Datenschutz und Internetverbindung
+
+Aufnahmen, Transkripte, PDFs und Zusammenfassungen übermittelt Therascript nie; sie verlassen den Mac nur, wenn man sie selbst kopiert. Mit dem Internet verbindet sich Therascript nur in zwei Fällen:
+
+- **Sprachmodelle herunterladen:** bei der Ersteinrichtung, beim Hinzufügen eines Modells in den Einstellungen und beim Installieren eines Modell-Updates.
+- **Nach neuen Versionen suchen:** beim Start, danach alle 24 Stunden und auf Klick unter «Über».
+
+Beide Verbindungen gehen an Cloudflare R2 (Cloudflare, Inc., USA; Speicherort Osteuropa, Auslieferung über das weltweite Cloudflare-Netz). Cloudflare sieht dabei IP-Adresse, Zeitpunkt und abgerufene Datei. Die App sendet kein Konto, keine Kennung und keine Nutzungsdaten. Links zu GitHub oder Hugging Face öffnen sich nur auf Klick im Browser. Nach der Ersteinrichtung funktioniert Therascript auch ohne Internet. Die vollständigen Angaben stehen in der [Datenschutzerklärung](https://adbstyle.github.io/therascripter/impressum.html#app-datenschutz).
 
 ## Entwicklung
 

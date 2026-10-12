@@ -678,3 +678,9 @@ body.legal section > ol li + li {
   color: var(--text-secondary);
   margin: var(--space-sm) 0 0;
 }
+
+body.legal h4 {
+  font-size: 0.9375rem;
+  margin-top: var(--space-sm);
+  margin-bottom: 0.25rem;
+}
