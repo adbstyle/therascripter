@@ -1,15 +1,6 @@
 import { app, BrowserWindow, powerMonitor } from 'electron'
-import { execFileSync, spawn } from 'child_process'
 import { createHash } from 'crypto'
-import {
-  accessSync,
-  constants,
-  createReadStream,
-  existsSync,
-  rmSync,
-  statSync,
-  statfsSync
-} from 'fs'
+import { accessSync, constants, createReadStream, rmSync, statSync, statfsSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join, resolve } from 'path'
 import { getSettings } from './SettingsService'
@@ -59,8 +50,13 @@ function sha256OfFile(path: string): Promise<string> {
   })
 }
 
-async function run(bin: string, args: string[], timeoutMs: number): Promise<string> {
-  const result = await runSubprocess({ bin, args, timeoutMs })
+async function run(
+  bin: string,
+  args: string[],
+  timeoutMs: number,
+  signal?: AbortSignal
+): Promise<string> {
+  const result = await runSubprocess({ bin, args, timeoutMs, signal })
   if (result.code !== 0) {
     const detail = result.stderr.trim().split('\n').pop() ?? ''
     throw new Error(
@@ -70,30 +66,36 @@ async function run(bin: string, args: string[], timeoutMs: number): Promise<stri
   return result.stdout
 }
 
-/** Hängt das DMG an einem privaten Ort ein, kopiert die App, hängt immer aus. */
-async function extractApp(dmgPath: string, targetApp: string): Promise<void> {
+/**
+ * Hängt das DMG an einem privaten Ort ein, kopiert die App, hängt immer aus —
+ * auch nach einem Abbruch mitten im Einhängen, sonst blockierte der noch
+ * eingehängte Datenträger den nächsten Versuch.
+ */
+async function extractApp(dmgPath: string, targetApp: string, signal: AbortSignal): Promise<void> {
   const mountPoint = join(dirname(targetApp), 'mnt')
   rmSync(mountPoint, { recursive: true, force: true })
-  await run(
-    '/usr/bin/hdiutil',
-    [
-      'attach',
-      dmgPath,
-      '-nobrowse',
-      '-readonly',
-      '-noautoopen',
-      '-noverify',
-      '-mountpoint',
-      mountPoint
-    ],
-    120_000
-  )
   try {
+    await run(
+      '/usr/bin/hdiutil',
+      [
+        'attach',
+        dmgPath,
+        '-nobrowse',
+        '-readonly',
+        '-noautoopen',
+        '-noverify',
+        '-mountpoint',
+        mountPoint
+      ],
+      120_000,
+      signal
+    )
     // --noqtn: keine Quarantäne-Attribute mitkopieren (ADR-009 Befund 3)
     await run(
       '/usr/bin/ditto',
       ['--noqtn', join(mountPoint, 'Therascript.app'), targetApp],
-      600_000
+      600_000,
+      signal
     )
   } finally {
     await run('/usr/bin/hdiutil', ['detach', mountPoint, '-force'], 60_000).catch(() => undefined)
@@ -105,22 +107,28 @@ async function extractApp(dmgPath: string, targetApp: string): Promise<void> {
  * und die Designated Requirement, an der Mikrofon-Berechtigung und
  * Schlüsselbund hängen (#161) — sonst verlöre ein Update beides.
  */
-async function verifyApp(appPath: string, expectedVersion: string): Promise<void> {
+async function verifyApp(
+  appPath: string,
+  expectedVersion: string,
+  signal: AbortSignal
+): Promise<void> {
   const version = (
     await run(
       '/usr/bin/plutil',
       ['-extract', 'CFBundleShortVersionString', 'raw', join(appPath, 'Contents', 'Info.plist')],
-      10_000
+      10_000,
+      signal
     )
   ).trim()
   if (version !== expectedVersion) {
     throw new Error(`Paket enthält Version ${version} statt ${expectedVersion}`)
   }
-  await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath], 300_000)
+  await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath], 300_000, signal)
   const requirement = await runSubprocess({
     bin: '/usr/bin/codesign',
     args: ['-d', '-r-', appPath],
-    timeoutMs: 30_000
+    timeoutMs: 30_000,
+    signal
   })
   const text = `${requirement.stdout}\n${requirement.stderr}`
   if (!text.includes(`designated => identifier "${BUNDLE_ID}"`)) {
@@ -132,7 +140,7 @@ async function download(
   url: string,
   target: string,
   onProgress: (percent: number) => void,
-  abortSignal: { aborted: boolean }
+  abortSignal: AbortSignal
 ): Promise<{ success: boolean; error?: string }> {
   const result = await downloadFile(url, target, (p) => onProgress(p.percent), abortSignal)
   // Ein vollständiges .partial beantwortet der Server mit 416 — neu laden
@@ -176,12 +184,14 @@ export function createAppUpdateDeps(onState: (state: AppUpdateState) => void): A
       sendToRenderer('appUpdate:state', state)
       onState(state)
     },
+    // Eigene Prozessgruppe (runSubprocess): rm läuft auch nach dem Beenden weiter
     removeInBackground: (path) => {
-      if (!existsSync(path)) return
-      spawn('/bin/rm', ['-rf', path], { detached: true, stdio: 'ignore' }).unref()
+      runSubprocess({ bin: '/bin/rm', args: ['-rf', path], timeoutMs: 30 * 60_000 }).catch((err) =>
+        console.log(`AppUpdate: Löschen von ${path} gescheitert: ${err}`)
+      )
     },
-    removeNow: (path) => {
-      if (existsSync(path)) execFileSync('/bin/rm', ['-rf', path])
+    removeNow: async (path) => {
+      await run('/bin/rm', ['-rf', path], 10 * 60_000)
     },
     log: (message) => console.log(message),
     now: () => new Date()

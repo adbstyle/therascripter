@@ -110,7 +110,7 @@ interface HomeProps {
 
 function SettingsHome({ onSelect }: HomeProps): React.JSX.Element {
   const { theme } = useTheme()
-  const { state: appUpdate } = useAppUpdate()
+  const { state: appUpdate, needsAttention: updateHighlighted } = useAppUpdate()
   const { availableUpdates } = useModelUpdates()
 
   const [blocklist, setBlocklist] = useState<{ entries: number; categories: number } | null>(null)
@@ -162,13 +162,13 @@ function SettingsHome({ onSelect }: HomeProps): React.JSX.Element {
       ? `Version ${appUpdate.version} bereit zur Installation`
       : appUpdate.phase === 'available' || appUpdate.phase === 'unsupported'
         ? `Version ${appUpdate.version} verfügbar`
-        : appUpdate.autoUpdate
-          ? 'Automatisch · Aktuell'
-          : 'Von Hand · Aktuell'
-  const updateHighlighted =
-    appUpdate?.phase === 'ready' ||
-    appUpdate?.phase === 'unsupported' ||
-    (appUpdate?.phase === 'available' && !appUpdate.autoUpdate)
+        : `${appUpdate.autoUpdate ? 'Automatisch' : 'Von Hand'} · ${
+            appUpdate.checkFailed
+              ? 'Prüfung nicht gelungen'
+              : appUpdate.checkedAt
+                ? 'Aktuell'
+                : 'Noch nicht geprüft'
+          }`
 
   const items: SettingsItem[] = [
     {

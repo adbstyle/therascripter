@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'fs'
 import { basename, dirname, join } from 'path'
 import { z } from 'zod'
 import type { ManifestApp } from '../../shared/update-manifest'
+import { isNewerVersion } from '../../shared/version'
 import type {
   AppUpdateInstallResult,
   AppUpdatePhase,
@@ -35,6 +36,8 @@ export const IDLE_INSTALL_SECONDS = 10 * 60
 export const MIN_FREE_AFTER_DOWNLOAD = 5 * 1024 ** 3
 /** Platz für DMG plus entpackte App (das DMG ist komprimiert, die App ~3.5×). */
 const STAGING_FACTOR = 5
+/** Namenszusatz für beiseite geschobene, im Hintergrund gelöschte Ordner. */
+const TRASH_MARK = '.deleting-'
 
 export const PersistedAppUpdateSchema = z.object({
   version: z.string().regex(/^\d+\.\d+\.\d+$/),
@@ -70,14 +73,14 @@ export interface AppUpdateDeps {
     url: string,
     target: string,
     onProgress: (percent: number) => void,
-    abortSignal: { aborted: boolean }
+    abortSignal: AbortSignal
   ) => Promise<{ success: boolean; error?: string }>
   sha256OfFile: (path: string) => Promise<string>
   freeBytes: (dir: string) => number | null
   /** Hängt das DMG ein, kopiert die App nach `targetApp`, hängt aus. */
-  extractApp: (dmgPath: string, targetApp: string) => Promise<void>
+  extractApp: (dmgPath: string, targetApp: string, signal: AbortSignal) => Promise<void>
   /** Wirft, wenn Version oder Signatur der Kopie nicht stimmen. */
-  verifyApp: (appPath: string, expectedVersion: string) => Promise<void>
+  verifyApp: (appPath: string, expectedVersion: string, signal: AbortSignal) => Promise<void>
   currentWork: () => BusyReason | null
   idleSeconds: () => number
   isWindowVisible: () => boolean
@@ -90,16 +93,9 @@ export interface AppUpdateDeps {
    * app.asar im Bundle als virtuelles Verzeichnis und löscht still nichts.
    */
   removeInBackground: (path: string) => void
-  removeNow: (path: string) => void
+  removeNow: (path: string) => Promise<void>
   log: (message: string) => void
   now: () => Date
-}
-
-function isNewer(current: string, candidate: string): boolean {
-  const parse = (v: string): number[] => v.split('.').map(Number)
-  const [a, b] = [parse(current), parse(candidate)]
-  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return b[i] > a[i]
-  return false
 }
 
 const BUSY_MESSAGE: Record<BusyReason, string> = {
@@ -116,7 +112,10 @@ export class AppUpdateService {
   private installPending = false
   private message: string | null = null
   private checkedAt: string | null = null
-  private downloadAbort: { aborted: boolean } | null = null
+  private checkFailed = false
+  private downloadAbort: AbortController | null = null
+  /** Letzter Download-Lauf — der nächste wartet, bis er fertig aufgeräumt hat. */
+  private lastRun: Promise<void> = Promise.resolve()
   private quitPlan: QuitInstallPlan | null = null
 
   constructor(private readonly deps: AppUpdateDeps) {}
@@ -135,7 +134,8 @@ export class AppUpdateService {
       installPending: this.installPending,
       message: this.message,
       unsupportedReason: this.phase === 'unsupported' ? this.deps.selfReplaceBlocker() : null,
-      checkedAt: this.checkedAt
+      checkedAt: this.checkedAt,
+      checkFailed: this.checkFailed
     }
   }
 
@@ -155,7 +155,26 @@ export class AppUpdateService {
   /** Arbeitsordner und Merker einer Version verwerfen. */
   private discard(): void {
     this.deps.writePersisted(null)
-    this.deps.removeInBackground(this.deps.workDir)
+    this.removeAside(this.deps.workDir)
+  }
+
+  /**
+   * Löscht im Hintergrund, schiebt den Ordner aber vorher atomar beiseite:
+   * Ein gleich danach startender Download legt seinen Ordner sonst dort an,
+   * wo rm noch leert. Liegengebliebenes räumt init() beim nächsten Start weg.
+   */
+  private removeAside(path: string): void {
+    if (!existsSync(path)) return
+    let target = path
+    if (!basename(path).includes(TRASH_MARK)) {
+      try {
+        target = `${path}${TRASH_MARK}${this.deps.now().getTime()}`
+        renameSync(path, target)
+      } catch {
+        target = path
+      }
+    }
+    this.deps.removeInBackground(target)
   }
 
   // ── Start ────────────────────────────────────────────────────────────────
@@ -169,12 +188,18 @@ export class AppUpdateService {
     const parent = dirname(this.deps.bundlePath)
     const previous = basename(previousBundlePath(this.deps.bundlePath))
     for (const name of safeReaddir(parent)) {
-      if (name.startsWith(previous)) this.deps.removeInBackground(join(parent, name))
+      if (name.startsWith(previous)) this.removeAside(join(parent, name))
+    }
+    // Beim letzten Beenden nicht fertig gelöschte Arbeitsordner
+    const workParent = dirname(this.deps.workDir)
+    const trashPrefix = `${basename(this.deps.workDir)}${TRASH_MARK}`
+    for (const name of safeReaddir(workParent)) {
+      if (name.startsWith(trashPrefix)) this.removeAside(join(workParent, name))
     }
 
     const saved = this.persisted()
     if (!saved) {
-      if (existsSync(this.deps.workDir)) this.deps.removeInBackground(this.deps.workDir)
+      this.removeAside(this.deps.workDir)
       return
     }
     if (saved.installAttemptedAt) {
@@ -191,7 +216,7 @@ export class AppUpdateService {
         failedInstalls: saved.failedInstalls + 1
       })
     }
-    if (!isNewer(this.deps.currentVersion, saved.version)) {
+    if (!isNewerVersion(this.deps.currentVersion, saved.version)) {
       this.discard()
       return
     }
@@ -201,10 +226,16 @@ export class AppUpdateService {
       sha256: saved.sha256,
       sizeBytes: saved.sizeBytes
     }
-    if (saved.stagedAppPath && existsSync(saved.stagedAppPath)) {
+    if (this.deps.selfReplaceBlocker()) {
+      // Z. B. jetzt aus dem DMG gestartet: kein Austausch, der bei jedem
+      // Beenden scheitern würde, sondern der Weg über die Anleitung (AK 9)
+      this.phase = 'unsupported'
+    } else if (saved.stagedAppPath && existsSync(saved.stagedAppPath)) {
       this.phase = 'ready'
     } else {
       this.phase = 'available'
+      // Ein beim Beenden unterbrochener Hintergrund-Download läuft gleich weiter
+      if (this.deps.getAutoUpdate() && this.startAutoDownload(this.offer)) return
     }
     this.emit()
   }
@@ -214,21 +245,20 @@ export class AppUpdateService {
   /** Ergebnis einer geprüften Update-Beschreibung (UpdateCheckService). */
   handleManifest(app: ManifestApp | undefined): void {
     this.checkedAt = this.deps.now().toISOString()
-    if (!app || !isNewer(this.deps.currentVersion, app.version)) {
+    this.checkFailed = false
+    if (!app || !isNewerVersion(this.deps.currentVersion, app.version)) {
       if (this.phase !== 'ready' && this.phase !== 'downloading') this.setIdle()
       this.emit()
       return
     }
     // Eine neuere Version ersetzt ein wartendes oder ladendes Update
-    if (
-      this.offer &&
-      this.offer.version !== app.version &&
-      isNewer(this.offer.version, app.version)
-    ) {
+    if (this.offer && isNewerVersion(this.offer.version, app.version)) {
       this.deps.log(`AppUpdate: ${app.version} ersetzt ${this.offer.version}`)
-      this.cancelDownload()
+      this.downloadAbort?.abort()
+      this.downloadAbort = null
       this.discard()
       this.phase = 'idle'
+      this.message = null
     }
     if (
       this.offer?.version === app.version &&
@@ -245,10 +275,30 @@ export class AppUpdateService {
       return
     }
     this.phase = 'available'
+    if (this.deps.getAutoUpdate() && this.startAutoDownload(app)) return
     this.emit()
-    if (this.deps.getAutoUpdate() && this.hasSpaceFor(app, MIN_FREE_AFTER_DOWNLOAD)) {
-      void this.download({ manual: false })
+  }
+
+  /** Eine Prüfung ist gescheitert (UpdateCheckService) — kein «aktuell» anzeigen. */
+  handleCheckFailed(): void {
+    this.checkFailed = true
+    this.emit()
+  }
+
+  /**
+   * Startet den Hintergrund-Download, wenn danach genug Platz bleibt (AK 12).
+   * Sonst ein Hinweis — ohne ihn bliebe das Update bei eingeschalteten
+   * automatischen Updates unbemerkt liegen. true = Download läuft (und meldet
+   * seinen Zustand selbst).
+   */
+  private startAutoDownload(app: ManifestApp): boolean {
+    if (!this.hasSpaceFor(app, MIN_FREE_AFTER_DOWNLOAD)) {
+      const gb = Math.ceil((app.sizeBytes * STAGING_FACTOR + MIN_FREE_AFTER_DOWNLOAD) / 1024 ** 3)
+      this.message = `Für das automatische Update auf Version ${app.version} fehlt Speicherplatz (mindestens ${gb} GB frei). Sie können es hier selbst herunterladen oder Platz freigeben.`
+      return false
     }
+    void this.download({ manual: false })
+    return true
   }
 
   private setIdle(): void {
@@ -256,6 +306,7 @@ export class AppUpdateService {
     this.offer = null
     this.progress = null
     this.manualDownload = false
+    this.message = null
   }
 
   private hasSpaceFor(app: ManifestApp, reserve: number): boolean {
@@ -269,8 +320,9 @@ export class AppUpdateService {
 
   /**
    * Lädt und stellt bereit. Ein automatischer Download bleibt unsichtbar und
-   * scheitert still (nächster Versuch bei der nächsten Prüfung); ein selbst
-   * gestarteter zeigt Fortschritt und eine Fehlermeldung (AK 3, NFR 3).
+   * scheitert ohne Meldung — das Update steht dann als verfügbar da, der
+   * nächste Versuch folgt bei der nächsten Prüfung; ein selbst gestarteter
+   * zeigt Fortschritt und eine Fehlermeldung (AK 3, NFR 3).
    */
   async download({ manual }: { manual: boolean }): Promise<void> {
     const app = this.offer
@@ -287,7 +339,7 @@ export class AppUpdateService {
       return
     }
 
-    const abort = { aborted: false }
+    const abort = new AbortController()
     this.downloadAbort = abort
     this.phase = 'downloading'
     this.manualDownload = manual
@@ -295,10 +347,24 @@ export class AppUpdateService {
     this.message = null
     this.emit()
 
+    // Ein abgebrochener Lauf hängt erst aus und stoppt seine Kopie, bevor der
+    // nächste in denselben Ordner schreibt
+    const run = this.lastRun.then(() => this.stage(app, abort))
+    this.lastRun = run
+    await run
+  }
+
+  /** Download, Prüfung und Bereitstellen eines Laufs. Wirft nie. */
+  private async stage(app: ManifestApp, abort: AbortController): Promise<void> {
+    if (abort.signal.aborted) return
     const dir = this.stageDir(app.version)
     const dmg = join(dir, 'Therascript.dmg')
     const stagedApp = join(dir, 'Therascript.app')
     try {
+      // Reste anderer Versionen, z. B. eines ersetzten Updates
+      for (const name of safeReaddir(this.deps.workDir)) {
+        if (name !== app.version) this.removeAside(join(this.deps.workDir, name))
+      }
       mkdirSync(dir, { recursive: true })
       this.deps.writePersisted({
         ...app,
@@ -312,12 +378,13 @@ export class AppUpdateService {
         app.url,
         dmg,
         (percent) => {
+          if (abort.signal.aborted) return
           this.progress = percent
           if (this.manualDownload) this.emit()
         },
-        abort
+        abort.signal
       )
-      if (abort.aborted) return
+      if (abort.signal.aborted) return
       if (!result.success) throw new Error(result.error ?? 'Download fehlgeschlagen')
       if ((await this.deps.sha256OfFile(dmg)) !== app.sha256) {
         rmSync(dmg, { force: true })
@@ -325,11 +392,11 @@ export class AppUpdateService {
           'Die heruntergeladene Datei stimmt nicht mit der signierten Beschreibung überein'
         )
       }
-      this.deps.removeNow(stagedApp)
-      await this.deps.extractApp(dmg, stagedApp)
-      await this.deps.verifyApp(stagedApp, app.version)
+      await this.deps.removeNow(stagedApp)
+      await this.deps.extractApp(dmg, stagedApp, abort.signal)
+      await this.deps.verifyApp(stagedApp, app.version, abort.signal)
       rmSync(dmg, { force: true })
-      if (abort.aborted || this.offer?.version !== app.version) return
+      if (abort.signal.aborted || this.offer?.version !== app.version) return
 
       this.deps.writePersisted({
         ...app,
@@ -343,7 +410,7 @@ export class AppUpdateService {
       this.deps.log(`AppUpdate: ${app.version} liegt bereit`)
       this.emit()
     } catch (err) {
-      if (abort.aborted) return
+      if (abort.signal.aborted) return
       const reason = err instanceof Error ? err.message : String(err)
       this.deps.log(`AppUpdate: Download/Bereitstellen von ${app.version} gescheitert: ${reason}`)
       this.phase = 'available'
@@ -360,7 +427,7 @@ export class AppUpdateService {
 
   cancelDownload(): void {
     if (!this.downloadAbort) return
-    this.downloadAbort.aborted = true
+    this.downloadAbort.abort()
     this.downloadAbort = null
     if (this.phase === 'downloading') {
       this.phase = this.offer ? 'available' : 'idle'
@@ -377,12 +444,10 @@ export class AppUpdateService {
     if (!enabled) {
       // Ein Hintergrund-Download stoppt; ein bereitliegendes Update bleibt (PC 2)
       if (this.phase === 'downloading' && !this.manualDownload) this.cancelDownload()
-    } else if (
-      this.phase === 'available' &&
-      this.offer &&
-      this.hasSpaceFor(this.offer, MIN_FREE_AFTER_DOWNLOAD)
-    ) {
-      void this.download({ manual: false })
+      // Ein Platz-Hinweis zum automatischen Update gilt nicht mehr
+      if (this.phase === 'available') this.message = null
+    } else if (this.phase === 'available' && this.offer && this.startAutoDownload(this.offer)) {
+      return
     }
     this.emit()
   }

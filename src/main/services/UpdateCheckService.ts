@@ -24,22 +24,6 @@ type Manifest = z.infer<typeof ManifestSchema>
 
 const MANIFEST_URL = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/manifest.json'
 
-// ─── Version comparison ──────────────────────────────────────────────────────
-
-/** Returns true if `latest` is strictly newer than `current` (semver without pre-release). */
-export function isNewerVersion(current: string, latest: string): boolean {
-  const parse = (v: string): [number, number, number] => {
-    const parts = v.split('.').map(Number)
-    if (parts.length !== 3 || parts.some(isNaN)) return [0, 0, 0]
-    return parts as [number, number, number]
-  }
-  const [cMaj, cMin, cPat] = parse(current)
-  const [lMaj, lMin, lPat] = parse(latest)
-  if (lMaj !== cMaj) return lMaj > cMaj
-  if (lMin !== cMin) return lMin > cMin
-  return lPat > cPat
-}
-
 // ─── Manifest fetch ───────────────────────────────────────────────────────────
 
 /** Lädt eine kleine Datei als Bytes (Manifest, Signatur — beide < 100 KB). */
@@ -248,6 +232,8 @@ async function runCheck(): Promise<CheckResult> {
   } catch (error) {
     // Non-blocking: update check failures are silently ignored
     console.log(`UpdateCheckService: Update-Check fehlgeschlagen (ignoriert): ${error}`)
+    // Sonst stünde in Einstellungen → Updates «aktuell», obwohl nichts geprüft wurde
+    getAppUpdateService()?.handleCheckFailed()
     return { modelUpdates: [] }
   }
 }

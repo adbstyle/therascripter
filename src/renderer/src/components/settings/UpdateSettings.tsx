@@ -61,12 +61,29 @@ export default function UpdateSettings(): React.JSX.Element {
           Therascript {state.currentVersion}
         </h3>
 
-        {state.phase === 'idle' && (
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-success" strokeWidth={1.75} aria-hidden="true" />
-            <span className="text-sm text-text-secondary">Therascript ist aktuell.</span>
-          </div>
-        )}
+        {state.phase === 'idle' &&
+          (state.checkFailed ? (
+            <p className="flex items-start gap-2 text-sm text-text-secondary">
+              <AlertCircle
+                className="mt-0.5 h-4 w-4 shrink-0 text-warning-text"
+                strokeWidth={2}
+                aria-hidden="true"
+              />
+              Die Suche nach Updates ist nicht gelungen. Bitte prüfen Sie die Internetverbindung und
+              versuchen Sie es später erneut.
+            </p>
+          ) : state.checkedAt ? (
+            <div className="flex items-center gap-3">
+              <CheckCircle2
+                className="h-5 w-5 text-success"
+                strokeWidth={1.75}
+                aria-hidden="true"
+              />
+              <span className="text-sm text-text-secondary">Therascript ist aktuell.</span>
+            </div>
+          ) : (
+            <p className="text-sm text-text-secondary">Noch nicht nach Updates gesucht.</p>
+          ))}
 
         {state.phase === 'available' && (
           <div className="space-y-3">

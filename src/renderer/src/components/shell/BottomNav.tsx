@@ -33,7 +33,7 @@ export default function BottomNav({
   const [appVersion, setAppVersion] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const copyResetRef = useRef<number | null>(null)
-  const { state: appUpdate } = useAppUpdate()
+  const { state: appUpdate, needsAttention: updateNeedsAttention } = useAppUpdate()
   const { pendingCount: reconcilePending } = useReconcileEvents()
 
   useEffect(
@@ -67,15 +67,11 @@ export default function BottomNav({
     window.api.system.aboutInfo().then((info) => setAppVersion(info.version))
   }, [])
 
-  // Ein Hintergrund-Download bleibt unsichtbar, bis das Update bereitliegt
-  // (PO-Entscheid #164); ohne automatische Updates wird jede neue Version gemeldet.
-  const updateHint =
-    appUpdate?.phase === 'ready'
+  const updateHint = !updateNeedsAttention
+    ? null
+    : appUpdate?.phase === 'ready'
       ? 'Update bereit'
-      : appUpdate?.phase === 'unsupported' ||
-          (appUpdate?.phase === 'available' && !appUpdate.autoUpdate)
-        ? 'Update verfügbar'
-        : null
+      : 'Update verfügbar'
 
   return (
     <div className="flex shrink-0 items-center justify-between gap-4 bg-surface-1 px-4 py-2">

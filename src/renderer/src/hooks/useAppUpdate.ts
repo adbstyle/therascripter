@@ -1,8 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AppUpdateInstallResult, AppUpdateState } from '../../../shared/types/AppUpdate'
 
+/**
+ * Braucht das App-Update die Nutzer:in? Bereit zur Installation, nur von Hand
+ * installierbar oder verfügbar, aber nicht automatisch ladbar (aus, zu wenig
+ * Platz, gescheitert). Ein laufender Hintergrund-Download bleibt unsichtbar
+ * (PO-Entscheid #164). Eine Stelle für untere Leiste und Einstellungen.
+ */
+export function updateNeedsAttention(state: AppUpdateState | null): boolean {
+  return state?.phase === 'ready' || state?.phase === 'unsupported' || state?.phase === 'available'
+}
+
 interface UseAppUpdateResult {
   state: AppUpdateState | null
+  needsAttention: boolean
   checking: boolean
   check: () => Promise<void>
   download: () => void
@@ -53,6 +64,7 @@ export function useAppUpdate(): UseAppUpdateResult {
 
   return {
     state,
+    needsAttention: updateNeedsAttention(state),
     checking,
     check,
     download,

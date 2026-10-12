@@ -2,10 +2,11 @@
  * Zustand des App-Updates in der App (Issues #164, #165). Der Main-Prozess
  * (AppUpdateService) besitzt ihn und schickt jede Änderung an den Renderer.
  *
- * - idle: aktuell (oder noch nie geprüft)
+ * - idle: kein Update bekannt (aktuell, noch nie geprüft oder Prüfung gescheitert
+ *   — siehe checkedAt/checkFailed)
  * - available: neuere Version bekannt, noch nicht geladen (automatische
- *   Updates aus, zu wenig Speicher oder ein Hintergrund-Download wird später
- *   still wiederholt)
+ *   Updates aus, zu wenig Speicher oder ein Hintergrund-Download ist
+ *   gescheitert) — braucht immer die Aufmerksamkeit der Nutzer:in
  * - downloading: Download, Prüfung und Bereitstellen laufen
  * - ready: neue Version liegt geprüft bereit und kann installiert werden
  * - unsupported: die App kann sich nicht selbst ersetzen — Weg über die Website
@@ -34,7 +35,10 @@ export interface AppUpdateState {
   message: string | null
   /** Warum sich die App nicht selbst ersetzen kann (phase 'unsupported'). */
   unsupportedReason: string | null
+  /** Letzte erfolgreiche Prüfung (ISO), null solange keine gelungen ist. */
   checkedAt: string | null
+  /** Die letzte Prüfung ist gescheitert (offline, Signatur ungültig, Server). */
+  checkFailed: boolean
 }
 
 /** Ergebnis von appUpdate:install. */

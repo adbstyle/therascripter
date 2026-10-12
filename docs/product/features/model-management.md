@@ -106,7 +106,7 @@ Validated by `ManifestSchema` (Zod):
 
 - Uses Node.js `https.get` with a **15-second timeout**.
 - Response body is capped at **100 KB** (guard against oversized responses).
-- Errors are silently logged and ignored — the app continues without update information.
+- Errors are logged and otherwise ignored — the app continues without update information. `AppUpdateService.handleCheckFailed()` records the failure so Settings → Updates says «Die Suche nach Updates ist nicht gelungen» instead of «aktuell» (also for an invalid signature); «aktuell» appears only after a successful check (`checkedAt`).
 
 ### Caching Strategy
 
@@ -196,13 +196,15 @@ The app updates itself without Developer ID (ADR-009). `AppUpdateService` (`src/
 
 | Phase | Meaning |
 |---|---|
-| `idle` | up to date |
-| `available` | newer version known, not downloaded (auto-update off, < 5 GB free after download, or a silent background retry is due) |
+| `idle` | no update known — up to date, not yet checked or last check failed (`checkedAt`, `checkFailed`) |
+| `available` | newer version known, not downloaded (auto-update off, < 5 GB free after download — with a hint naming the space needed — or a failed background download); always shown in the bottom bar |
 | `downloading` | DMG download → sha256 vs. signed manifest → `hdiutil attach` on a private mount point → `ditto --noqtn` of the app into `userData/app-update/<version>/` → `hdiutil detach` → check version, `codesign --verify --deep --strict` and the Designated Requirement (`identifier "com.therascript.app"`, #161) |
 | `ready` | verified copy waits; persisted in the `appUpdate` setting so a restart keeps it |
 | `unsupported` | the app cannot replace itself (not in `/Applications` or `~/Applications`, App Translocation, DMG volume, no write permission or foreign owner) → hint with the website installation guide |
 
-A background download stays invisible and fails silently (retry at the next check); a manual download shows progress, can be cancelled and reports errors. A newer version replaces a waiting or downloading one.
+A background download stays invisible while it runs; if it fails, the update shows up as `available` without an error text (retry at the next check, or download by hand). A download interrupted by quitting resumes at the next start. A manual download shows progress, can be cancelled and reports errors. A newer version replaces a waiting or downloading one.
+
+Cancelling aborts the running step (`AbortSignal` into download, `hdiutil`, `ditto`, `codesign`); the next run waits until the cancelled one has detached its DMG (`lastRun`), so two runs never share a mount point or staging folder. Folders are deleted by first renaming them to `<name>.deleting-<ts>` (atomic) and then running `/bin/rm` in the background via `runSubprocess` — a download starting right after a replacement can never land in a folder that `rm` is still emptying. `init()` sweeps leftover `.deleting-` folders.
 
 ### Installing
 
@@ -210,11 +212,11 @@ A background download stays invisible and fails silently (retry at the next chec
 - **Never interrupt work:** `WorkGuard.currentWork()` (recording, running **or pending** task — `TaskQueueService.hasWork()`, model download, model update) is checked immediately before installing. A click during work marks the install as pending; it runs as soon as nothing is busy. The quit decision is taken at the very beginning of `before-quit`, before the recording cleanup.
 - **Swap:** after the ordered shutdown (queue stopped, DB closed) two renames — `Therascript.app` → `.Therascript-previous.app`, staged copy → `Therascript.app` — then `app.exit(0)` (with `app.relaunch()` for a click/idle install). **Not `app.quit()`:** after renaming its own bundle macOS aborts a regular termination and the process lingers (measured on the packaged app). Quit incl. swap: ~150 ms.
 - **Hidden window:** if the window was hidden, `startHiddenAfterUpdate` makes the relaunch start with `show: false` and ignore the launch `activate` event.
-- **Next start:** `init()` compares the installed version with the attempted one: success → remove staging and the previous bundle (via `/bin/rm` — Electron's `fs` treats `app.asar` inside a bundle as a virtual directory and silently deletes nothing); failure → status «nicht gelungen … automatisch erneut» and the update stays ready.
+- **Next start:** `init()` compares the installed version with the attempted one: success → remove staging and the previous bundle (via `/bin/rm` — Electron's `fs` treats `app.asar` inside a bundle as a virtual directory and silently deletes nothing); failure → status «nicht gelungen … automatisch erneut» and the update stays ready. If the app now cannot replace itself (e.g. started from the DMG), a staged update is restored as `unsupported` instead of `ready`, so no swap is attempted on every quit.
 
 ### Automatic updates (#165)
 
-Setting `autoUpdate` (default `true`, also for existing installations via electron-store defaults). Off: no automatic download or install (also not on quit); checks continue and new versions are shown; an update already downloaded stays installable; a running background download is cancelled. UI: Settings → Updates (`UpdateSettings.tsx`, `Toggle.tsx`); the bottom bar shows «Update bereit» / «Update verfügbar» and opens that page.
+Setting `autoUpdate` (default `true`, also for existing installations via electron-store defaults). Off: no automatic download or install (also not on quit); checks continue and new versions are shown; an update already downloaded stays installable; a running background download is cancelled. UI: Settings → Updates (`UpdateSettings.tsx`, `Toggle.tsx`); the bottom bar shows «Update bereit» / «Update verfügbar» and opens that page — whenever `updateNeedsAttention()` (`useAppUpdate.ts`, also used for the highlighted Settings card) is true: phase `ready`, `unsupported` or `available`.
 
 ## electron-store Keys
 

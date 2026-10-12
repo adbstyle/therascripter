@@ -15,7 +15,8 @@ const base: AppUpdateState = {
   installPending: false,
   message: null,
   unsupportedReason: null,
-  checkedAt: null
+  checkedAt: '2026-10-12T10:00:00Z',
+  checkFailed: false
 }
 
 const api = {
@@ -93,6 +94,18 @@ describe('UpdateSettings', () => {
     expect(await screen.findByText(/nicht aus dem Ordner «Programme»/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Anleitung öffnen' }))
     expect(api.openInstallGuide).toHaveBeenCalledOnce()
+  })
+
+  it('meldet «aktuell» nur nach einer gelungenen Prüfung', async () => {
+    show({ checkFailed: true })
+    expect(await screen.findByText(/Suche nach Updates ist nicht gelungen/)).toBeInTheDocument()
+    expect(screen.queryByText(/ist aktuell/)).not.toBeInTheDocument()
+  })
+
+  it('meldet «aktuell» nicht, solange noch keine Prüfung gelungen ist', async () => {
+    show({ checkedAt: null })
+    expect(await screen.findByText(/Noch nicht nach Updates gesucht/)).toBeInTheDocument()
+    expect(screen.queryByText(/ist aktuell/)).not.toBeInTheDocument()
   })
 
   it('zeigt eine gescheiterte Installation als Status (AK 16)', async () => {

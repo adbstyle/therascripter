@@ -106,8 +106,12 @@ vi.mock('../ManifestSignature', () => ({
 }))
 
 const mockHandleManifest = vi.fn()
+const mockHandleCheckFailed = vi.fn()
 vi.mock('../app-update-deps', () => ({
-  getAppUpdateService: () => ({ handleManifest: mockHandleManifest })
+  getAppUpdateService: () => ({
+    handleManifest: mockHandleManifest,
+    handleCheckFailed: mockHandleCheckFailed
+  })
 }))
 
 // ─── Import after mocks ───────────────────────────────────────────────────────
@@ -118,10 +122,10 @@ import {
   cleanupIncompleteUpdates,
   migrateInstalledVersions,
   executeUpdates,
-  isNewerVersion,
   dismissManifestVersions,
   manifestEntryKey
 } from '../UpdateCheckService'
+import { isNewerVersion } from '../../../shared/version'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -498,6 +502,7 @@ describe('checkForUpdates — signierte Update-Beschreibung (Issues #163/#164)',
     const { modelUpdates } = await checkForUpdates()
     expect(modelUpdates).toEqual([])
     expect(mockHandleManifest).not.toHaveBeenCalled()
+    expect(mockHandleCheckFailed).toHaveBeenCalled()
   })
 
   it('teilt gleichzeitige Prüfungen in einen Lauf', async () => {
@@ -511,6 +516,7 @@ describe('checkForUpdates — signierte Update-Beschreibung (Issues #163/#164)',
     const { modelUpdates } = await checkForUpdates()
     expect(modelUpdates).toEqual([])
     expect(mockHandleManifest).not.toHaveBeenCalled()
+    expect(mockHandleCheckFailed).toHaveBeenCalled()
   })
 })
 

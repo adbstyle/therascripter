@@ -68,7 +68,7 @@ function makeDeps(over: Partial<AppUpdateDeps> = {}): typeof deps {
     relaunch: vi.fn(),
     onStateChange: () => undefined,
     removeInBackground: (path) => rmSync(path, { recursive: true, force: true }),
-    removeNow: (path) => rmSync(path, { recursive: true, force: true }),
+    removeNow: async (path) => rmSync(path, { recursive: true, force: true }),
     log: () => undefined,
     now: () => new Date('2026-10-12T10:00:00Z'),
     ...over
@@ -127,12 +127,32 @@ describe('AppUpdateService — Angebot und Download', () => {
     expect(service.getState().phase).toBe('ready')
   })
 
-  it('lädt automatisch nur, wenn danach 5 GB frei bleiben (AK 12)', () => {
+  it('lädt automatisch nur, wenn danach 5 GB frei bleiben (AK 12) — und sagt es', () => {
     deps = makeDeps({ freeBytes: () => 5 * 1024 ** 3 })
     const service = new AppUpdateService(deps)
     service.handleManifest(offer('1.1.0'))
     expect(service.getState().phase).toBe('available')
+    expect(service.getState().message).toMatch(/fehlt Speicherplatz/)
     expect(deps.download).not.toHaveBeenCalled()
+  })
+
+  it('meldet einen automatischen Download nicht erst als «verfügbar» (kein Aufblitzen)', async () => {
+    const phases: string[] = []
+    deps = makeDeps({ onStateChange: (s) => phases.push(s.phase) })
+    const service = new AppUpdateService(deps)
+    service.handleManifest(offer('1.1.0'))
+    await vi.waitFor(() => expect(service.getState().phase).toBe('ready'))
+    expect(phases).not.toContain('available')
+  })
+
+  it('merkt sich eine gescheiterte Prüfung bis zur nächsten gelungenen', () => {
+    deps = makeDeps()
+    const service = new AppUpdateService(deps)
+    service.handleCheckFailed()
+    expect(service.getState()).toMatchObject({ checkFailed: true, checkedAt: null })
+    service.handleManifest(undefined)
+    expect(service.getState()).toMatchObject({ checkFailed: false, phase: 'idle' })
+    expect(service.getState().checkedAt).not.toBeNull()
   })
 
   it('verwirft eine Datei, die nicht zur signierten Beschreibung passt — still im Hintergrund', async () => {
@@ -177,6 +197,49 @@ describe('AppUpdateService — Angebot und Download', () => {
     await vi.waitFor(() =>
       expect(service.getState()).toMatchObject({ phase: 'ready', version: '1.2.0' })
     )
+  })
+
+  it('löscht beim Ersetzen nie in den Ordner des neuen Downloads hinein', async () => {
+    // Das Löschen läuft erst «später» — wie rm im Hintergrund
+    const pending: string[] = []
+    const service = await readyService({ removeInBackground: (path) => pending.push(path) })
+    service.handleManifest(offer('1.2.0'))
+    await vi.waitFor(() => expect(service.getState().phase).toBe('ready'))
+    for (const path of pending) rmSync(path, { recursive: true, force: true })
+    expect(existsSync(persisted!.stagedAppPath!)).toBe(true)
+    expect(persisted!.stagedAppPath).toMatch(/1\.2\.0\/Therascript\.app$/)
+  })
+
+  it('startet nach einem Abbruch erst, wenn der abgebrochene Lauf aufgeräumt hat', async () => {
+    autoUpdate = false
+    let releaseExtract: () => void = () => undefined
+    const order: string[] = []
+    let calls = 0
+    deps = makeDeps({
+      extractApp: async (_dmg, targetApp, signal) => {
+        const call = ++calls
+        order.push(`extract ${call}`)
+        if (call === 1) {
+          await new Promise<void>((resolve) => (releaseExtract = resolve))
+          expect(signal.aborted).toBe(true)
+          order.push('extract 1 aufgeräumt')
+          return
+        }
+        mkdirSync(targetApp, { recursive: true })
+      }
+    })
+    const service = new AppUpdateService(deps)
+    service.handleManifest(offer('1.1.0'))
+    const first = service.download({ manual: true })
+    await vi.waitFor(() => expect(order).toEqual(['extract 1']))
+    service.cancelDownload()
+    const second = service.download({ manual: true })
+    await new Promise((r) => setTimeout(r, 10))
+    expect(order).toEqual(['extract 1'])
+    releaseExtract()
+    await Promise.all([first, second])
+    expect(order).toEqual(['extract 1', 'extract 1 aufgeräumt', 'extract 2'])
+    expect(service.getState().phase).toBe('ready')
   })
 
   it('verweist auf die Website, wenn sich die App nicht ersetzen kann (AK 9)', () => {
@@ -294,6 +357,43 @@ describe('AppUpdateService — nach dem Neustart', () => {
     new AppUpdateService(deps).init()
     expect(persisted).toBeNull()
     expect(existsSync(previousBundlePath(deps.bundlePath))).toBe(false)
+  })
+
+  it('setzt einen beim Beenden unterbrochenen Hintergrund-Download fort', async () => {
+    persisted = {
+      ...offer('1.1.0'),
+      stagedAppPath: null,
+      installAttemptedAt: null,
+      failedInstalls: 0
+    }
+    deps = makeDeps()
+    const service = new AppUpdateService(deps)
+    service.init()
+    await vi.waitFor(() => expect(service.getState().phase).toBe('ready'))
+  })
+
+  it('versucht keinen Austausch, wenn die App jetzt nicht aus «Programme» läuft (AK 9)', () => {
+    deps = makeDeps({ selfReplaceBlocker: () => 'Therascript läuft nicht aus «Programme».' })
+    const staged = join(root, 'app-update', '1.1.0', 'Therascript.app')
+    mkdirSync(staged, { recursive: true })
+    persisted = {
+      ...offer('1.1.0'),
+      stagedAppPath: staged,
+      installAttemptedAt: null,
+      failedInstalls: 0
+    }
+    const service = new AppUpdateService(deps)
+    service.init()
+    expect(service.getState().phase).toBe('unsupported')
+    expect(service.prepareQuitInstall()).toBeNull()
+  })
+
+  it('räumt beim Start liegengebliebene Lösch-Reste weg', () => {
+    deps = makeDeps()
+    const leftover = join(root, 'app-update.deleting-123')
+    mkdirSync(leftover)
+    new AppUpdateService(deps).init()
+    expect(existsSync(leftover)).toBe(false)
   })
 
   it('meldet eine gescheiterte Installation und bietet sie still erneut an (AK 16, PC 5)', () => {

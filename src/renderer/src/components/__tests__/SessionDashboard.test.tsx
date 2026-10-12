@@ -191,7 +191,8 @@ beforeEach(() => {
         installPending: false,
         message: null,
         unsupportedReason: null,
-        checkedAt: null
+        checkedAt: null,
+        checkFailed: false
       }),
       check: vi.fn(),
       download: vi.fn(),
