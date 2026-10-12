@@ -161,7 +161,7 @@ Source: `src/main/ipc/model-update-handlers.ts`
 | `modelUpdate:restart` | invoke | `RestartUpdateSchema` — `{ updates: PendingModelUpdate[] }` | `{ allowed: boolean, reason?: string }` | Request app restart to apply model updates. Refused if recording or processing is active (`reason: "recording"` or `"processing"`). |
 | `modelUpdate:startDownload` | invoke | _(none)_ | `void` | Start downloading pending model updates (called from ModelUpdateScreen after restart) |
 | `modelUpdate:getPending` | invoke | _(none)_ | `PendingModelUpdate[] \| null` | Retrieve pending updates stored in electron-store settings |
-| `modelUpdate:getAvailable` | invoke | _(none)_ | `PendingModelUpdate[]` | Available updates from the last successful check, without dismissed versions (Issue #144). Fetched on mount by `useModelUpdates`, so views mounted after the startup push (Settings) see the same state |
+| `modelUpdate:getAvailable` | invoke | _(none)_ | `PendingModelUpdate[]` | Offered updates (Issue #144): manifest entries of the last successful check, recomputed on every call against installed models and dismissed versions. Fetched on mount by `useModelUpdates`, so views mounted after the startup push (Settings) see the same state |
 | `modelUpdate:clearPending` | invoke | _(none)_ | `void` | Clear pending updates from settings (used when user skips update) |
 | `modelUpdate:dismissVersions` | invoke | `DismissUpdatesSchema` — `{ updates: PendingModelUpdate[] }` | `void` | Record dismissed manifest entries; removes them from the available updates and pushes the new state |
 
@@ -171,7 +171,7 @@ Source: `src/main/ipc/model-update-handlers.ts`
 
 | Channel | Payload | Description |
 |---|---|---|
-| `modelUpdate:available` | `PendingModelUpdate[]` | Every change of the available updates — after each successful check, after dismissing and after applying updates; **also an empty list** (Issue #144) |
+| `modelUpdate:available` | `PendingModelUpdate[]` | Every change of the offered updates — after each successful check, after dismissing, after each applied update and after a model download/delete in Settings; **also an empty list** (Issue #144) |
 | `modelUpdate:downloadProgress` | `ModelDownloadStatus` | Emitted during model update download with progress data |
 | `modelUpdate:downloadComplete` | _(none)_ | Emitted when all model updates have been downloaded and applied |
 | `modelUpdate:downloadError` | `string` | Emitted when a model update download fails, with error message |
