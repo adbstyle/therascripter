@@ -299,6 +299,4 @@ The tab in `src/renderer/src/views/Settings.tsx` renders `ModelsSettings.tsx`. T
 1. `scripts/convert-hf-whisper.sh <hf-repo> <output-basename>` — converts a HuggingFace Whisper model via `convert-h5-to-ggml.py` and quantizes to `q5_0`. Output: `r2-upload/<basename>.bin`. Prints SHA-256 and size.
 2. Upload the file to R2 (via `aws s3 cp`).
 3. Add an entry to `MODEL_DEFINITIONS` (`ModelDownloadService.ts`): `group: 'asr'`, `isRequired: false`, `description`, `languages`, `accuracyScore`, `speedScore`, plus the correct `sha256` and `sizeBytes`.
-4. Add the new entry to the manifest array in `scripts/publish-manifest.sh`.
-5. Run `scripts/publish-manifest.sh`.
-6. Ship an app release (hash sync — see CLAUDE.md "Model hash sync").
+4. Ship an app release — `release.sh` publishes the signed manifest from the catalog (hash sync, see CLAUDE.md "Model hash sync").

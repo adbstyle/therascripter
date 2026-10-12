@@ -302,6 +302,19 @@ if ! node "$ROOT_DIR/scripts/release-check/run.mjs" --app "$ROOT_DIR/dist/mac-ar
   echo "⚠️  Release-Prüfung rot, bewusst freigegeben: $RELEASE_CHECK_NOTE"
 fi
 
+# ── Update-Beschreibung vorab erzeugen und signieren (Issue #163) ───────────
+# Fail-fast vor Tag und Push: Fehlt ein Modell-Artefakt auf R2 oder kann der
+# Signaturschlüssel nicht signieren, hat noch nichts die Maschine verlassen.
+
+echo ""
+echo "→ Erzeuge und signiere die Update-Beschreibung (Probelauf) …"
+if ! "$ROOT_DIR/scripts/publish-manifest.sh" --from-catalog --dmg "$DMG_PATH" --dry-run >/dev/null; then
+  echo ""
+  echo "❌ Update-Beschreibung lässt sich nicht erzeugen oder signieren — Release abgebrochen."
+  echo "   Nichts wurde gepusht. Grund siehe oben."
+  exit 1
+fi
+
 # ── Git tag + push (erst jetzt — Build, Verify und Release-Prüfung sind grün) ─
 
 # Only create tag if it doesn't exist yet
@@ -365,18 +378,34 @@ gh release create "v$NEW_VERSION" \
   --notes-file "$NOTES_TMP" \
   "$DMG_PATH"
 
-# ── Update manifest ──────────────────────────────────────────────────────────
+# ── Signierte Update-Beschreibung (Issue #163) ───────────────────────────────
+# Angeboten wird eine Version erst über das signierte Manifest — und erst,
+# wenn das DMG nachweislich unverändert auf GitHub abrufbar ist (AK 4).
+
+echo ""
+echo "→ Prüfe das hochgeladene DMG …"
+LOCAL_DMG_SHA=$(shasum -a 256 "$DMG_PATH" | cut -d' ' -f1)
+REMOTE_DMG_DIGEST=$(gh api "repos/{owner}/{repo}/releases/tags/v$NEW_VERSION" \
+  --jq '.assets[] | select(.name == "Therascript.dmg") | .digest')
+DMG_URL="https://github.com/adbstyle/therascripter/releases/download/v$NEW_VERSION/Therascript.dmg"
+if [ "$REMOTE_DMG_DIGEST" != "sha256:$LOCAL_DMG_SHA" ] || ! curl -fsSIL -o /dev/null "$DMG_URL"; then
+  echo "❌ Das DMG auf GitHub ist nicht abrufbar oder weicht ab (lokal sha256:$LOCAL_DMG_SHA, GitHub ${REMOTE_DMG_DIGEST:-<fehlt>})."
+  echo "   Das Release ist auf GitHub, wird der App aber NICHT angeboten (kein Manifest)."
+  echo "   DMG ersetzen: gh release upload v$NEW_VERSION \"$DMG_PATH\" --clobber"
+  echo "   Dann: scripts/publish-manifest.sh --from-catalog --dmg \"$DMG_PATH\""
+  exit 1
+fi
 
 # Modell-Einträge UND latestAppVersion aus dem Katalog dieses Releases — nicht
 # nur die App-Version patchen: sonst zeigte das Manifest nach einem neuen
 # Artefakt weiter aufs alte, und frische Installationen bekämen ein "Update"
 # zurück darauf angeboten (Trigger ist der sha-Vergleich).
 echo ""
-echo "→ Veröffentliche manifest.json aus dem Modell-Katalog (latestAppVersion=$NEW_VERSION) …"
-if ! "$ROOT_DIR/scripts/publish-manifest.sh" --from-catalog; then
-  echo "⚠️  Manifest-Update fehlgeschlagen — das Release ist draussen, das Manifest NICHT."
-  echo "   Frische Installationen bekommen sonst ein Modell-Update aufs alte Artefakt angeboten."
-  echo "   Artefakte prüfen/hochladen, dann: scripts/publish-manifest.sh --from-catalog"
+echo "→ Veröffentliche die signierte Update-Beschreibung (latestAppVersion=$NEW_VERSION) …"
+if ! "$ROOT_DIR/scripts/publish-manifest.sh" --from-catalog --dmg "$DMG_PATH"; then
+  echo "❌ Manifest nicht veröffentlicht — das Release ist auf GitHub, wird der App aber NICHT angeboten."
+  echo "   Grund siehe oben. Beheben, dann: scripts/publish-manifest.sh --from-catalog --dmg \"$DMG_PATH\""
+  exit 1
 fi
 
 echo ""

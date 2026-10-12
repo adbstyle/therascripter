@@ -92,24 +92,14 @@ After uploading, the script lists bucket contents for verification.
 
 ### Step 4: Publish manifest (`scripts/publish-manifest.sh`)
 
-`release.sh` publishes the manifest automatically at the end of every release with `scripts/publish-manifest.sh --from-catalog`: model entries (URL, sha256, size) come straight from `src/shared/model-catalog.ts`, every artifact is checked against R2 via HEAD (exists, `Content-Length` matches), no local files are needed. Upload a new artifact **before** releasing, otherwise this step aborts. `--from-catalog --dry-run` writes `manifest.json` locally without uploading.
+`release.sh` publishes the **signed** manifest at the end of every release with `scripts/publish-manifest.sh --from-catalog --dmg dist/Therascript.dmg` (Issue #163):
 
-The modes below build the manifest from local files instead:
+- Model entries (`id`, `version`, `label`, `url`, `sha256`, `sizeBytes`, `minAppVersion`) come straight from `src/shared/model-catalog.ts`; every artifact is checked against R2 via HEAD (exists, `Content-Length` matches). Upload a new artifact **before** releasing, otherwise the release aborts before tagging.
+- `minAppVersion`: an artifact whose sha256 is unchanged keeps its value; a new or changed artifact gets the version of the release that ships it.
+- `app`: version, GitHub download URL, size and sha256 of the DMG of this release. `latestAppVersion` and `generatedAt` stay as before, so installations without signature checks keep reading the manifest.
+- Signature: Ed25519 over the exact bytes of `manifest.json`, uploaded **first** to `signatures/<sha256 of manifest.json>.json`, then the manifest. Afterwards the script fetches both via the public URL and compares.
 
-Generates `manifest.json` from the files in `r2-upload/` and uploads it to R2. For each model the manifest records:
-
-- `id` -- model identifier (e.g. `whisper-large-v3-turbo`)
-- `version` -- date string (YYYY-MM-DD)
-- `label` -- human-readable label in German
-- `url` -- CDN download URL
-- `sha256` -- SHA-256 checksum
-- `sizeBytes` -- file size in bytes
-
-The manifest also includes `latestAppVersion` (read from `package.json`) and `generatedAt` (UTC timestamp).
-
-Options:
-- `scripts/publish-manifest.sh --dry-run` generates the manifest locally without uploading.
-- `scripts/publish-manifest.sh --app-version-only` downloads the existing manifest from R2, patches only the `latestAppVersion` field, and re-uploads. This does not require model files in `r2-upload/`. **Not sufficient after a new artifact:** model entries stay on the old artifact, and fresh installs of the new app (which carry the new hash) get offered a "model update" back to it. Use `--from-catalog` instead.
+Model-only republish between releases: `scripts/publish-manifest.sh --from-catalog` without `--dmg` keeps the live `app` entry, but only if it already describes the version in `package.json`. `--dry-run` generates and signs locally without uploading. The earlier modes (build from `r2-upload/`, `--app-version-only`) are gone: every manifest must be signed and follow the catalog.
 
 ### After upload
 

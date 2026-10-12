@@ -1,24 +1,61 @@
 #!/usr/bin/env bash
-# Generate manifest.json from packaged model archives in r2-upload/ and upload to R2.
-# Run AFTER scripts/package-models.sh has populated r2-upload/ with the model files.
-# Usage: scripts/publish-manifest.sh [--dry-run | --app-version-only | --from-catalog [--dry-run]]
-#   --from-catalog      Modell-Einträge direkt aus src/shared/model-catalog.ts (URL, sha256,
-#                       Grösse), jedes Artefakt per HEAD gegen R2 geprüft. Braucht KEINE
-#                       Dateien in r2-upload/. Das ruft release.sh auf — so passt das
-#                       Manifest immer zum Katalog der released App.
-#   --app-version-only  Download existing manifest from R2, patch latestAppVersion, re-upload.
-#                       Does NOT require model files in r2-upload/. Lässt die Modell-
-#                       Einträge unverändert — nach einem neuen Artefakt NICHT ausreichend.
+# Veröffentlicht die signierte Update-Beschreibung (manifest.json) auf R2.
+#
+# Usage: scripts/publish-manifest.sh --from-catalog [--dmg <Therascript.dmg>] [--dry-run]
+#
+#   --from-catalog  Modell-Einträge aus src/shared/model-catalog.ts (URL, sha256,
+#                   Grösse), jedes Artefakt per HEAD gegen R2 geprüft
+#                   (scripts/manifest-from-catalog.ts). Der einzige Weg — frühere
+#                   Modi (aus r2-upload/, --app-version-only) sind entfallen: jedes
+#                   Manifest muss signiert sein, und der Katalog ist die Quelle.
+#   --dmg <pfad>    Installationspaket dieses Releases: Version, URL, Grösse und
+#                   sha256 kommen in den App-Eintrag (release.sh übergibt es).
+#                   Ohne --dmg bleibt der App-Eintrag des Live-Manifests, falls er
+#                   schon diese Version beschreibt (Modell-Update zwischen Releases).
+#   --dry-run       Nur erzeugen und signieren, nichts hochladen.
+#
+# Signatur (Issue #163): Ed25519 über die exakten Bytes von manifest.json,
+# Hauptschlüssel aus dem Schlüsselbund (scripts/lib/signing-keychain.ts), nach
+# dessen Verlust der Reserveschlüssel über THERASCRIPT_SIGNING_KEY_FILE. Die
+# Signatur liegt unter signatures/<sha256 des Manifests>.json und wird VOR dem
+# Manifest hochgeladen — eine App findet zu jedem Manifest, das sie sieht, die
+# passende Signatur. Danach prüft das Skript beide über die öffentliche URL.
+# Jeder Fehler endet mit Exit ≠ 0 und Grund (PC 1).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-SOURCE_DIR="$PROJECT_ROOT/r2-upload"
 MANIFEST_FILE="$PROJECT_ROOT/manifest.json"
 BUCKET="therascript"
-MODE="${1:-}"
+CDN_BASE=$(sed -n "s/^export const R2_CDN = '\(.*\)'/\1/p" "$PROJECT_ROOT/src/shared/model-catalog.ts")
 
-# Load .env if present
+FROM_CATALOG=false
+DRY_RUN=false
+DMG_PATH=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --from-catalog) FROM_CATALOG=true; shift ;;
+    --dry-run) DRY_RUN=true; shift ;;
+    --dmg)
+      [ $# -ge 2 ] || { echo "❌ --dmg braucht einen Pfad"; exit 1; }
+      DMG_PATH="$2"; shift 2 ;;
+    *) echo "❌ Unbekannte Option: $1"; exit 1 ;;
+  esac
+done
+if [ "$FROM_CATALOG" != true ]; then
+  echo "❌ Nur noch --from-catalog wird unterstützt (signiertes Manifest aus dem Katalog)."
+  echo "   Usage: scripts/publish-manifest.sh --from-catalog [--dmg <Therascript.dmg>] [--dry-run]"
+  exit 1
+fi
+if [ -n "$DMG_PATH" ] && [ ! -f "$DMG_PATH" ]; then
+  echo "❌ DMG nicht gefunden: $DMG_PATH"
+  exit 1
+fi
+if [ -z "$CDN_BASE" ]; then
+  echo "❌ R2_CDN nicht in src/shared/model-catalog.ts gefunden"
+  exit 1
+fi
+
 ENV_FILE="$PROJECT_ROOT/.env"
 if [ -f "$ENV_FILE" ]; then
   set -a
@@ -26,265 +63,53 @@ if [ -f "$ENV_FILE" ]; then
   set +a
 fi
 
-# ── From-catalog mode ────────────────────────────────────────────────────────
-if [ "$MODE" = "--from-catalog" ]; then
-  APP_VERSION=$(node -e "process.stdout.write(require('$PROJECT_ROOT/package.json').version)")
-  echo "=== Manifest aus Katalog (latestAppVersion=$APP_VERSION) ==="
-  # Erst in eine Temp-Datei: bricht die R2-Prüfung ab, bleibt manifest.json unberührt.
-  (cd "$PROJECT_ROOT" && npx tsx "$SCRIPT_DIR/manifest-from-catalog.ts" "$APP_VERSION") > "$MANIFEST_FILE.tmp"
-  mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
-  echo "  -> $MANIFEST_FILE"
-
-  if [ "${2:-}" = "--dry-run" ]; then
-    echo "(Dry-run: kein Upload)"
-    cat "$MANIFEST_FILE"
-    exit 0
-  fi
-
-  if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ] || [ -z "${R2_ACCESS_KEY_ID:-}" ] || [ -z "${R2_SECRET_ACCESS_KEY:-}" ]; then
-    echo "Error: R2-Credentials fehlen. CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY in .env setzen"
-    exit 1
-  fi
-  if ! command -v aws &>/dev/null; then
-    echo "Error: AWS CLI nicht gefunden. Installieren: brew install awscli"
-    exit 1
-  fi
-  export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
-  export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
-  export AWS_DEFAULT_REGION="auto"
-  aws s3 cp "$MANIFEST_FILE" "s3://$BUCKET/manifest.json" \
-    --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" \
-    --content-type "application/json" \
-    --no-progress
-  echo "  -> OK (manifest.json auf R2)"
-  exit 0
-fi
-
-# ── App-version-only mode ────────────────────────────────────────────────────
-# Downloads existing manifest from R2, patches latestAppVersion, re-uploads.
-if [ "$MODE" = "--app-version-only" ]; then
-  APP_VERSION=$(node -e "process.stdout.write(require('$PROJECT_ROOT/package.json').version)")
-
-  # Validate R2 credentials
-  if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ] || [ -z "${R2_ACCESS_KEY_ID:-}" ] || [ -z "${R2_SECRET_ACCESS_KEY:-}" ]; then
-    echo "Error: R2-Credentials fehlen. CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY in .env setzen"
-    exit 1
-  fi
-  if ! command -v aws &>/dev/null; then
-    echo "Error: AWS CLI nicht gefunden. Installieren: brew install awscli"
-    exit 1
-  fi
-
-  R2_ENDPOINT="https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
-  export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
-  export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
-  export AWS_DEFAULT_REGION="auto"
-
-  echo "=== App-Version-Only Mode ==="
-  echo "  Downloading existing manifest.json from R2 …"
-  aws s3 cp "s3://$BUCKET/manifest.json" "$MANIFEST_FILE" \
-    --endpoint-url "$R2_ENDPOINT" --no-progress
-
-  echo "  Patching latestAppVersion → $APP_VERSION …"
-  node -e "
-    const fs = require('fs');
-    const m = JSON.parse(fs.readFileSync('$MANIFEST_FILE', 'utf8'));
-    m.latestAppVersion = '$APP_VERSION';
-    m.generatedAt = new Date().toISOString().replace(/\.\d{3}Z/, 'Z');
-    fs.writeFileSync('$MANIFEST_FILE', JSON.stringify(m, null, 2) + '\n');
-  "
-
-  echo "  Uploading patched manifest.json to R2 …"
-  aws s3 cp "$MANIFEST_FILE" "s3://$BUCKET/manifest.json" \
-    --endpoint-url "$R2_ENDPOINT" \
-    --content-type "application/json" \
-    --no-progress
-
-  echo "  -> OK (latestAppVersion=$APP_VERSION)"
-  exit 0
-fi
-
-# ── Full mode (models + app version) ────────────────────────────────────────
-
-# Model metadata: id|filename|label|relativePath|archive|checkPath
-# Generated from src/shared/model-catalog.ts (single source of truth) via
-# scripts/extract-model-definitions.ts. The bash array is no longer maintained
-# by hand — adding a new model requires a single update in the TS catalog only.
-declare -a MODELS=()
-EXTRACTOR="$SCRIPT_DIR/extract-model-definitions.ts"
-if [ ! -f "$EXTRACTOR" ]; then
-  echo "Error: extract-model-definitions.ts nicht gefunden: $EXTRACTOR"
-  exit 1
-fi
-while IFS= read -r line; do
-  [ -n "$line" ] && MODELS+=("$line")
-done < <(cd "$PROJECT_ROOT" && npx tsx "$EXTRACTOR")
-if [ "${#MODELS[@]}" -eq 0 ]; then
-  echo "Error: extract-model-definitions.ts lieferte keine Einträge — TS-Source kaputt?"
-  exit 1
-fi
-
-# CDN base URL
-CDN_BASE="https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev"
-
-# Today's date as version string
-VERSION=$(date +%Y-%m-%d)
-GENERATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 APP_VERSION=$(node -e "process.stdout.write(require('$PROJECT_ROOT/package.json').version)")
+echo "=== Manifest aus Katalog (latestAppVersion=$APP_VERSION) ==="
+DMG_ARGS=()
+[ -n "$DMG_PATH" ] && DMG_ARGS=(--dmg "$DMG_PATH")
+# Erst in eine Temp-Datei: bricht die R2-Prüfung ab, bleibt manifest.json unberührt.
+(cd "$PROJECT_ROOT" && npx tsx "$SCRIPT_DIR/manifest-from-catalog.ts" "$APP_VERSION" ${DMG_ARGS[@]+"${DMG_ARGS[@]}"}) > "$MANIFEST_FILE.tmp"
+mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
+echo "  -> $MANIFEST_FILE"
 
-echo "=== Generating manifest.json ==="
-echo "Version: $VERSION"
-echo "Source: $SOURCE_DIR"
-echo ""
+echo "=== Signieren ==="
+SIG_PATH=$(cd "$PROJECT_ROOT" && npx tsx "$SCRIPT_DIR/sign-manifest.ts" "$MANIFEST_FILE")
+echo "  -> $MANIFEST_FILE.sig ($SIG_PATH)"
 
-# Validate source files exist
-for MODEL_ENTRY in "${MODELS[@]}"; do
-  IFS='|' read -r ID FILENAME LABEL _ <<< "$MODEL_ENTRY"
-  FILE="$SOURCE_DIR/$FILENAME"
-  if [ ! -f "$FILE" ]; then
-    echo "Error: Modelldatei nicht gefunden: $FILE"
-    echo "Zuerst ausführen: npm run sidecar:package"
-    exit 1
-  fi
-done
-
-# Verify lokale Tarballs gegen R2-Stand ─────────────────────────────────────
-# Hintergrund: package-models.sh erzeugt frische Tarballs (gzip-Header-Timestamps
-# differieren bei jedem Lauf), auch wenn der Modell-Inhalt identisch ist. Wenn
-# nur ein Teil der Tarballs auf R2 hochgeladen wird, würde dieses Skript SHAs
-# in das Manifest schreiben, die R2 nicht hat → Update-Verifikation failed mit
-# "SHA-256-Prüfung fehlgeschlagen" beim User. Pre-Flight-Check stoppt das.
-if [ "$MODE" != "--dry-run" ] \
-  && [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] \
-  && [ -n "${R2_ACCESS_KEY_ID:-}" ] \
-  && [ -n "${R2_SECRET_ACCESS_KEY:-}" ] \
-  && command -v aws &>/dev/null; then
-  echo "=== Pre-Flight: Lokale Tarballs vs. R2 ==="
-  R2_ENDPOINT="https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
-  export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
-  export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
-  export AWS_DEFAULT_REGION="auto"
-
-  MISMATCH=false
-  for MODEL_ENTRY in "${MODELS[@]}"; do
-    IFS='|' read -r ID FILENAME _ <<< "$MODEL_ENTRY"
-    LOCAL_SIZE=$(stat -f%z "$SOURCE_DIR/$FILENAME")
-    REMOTE_SIZE=$(aws s3api head-object \
-      --bucket "$BUCKET" \
-      --key "$FILENAME" \
-      --endpoint-url "$R2_ENDPOINT" \
-      --query ContentLength \
-      --output text 2>/dev/null || echo "MISSING")
-
-    if [ "$REMOTE_SIZE" = "MISSING" ]; then
-      echo "  ✗ $FILENAME — fehlt auf R2 (lokal $LOCAL_SIZE bytes)"
-      MISMATCH=true
-    elif [ "$LOCAL_SIZE" != "$REMOTE_SIZE" ]; then
-      echo "  ✗ $FILENAME — lokal $LOCAL_SIZE bytes, R2 $REMOTE_SIZE bytes"
-      MISMATCH=true
-    else
-      echo "  ✓ $FILENAME — $LOCAL_SIZE bytes"
-    fi
-  done
-
-  if [ "$MISMATCH" = true ]; then
-    echo ""
-    echo "FEHLER: Lokale Tarballs weichen von R2 ab. Das Manifest würde SHAs publizieren,"
-    echo "       die R2 nicht hat — User-Updates würden mit SHA-256-Prüfung-fehlgeschlagen failen."
-    echo ""
-    echo "  Lösung A: scripts/upload-r2.sh ausführen, um lokale Tarballs auf R2 zu pushen."
-    echo "  Lösung B: Veraltete lokale Tarballs aus r2-upload/ entfernen (wenn R2-Stand korrekt ist)"
-    echo "             und nur die wirklich neu zu publizierenden Files in r2-upload/ behalten."
-    echo ""
-    exit 1
-  fi
-  echo ""
-fi
-
-# Build JSON
-MODELS_JSON="["
-FIRST=true
-for MODEL_ENTRY in "${MODELS[@]}"; do
-  IFS='|' read -r ID FILENAME LABEL RELATIVE_PATH ARCHIVE CHECK_PATH <<< "$MODEL_ENTRY"
-  FILE="$SOURCE_DIR/$FILENAME"
-
-  HASH=$(shasum -a 256 "$FILE" | cut -d' ' -f1)
-  SIZE=$(stat -f%z "$FILE")
-  URL="$CDN_BASE/$FILENAME"
-
-  echo "  $ID"
-  echo "    sha256:    $HASH"
-  echo "    sizeBytes: $SIZE"
-  echo "    url:       $URL"
-  echo ""
-
-  if [ "$FIRST" = true ]; then
-    FIRST=false
-  else
-    MODELS_JSON="$MODELS_JSON,"
-  fi
-
-  MODELS_JSON="$MODELS_JSON
-    {
-      \"id\": \"$ID\",
-      \"version\": \"$VERSION\",
-      \"label\": \"$LABEL\",
-      \"url\": \"$URL\",
-      \"sha256\": \"$HASH\",
-      \"sizeBytes\": $SIZE
-    }"
-done
-MODELS_JSON="$MODELS_JSON
-  ]"
-
-# Write manifest.json
-cat > "$MANIFEST_FILE" << EOF
-{
-  "generatedAt": "$GENERATED_AT",
-  "latestAppVersion": "$APP_VERSION",
-  "models": $MODELS_JSON
-}
-EOF
-
-echo "=== manifest.json geschrieben: $MANIFEST_FILE ==="
-echo ""
-
-if [ "$MODE" = "--dry-run" ]; then
+if [ "$DRY_RUN" = true ]; then
   echo "(Dry-run: kein Upload)"
   cat "$MANIFEST_FILE"
   exit 0
 fi
 
-# Validate R2 credentials
 if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ] || [ -z "${R2_ACCESS_KEY_ID:-}" ] || [ -z "${R2_SECRET_ACCESS_KEY:-}" ]; then
-  echo "Warnung: R2-Credentials fehlen — manifest.json wurde lokal geschrieben, aber nicht hochgeladen."
-  echo "Zum Hochladen: CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY in .env setzen"
-  exit 0
-fi
-
-if ! command -v aws &>/dev/null; then
-  echo "Error: AWS CLI nicht gefunden. Installieren: brew install awscli"
+  echo "❌ R2-Credentials fehlen. CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY in .env setzen"
   exit 1
 fi
-
-R2_ENDPOINT="https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
-
+if ! command -v aws &>/dev/null; then
+  echo "❌ AWS CLI nicht gefunden. Installieren: brew install awscli"
+  exit 1
+fi
 export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
 export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
 export AWS_DEFAULT_REGION="auto"
+R2_ENDPOINT="https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
-echo "=== Uploading manifest.json to R2 ==="
+echo "=== Hochladen (Signatur zuerst) ==="
+aws s3 cp "$MANIFEST_FILE.sig" "s3://$BUCKET/$SIG_PATH" \
+  --endpoint-url "$R2_ENDPOINT" --content-type "application/json" --no-progress
 aws s3 cp "$MANIFEST_FILE" "s3://$BUCKET/manifest.json" \
-  --endpoint-url "$R2_ENDPOINT" \
-  --content-type "application/json" \
-  --no-progress
+  --endpoint-url "$R2_ENDPOINT" --content-type "application/json" --no-progress
 
-echo "  -> OK"
-echo ""
-echo "manifest.json verfügbar unter: $CDN_BASE/manifest.json"
-echo ""
-echo "Nächste Schritte:"
-echo "  - sha256/sizeBytes in src/shared/model-catalog.ts müssen diesem Manifest entsprechen"
-echo "    (manifest.json ist gitignored — nichts zu committen)."
-echo "  - Beim Release veröffentlicht release.sh das Manifest ohnehin neu aus dem Katalog"
-echo "    (publish-manifest.sh --from-catalog)."
+echo "=== Öffentlich abrufbar? ==="
+LOCAL_SHA=$(shasum -a 256 "$MANIFEST_FILE" | cut -d' ' -f1)
+REMOTE_SHA=$(curl -fsS -H 'Cache-Control: no-cache' "$CDN_BASE/manifest.json" | shasum -a 256 | cut -d' ' -f1)
+if [ "$LOCAL_SHA" != "$REMOTE_SHA" ]; then
+  echo "❌ $CDN_BASE/manifest.json liefert nicht das eben hochgeladene Manifest"
+  exit 1
+fi
+if ! curl -fsS "$CDN_BASE/$SIG_PATH" | cmp -s - "$MANIFEST_FILE.sig"; then
+  echo "❌ Signatur unter $CDN_BASE/$SIG_PATH nicht abrufbar oder abweichend"
+  exit 1
+fi
+echo "  -> OK: manifest.json und $SIG_PATH öffentlich abrufbar"

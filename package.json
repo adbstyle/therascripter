@@ -26,7 +26,7 @@
     "sidecar:package": "scripts/package-models.sh",
     "sidecar:upload": "scripts/upload-r2.sh",
     "sidecar:deploy": "npm run sidecar:build && npm run sidecar:package && npm run sidecar:upload",
-    "sidecar:publish-manifest": "scripts/publish-manifest.sh",
+    "sidecar:publish-manifest": "scripts/publish-manifest.sh --from-catalog",
     "icons:tray": "node scripts/build-tray-icons.mjs",
     "dmg:background": "node scripts/build-dmg-background.mjs"
   },
