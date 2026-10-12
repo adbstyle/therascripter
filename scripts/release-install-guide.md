@@ -26,9 +26,9 @@ Ausführliche Anleitung mit Erklärungen: https://adbstyle.github.io/therascript
 2. macOS meldet: *«Therascript» wurde nicht geöffnet. Apple konnte nicht überprüfen, ob die App frei von Schadsoftware ist.* Diese Meldung ist erwartet.
 3. Auf **Fertig** klicken, **nicht** auf «In den Papierkorb legen».
 
-### Schritt 3: Therascript freigeben (einmalig)
+### Schritt 3: Programm-Freigabe erteilen (einmalig)
 
-Erledigen Sie diesen Schritt direkt nach Schritt 2. macOS bietet die Freigabe nur kurze Zeit nach dem blockierten Start an.
+Mit der Programm-Freigabe erlauben Sie macOS, Therascript zu starten. Erledigen Sie diesen Schritt direkt nach Schritt 2: macOS bietet die Freigabe nur kurze Zeit nach dem blockierten Start an. Fehlt der Hinweis zu Therascript, öffnen Sie Therascript erneut (Schritt 2) und kehren gleich danach hierher zurück.
 
 1. Oben links auf das Apple-Symbol klicken und **Systemeinstellungen** wählen.
 2. Links auf **Datenschutz & Sicherheit** klicken und rechts ganz nach unten scrollen.
@@ -37,17 +37,17 @@ Erledigen Sie diesen Schritt direkt nach Schritt 2. macOS bietet die Freigabe nu
 
 Therascript startet und lädt beim ersten Start die Sprachmodelle herunter (je nach Internetverbindung 5–15 Minuten). Der Fortschritt wird angezeigt.
 
-### Warum diese Freigabe nötig ist
+### Warum die Programm-Freigabe nötig ist
 
 Apple bestätigt Apps nur gegen eine jährliche Gebühr als geprüft. Therascript ist kostenlos und quelloffen und verzichtet deshalb auf diese Beglaubigung. Darum warnt macOS beim ersten Start.
 
-- **Was die Freigabe bewirkt:** Sie erlauben macOS, diese Version von Therascript zu starten. Die Freigabe gilt für die ganze App, auch für die eingebauten Werkzeuge für Transkription, Sprechererkennung, Pseudonymisierung, Texterkennung und Zusammenfassung. Ein Terminal ist nicht nötig.
+- **Was die Programm-Freigabe bewirkt:** Sie erlauben macOS, diese Version von Therascript zu starten. Die Freigabe gilt für die ganze App, auch für die eingebauten Werkzeuge für Transkription, Sprechererkennung, Pseudonymisierung, Texterkennung und Zusammenfassung. Ein Terminal ist nicht nötig.
 - **Was niemand unabhängig bestätigt:** Ohne Beglaubigung prüft weder Apple noch eine andere Stelle, dass die heruntergeladene Datei wirklich vom Therascript-Projekt stammt. Laden Sie Therascript deshalb nur über die Website https://adbstyle.github.io/therascripter/ oder die Release-Seite auf GitHub. Der Quellcode ist öffentlich einsehbar.
 
 ### Auf eine neue Version aktualisieren
 
-1. Therascript beenden: in der Menüleiste oben rechts auf das Therascript-Symbol klicken und **Therascript beenden** wählen. Das Schliessen des Fensters allein beendet die App nicht.
+1. Therascript beenden: in der Menüleiste oben rechts auf das Therascript-Symbol klicken und **Therascript beenden** wählen, oder im geöffneten Fenster `⌘ Q` drücken. Das Schliessen des Fensters allein beendet die App nicht.
 2. Die neue Version wie in Schritt 1 herunterladen und auf den Ordner **Programme** ziehen. Auf die Frage, ob die vorhandene App ersetzt werden soll, mit **Ersetzen** antworten.
-3. Schritt 2 und 3 wiederholen. Jede heruntergeladene Version braucht die Freigabe einmal.
+3. Schritt 2 und 3 wiederholen. Jede heruntergeladene Version braucht die Programm-Freigabe einmal.
 
-Ihre Transkriptionen, Einstellungen und die heruntergeladenen Modelle bleiben erhalten. Fragt macOS nach dem Update erneut nach dem Mikrofon, erlauben Sie den Zugriff, damit Aufnahmen weiter funktionieren.
+Ihre Transkriptionen, Einstellungen und die heruntergeladenen Modelle bleiben erhalten. Nach dem Update kann macOS zwei Rückfragen stellen: Erlauben Sie den Zugriff auf das Mikrofon, damit Aufnahmen weiter funktionieren. Fragt macOS, ob Therascript auf den Schlüsselbund zugreifen darf, wählen Sie **Immer erlauben** und bestätigen mit Ihrem Passwort.
