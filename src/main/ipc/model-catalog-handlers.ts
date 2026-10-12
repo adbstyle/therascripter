@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { validateIpc } from '../utils/ipc-helpers'
+import { refreshAvailableModelUpdates } from '../services/UpdateCheckService'
 import {
   abortModelDownload,
   clearActiveModel,
@@ -54,7 +55,12 @@ export function registerModelCatalogHandlers(): void {
 
   ipcMain.handle('modelCatalog:download', async (_event, payload: unknown) => {
     const { id } = validateIpc(ModelIdPayloadSchema, payload, 'modelCatalog:download')
-    await downloadSingleModel(id)
+    try {
+      await downloadSingleModel(id)
+    } finally {
+      // Ein frisch geladenes Modell braucht kein Update mehr (#144)
+      refreshAvailableModelUpdates()
+    }
     const def = getModelById(id)
     return buildCatalogEntries(def?.group ?? 'asr')
   })
@@ -62,7 +68,12 @@ export function registerModelCatalogHandlers(): void {
   ipcMain.handle('modelCatalog:delete', async (_event, payload: unknown) => {
     const { id } = validateIpc(ModelIdPayloadSchema, payload, 'modelCatalog:delete')
     const groupBefore = getModelById(id)?.group ?? 'asr'
-    await deleteModel(id)
+    try {
+      await deleteModel(id)
+    } finally {
+      // Kein Update-Hinweis für ein gelöschtes Modell (#144)
+      refreshAvailableModelUpdates()
+    }
     return buildCatalogEntries(groupBefore)
   })
 

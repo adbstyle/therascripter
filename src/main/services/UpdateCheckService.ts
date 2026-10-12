@@ -15,7 +15,11 @@ import { UPDATE_SIGNING_KEYS, manifestSignaturePath } from '../../shared/update-
 import { verifyManifestSignature } from './ManifestSignature'
 import { sendToRenderer } from '../utils/ipc-helpers'
 import type { ModelDownloadStatus } from '../../shared/types/IpcApi'
-import type { PendingModelUpdate, CheckResult } from '../../shared/types/ModelUpdate'
+import type {
+  PendingModelUpdate,
+  CheckResult,
+  InstalledModelVersion
+} from '../../shared/types/ModelUpdate'
 import { getAppUpdateService } from './app-update-deps'
 import { getTaskQueue } from './TaskQueueService'
 import { z } from 'zod'
@@ -116,6 +120,59 @@ export function dismissManifestVersions(entries: Array<{ id: string; sha256: str
     seen.add(manifestEntryKey(e.id, e.sha256))
   }
   settings.set('dismissedManifestVersions', Array.from(seen))
+  // Banner und Badge in den Einstellungen verschwinden gemeinsam (#144)
+  refreshAvailableModelUpdates()
+}
+
+function dismissedManifestKeys(): Set<string> {
+  const raw = getSettings().get('dismissedManifestVersions')
+  return new Set(Array.isArray(raw) ? raw : [])
+}
+
+// ─── Verfügbare Modell-Updates (Issue #144) ──────────────────────────────────
+
+/**
+ * Manifest-Einträge der letzten gelungenen Prüfung für bekannte Modelle —
+ * ungefiltert. Was davon angeboten wird, berechnet getAvailableModelUpdates()
+ * bei jedem Abruf aus dem aktuellen Stand (installiert, verworfen). So kann
+ * kein Weg, der Modelle ändert, einen veralteten Hinweis hinterlassen; er muss
+ * nur refreshAvailableModelUpdates() aufrufen, damit der Renderer es erfährt.
+ */
+let manifestModelCandidates: PendingModelUpdate[] = []
+
+/** Angeboten: installiert, nicht in dieser Version installiert, nicht verworfen. */
+function isOffered(
+  update: PendingModelUpdate,
+  installed: Record<string, InstalledModelVersion>,
+  dismissed: Set<string>
+): boolean {
+  // Nur installierte Modelle — optionale Alternativen ohne Install werden nicht beworben
+  if (!isModelInstalled(update.id)) return false
+  if (installed[update.id]?.sha256 === update.sha256) return false
+  // Issue #84 / Story F+G — user actively dismissed this exact manifest entry
+  // (UpdateBanner dismiss or ModelUpdateScreen "Diese Version überspringen").
+  // Re-becomes eligible when the manifest publishes a new sha256 for the same id.
+  return !dismissed.has(manifestEntryKey(update.id, update.sha256))
+}
+
+/**
+ * Eine Quelle der Wahrheit für alle Renderer-Stellen (Banner, Einstellungen).
+ * Wer nach dem Start-Push mountet, holt den Stand über modelUpdate:getAvailable.
+ */
+export function getAvailableModelUpdates(): PendingModelUpdate[] {
+  const installed = getInstalledVersions()
+  const dismissed = dismissedManifestKeys()
+  return manifestModelCandidates.filter((u) => isOffered(u, installed, dismissed))
+}
+
+/**
+ * Nach jeder Änderung an Manifest, installierten Modellen oder verworfenen
+ * Versionen: Stand neu berechnen und pushen — auch eine leere Liste.
+ */
+export function refreshAvailableModelUpdates(): PendingModelUpdate[] {
+  const updates = getAvailableModelUpdates()
+  sendToRenderer('modelUpdate:available', updates)
+  return updates
 }
 
 // ─── checkForUpdates ─────────────────────────────────────────────────────────
@@ -137,14 +194,12 @@ async function runCheck(): Promise<CheckResult> {
   try {
     const manifest = await fetchVerifiedManifest()
 
-    const settings = getSettings()
     const installedVersions = getInstalledVersions()
-    const dismissedRaw = settings.get('dismissedManifestVersions')
-    const dismissed = new Set(Array.isArray(dismissedRaw) ? dismissedRaw : [])
+    const dismissed = dismissedManifestKeys()
     const definitions = getModelDefinitions()
 
     // ── Model update check ──
-    const modelUpdates: PendingModelUpdate[] = []
+    const candidates: PendingModelUpdate[] = []
 
     for (const manifestModel of manifest.models) {
       // Path-traversal guard on id
@@ -160,46 +215,6 @@ async function runCheck(): Promise<CheckResult> {
         continue
       }
 
-      // Nur Modelle updaten, die bereits installiert sind — optionale ASR-Alternativen
-      // ohne Install werden nicht als "Update verfügbar" beworben.
-      if (!isModelInstalled(manifestModel.id)) {
-        continue
-      }
-
-      const installed = installedVersions[manifestModel.id]
-      if (installed && installed.sha256 === manifestModel.sha256) {
-        continue // Already up to date
-      }
-
-      // Issue #84 / Story F+G — user actively dismissed this exact manifest
-      // entry (UpdateBanner dismiss or ModelUpdateScreen "Diese Version
-      // überspringen"). Re-becomes eligible when the manifest publishes a new
-      // sha256 for the same id.
-      if (dismissed.has(manifestEntryKey(manifestModel.id, manifestModel.sha256))) {
-        continue
-      }
-
-      // Lazy heal of the legacy '' sentinel from migrateInstalledVersions:
-      // for non-archive models we can hash the file on disk and compare against
-      // the manifest. If they match, the install is bit-identical to the
-      // current manifest version — backfill the real hash and skip the update,
-      // closing the upgrade-from-old-build false-positive (Issue #84 / Story B).
-      // Archive models can't be hashed post-extract (the .tar.gz is gone), so
-      // they fall through to the standard update path; one accepted update will
-      // then write the real hash via executeUpdates and the issue resolves.
-      if (installed && installed.sha256 === '' && !definition.archive) {
-        const filePath = join(getModelsDir(), definition.relativePath)
-        if (existsSync(filePath)) {
-          const matches = await verifyFileSha256(filePath, manifestModel.sha256)
-          if (matches) {
-            const healed = { ...installed, sha256: manifestModel.sha256 }
-            setInstalledVersion(manifestModel.id, healed)
-            installedVersions[manifestModel.id] = healed
-            continue
-          }
-        }
-      }
-
       // Path-traversal guard on relativePath
       if (definition.relativePath.includes('..')) {
         console.warn(
@@ -208,7 +223,7 @@ async function runCheck(): Promise<CheckResult> {
         continue
       }
 
-      modelUpdates.push({
+      const candidate: PendingModelUpdate = {
         id: manifestModel.id,
         version: manifestModel.version,
         label: manifestModel.label,
@@ -218,12 +233,34 @@ async function runCheck(): Promise<CheckResult> {
         relativePath: definition.relativePath,
         archive: definition.archive,
         checkPath: definition.checkPath
-      })
+      }
+      candidates.push(candidate)
+
+      // Lazy heal of the legacy '' sentinel from migrateInstalledVersions:
+      // for non-archive models we can hash the file on disk and compare against
+      // the manifest. If they match, the install is bit-identical to the
+      // current manifest version — backfill the real hash, which takes the
+      // entry out of the offered updates (closing the upgrade-from-old-build
+      // false-positive, Issue #84 / Story B). Archive models can't be hashed
+      // post-extract (the .tar.gz is gone), so they stay offered; one accepted
+      // update will then write the real hash via executeUpdates.
+      const installed = installedVersions[manifestModel.id]
+      if (
+        installed?.sha256 === '' &&
+        !definition.archive &&
+        isOffered(candidate, installedVersions, dismissed)
+      ) {
+        const filePath = join(getModelsDir(), definition.relativePath)
+        if (existsSync(filePath) && (await verifyFileSha256(filePath, manifestModel.sha256))) {
+          const healed = { ...installed, sha256: manifestModel.sha256 }
+          setInstalledVersion(manifestModel.id, healed)
+          installedVersions[manifestModel.id] = healed
+        }
+      }
     }
 
-    if (modelUpdates.length > 0) {
-      sendToRenderer('modelUpdate:available', modelUpdates)
-    }
+    manifestModelCandidates = candidates
+    const modelUpdates = refreshAvailableModelUpdates()
 
     // ── App update (Issue #164) ──
     getAppUpdateService()?.handleManifest(manifest.app)
@@ -512,6 +549,8 @@ async function runUpdates(
       sha256: update.sha256,
       installedAt: new Date().toISOString()
     })
+    // Sofort aus dem Angebot — auch wenn ein späteres Update dieses Laufs scheitert
+    refreshAvailableModelUpdates()
 
     overallDownloaded += update.sizeBytes
   }

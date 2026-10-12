@@ -127,7 +127,7 @@ For each model in the manifest:
 3. If the SHA differs (or the model has no recorded version), it is flagged as a pending update.
 4. The model's `relativePath`, `archive` flag, and `checkPath` are looked up from the local `MODEL_DEFINITIONS`.
 
-Available updates are pushed to the renderer via `modelUpdate:available`.
+The main process keeps the manifest entries of the last successful check for known models — unfiltered — and computes the offered updates on every read from the current state: model installed (`isModelInstalled`), installed sha256 differs, version not dismissed (Issue #144). This is the single source of truth for every renderer view; no code path that changes models can leave a stale hint behind. `refreshAvailableModelUpdates()` recomputes and pushes via `modelUpdate:available`, **including an empty list**: after every successful check, after «Verwerfen» (`dismissManifestVersions`), after **each** update applied by `executeUpdates` (a later failing update in the same run does not keep the applied one on offer) and after downloading or deleting a model in Settings → Modelle (`model-catalog-handlers.ts`). A failed check keeps the previous manifest entries. `useModelUpdates` fetches the state on mount via `modelUpdate:getAvailable` and then follows the pushes (a push arriving while fetching wins), so the Settings «Update» badge on the Modelle card no longer depends on being mounted at startup.
 
 ### Version Migration
 
@@ -135,7 +135,7 @@ On first run after the update system was added, `migrateInstalledVersions()` see
 
 ### UpdateBanner (Non-blocking Notification)
 
-When `useModelUpdates` receives updates via `modelUpdate:available`, `App.tsx` renders `UpdateBanner` at the top of the main UI. The banner shows:
+When `useModelUpdates` reports updates, `App.tsx` renders `UpdateBanner` at the top of the main UI. The banner shows:
 - Number of models with updates and total download size.
 - A "Jetzt neu starten" (restart now) button.
 
@@ -248,8 +248,10 @@ Setting `autoUpdate` (default `true`, also for existing installations via electr
 | `modelUpdate:restart` | handle | Persists updates + relaunches app (guarded) |
 | `modelUpdate:startDownload` | handle | Executes pending updates after restart |
 | `modelUpdate:getPending` | handle | Returns pending updates from electron-store |
+| `modelUpdate:getAvailable` | handle | Returns the offered updates, recomputed from the last check and the current install/dismiss state (#144) |
 | `modelUpdate:clearPending` | handle | Clears pending updates (skip) |
-| `modelUpdate:available` | send | Pushes available updates to renderer |
+| `modelUpdate:dismissVersions` | handle | Records dismissed versions, pushes the recomputed list |
+| `modelUpdate:available` | send | Pushes every change of the available updates, also an empty list |
 | `modelUpdate:downloadProgress` | send | Pushes download progress during update |
 | `modelUpdate:downloadComplete` | send | Signals all updates finished |
 | `modelUpdate:downloadError` | send | Sends error message to renderer |
