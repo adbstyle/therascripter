@@ -58,6 +58,7 @@ usage() {
   cat <<'EOF'
 Usage: scripts/release.sh [--bump patch|minor|major | --version X.Y.Z]
                           [--notes "text" | --notes-file <pfad>]
+                          [--override-release-check "<Begründung>"]
 
 Ohne Argumente: interaktiver Modus (Fragen wie bisher).
 Mit --bump oder --version: nicht-interaktiv, keine Rückfragen; läuft nur auf
@@ -65,6 +66,13 @@ dem main-Branch (Ersatz für die entfallene menschliche Bestätigung).
 Notes aus --notes/--notes-file; fehlen sie, werden sie von GitHub aus den
 Commits generiert. Die Installationsanleitung für Endanwender
 (scripts/release-install-guide.md) wird IMMER automatisch angehängt.
+
+Vor Tag und Push läuft die Release-Prüfung (scripts/release-check/run.mjs):
+Start ohne Daten, Start auf dem Seed der Vorversion samt Datenerhalt,
+Aufnahme und PDF bis zur Zusammenfassung. Ist sie rot, bricht der Release ab.
+--override-release-check gibt einen roten Lauf bewusst frei; die Begründung
+landet in der Tag-Nachricht und im Release-Text. Interaktiv fragt das Skript
+bei Rot nach einer Begründung.
 EOF
 }
 
@@ -72,9 +80,10 @@ BUMP=""
 VERSION_ARG=""
 NOTES_ARG=""
 NOTES_FILE_ARG=""
+RELEASE_CHECK_OVERRIDE=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --bump|--version|--notes|--notes-file)
+    --bump|--version|--notes|--notes-file|--override-release-check)
       if [ $# -lt 2 ]; then
         echo "❌ Option $1 braucht einen Wert."
         usage
@@ -85,6 +94,13 @@ while [ $# -gt 0 ]; do
         --version)    VERSION_ARG="$2" ;;
         --notes)      NOTES_ARG="$2" ;;
         --notes-file) NOTES_FILE_ARG="$2" ;;
+        --override-release-check)
+          RELEASE_CHECK_OVERRIDE="$2"
+          if [ -z "${RELEASE_CHECK_OVERRIDE// /}" ]; then
+            echo "❌ --override-release-check braucht eine Begründung."
+            exit 1
+          fi
+          ;;
       esac
       shift 2
       ;;
@@ -261,11 +277,39 @@ if ! "$ROOT_DIR/scripts/verify-bundles.sh" --app "$ROOT_DIR/dist/mac-arm64/Thera
   exit 1
 fi
 
-# ── Git tag + push (erst jetzt — Build und Verify sind grün) ─────────────────
+# ── Release-Prüfung (Issue #170) ─────────────────────────────────────────────
+# Startet die gepackte App isoliert: ohne Daten bis zur Ersteinrichtung, auf
+# dem Seed der zuletzt veröffentlichten Version (alle Inhalte erhalten) und
+# mit einer Aufnahme und einem PDF bis zur Zusammenfassung. Einen Rückweg zur
+# Vorversion gibt es nicht (ADR-009) — diese Prüfung ist das Sicherheitsnetz.
+# Bei Rot nur weiter mit dokumentierter Begründung.
+
+echo ""
+echo "→ Release-Prüfung (Start, Daten der Vorversion, Verarbeitung) …"
+RELEASE_CHECK_NOTE=""
+if ! node "$ROOT_DIR/scripts/release-check/run.mjs" --app "$ROOT_DIR/dist/mac-arm64/Therascript.app"; then
+  if [ -z "$RELEASE_CHECK_OVERRIDE" ] && [ "$INTERACTIVE" = true ]; then
+    echo ""
+    read -r -p "Release trotzdem veröffentlichen? Begründung (leer = abbrechen): " RELEASE_CHECK_OVERRIDE
+  fi
+  if [ -z "${RELEASE_CHECK_OVERRIDE// /}" ]; then
+    echo ""
+    echo "❌ Release-Prüfung rot — Release abgebrochen. Details oben."
+    echo "   Nichts wurde gepusht. Bewusst freigeben: --override-release-check \"<Begründung>\""
+    exit 1
+  fi
+  RELEASE_CHECK_NOTE="$RELEASE_CHECK_OVERRIDE"
+  echo "⚠️  Release-Prüfung rot, bewusst freigegeben: $RELEASE_CHECK_NOTE"
+fi
+
+# ── Git tag + push (erst jetzt — Build, Verify und Release-Prüfung sind grün) ─
 
 # Only create tag if it doesn't exist yet
 if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
   echo "  (Tag v$NEW_VERSION existiert bereits — überspringe)"
+elif [ -n "$RELEASE_CHECK_NOTE" ]; then
+  git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION" \
+    -m "Release-Prüfung übersteuert: $RELEASE_CHECK_NOTE"
 else
   git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
 fi
@@ -305,7 +349,13 @@ NOTES_TMP="$(mktemp -t therascript-release-notes)"
 trap 'rm -f "$NOTES_TMP"' EXIT
 {
   if [ -n "$NOTES_BODY" ]; then
-    printf '%s\n\n---\n\n' "$NOTES_BODY"
+    printf '%s\n\n' "$NOTES_BODY"
+  fi
+  if [ -n "$RELEASE_CHECK_NOTE" ]; then
+    printf '> ⚠️ **Release-Prüfung übersteuert:** %s\n\n' "$RELEASE_CHECK_NOTE"
+  fi
+  if [ -n "$NOTES_BODY" ] || [ -n "$RELEASE_CHECK_NOTE" ]; then
+    printf -- '---\n\n'
   fi
   cat "$INSTALL_GUIDE_FILE"
 } > "$NOTES_TMP"

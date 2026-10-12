@@ -25,11 +25,35 @@ The release script performs these steps in order:
 
 5. **Verify + Smoke (release gate)** — Runs `scripts/verify-bundles.sh --app dist/mac-arm64/Therascript.app --smoke`. On failure the release aborts here: nothing has been tagged or pushed yet.
 
-6. **Tag + push** — Only after a green gate: creates the annotated tag `vX.Y.Z` (skipped if it exists) and pushes commit + tag.
+6. **Release check (Issue #170)** — Runs `node scripts/release-check/run.mjs --app dist/mac-arm64/Therascript.app` (details below). Red means abort; `--override-release-check "<reason>"` (or, interactively, a reason typed at the prompt) releases anyway and records the reason in the tag message and the release notes.
 
-7. **GitHub Release** — If no notes were provided, generates them from commit history via `gh api repos/{owner}/{repo}/releases/generate-notes` (must run after the tag push; the built-in `--generate-notes` flag cannot be combined with `--notes-file`, which is needed for the appended install guide). A failed generation is reported loudly but does not abort — the release then ships with the install guide only. Creates the release via `gh release create vX.Y.Z --notes-file …` with the DMG attached.
+7. **Tag + push** — Only after green gates: creates the annotated tag `vX.Y.Z` (skipped if it exists) and pushes commit + tag.
 
-8. **Publish manifest** — Runs `scripts/publish-manifest.sh --from-catalog`: model entries (URL, sha256, size) come from `src/shared/model-catalog.ts` of the release, `latestAppVersion` from `package.json`, and every artifact is checked against R2 via HEAD first. The manifest thus always matches the catalog of the released app; new artifacts must be on R2 before releasing (see `model-pipeline.md`). Warns loudly (but does not fail the release) if this step errors — rerun `scripts/publish-manifest.sh --from-catalog` then, otherwise fresh installs get offered a "model update" back to the previous artifact.
+8. **GitHub Release** — If no notes were provided, generates them from commit history via `gh api repos/{owner}/{repo}/releases/generate-notes` (must run after the tag push; the built-in `--generate-notes` flag cannot be combined with `--notes-file`, which is needed for the appended install guide). A failed generation is reported loudly but does not abort — the release then ships with the install guide only. Creates the release via `gh release create vX.Y.Z --notes-file …` with the DMG attached.
+
+9. **Publish manifest** — Runs `scripts/publish-manifest.sh --from-catalog`: model entries (URL, sha256, size) come from `src/shared/model-catalog.ts` of the release, `latestAppVersion` from `package.json`, and every artifact is checked against R2 via HEAD first. The manifest thus always matches the catalog of the released app; new artifacts must be on R2 before releasing (see `model-pipeline.md`). Warns loudly (but does not fail the release) if this step errors — rerun `scripts/publish-manifest.sh --from-catalog` then, otherwise fresh installs get offered a "model update" back to the previous artifact.
+
+### Release check (scripts/release-check/)
+
+There is no way back to a previous version in the app (ADR-009) and updates install themselves (#164), so every release proves before tagging that the packaged app starts, keeps the data of the last published version and processes recordings and PDFs. Checks:
+
+| Check | What it proves |
+|---|---|
+| Start without data | The app reaches the first-launch screen («Download starten») |
+| Start on the seed of the previous version | The session list shows every seed session; transcripts with edits and speakers, placeholder mapping, summaries, status, Sperrliste, settings and task history are unchanged; the seed's waiting session runs through to a summary |
+| Recording and PDF | A short recording (fed through the recording IPC, no microphone) and a PDF with a text and a scanned page reach `review` **with** a summary (the app skips summaries silently, the check does not) |
+
+A check that cannot run (missing previous DMG, missing models, timeout) counts as failed. The report lists every check with its reason; app output goes to `~/Library/Caches/therascript-release-check/logs/`.
+
+**Isolation.** The packaged app runs with `CFFIXED_USER_HOME=<test home>` (CoreFoundation, hence `app.getPath('home')`, reads it before `HOME`), `--use-mock-keychain` (otherwise macOS asks for a keychain in the test home) and `--no-sandbox`, inside `sandbox-exec` that denies `~/.therascript`, `~/Library/Application Support/therascript` and outbound 80/443 (update check). Never deny `fdesetup`: `execFile` then throws synchronously and `checkFileVaultOnStartup` aborts the startup before `taskQueue.start()`. Every launch asserts `aboutInfo().dataDir`. The app is quit with a targeted macOS quit (`NSRunningApplication.terminate`), not SIGTERM — the bundled `atomically` swallows SIGTERM. Models are APFS clones of the release Mac's `~/.therascript/models`. No product change was needed, so the published previous version runs the same way.
+
+**Seed.** The previous release (`gh release download <tag>`, extracted to the cache) builds it through its own UI API: settings, Sperrliste (all 7 types), a recording and a PDF processed to `review` with summary, the recording edited (text, speaker), then — while a second recording runs — a PDF import (waits, the queue pauses during recordings) and a quit: the recording ends as `error`, the PDF stays `queued`. Never a `recording` session: it opens a native recovery dialog at startup. The seed is cached per tag under `~/Library/Caches/therascript-release-check/seeds/<tag>/` (first release after a new version pays ~5 min once). The DB stores absolute paths, so build and check always use the same home (`…/therascript-release-check/home`); timestamps are shifted to «now» before every check (30-day auto-deletion, 24-h source cleanup). When a version introduces a new kind of data, extend `lib/seed.mjs` in the same release (NFR 6).
+
+**Test data** (`tests/fixtures/release-check/`, invented, no patient data): `gespraech.wav` (~20 s, two voices, recording format) and `bericht.pdf` (text page + scanned page). Regenerate with `node scripts/release-check/build-fixtures.mjs`.
+
+The seed cache key is `<tag>-<hash of seed.mjs, app-actions.mjs and the fixtures>`: extending the seed builds a new seed instead of reusing an old one. Settings compared exactly are the user-set ones (`theme`, `reviewPanelOpen`, `consentReminderShown`); for `activeModels` the check only requires every active model to be installed, because a new version may replace models on purpose (e.g. retiring a model).
+
+**Not covered** (manual check, ADR-009): Gatekeeper behaviour, first launch with model download, older versions than the last release, ML quality. Known gap: the seed has no session whose task was *running* when the previous version quit (`processing`, recovered by `recoverStuckTasks`), because such a state cannot be produced reproducibly through the UI API — the `queued` session covers the resume path only.
 
 ## Build Pipeline
 
