@@ -7,7 +7,7 @@ Therascript releases are built as macOS DMG installers targeting Apple Silicon (
 - **Interactive** (no arguments): prompts for the version choice, a confirmation, and optional release notes.
 - **Non-interactive** (`--bump patch|minor|major` or `--version X.Y.Z`, plus `--notes "text"` or `--notes-file <path>`): no prompts; intended for automated releases (e.g. Claude-driven). Refuses to run on any branch other than `main` — that guard replaces the human confirmation prompt. All flag inputs (bump value, version format, notes-file existence, mutually exclusive flag combinations) are validated up front, before anything is built or pushed.
 
-The end-user install guide (`scripts/release-install-guide.md`) is **always** appended to the release notes, regardless of how the notes were produced. Keep its facts (macOS floor, model size, disk space, Gatekeeper command) in sync with README.md.
+The end-user install guide (`scripts/release-install-guide.md`) is **always** appended to the release notes, regardless of how the notes were produced. The same guide appears on the website (`website/installation.html`, linked from every download button), in README.md ("Installation") and in short form in the DMG window (`build/dmg-background.svg`, rendered via `npm run dmg:background`). Keep steps and facts (macOS floor, model size, disk space) identical at all four places.
 
 ## Release Flow
 
@@ -106,13 +106,11 @@ Therascript is not signed with an Apple Developer certificate. The implications:
 
 ## Gatekeeper
 
-Because the app lacks a Developer ID signature and is not notarized, macOS Gatekeeper quarantines the downloaded app. Users must clear the quarantine once per downloaded version:
+Because the app lacks a Developer ID signature and is not notarized, macOS 26 blocks the first launch of a browser-downloaded version with «"Therascript" Not Opened — Apple could not verify …» (buttons «Done» / «Move to Bin»). Users then allow it once per downloaded version in System Settings → Privacy & Security → «Open Anyway» («Dennoch öffnen»). No Terminal command is needed (ADR-009, verified with 0.8.13 on macOS 26.5).
 
-```bash
-chmod -R u+w /Applications/Therascript.app && xattr -cr /Applications/Therascript.app
-```
+«Open Anyway» writes the approval into the quarantine attribute of **every** file in the bundle. A file without the owner-write bit keeps its unapproved quarantine and Gatekeeper SIGKILLs it on spawn (silent summarization skip, failing transcription). That is why the u+w gate in `verify-bundles.sh` (plus the `chmod` in `afterPack.js`) decides whether installation works without Terminal. Versions up to 0.8.7 shipped read-only files and needed the old `chmod … && xattr -cr …` command.
 
-**Right-click → Open is NOT sufficient**: it only whitelists the app launch itself, not the bundled ML binaries — those would still be SIGKILLed by Gatekeeper on spawn (silent summarization skip, failing transcription). The `chmod` prefix is needed for versions ≤ 0.8.7 (some bundled files shipped read-only, making `xattr` fail with `Permission denied`); harmless on newer versions. This is the same instruction the appended install guide (`scripts/release-install-guide.md`) and README.md give end users.
+Gatekeeper cannot be tested from a developer shell (quarantined binaries run there without approval). Releases that change installation, update path, signature or bundle layout need the manual check from ADR-009 ("Prüfung vor jedem Release").
 
 ## Version Management
 

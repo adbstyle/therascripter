@@ -90,9 +90,10 @@ done
 echo "Libraries: $LIB_DIR/ ($(ls "$LIB_DIR" | wc -l | tr -d ' ') files)"
 
 # Owner-Write-Bit erzwingen: Homebrew-Bottles shippen Mach-Os teils mit Modus
-# 444/555 und `cp` übernimmt den Modus. Ohne u+w schlägt beim Endnutzer
-# `xattr -cr` mit EACCES fehl → Quarantäne bleibt → Gatekeeper killt das
-# Binary per SIGKILL. Details: verify-bundles.sh (Owner-Write-Gate).
+# 444/555 und `cp` übernimmt den Modus. Ohne u+w kann «Dennoch öffnen» beim
+# Endnutzer die Freigabe nicht in die Datei schreiben → Quarantäne bleibt →
+# Gatekeeper killt das Binary per SIGKILL. Details: verify-bundles.sh
+# (Owner-Write-Gate).
 chmod -R u+w "$BIN_DIR" "$LIB_DIR"
 
 # ── 3a. Make bundle self-contained ──────────────────────────────────────────

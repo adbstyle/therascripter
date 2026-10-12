@@ -7,6 +7,12 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://adbstyle.github.io/therascripter/installation.html</loc>
+    <lastmod>2026-10-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://adbstyle.github.io/therascripter/impressum.html</loc>
     <lastmod>2026-05-08</lastmod>
     <changefreq>yearly</changefreq>

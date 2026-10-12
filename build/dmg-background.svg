@@ -1,0 +1,65 @@
+<!--
+  Quelle des DMG-Fensterhintergrunds. Rendern mit: npm run dmg:background
+  (scripts/build-dmg-background.mjs → build/dmg-background.png + @2x).
+
+  Masse in Punkten des DMG-Fensters (electron-builder.yml → dmg.window, 540 breit).
+  Die Symbole liegen mit Mittelpunkt bei x=140 (App) und x=400 (Programme), y=200,
+  Grösse 110, Beschriftung darunter bis ca. y=275 — der Text muss darunter bleiben.
+
+  Die Schritte sind die Kurzform der Installationsanleitung
+  (scripts/release-install-guide.md, website/installation.html). Bei Änderungen
+  dort hier nachziehen. Sie-Form, keine Fachbegriffe (Epic #156).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="540" height="380" viewBox="0 0 540 380">
+  <rect width="540" height="380" fill="#ffffff" />
+
+  <!-- Dekorative Bögen in den Farben des Logos -->
+  <circle cx="-40" cy="430" r="330" fill="none" stroke="#d6ecf5" stroke-width="90" opacity="0.6" />
+  <circle cx="620" cy="470" r="300" fill="none" stroke="#dff3ec" stroke-width="80" opacity="0.7" />
+
+  <!-- Wortmarke -->
+  <image href="../website/assets/logo.svg" x="150" y="34" width="44" height="44" />
+  <text
+    x="204"
+    y="70"
+    font-family="SF Pro Display, Helvetica Neue, Helvetica, Arial, sans-serif"
+    font-size="38"
+    font-weight="700"
+    fill="#171717"
+  >TheraScript</text>
+
+  <!-- Pfeil von der App zum Ordner Programme -->
+  <path
+    d="M 212 196 C 245 176, 295 176, 326 194"
+    fill="none"
+    stroke="#1884b5"
+    stroke-width="3"
+    stroke-linecap="round"
+  />
+  <path
+    d="M 314 184 L 328 195 L 312 202"
+    fill="none"
+    stroke="#1884b5"
+    stroke-width="3"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Kurzanleitung -->
+  <g
+    font-family="SF Pro Text, Helvetica Neue, Helvetica, Arial, sans-serif"
+    font-size="13"
+    fill="#171717"
+  >
+    <text x="60" y="298">1.  Therascript auf «Programme» ziehen und dort öffnen</text>
+    <text x="60" y="318">2.  Bei der Warnung von macOS auf «Fertig» klicken</text>
+    <text x="60" y="338">3.  Systemeinstellungen → Datenschutz &amp; Sicherheit → «Dennoch öffnen»</text>
+  </g>
+  <text
+    x="60"
+    y="362"
+    font-family="SF Pro Text, Helvetica Neue, Helvetica, Arial, sans-serif"
+    font-size="11.5"
+    fill="#525252"
+  >Anleitung: adbstyle.github.io/therascripter/installation.html</text>
+</svg>

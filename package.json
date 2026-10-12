@@ -27,7 +27,8 @@
     "sidecar:upload": "scripts/upload-r2.sh",
     "sidecar:deploy": "npm run sidecar:build && npm run sidecar:package && npm run sidecar:upload",
     "sidecar:publish-manifest": "scripts/publish-manifest.sh",
-    "icons:tray": "node scripts/build-tray-icons.mjs"
+    "icons:tray": "node scripts/build-tray-icons.mjs",
+    "dmg:background": "node scripts/build-dmg-background.mjs"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",

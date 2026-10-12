@@ -22,28 +22,23 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 ## Systemvoraussetzungen
 
 - macOS 26 (Tahoe) oder neuer (die mitgelieferte Metal-GPU-Bibliothek für die Spracherkennung wurde gegen das macOS-26-SDK gebaut; eine niedrigere Untergrenze ist als [Issue #97](https://github.com/adbstyle/therascripter/issues/97) erfasst)
-- Apple Silicon
+- Mac mit Apple-Chip (M1 oder neuer)
 - Mindestens 8 GB RAM
 - ~5 GB freier Speicherplatz (App ~1 GB + ML-Modelle ~1.8 GB; der Erststart prüft 5 GB für
   Download und Entpacken; zusätzlich ~3.4 GB optional für Zusammenfassung)
 
 ## Installation
 
-1. [DMG herunterladen](https://github.com/adbstyle/therascripter/releases)
-2. DMG öffnen und Therascript in den Programme-Ordner ziehen
-3. Gatekeeper-Sperre aufheben (App ist nicht notarisiert):
-   ```bash
-   chmod -R u+w /Applications/Therascript.app && xattr -cr /Applications/Therascript.app
-   ```
-   Das vorangestellte `chmod` ist für Versionen bis 0.8.7 nötig (einzelne mitgelieferte
-   Dateien waren schreibgeschützt, `xattr` meldete sonst `Permission denied`) und ist
-   für neuere Versionen wirkungslos, aber harmlos.
+Ausführliche Anleitung mit Erklärungen: [adbstyle.github.io/therascripter/installation.html](https://adbstyle.github.io/therascripter/installation.html). Ein Terminal ist nicht nötig.
 
-   Hinweis: Rechtsklick → Öffnen genügt **nicht** — es erlaubt nur den App-Start,
-   entfernt aber die Quarantäne der mitgelieferten ML-Werkzeuge nicht (die
-   Zusammenfassungs-Funktion bliebe stumm deaktiviert).
-4. Therascript starten
-5. Beim ersten Start lädt Therascript die ML-Modelle herunter (~1.7 GB; Zusammenfassungs-Modell ist optional und kann später nachgeladen werden)
+1. [`Therascript.dmg` herunterladen](https://github.com/adbstyle/therascripter/releases/latest/download/Therascript.dmg), doppelklicken und Therascript auf den Ordner **Programme** ziehen.
+2. Therascript im Ordner **Programme** öffnen. macOS meldet, Apple könne nicht überprüfen, ob die App frei von Schadsoftware ist. Auf **Fertig** klicken, nicht auf «In den Papierkorb legen».
+3. Direkt danach in **Systemeinstellungen → Datenschutz & Sicherheit** ganz nach unten scrollen, beim Hinweis zu Therascript auf **Dennoch öffnen** klicken und mit Passwort oder Touch ID bestätigen. macOS bietet die Freigabe nur kurze Zeit nach dem blockierten Start an.
+4. Beim ersten Start lädt Therascript die Sprachmodelle herunter (~1.7 GB; das Zusammenfassungs-Modell ist optional und kann später nachgeladen werden).
+
+**Warum die Freigabe?** Apple bestätigt Apps nur gegen eine jährliche Gebühr. Therascript ist kostenlos und quelloffen und verzichtet auf diese Beglaubigung. Die Freigabe gilt für die ganze App samt der eingebauten Werkzeuge für Transkription, Sprechererkennung, Pseudonymisierung, Texterkennung und Zusammenfassung. Niemand bestätigt unabhängig, dass die heruntergeladene Datei vom Projekt stammt: Laden Sie Therascript nur über die Website oder die [Release-Seite](https://github.com/adbstyle/therascripter/releases).
+
+**Auf eine neue Version aktualisieren:** Therascript über das Symbol in der Menüleiste beenden («Therascript beenden»; das Schliessen des Fensters beendet die App nicht), die neue Version herunterladen, die App im Ordner **Programme** ersetzen und Schritt 2 und 3 wiederholen. Transkriptionen, Einstellungen und Modelle bleiben erhalten. Fragt macOS danach erneut nach dem Mikrofon, den Zugriff erlauben.
 
 > **Empfehlung:** FileVault-Verschlüsselung aktivieren — Therascript warnt, falls deaktiviert.
 
