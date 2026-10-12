@@ -42,7 +42,7 @@ Renders the `<AboutPage />` component. Sections displayed top to bottom:
 
 1. **App logo and version** — `Therascript v{version}` with "Open Source (MIT-Lizenz)" subtitle.
 2. **App update check** — "Nach Updates suchen" button triggers `checkNow()` from `useAppUpdate`. While checking, button text changes to "Prüfe...". If an update is available, a "Neue Version verfügbar — herunterladen" link appears that calls `openReleasePage()` (opens GitHub Releases in browser). If up-to-date, shows "Therascript ist aktuell".
-3. **Local processing note** — "Alle Verarbeitung findet komplett lokal auf Ihrem Mac statt."
+3. **Local processing and internet note** — session contents never leave the Mac; the app connects only for model downloads and the version check (Cloudflare R2: IP address, time, requested file). Same core statement as the website FAQ «Wann verbindet sich TheraScript mit dem Internet?», the privacy statement (`website/impressum.html#app-datenschutz`), README and `FirstLaunchScreen` (Issue #162) — keep them in sync.
 4. **Source code** — "Auf GitHub ansehen" button opens the GitHub repository.
 5. **App data directory** — Shows `~/.therascript` path with an "Öffnen" button that reveals it in Finder via `window.api.system.openInFinder()`.
 6. **Storage usage** — Displays "App + Modelle" and "Sitzungsdaten" sizes formatted via `formatBytes()`.
