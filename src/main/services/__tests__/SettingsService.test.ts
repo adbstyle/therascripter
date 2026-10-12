@@ -16,6 +16,8 @@ interface FakeStoreState {
   reconcileEvents: unknown[]
   dismissedManifestVersions: unknown[]
   installedModelVersions: Record<string, unknown>
+  modelsDownloaded?: boolean
+  microphoneWasGranted?: boolean
 }
 
 let storeState: FakeStoreState
@@ -125,5 +127,25 @@ describe('initSettings — Issue #84 boot-loop regression guard', () => {
     initSettings()
 
     expect(storeState.activeModels.ner).toBe('flair-ner-german-large')
+  })
+})
+
+describe('initSettings — Mikrofon-Bestandsmigration (Issue #161)', () => {
+  it('stuft Installationen mit geladenen Modellen einmalig als «war erlaubt» ein', () => {
+    freshState({ modelsDownloaded: true })
+    initSettings()
+    expect(storeState.microphoneWasGranted).toBe(true)
+  })
+
+  it('startet frische Installationen mit «nie erteilt»', () => {
+    freshState({ modelsDownloaded: false })
+    initSettings()
+    expect(storeState.microphoneWasGranted).toBe(false)
+  })
+
+  it('überschreibt einen gespeicherten Wert nicht', () => {
+    freshState({ modelsDownloaded: true, microphoneWasGranted: false })
+    initSettings()
+    expect(storeState.microphoneWasGranted).toBe(false)
   })
 })

@@ -133,6 +133,12 @@ beforeEach(() => {
       updateTitle: vi.fn().mockResolvedValue(undefined),
       updateText: vi.fn().mockResolvedValue(undefined)
     },
+    microphone: {
+      getState: vi.fn().mockResolvedValue({ status: 'granted', previouslyGranted: true }),
+      ensureAccess: vi.fn().mockResolvedValue('granted'),
+      dismissHint: vi.fn().mockResolvedValue(undefined),
+      openSettings: vi.fn().mockResolvedValue(undefined)
+    },
     nav: {
       onOpenSettings: vi.fn().mockReturnValue(() => {})
     },
@@ -234,5 +240,51 @@ describe('App — Navigation während der Aufnahme', () => {
     await waitFor(() => {
       expect(screen.getByText('Mikrofonzugriff wurde verweigert.')).toBeInTheDocument()
     })
+  })
+})
+
+describe('App — Mikrofon-Berechtigung (Issue #161)', () => {
+  it('weist nach dem Start auf eine verlorene Berechtigung hin', async () => {
+    window.api.microphone.getState = vi
+      .fn()
+      .mockResolvedValue({ status: 'not-determined', previouslyGranted: true })
+    renderApp()
+
+    expect(await screen.findByText(/Mikrofon-Berechtigung fehlt/)).toBeInTheDocument()
+  })
+
+  it('zeigt den Hinweis nie während einer Aufnahme', async () => {
+    mockRecordingState.isRecording = true
+    window.api.microphone.getState = vi
+      .fn()
+      .mockResolvedValue({ status: 'not-determined', previouslyGranted: true })
+    renderApp()
+
+    await waitFor(() => expect(window.api.microphone.getState).toHaveBeenCalled())
+    await screen.findByText('PDF importieren')
+    expect(screen.queryByText(/Mikrofon-Berechtigung fehlt/)).not.toBeInTheDocument()
+  })
+
+  it('räumt den Hinweis, sobald eine Aufnahme läuft — er kehrt nach dem Stopp nicht zurück', async () => {
+    window.api.microphone.getState = vi
+      .fn()
+      .mockResolvedValue({ status: 'not-determined', previouslyGranted: true })
+    const { rerender } = renderApp()
+    expect(await screen.findByText(/Mikrofon-Berechtigung fehlt/)).toBeInTheDocument()
+
+    const rerenderApp = (): void =>
+      rerender(
+        <ThemeProvider>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </ThemeProvider>
+      )
+    mockRecordingState.isRecording = true
+    rerenderApp()
+    mockRecordingState.isRecording = false
+    rerenderApp()
+
+    expect(screen.queryByText(/Mikrofon-Berechtigung fehlt/)).not.toBeInTheDocument()
   })
 })

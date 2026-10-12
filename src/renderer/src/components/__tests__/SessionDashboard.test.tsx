@@ -193,6 +193,12 @@ beforeEach(() => {
       updateTitle: vi.fn().mockResolvedValue(undefined),
       updateText: vi.fn().mockResolvedValue(undefined)
     },
+    microphone: {
+      getState: vi.fn().mockResolvedValue({ status: 'granted', previouslyGranted: true }),
+      ensureAccess: vi.fn().mockResolvedValue('granted'),
+      dismissHint: vi.fn().mockResolvedValue(undefined),
+      openSettings: vi.fn().mockResolvedValue(undefined)
+    },
     nav: {
       onOpenSettings: vi.fn().mockReturnValue(() => {})
     },

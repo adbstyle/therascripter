@@ -88,7 +88,21 @@ Recording is a status, not a mode: the full app stays navigable while a recordin
 
 In views where that card is not visible (Settings, Review), a slim red `RecordingBar` appears directly below the title bar showing the pulsing dot, "Aufnahme läuft", and the live timer; clicking it navigates back to the sessions list. The bar and the card are mutually exclusive so the same information is never shown twice.
 
-Only two actions remain blocked while recording: starting a second recording (button hidden, main process throws) and the model-update restart (gated in `model-update-handlers.ts`). PDF import is allowed, but the task queue is paused for the duration of the recording — see the queue pause section in [transcription-pipeline.md](transcription-pipeline.md). Recording errors (e.g. denied microphone access) surface as an error toast.
+Only two actions remain blocked while recording: starting a second recording (button hidden, main process throws) and the model-update restart (gated in `model-update-handlers.ts`). PDF import is allowed, but the task queue is paused for the duration of the recording — see the queue pause section in [transcription-pipeline.md](transcription-pipeline.md). Recording errors surface as an error toast — except a missing microphone permission, see below.
+
+## Microphone Permission
+
+macOS ties the microphone permission (TCC) to the main app's Designated Requirement. Builds are signed with `designated => identifier "com.therascript.app"` (ADR-009, `build-scripts/afterPack.js`), so the permission survives updates; the default ad-hoc requirement (`cdhash H"…"`) lost it with every build. The German prompt text comes from `mac.extendInfo.NSMicrophoneUsageDescription` in `electron-builder.yml`.
+
+The renderer cannot read the permission (sandbox), so the main process exposes `microphone:getState | ensureAccess | dismissHint | openSettings` (`MicrophoneService.ts`, `microphone-handlers.ts`). The setting `microphoneWasGranted` remembers whether the installation ever had the permission; existing installations (`modelsDownloaded`) are migrated to `true` once (Issue #161, Postcondition 2).
+
+| Situation | Behaviour |
+|---|---|
+| First setup | `FirstLaunchScreen` shows an optional «Mikrofon» row with [Erlauben]. |
+| Start of the app / window becomes visible, status `not-determined` and previously granted (e.g. after an update) | `MicrophoneBanner` «Die Mikrofon-Berechtigung fehlt …» with [Mikrofon erlauben] / [Später]. «Später» resets `microphoneWasGranted`, so the next reminder only comes at the next recording start. |
+| Recording start | `useRecording` calls `ensureAccess()` before `getUserMedia`: macOS asks while nothing is decided. On `denied`/`restricted` (or `NotAllowedError`), no session is created and the banner shows the path System Settings → Datenschutz & Sicherheit → Mikrofon with [Systemeinstellungen öffnen]. |
+
+The banner never appears during a recording. The check is a non-blocking renderer effect (`useMicrophonePermission`) and runs again on `visibilitychange`, so a window hidden during an update restart shows the hint as soon as it opens.
 
 ## Crash Recovery
 
@@ -102,6 +116,11 @@ Only two actions remain blocked while recording: starting a second recording (bu
 | `src/renderer/src/components/shell/RecordingBar.tsx` | Slim recording status bar shown in Settings/Review |
 | `src/renderer/src/components/VUMeter.tsx` | Audio level visualization (6-bar symmetric meter, subscribes to the level itself) |
 | `src/renderer/src/components/ConsentBanner.tsx` | First-recording consent reminder |
+| `src/renderer/src/components/MicrophoneBanner.tsx` | Microphone hints: permission lost (e.g. after an update) or denied at recording start |
+| `src/renderer/src/components/MicrophoneSetupRow.tsx` | Optional microphone row in `FirstLaunchScreen` |
+| `src/renderer/src/hooks/useMicrophonePermission.ts` | Hint state, check on mount and `visibilitychange` |
+| `src/main/services/MicrophoneService.ts` | Permission state, `ensureAccess`, «Später», `microphoneWasGranted` |
+| `src/main/ipc/microphone-handlers.ts` | IPC handlers `microphone:*` |
 | `src/main/ipc/recording-handlers.ts` | IPC handlers: start, stop, data streaming, auto-stop, recovery |
 | `src/main/services/AudioFileService.ts` | WAV file creation, chunk writing, header finalization, crash recovery |
 | `src/main/services/TrayService.ts` | System tray icon, menu, duration display |

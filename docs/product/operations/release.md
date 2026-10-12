@@ -101,7 +101,7 @@ The order matters: fuses must be flipped first, then the binary must be re-signe
 Therascript is not signed with an Apple Developer certificate. The implications:
 
 - `mac.identity: null` in `electron-builder.yml` tells electron-builder to skip its signing step entirely.
-- `afterPack.js` applies an ad-hoc signature (`codesign --sign -`) after flipping fuses. This satisfies the ARM64 signature requirement but does not establish trust with macOS Gatekeeper.
+- `afterPack.js` applies an ad-hoc signature (`codesign --sign -`) after flipping fuses, then re-signs the helper apps and the main app with `designated => identifier "<bundle-id>"` so the microphone permission and keychain access survive updates (ADR-009, Issue #161; checked by `verify-bundles.sh --app`). This satisfies the ARM64 signature requirement but does not establish trust with macOS Gatekeeper.
 - The ad-hoc signature means the app is recognized as "from an unidentified developer" by macOS.
 
 ## Gatekeeper

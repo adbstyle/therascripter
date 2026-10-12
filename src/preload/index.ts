@@ -229,6 +229,12 @@ const api: IpcApi = {
     updateText: (sessionId: string, text: string) =>
       ipcRenderer.invoke('summary:updateText', { sessionId, text })
   },
+  microphone: {
+    getState: () => ipcRenderer.invoke('microphone:getState'),
+    ensureAccess: () => ipcRenderer.invoke('microphone:ensureAccess'),
+    dismissHint: () => ipcRenderer.invoke('microphone:dismissHint'),
+    openSettings: () => ipcRenderer.invoke('microphone:openSettings')
+  },
   nav: {
     onOpenSettings: (callback) => {
       const handler = (): void => callback()

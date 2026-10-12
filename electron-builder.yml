@@ -53,6 +53,10 @@ mac:
   artifactName: ${productName}.dmg
   category: public.app-category.medical
   identity: null
+  # Prüftext der macOS-Rückfrage (Issue #161) — ersetzt Electrons englischen
+  # Standard. Sie-Form, keine Fachbegriffe.
+  extendInfo:
+    NSMicrophoneUsageDescription: Therascript nimmt Ihre Therapiesitzungen über das Mikrofon auf. Die Aufnahme wird nur auf diesem Mac gespeichert und verarbeitet.
 dmg:
   background: build/dmg-background.png
   iconSize: 110

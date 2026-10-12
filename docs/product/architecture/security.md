@@ -44,7 +44,7 @@ Fuses are compile-time toggles baked into the Electron binary. Once flipped, the
 | `OnlyLoadAppFromAsar` | `true` | Forces the app to load only from the asar archive, preventing code injection via unpacked app directories. |
 | `EnableEmbeddedAsarIntegrityValidation` | `false` | Disabled because asar integrity validation requires a proper Apple Developer code signing certificate. |
 
-After flipping fuses, `resetAdHocDarwinSignature: true` re-signs the binary with an ad-hoc signature (`codesign --sign -`). Without this step, macOS would kill the app on launch with `CODESIGNING, Code 2 Invalid Page` because the fuse changes invalidate the original signature.
+After flipping fuses, `resetAdHocDarwinSignature: true` re-signs the binary with an ad-hoc signature (`codesign --sign -`). Without this step, macOS would kill the app on launch with `CODESIGNING, Code 2 Invalid Page` because the fuse changes invalidate the original signature. `afterPack.js` then signs the helper apps and the main app once more with an explicit Designated Requirement (see Code Signing).
 
 ## Context Isolation and Sandbox
 
@@ -127,6 +127,8 @@ await flipFuses(electronBinary, {
 ```
 
 The ad-hoc signature (`codesign --sign -`) ensures the binary's code pages are valid on ARM64 macOS, which requires all executable code to be signed. Without any signature, Apple Silicon Macs refuse to run the binary.
+
+**Designated Requirement (ADR-009, Issue #161).** A plain ad-hoc signature has the requirement `cdhash H"…"`, which changes with every build. macOS binds the microphone permission (TCC) and the keychain item «Therascript Safe Storage» (created by the `EnableCookieEncryption` fuse) to that requirement, so both were lost on every update. `afterPack.js` therefore re-signs, after `flipFuses`, first each helper app and then the main app (without `--deep`) with `designated => identifier "<bundle-id>"`. Trade-off: another ad-hoc-signed app with the same bundle id could inherit these grants — but code that already runs under the user's account can read `~/.therascript` anyway. `verify-bundles.sh --app` fails the release if the requirement, the seal or the German `NSMicrophoneUsageDescription` regresses. No entitlements are applied (an `app-sandbox` entitlement would break `~/.therascript` and every subprocess).
 
 ## Gatekeeper
 

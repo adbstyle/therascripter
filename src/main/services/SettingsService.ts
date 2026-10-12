@@ -48,6 +48,13 @@ export interface AppSettings {
    * same id, so no explicit cleanup is needed.
    */
   dismissedManifestVersions: string[]
+  /**
+   * Issue #161 — war die Mikrofon-Berechtigung schon einmal erteilt?
+   * Bewusst OHNE Default: electron-store schreibt Defaults beim Init in den
+   * Store, die einmalige Bestands-Migration in initSettings() muss aber
+   * erkennen, dass der Key noch fehlt.
+   */
+  microphoneWasGranted?: boolean
 }
 
 const defaults: AppSettings = {
@@ -213,6 +220,15 @@ export function initSettings(): Store<AppSettings> {
   // Issue #84 / Story F+G — same reasoning for dismissedManifestVersions.
   if (!Array.isArray(store.get('dismissedManifestVersions'))) {
     store.set('dismissedManifestVersions', [])
+  }
+
+  // Issue #161 — Bestandsinstallationen kennen kein «war schon erlaubt». Wer
+  // schon Modelle geladen hat, gilt einmalig als «war erlaubt»: Die neue
+  // Signatur (Designated Requirement) setzt die Mikrofon-Berechtigung bei
+  // ihnen zurück, und der Start-Hinweis fängt das ab (Postcondition 2).
+  // Frische Installationen starten mit false — sie fragt die Ersteinrichtung.
+  if (store.get('microphoneWasGranted') === undefined) {
+    store.set('microphoneWasGranted', store.get('modelsDownloaded') === true)
   }
 
   // installedModelVersions: Altlasten-Keys (Legacy + PR-Zwischenstände) auf den neuen
