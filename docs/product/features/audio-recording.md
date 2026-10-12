@@ -99,8 +99,8 @@ The renderer cannot read the permission (sandbox), so the main process exposes `
 | Situation | Behaviour |
 |---|---|
 | First setup | `FirstLaunchScreen` shows an optional «Mikrofon» row with [Erlauben]. |
-| Start of the app / window becomes visible, status `not-determined` and previously granted (e.g. after an update) | `MicrophoneBanner` «Die Mikrofon-Berechtigung fehlt …» with [Mikrofon erlauben] / [Später]. «Später» resets `microphoneWasGranted`, so the next reminder only comes at the next recording start. |
-| Recording start | `useRecording` calls `ensureAccess()` before `getUserMedia`: macOS asks while nothing is decided. On `denied`/`restricted` (or `NotAllowedError`), no session is created and the banner shows the path System Settings → Datenschutz & Sicherheit → Mikrofon with [Systemeinstellungen öffnen]. |
+| Start of the app / window becomes visible, status `not-determined` and previously granted (e.g. after an update) | `MicrophoneBanner` «Für Aufnahmen braucht Therascript die Mikrofon-Berechtigung …» with [Mikrofon erlauben] / [Später]. «Später» resets `microphoneWasGranted`, so the next reminder only comes at the next recording start. |
+| Recording start | `useRecording` calls `ensureAccess()` before `getUserMedia` (macOS asks while nothing is decided, `unknown` counts as undecided) and reports the status to the hook: `granted` clears any hint, even if the recording then fails for another reason. On `denied`/`restricted` (or `NotAllowedError`), no session is created and the banner shows the path System Settings → Datenschutz & Sicherheit → Mikrofon with [Systemeinstellungen öffnen]. |
 
 The banner never appears during a recording. The check is a non-blocking renderer effect (`useMicrophonePermission`) and runs again on `visibilitychange`, so a window hidden during an update restart shows the hint as soon as it opens.
 

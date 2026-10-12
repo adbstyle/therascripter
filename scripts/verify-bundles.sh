@@ -366,8 +366,9 @@ if [ -n "$APP_PATH" ]; then
       SIG_FAIL=1
     fi
   done
-  if ! codesign --verify --deep --strict "$APP_PATH" 2>/dev/null; then
-    echo "FAIL [sig]: codesign --verify --deep --strict schlägt fehl" >&2
+  if ! seal_out=$(codesign --verify --deep --strict "$APP_PATH" 2>&1); then
+    echo "FAIL [sig]: codesign --verify --deep --strict schlägt fehl:" >&2
+    echo "$seal_out" >&2
     SIG_FAIL=1
   fi
   mic_usage=$(plutil -extract NSMicrophoneUsageDescription raw "$APP_PATH/Contents/Info.plist" 2>/dev/null || true)

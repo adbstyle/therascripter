@@ -61,6 +61,12 @@ describe('ensureMicrophoneAccess', () => {
     expect(deps.granted()).toBe(true)
   })
 
+  it('fragt auch bei unbekanntem Status, statt [Erlauben] wirkungslos zu lassen', async () => {
+    const deps = fakeDeps('unknown')
+    expect(await ensureMicrophoneAccess(deps)).toBe('granted')
+    expect(deps.askForAccess).toHaveBeenCalledOnce()
+  })
+
   it('liefert die Ablehnung aus der Rückfrage', async () => {
     const deps = fakeDeps('not-determined', false, 'denied')
     expect(await ensureMicrophoneAccess(deps)).toBe('denied')

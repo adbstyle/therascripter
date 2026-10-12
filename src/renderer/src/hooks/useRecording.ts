@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AudioRecorder } from '../services/AudioRecorder'
 import { createValueStore, type ValueStore } from '../utils/valueStore'
+import type { MicrophoneStatus } from '../../../shared/types/Microphone'
 
 interface UseRecordingResult {
   isRecording: boolean
@@ -18,14 +19,15 @@ interface UseRecordingResult {
 
 interface UseRecordingOptions {
   /**
-   * Der Aufnahmestart ist an der fehlenden Mikrofon-Berechtigung gescheitert.
-   * Der Aufrufer zeigt dafür einen bleibenden Hinweis mit dem Weg über die
-   * Systemeinstellungen (Issue #161) statt eines 3-s-Toasts.
+   * Mikrofon-Status, den der Aufnahmestart festgestellt hat (Issue #161). Bei
+   * einer Ablehnung zeigt der Aufrufer einen bleibenden Hinweis mit dem Weg
+   * über die Systemeinstellungen statt eines 3-s-Toasts; eine erteilte
+   * Berechtigung räumt einen veralteten Hinweis.
    */
-  onMicrophoneDenied?: () => void
+  onMicrophoneStatus?: (status: MicrophoneStatus) => void
 }
 
-export function useRecording({ onMicrophoneDenied }: UseRecordingOptions = {}): UseRecordingResult {
+export function useRecording({ onMicrophoneStatus }: UseRecordingOptions = {}): UseRecordingResult {
   const [isRecording, setIsRecording] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const recorderRef = useRef<AudioRecorder | null>(null)
@@ -36,8 +38,8 @@ export function useRecording({ onMicrophoneDenied }: UseRecordingOptions = {}): 
   const [duration] = useState(() => createValueStore(0))
   // Ref statt Dependency: startRecording bleibt stabil, auch wenn der
   // Aufrufer den Callback bei jedem Render neu erzeugt.
-  const onMicrophoneDeniedRef = useRef(onMicrophoneDenied)
-  onMicrophoneDeniedRef.current = onMicrophoneDenied
+  const onMicrophoneStatusRef = useRef(onMicrophoneStatus)
+  onMicrophoneStatusRef.current = onMicrophoneStatus
 
   const stopRecording = useCallback(async () => {
     if (stoppingRef.current) return
@@ -72,10 +74,8 @@ export function useRecording({ onMicrophoneDenied }: UseRecordingOptions = {}): 
       // jetzt; nach einer Ablehnung fragt es nie wieder, dann bleibt nur der
       // Weg über die Systemeinstellungen. So entsteht auch keine Session.
       const micStatus = await window.api.microphone.ensureAccess()
-      if (micStatus === 'denied' || micStatus === 'restricted') {
-        onMicrophoneDeniedRef.current?.()
-        return
-      }
+      onMicrophoneStatusRef.current?.(micStatus)
+      if (micStatus === 'denied' || micStatus === 'restricted') return
 
       const recorder = new AudioRecorder()
       recorderRef.current = recorder
@@ -85,7 +85,7 @@ export function useRecording({ onMicrophoneDenied }: UseRecordingOptions = {}): 
       recorderRef.current = null
 
       if (err instanceof DOMException && err.name === 'NotAllowedError') {
-        onMicrophoneDeniedRef.current?.()
+        onMicrophoneStatusRef.current?.('denied')
       } else if (err instanceof DOMException && err.name === 'NotFoundError') {
         setError('Kein Mikrofon gefunden. Bitte schliessen Sie ein Mikrofon an.')
       } else {

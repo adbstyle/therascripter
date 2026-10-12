@@ -123,11 +123,24 @@ describe('useRecording – Pegel und Dauer', () => {
 })
 
 describe('useRecording – Mikrofon-Berechtigung (Issue #161)', () => {
-  it('klärt die Berechtigung vor dem Start', async () => {
-    const { result } = renderHook(() => useRecording())
+  it('klärt die Berechtigung vor dem Start und meldet den Status', async () => {
+    const onMicrophoneStatus = vi.fn()
+    const { result } = renderHook(() => useRecording({ onMicrophoneStatus }))
     await act(() => result.current.startRecording())
     expect(ensureAccess).toHaveBeenCalledOnce()
+    expect(onMicrophoneStatus).toHaveBeenCalledWith('granted')
     expect(result.current.isRecording).toBe(true)
+  })
+
+  it('meldet eine erteilte Berechtigung auch, wenn die Aufnahme danach scheitert', async () => {
+    recorderStart = () => Promise.reject(new DOMException('none', 'NotFoundError'))
+    const onMicrophoneStatus = vi.fn()
+    const { result } = renderHook(() => useRecording({ onMicrophoneStatus }))
+
+    await act(() => result.current.startRecording())
+
+    expect(onMicrophoneStatus).toHaveBeenCalledWith('granted')
+    expect(result.current.error).toMatch(/Kein Mikrofon gefunden/)
   })
 
   it.each(['denied', 'restricted'])(
@@ -136,13 +149,13 @@ describe('useRecording – Mikrofon-Berechtigung (Issue #161)', () => {
       ensureAccess.mockResolvedValue(status)
       const start = vi.fn()
       recorderStart = start
-      const onMicrophoneDenied = vi.fn()
-      const { result } = renderHook(() => useRecording({ onMicrophoneDenied }))
+      const onMicrophoneStatus = vi.fn()
+      const { result } = renderHook(() => useRecording({ onMicrophoneStatus }))
 
       await act(() => result.current.startRecording())
 
       expect(start).not.toHaveBeenCalled()
-      expect(onMicrophoneDenied).toHaveBeenCalledOnce()
+      expect(onMicrophoneStatus).toHaveBeenCalledWith(status)
       expect(result.current.isRecording).toBe(false)
       expect(result.current.error).toBeNull()
     }
@@ -150,12 +163,12 @@ describe('useRecording – Mikrofon-Berechtigung (Issue #161)', () => {
 
   it('meldet NotAllowedError von getUserMedia ebenfalls als Ablehnung', async () => {
     recorderStart = () => Promise.reject(new DOMException('denied', 'NotAllowedError'))
-    const onMicrophoneDenied = vi.fn()
-    const { result } = renderHook(() => useRecording({ onMicrophoneDenied }))
+    const onMicrophoneStatus = vi.fn()
+    const { result } = renderHook(() => useRecording({ onMicrophoneStatus }))
 
     await act(() => result.current.startRecording())
 
-    expect(onMicrophoneDenied).toHaveBeenCalledOnce()
+    expect(onMicrophoneStatus).toHaveBeenLastCalledWith('denied')
     expect(result.current.error).toBeNull()
   })
 })

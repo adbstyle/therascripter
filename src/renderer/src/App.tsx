@@ -22,7 +22,7 @@ type View = 'sessions' | 'settings' | 'review'
 export default function App(): React.JSX.Element {
   const microphone = useMicrophonePermission()
   const { isRecording, level, duration, error, startRecording, stopRecording } = useRecording({
-    onMicrophoneDenied: microphone.showDenied
+    onMicrophoneStatus: microphone.reportStatus
   })
   const { availableUpdates, clearUpdates } = useModelUpdates()
   const toast = useToast()
@@ -68,12 +68,8 @@ export default function App(): React.JSX.Element {
   // mit Status 'recording' sofort erscheint bzw. auf 'queued' umspringt.
   // Kein Forced-Navigate beim Stop — wer in Review/Settings ist, bleibt dort.
   const prevRecording = useRef(false)
-  const clearMicrophoneHint = microphone.clear
   useEffect(() => {
     if (isRecording && !prevRecording.current) {
-      // Die Aufnahme läuft, also ist die Berechtigung da — sonst kehrte ein
-      // veralteter Mikrofon-Hinweis nach dem Stopp zurück.
-      clearMicrophoneHint()
       setCurrentView('sessions')
       setReviewSessionId(null)
       setConsentDismissed(false)
@@ -82,7 +78,7 @@ export default function App(): React.JSX.Element {
       setRefreshTrigger((v) => v + 1)
     }
     prevRecording.current = isRecording
-  }, [isRecording, clearMicrophoneHint])
+  }, [isRecording])
 
   // Aufnahmefehler als Toast: seit dem Wegfall der Vollbild-RecordingView
   // gibt es keinen dedizierten Anzeigeort mehr. Eine fehlende Mikrofon-

@@ -50,4 +50,4 @@ Apple bestätigt Apps nur gegen eine jährliche Gebühr als geprüft. Therascrip
 2. Die neue Version wie in Schritt 1 herunterladen und auf den Ordner **Programme** ziehen. Auf die Frage, ob die vorhandene App ersetzt werden soll, mit **Ersetzen** antworten.
 3. Schritt 2 und 3 wiederholen. Jede heruntergeladene Version braucht die Programm-Freigabe einmal.
 
-Ihre Transkriptionen, Einstellungen und die heruntergeladenen Modelle bleiben erhalten. Nach dem Update kann macOS zwei Rückfragen stellen: Erlauben Sie den Zugriff auf das Mikrofon, damit Aufnahmen weiter funktionieren. Fragt macOS, ob Therascript auf den Schlüsselbund zugreifen darf, wählen Sie **Immer erlauben** und bestätigen mit Ihrem Passwort.
+Ihre Transkriptionen, Einstellungen und die heruntergeladenen Modelle bleiben erhalten. Beim ersten Update auf eine Version, die Ihre Berechtigungen über Updates hinweg behält, kann macOS einmalig zwei Rückfragen stellen: Erlauben Sie den Zugriff auf das Mikrofon, damit Aufnahmen weiter funktionieren. Fragt macOS, ob Therascript auf den Schlüsselbund zugreifen darf, wählen Sie **Immer erlauben** und bestätigen mit Ihrem Passwort. Spätere Updates fragen nicht mehr.

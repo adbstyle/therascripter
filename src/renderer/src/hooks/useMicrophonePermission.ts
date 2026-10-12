@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { MicrophoneStatus } from '../../../shared/types/Microphone'
 
 /**
  * - `lost`: Die Berechtigung war schon einmal erteilt und fehlt jetzt (z. B.
@@ -13,9 +14,12 @@ export interface MicrophonePermission {
   allow: () => Promise<void>
   dismiss: () => void
   openSettings: () => void
-  showDenied: () => void
-  /** Eine gestartete Aufnahme beweist die Berechtigung — Hinweis räumen. */
-  clear: () => void
+  /**
+   * Status aus einem Aufnahmestart übernehmen: Eine Ablehnung zeigt den Weg
+   * über die Systemeinstellungen, eine erteilte Berechtigung räumt jeden
+   * Hinweis — auch wenn die Aufnahme danach aus anderem Grund scheitert.
+   */
+  reportStatus: (status: MicrophoneStatus) => void
 }
 
 export function useMicrophonePermission(): MicrophonePermission {
@@ -68,8 +72,10 @@ export function useMicrophonePermission(): MicrophonePermission {
     void window.api.microphone.openSettings()
   }, [])
 
-  const showDenied = useCallback(() => setHint('denied'), [])
-  const clear = useCallback(() => setHint(null), [])
+  const reportStatus = useCallback((status: MicrophoneStatus) => {
+    if (status === 'granted') setHint(null)
+    else if (status === 'denied' || status === 'restricted') setHint('denied')
+  }, [])
 
-  return { hint, allow, dismiss, openSettings, showDenied, clear }
+  return { hint, allow, dismiss, openSettings, reportStatus }
 }

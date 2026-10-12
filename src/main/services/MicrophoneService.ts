@@ -28,10 +28,12 @@ export function getMicrophoneState(deps: MicrophoneDeps): MicrophoneState {
 /**
  * Fragt macOS nur, solange noch nichts festgelegt ist — nach einer Ablehnung
  * zeigt macOS keine Rückfrage mehr, dann hilft nur der Weg über die
- * Systemeinstellungen.
+ * Systemeinstellungen. `unknown` (TCC nicht lesbar) zählt als «nicht
+ * festgelegt»: sonst bliebe [Erlauben] wirkungslos stehen.
  */
 export async function ensureMicrophoneAccess(deps: MicrophoneDeps): Promise<MicrophoneStatus> {
-  if (deps.getStatus() === 'not-determined') {
+  const status = deps.getStatus()
+  if (status === 'not-determined' || status === 'unknown') {
     await deps.askForAccess()
   }
   return getMicrophoneState(deps).status

@@ -250,7 +250,9 @@ describe('App — Mikrofon-Berechtigung (Issue #161)', () => {
       .mockResolvedValue({ status: 'not-determined', previouslyGranted: true })
     renderApp()
 
-    expect(await screen.findByText(/Mikrofon-Berechtigung fehlt/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/braucht Therascript die Mikrofon-Berechtigung/)
+    ).toBeInTheDocument()
   })
 
   it('zeigt den Hinweis nie während einer Aufnahme', async () => {
@@ -262,29 +264,8 @@ describe('App — Mikrofon-Berechtigung (Issue #161)', () => {
 
     await waitFor(() => expect(window.api.microphone.getState).toHaveBeenCalled())
     await screen.findByText('PDF importieren')
-    expect(screen.queryByText(/Mikrofon-Berechtigung fehlt/)).not.toBeInTheDocument()
-  })
-
-  it('räumt den Hinweis, sobald eine Aufnahme läuft — er kehrt nach dem Stopp nicht zurück', async () => {
-    window.api.microphone.getState = vi
-      .fn()
-      .mockResolvedValue({ status: 'not-determined', previouslyGranted: true })
-    const { rerender } = renderApp()
-    expect(await screen.findByText(/Mikrofon-Berechtigung fehlt/)).toBeInTheDocument()
-
-    const rerenderApp = (): void =>
-      rerender(
-        <ThemeProvider>
-          <ToastProvider>
-            <App />
-          </ToastProvider>
-        </ThemeProvider>
-      )
-    mockRecordingState.isRecording = true
-    rerenderApp()
-    mockRecordingState.isRecording = false
-    rerenderApp()
-
-    expect(screen.queryByText(/Mikrofon-Berechtigung fehlt/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/braucht Therascript die Mikrofon-Berechtigung/)
+    ).not.toBeInTheDocument()
   })
 })

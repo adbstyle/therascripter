@@ -59,7 +59,7 @@ describe('useMicrophonePermission', () => {
     state = { status: 'denied', previouslyGranted: false }
     const { result } = renderHook(() => useMicrophonePermission())
     await waitFor(() => expect(mic.getState).toHaveBeenCalledTimes(1))
-    act(() => result.current.showDenied())
+    act(() => result.current.reportStatus('denied'))
 
     state = { status: 'granted', previouslyGranted: true }
     act(() => {
@@ -97,7 +97,7 @@ describe('useMicrophonePermission', () => {
     const { result } = renderHook(() => useMicrophonePermission())
     await waitFor(() => expect(mic.getState).toHaveBeenCalledTimes(1))
 
-    act(() => result.current.showDenied())
+    act(() => result.current.reportStatus('denied'))
     act(() => setVisibility('visible'))
     await waitFor(() => expect(mic.getState).toHaveBeenCalledTimes(2))
     expect(result.current.hint).toBe('denied')
@@ -109,9 +109,29 @@ describe('useMicrophonePermission', () => {
 
   it('Wegklicken des Aufnahme-Hinweises ändert nichts im Main-Prozess', () => {
     const { result } = renderHook(() => useMicrophonePermission())
-    act(() => result.current.showDenied())
+    act(() => result.current.reportStatus('denied'))
     act(() => result.current.dismiss())
     expect(mic.dismissHint).not.toHaveBeenCalled()
     expect(result.current.hint).toBeNull()
+  })
+
+  it('eine beim Aufnahmestart erteilte Berechtigung räumt den Start-Hinweis', async () => {
+    state = { status: 'not-determined', previouslyGranted: true }
+    const { result } = renderHook(() => useMicrophonePermission())
+    await waitFor(() => expect(result.current.hint).toBe('lost'))
+
+    act(() => result.current.reportStatus('granted'))
+
+    expect(result.current.hint).toBeNull()
+  })
+
+  it('ein unentschiedener Status beim Aufnahmestart lässt den Hinweis stehen', async () => {
+    state = { status: 'not-determined', previouslyGranted: true }
+    const { result } = renderHook(() => useMicrophonePermission())
+    await waitFor(() => expect(result.current.hint).toBe('lost'))
+
+    act(() => result.current.reportStatus('unknown'))
+
+    expect(result.current.hint).toBe('lost')
   })
 })

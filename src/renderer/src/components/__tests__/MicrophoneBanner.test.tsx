@@ -16,7 +16,7 @@ function renderBanner(variant: 'lost' | 'denied'): {
 describe('MicrophoneBanner', () => {
   it('bietet bei verlorener Berechtigung «Mikrofon erlauben» und «Später»', async () => {
     const { onAllow, onDismiss } = renderBanner('lost')
-    expect(screen.getByText(/Mikrofon-Berechtigung fehlt/)).toBeInTheDocument()
+    expect(screen.getByText(/braucht Therascript die Mikrofon-Berechtigung/)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Mikrofon erlauben' }))
     await userEvent.click(screen.getByRole('button', { name: 'Später' }))

@@ -29,8 +29,8 @@ export default function MicrophoneBanner({
         <MicOff className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden="true" />
         {isLost ? (
           <span>
-            Die Mikrofon-Berechtigung fehlt, zum Beispiel nach einem Update. Ohne sie sind keine
-            Aufnahmen möglich.
+            Für Aufnahmen braucht Therascript die Mikrofon-Berechtigung. Nach einem Update fragt
+            macOS einmalig erneut danach.
           </span>
         ) : (
           <span>
