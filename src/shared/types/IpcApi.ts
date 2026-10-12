@@ -186,6 +186,11 @@ export interface ModelUpdateApi {
   restart(updates: PendingModelUpdate[]): Promise<ModelUpdateRestartResult>
   startDownload(): Promise<void>
   getPending(): Promise<PendingModelUpdate[] | null>
+  /**
+   * Issue #144 — verfügbare Modell-Updates aus der letzten Prüfung (ohne
+   * verworfene). Für den Stand beim Mount; Änderungen kommen über onAvailable.
+   */
+  getAvailable(): Promise<PendingModelUpdate[]>
   clearPending(): Promise<void>
   /**
    * Issue #84 / Story F+G — record that the user actively dismissed these
@@ -193,6 +198,7 @@ export interface ModelUpdateApi {
    * publishes a new sha256 for the same id.
    */
   dismissVersions(updates: PendingModelUpdate[]): Promise<void>
+  /** Jede Änderung der verfügbaren Modell-Updates, auch eine leere Liste (#144). */
   onAvailable(callback: (updates: PendingModelUpdate[]) => void): () => void
   onDownloadProgress(callback: (status: ModelDownloadStatus) => void): () => void
   onDownloadComplete(callback: () => void): () => void

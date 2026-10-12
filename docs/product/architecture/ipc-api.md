@@ -45,8 +45,8 @@ The `api` object contains the following namespaces:
 | `api.review` | `load(sessionId)`, `save(sessionId, document, entityMap)`, `exportClipboard(text)` |
 | `api.system` | `aboutInfo()`, `uninstall()`, `openInFinder(path)` |
 | `api.modelDownload` | `status()`, `checkDiskSpace()`, `start()`, `onStatus(cb)` |
-| `api.modelUpdate` | `check()`, `restart(updates)`, `startDownload()`, `getPending()`, `clearPending()`, `onAvailable(cb)`, `onDownloadProgress(cb)`, `onDownloadComplete(cb)`, `onDownloadError(cb)` |
-| `api.appUpdate` | `getStatus()`, `check()`, `openReleasePage()`, `onStatus(cb)` |
+| `api.modelUpdate` | `check()`, `restart(updates)`, `startDownload()`, `getPending()`, `getAvailable()`, `clearPending()`, `dismissVersions(updates)`, `onAvailable(cb)`, `onDownloadProgress(cb)`, `onDownloadComplete(cb)`, `onDownloadError(cb)` |
+| `api.appUpdate` | `getState()`, `check()`, `download()`, `cancelDownload()`, `install()`, `setAutoUpdate(enabled)`, `openInstallGuide()`, `onState(cb)` |
 
 All `on*` listener methods return an unsubscribe function `() => void`.
 
@@ -161,7 +161,9 @@ Source: `src/main/ipc/model-update-handlers.ts`
 | `modelUpdate:restart` | invoke | `RestartUpdateSchema` — `{ updates: PendingModelUpdate[] }` | `{ allowed: boolean, reason?: string }` | Request app restart to apply model updates. Refused if recording or processing is active (`reason: "recording"` or `"processing"`). |
 | `modelUpdate:startDownload` | invoke | _(none)_ | `void` | Start downloading pending model updates (called from ModelUpdateScreen after restart) |
 | `modelUpdate:getPending` | invoke | _(none)_ | `PendingModelUpdate[] \| null` | Retrieve pending updates stored in electron-store settings |
+| `modelUpdate:getAvailable` | invoke | _(none)_ | `PendingModelUpdate[]` | Available updates from the last successful check, without dismissed versions (Issue #144). Fetched on mount by `useModelUpdates`, so views mounted after the startup push (Settings) see the same state |
 | `modelUpdate:clearPending` | invoke | _(none)_ | `void` | Clear pending updates from settings (used when user skips update) |
+| `modelUpdate:dismissVersions` | invoke | `DismissUpdatesSchema` — `{ updates: PendingModelUpdate[] }` | `void` | Record dismissed manifest entries; removes them from the available updates and pushes the new state |
 
 `PendingModelUpdate` schema fields: `id`, `version`, `label`, `url` (URL), `sha256` (64 hex chars), `sizeBytes` (positive int), `relativePath`, `archive?` (boolean), `checkPath`.
 
@@ -169,7 +171,7 @@ Source: `src/main/ipc/model-update-handlers.ts`
 
 | Channel | Payload | Description |
 |---|---|---|
-| `modelUpdate:available` | `PendingModelUpdate[]` | Emitted when new model versions are detected during background check |
+| `modelUpdate:available` | `PendingModelUpdate[]` | Every change of the available updates — after each successful check, after dismissing and after applying updates; **also an empty list** (Issue #144) |
 | `modelUpdate:downloadProgress` | `ModelDownloadStatus` | Emitted during model update download with progress data |
 | `modelUpdate:downloadComplete` | _(none)_ | Emitted when all model updates have been downloaded and applied |
 | `modelUpdate:downloadError` | `string` | Emitted when a model update download fails, with error message |
@@ -180,15 +182,19 @@ Source: `src/main/ipc/app-update-handlers.ts`
 
 | Channel | Direction | Input Schema | Return Type | Description |
 |---|---|---|---|---|
-| `appUpdate:getStatus` | invoke | _(none)_ | `{ available: boolean, latestVersion: string \| null, checkedAt: string \| null }` | Return cached app update status from electron-store. Validated against `AppUpdateStatusSchema` on read. |
-| `appUpdate:check` | invoke | _(none)_ | `{ modelUpdates: PendingModelUpdate[], appUpdate: AppUpdateStatus }` | Trigger a full consolidated check (model + app) against the R2 manifest |
-| `appUpdate:openReleasePage` | invoke | _(none)_ | `void` | Open the GitHub Releases page in the default browser |
+| `appUpdate:getState` | invoke | _(none)_ | `AppUpdateState` | Current app update state from `AppUpdateService` (Issues #164/#165) |
+| `appUpdate:check` | invoke | _(none)_ | `AppUpdateState` | Trigger a full consolidated check (model + app) against the signed R2 manifest |
+| `appUpdate:download` | invoke | _(none)_ | `void` | Start a manual download (progress via `appUpdate:state`) |
+| `appUpdate:cancelDownload` | invoke | _(none)_ | `void` | Cancel the running download |
+| `appUpdate:install` | invoke | _(none)_ | `AppUpdateInstallResult` | Install a ready update now, or mark it pending while work is running |
+| `appUpdate:setAutoUpdate` | invoke | `{ enabled: boolean }` | `void` | Setting «Automatische Updates» (#165) |
+| `appUpdate:openInstallGuide` | invoke | _(none)_ | `void` | Open the installation guide on the website (manual update path) |
 
 **Event channels (main -> renderer):**
 
 | Channel | Payload | Description |
 |---|---|---|
-| `appUpdate:status` | `AppUpdateStatus` | Emitted when a background check detects a new app version |
+| `appUpdate:state` | `AppUpdateState` | Every change of the app update state |
 
 ### Settings Handlers
 
@@ -242,10 +248,16 @@ Source: `src/main/ipc/system-handlers.ts`
 | `modelUpdate:restart` | model-update |
 | `modelUpdate:startDownload` | model-update |
 | `modelUpdate:getPending` | model-update |
+| `modelUpdate:getAvailable` | model-update |
 | `modelUpdate:clearPending` | model-update |
-| `appUpdate:getStatus` | app-update |
+| `modelUpdate:dismissVersions` | model-update |
+| `appUpdate:getState` | app-update |
 | `appUpdate:check` | app-update |
-| `appUpdate:openReleasePage` | app-update |
+| `appUpdate:download` | app-update |
+| `appUpdate:cancelDownload` | app-update |
+| `appUpdate:install` | app-update |
+| `appUpdate:setAutoUpdate` | app-update |
+| `appUpdate:openInstallGuide` | app-update |
 | `settings:get` | settings |
 | `settings:set` | settings |
 | `system:aboutInfo` | system |
@@ -273,4 +285,4 @@ Source: `src/main/ipc/system-handlers.ts`
 | `modelUpdate:downloadProgress` | model-update |
 | `modelUpdate:downloadComplete` | model-update |
 | `modelUpdate:downloadError` | model-update |
-| `appUpdate:status` | app-update |
+| `appUpdate:state` | app-update |

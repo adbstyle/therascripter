@@ -34,6 +34,7 @@ const mockModelUpdate = {
   restart: vi.fn(),
   startDownload: vi.fn(),
   getPending: vi.fn().mockResolvedValue(null),
+  getAvailable: vi.fn().mockResolvedValue([]),
   clearPending: vi.fn().mockResolvedValue(undefined),
   dismissVersions: vi.fn().mockResolvedValue(undefined),
   onAvailable: vi.fn().mockReturnValue(() => {}),

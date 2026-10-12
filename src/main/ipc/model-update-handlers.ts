@@ -4,7 +4,8 @@ import {
   checkForUpdates,
   triggerUpdateRestart,
   executeUpdates,
-  dismissManifestVersions
+  dismissManifestVersions,
+  getAvailableModelUpdates
 } from '../services/UpdateCheckService'
 import { getActiveSessionId } from './recording-handlers'
 import { getTaskQueue } from '../services/TaskQueueService'
@@ -19,6 +20,10 @@ export function registerModelUpdateHandlers(): void {
     const result = await checkForUpdates()
     return result.modelUpdates
   })
+
+  // Issue #144 — aktueller Stand für Renderer-Stellen, die nach dem Start-Push
+  // mounten (z. B. Einstellungen); danach kommen Änderungen per Push
+  ipcMain.handle('modelUpdate:getAvailable', () => getAvailableModelUpdates())
 
   // Restart to apply updates — refuses if recording or processing is active
   ipcMain.handle('modelUpdate:restart', (_event, args: unknown) => {

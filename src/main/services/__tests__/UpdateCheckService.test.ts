@@ -123,6 +123,7 @@ import {
   migrateInstalledVersions,
   executeUpdates,
   dismissManifestVersions,
+  getAvailableModelUpdates,
   manifestEntryKey
 } from '../UpdateCheckService'
 import { isNewerVersion } from '../../../shared/version'
@@ -446,6 +447,99 @@ describe('dismissManifestVersions', () => {
     expect(mockSettingsStore.set).toHaveBeenCalledWith('dismissedManifestVersions', [
       manifestEntryKey('a', '1'.repeat(64))
     ])
+  })
+})
+
+describe('verfügbare Modell-Updates — eine Quelle der Wahrheit (Issue #144)', () => {
+  const whisperUpdateSha = 'cccc' + 'c'.repeat(60)
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockExistsSync.mockReturnValue(true)
+  })
+
+  /** Prüfung, bei der genau whisper ein Update hat (pyannote ist aktuell). */
+  async function checkWithWhisperUpdate(): Promise<void> {
+    mockSettingsStore.get.mockImplementation((key: string) => {
+      if (key === 'installedModelVersions')
+        return {
+          'prod:whisper-large-v3-turbo': {
+            version: '2025-01-15',
+            sha256: 'aaaa' + 'a'.repeat(60),
+            installedAt: ''
+          },
+          'prod:pyannote-suite': {
+            version: '2025-01-15',
+            sha256: 'bbbb' + 'b'.repeat(60),
+            installedAt: ''
+          }
+        }
+      if (key === 'dismissedManifestVersions') return []
+      return null
+    })
+    makeHttpsResponse(200, validManifest)
+    await checkForUpdates()
+  }
+
+  const pushed = (): unknown[] =>
+    mockSendFn.mock.calls
+      .filter(([channel]) => channel === 'modelUpdate:available')
+      .map((c) => c[1])
+
+  it('hält das Ergebnis für später mountende Renderer-Stellen bereit', async () => {
+    await checkWithWhisperUpdate()
+    expect(getAvailableModelUpdates().map((u) => u.id)).toEqual(['whisper-large-v3-turbo'])
+    expect(pushed()).toHaveLength(1)
+  })
+
+  it('pusht auch eine leere Liste, damit veraltete Hinweise verschwinden', async () => {
+    await checkWithWhisperUpdate()
+    mockSettingsStore.get.mockReturnValue({
+      'prod:whisper-large-v3-turbo': {
+        version: '2025-02-01',
+        sha256: whisperUpdateSha,
+        installedAt: ''
+      },
+      'prod:pyannote-suite': {
+        version: '2025-01-15',
+        sha256: 'bbbb' + 'b'.repeat(60),
+        installedAt: ''
+      }
+    })
+    makeHttpsResponse(200, validManifest)
+    await checkForUpdates()
+    expect(getAvailableModelUpdates()).toEqual([])
+    expect(pushed().at(-1)).toEqual([])
+  })
+
+  it('«Verwerfen» entfernt die Version aus dem Stand und pusht ihn', async () => {
+    await checkWithWhisperUpdate()
+    mockSettingsStore.get.mockReturnValue([])
+    dismissManifestVersions([{ id: 'whisper-large-v3-turbo', sha256: whisperUpdateSha }])
+    expect(getAvailableModelUpdates()).toEqual([])
+    expect(pushed().at(-1)).toEqual([])
+  })
+
+  it('behält den Stand, wenn eine Prüfung scheitert', async () => {
+    await checkWithWhisperUpdate()
+    makeHttpsError('Connection refused')
+    await checkForUpdates()
+    expect(getAvailableModelUpdates()).toHaveLength(1)
+  })
+
+  it('entfernt angewendete Updates nach executeUpdates', async () => {
+    await checkWithWhisperUpdate()
+    const applied = getAvailableModelUpdates()[0]
+    mockDownloadFile.mockResolvedValue({ success: true })
+    mockVerifyFileSha256.mockResolvedValue(true)
+    mockSettingsStore.get.mockImplementation((key: string) => {
+      if (key === 'pendingModelUpdates') return [applied]
+      if (key === 'installedModelVersions') return {}
+      return null
+    })
+    await executeUpdates()
+    expect(getAvailableModelUpdates()).toEqual([])
+    expect(pushed().at(-1)).toEqual([])
   })
 })
 

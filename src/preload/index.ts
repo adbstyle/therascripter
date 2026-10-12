@@ -176,6 +176,7 @@ const api: IpcApi = {
       ipcRenderer.invoke('modelUpdate:restart', { updates }),
     startDownload: () => ipcRenderer.invoke('modelUpdate:startDownload'),
     getPending: () => ipcRenderer.invoke('modelUpdate:getPending'),
+    getAvailable: () => ipcRenderer.invoke('modelUpdate:getAvailable'),
     clearPending: () => ipcRenderer.invoke('modelUpdate:clearPending'),
     dismissVersions: (updates: PendingModelUpdate[]) =>
       ipcRenderer.invoke('modelUpdate:dismissVersions', { updates }),

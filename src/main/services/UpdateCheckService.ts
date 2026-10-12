@@ -116,6 +116,29 @@ export function dismissManifestVersions(entries: Array<{ id: string; sha256: str
     seen.add(manifestEntryKey(e.id, e.sha256))
   }
   settings.set('dismissedManifestVersions', Array.from(seen))
+  // Banner und Badge in den Einstellungen verschwinden gemeinsam (#144)
+  setAvailableModelUpdates(
+    availableModelUpdates.filter((u) => !seen.has(manifestEntryKey(u.id, u.sha256)))
+  )
+}
+
+// ─── Verfügbare Modell-Updates (Issue #144) ──────────────────────────────────
+
+/**
+ * Letztes Prüfergebnis, bereits um verworfene Versionen gefiltert — eine
+ * Quelle der Wahrheit für alle Renderer-Stellen (Banner, Einstellungen).
+ * Wer später mountet, holt den Stand über modelUpdate:getAvailable; jede
+ * Änderung, auch eine leere Liste, geht zusätzlich als Push raus.
+ */
+let availableModelUpdates: PendingModelUpdate[] = []
+
+export function getAvailableModelUpdates(): PendingModelUpdate[] {
+  return availableModelUpdates
+}
+
+function setAvailableModelUpdates(updates: PendingModelUpdate[]): void {
+  availableModelUpdates = updates
+  sendToRenderer('modelUpdate:available', updates)
 }
 
 // ─── checkForUpdates ─────────────────────────────────────────────────────────
@@ -221,9 +244,7 @@ async function runCheck(): Promise<CheckResult> {
       })
     }
 
-    if (modelUpdates.length > 0) {
-      sendToRenderer('modelUpdate:available', modelUpdates)
-    }
+    setAvailableModelUpdates(modelUpdates)
 
     // ── App update (Issue #164) ──
     getAppUpdateService()?.handleManifest(manifest.app)
@@ -518,6 +539,11 @@ async function runUpdates(
 
   // All updates done — clear pending and cleanup staging
   settings.set('pendingModelUpdates', null)
+  // Eine Prüfung beim Start (vor dem Austausch) hat sie noch als verfügbar gemeldet
+  const applied = new Set(updates.map((u) => manifestEntryKey(u.id, u.sha256)))
+  setAvailableModelUpdates(
+    availableModelUpdates.filter((u) => !applied.has(manifestEntryKey(u.id, u.sha256)))
+  )
   try {
     rmSync(stagingDir, { recursive: true })
   } catch {

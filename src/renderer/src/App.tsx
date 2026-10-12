@@ -24,7 +24,7 @@ export default function App(): React.JSX.Element {
   const { isRecording, level, duration, error, startRecording, stopRecording } = useRecording({
     onMicrophoneStatus: microphone.reportStatus
   })
-  const { availableUpdates, clearUpdates } = useModelUpdates()
+  const { availableUpdates } = useModelUpdates()
   const toast = useToast()
   const [modelsReady, setModelsReady] = useState<boolean | null>(null)
   const [pendingUpdates, setPendingUpdates] = useState<PendingModelUpdate[] | null>(null)
@@ -120,10 +120,10 @@ export default function App(): React.JSX.Element {
     setModelsReady(true)
   }, [])
 
+  // Die angewendeten Updates entfernt der Main-Prozess aus den verfügbaren (#144)
   const handleUpdateComplete = useCallback(() => {
     setPendingUpdates(null)
-    clearUpdates()
-  }, [clearUpdates])
+  }, [])
 
   // Issue #84 / Story G — "Später" + Error-Continue exits leave the
   // pending entry in electron-store intact (next-launch retry promise) and
@@ -168,9 +168,9 @@ export default function App(): React.JSX.Element {
 
   const handleDismissUpdates = useCallback(async () => {
     if (!availableUpdates || availableUpdates.length === 0) return
+    // Der Main-Prozess pusht den neuen Stand an Banner und Einstellungen (#144)
     await window.api.modelUpdate.dismissVersions(availableUpdates)
-    clearUpdates()
-  }, [availableUpdates, clearUpdates])
+  }, [availableUpdates])
 
   const isInReview = currentView === 'review'
 
