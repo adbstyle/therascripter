@@ -27,11 +27,13 @@ The release script performs these steps in order:
 
 6. **Release check (Issue #170)** — Runs `node scripts/release-check/run.mjs --app dist/mac-arm64/Therascript.app` (details below). Red means abort; `--override-release-check "<reason>"` (or, interactively, a reason typed at the prompt) releases anyway and records the reason in the tag message and the release notes.
 
-7. **Tag + push** — Only after green gates: creates the annotated tag `vX.Y.Z` (skipped if it exists) and pushes commit + tag.
+7. **Update description dry run (Issue #163)** — `publish-manifest.sh --from-catalog --dmg dist/Therascript.dmg --dry-run` builds and signs the manifest locally. A missing model artifact on R2 or a missing/untrusted signing key aborts here, before anything is pushed.
 
-8. **GitHub Release** — If no notes were provided, generates them from commit history via `gh api repos/{owner}/{repo}/releases/generate-notes` (must run after the tag push; the built-in `--generate-notes` flag cannot be combined with `--notes-file`, which is needed for the appended install guide). A failed generation is reported loudly but does not abort — the release then ships with the install guide only. Creates the release via `gh release create vX.Y.Z --notes-file …` with the DMG attached.
+8. **Tag + push** — Only after green gates: creates the annotated tag `vX.Y.Z` (skipped if it exists) and pushes commit + tag.
 
-9. **Publish manifest** — Runs `scripts/publish-manifest.sh --from-catalog`: model entries (URL, sha256, size) come from `src/shared/model-catalog.ts` of the release, `latestAppVersion` from `package.json`, and every artifact is checked against R2 via HEAD first. The manifest thus always matches the catalog of the released app; new artifacts must be on R2 before releasing (see `model-pipeline.md`). Warns loudly (but does not fail the release) if this step errors — rerun `scripts/publish-manifest.sh --from-catalog` then, otherwise fresh installs get offered a "model update" back to the previous artifact.
+9. **GitHub Release** — If no notes were provided, generates them from commit history via `gh api repos/{owner}/{repo}/releases/generate-notes` (must run after the tag push; the built-in `--generate-notes` flag cannot be combined with `--notes-file`, which is needed for the appended install guide). A failed generation is reported loudly but does not abort — the release then ships with the install guide only. Creates the release **as a draft** via `gh release create vX.Y.Z --draft --notes-file …` with the DMG attached — not public yet (release page, website «latest» download).
+
+10. **Signed update description + publish** — Checks that the DMG in the draft has the local sha256 (asset `digest`), then runs `scripts/publish-manifest.sh --from-catalog --dmg dist/Therascript.dmg`: model entries from `src/shared/model-catalog.ts` (each checked against R2 via HEAD), an `app` entry (version, URL, size, sha256 of the DMG), Ed25519 signature uploaded first to `signatures/<sha256>.json`, then `manifest.json`, then both re-fetched from the public URL. Only then the draft is published (`gh release edit --draft=false --latest`) and the download URL is checked. Any failure **aborts with exit 1** and the next command; before the publish step the version stays a non-public draft. New artifacts must be on R2 before releasing (see `model-pipeline.md`).
 
 ### Release check (scripts/release-check/)
 
@@ -54,6 +56,24 @@ A check that cannot run (missing previous DMG, missing models, timeout) counts a
 The seed cache key is `<tag>-<hash of seed.mjs, app-actions.mjs and the fixtures>`: extending the seed builds a new seed instead of reusing an old one. Settings compared exactly are the user-set ones (`theme`, `reviewPanelOpen`, `consentReminderShown`); for `activeModels` the check only requires every active model to be installed, because a new version may replace models on purpose (e.g. retiring a model).
 
 **Not covered** (manual check, ADR-009): Gatekeeper behaviour, first launch with model download, older versions than the last release, ML quality. Known gap: the seed has no session whose task was *running* when the previous version quit (`processing`, recovered by `recoverStuckTasks`), because such a state cannot be produced reproducibly through the UI API — the `queued` session covers the resume path only.
+
+### Signing keys (Issue #163)
+
+The app trusts the Ed25519 public keys in `src/shared/update-keys.ts` (`UPDATE_SIGNING_KEYS`). Two keys per generation:
+
+- **Primary** (`primary-YYYY-MM`): private key in the login keychain of the release Mac (service `therascript-update-signing`). `scripts/sign-manifest.ts` reads it; macOS asks once, «Immer erlauben» makes every later release sign without a prompt. Never in the repo, `.env` or the app bundle — `verify-bundles.sh` fails on key files or key material in `app.asar`.
+- **Backup** (`backup-YYYY-MM`): private key offline in the publisher's password manager. Used only if the primary is lost: `THERASCRIPT_SIGNING_KEY_FILE=<file with the base64 key> scripts/publish-manifest.sh --from-catalog --dmg …`.
+
+Created once with `npx tsx scripts/generate-signing-keys.ts` (writes the public keys into `update-keys.ts`; no private key is printed).
+
+**Planned rotation / after loss** (no reinstall):
+
+1. `npx tsx scripts/generate-signing-keys.ts --rotate` appends a new pair to `UPDATE_SIGNING_KEYS` (old entries stay) and stores the new primary as `therascript-update-signing-next` in the keychain; the new backup goes to a desktop file → password manager.
+2. Ship a release that trusts both generations, signed with the current primary — after a **loss** with the backup key (`THERASCRIPT_SIGNING_KEY_FILE=…`).
+3. Once that release is widespread: `npx tsx scripts/generate-signing-keys.ts --activate-next` (the successor becomes the signing key).
+4. Drop the retired entries from `update-keys.ts` in a later release.
+
+After a **theft** an attacker can sign; then a one-time manual reinstall with new keys is accepted (Issue #163, Out of Scope 2).
 
 ## Build Pipeline
 

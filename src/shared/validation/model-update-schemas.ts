@@ -6,6 +6,19 @@ export const ManifestModelSchema = z.object({
   label: z.string().min(1),
   url: z.string().url(),
   sha256: z.string().regex(/^[a-f0-9]{64}$/, 'sha256 muss 64 Hex-Zeichen sein'),
+  sizeBytes: z.number().int().positive(),
+  /** Ab welcher App-Version das Artefakt passt (Issue #163); fehlt bei alten Manifesten. */
+  minAppVersion: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+$/)
+    .optional()
+})
+
+/** Installationspaket der neuesten Version (Issue #163); fehlt bei alten Manifesten. */
+export const ManifestAppSchema = z.object({
+  version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  url: z.string().url(),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/, 'sha256 muss 64 Hex-Zeichen sein'),
   sizeBytes: z.number().int().positive()
 })
 
@@ -15,6 +28,7 @@ export const ManifestSchema = z.object({
     .string()
     .regex(/^\d+\.\d+\.\d+$/)
     .optional(),
+  app: ManifestAppSchema.optional(),
   models: z.array(ManifestModelSchema).min(1)
 })
 

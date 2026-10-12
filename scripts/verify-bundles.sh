@@ -318,6 +318,20 @@ if [ -f "$ASAR" ]; then
       ASAR_FAIL=1
     fi
   done
+  # Privater Signaturschlüssel der Update-Beschreibung (Issue #163, AK 7):
+  # liegt im Schlüsselbund bzw. offline. Weder Schlüsseldateien noch
+  # Schlüsselmaterial dürfen ins Paket — sonst kann jeder Updates fälschen.
+  # Dateinamen bewusst eng (.pem, update-signing): ein .key-Muster träfe
+  # harmlose Testzertifikate aus Abhängigkeiten. Schlüsselmaterial selbst
+  # findet die Inhaltsprüfung darunter.
+  if grep -qiE '\.pem$|update-signing' <<<"$asar_list"; then
+    echo "FAIL [asar]: Schlüsseldatei in app.asar: $(grep -iE '\.pem$|update-signing' <<<"$asar_list" | head -3 | tr '\n' ' ')" >&2
+    ASAR_FAIL=1
+  fi
+  if LC_ALL=C grep -aqE 'PRIVATE KEY|RESERVESCHL' "$ASAR"; then
+    echo "FAIL [asar]: app.asar enthält privates Schlüsselmaterial" >&2
+    ASAR_FAIL=1
+  fi
   for required in '/out/main/index.js' '/package.json' '/node_modules/better-sqlite3' '/node_modules/pdfjs-dist' '/node_modules/zod'; do
     if ! grep -q "^$required" <<<"$asar_list"; then
       echo "FAIL [asar]: required path missing from app.asar: $required" >&2
