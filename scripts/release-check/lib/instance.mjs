@@ -1,4 +1,3 @@
-/* global WebSocket */
 /**
  * Startet eine gepackte Therascript-App isoliert für die Release-Prüfung
  * (Issue #170) und spricht per CDP mit ihr.
@@ -117,7 +116,9 @@ async function connectPage(port) {
   }
   const target = targets.find((t) => t.type === 'page')
   if (!target) return null
-  const ws = new WebSocket(target.webSocketDebuggerUrl)
+  // globalThis: WebSocket ist erst ab Node 22 global, ESLint kennt es je
+  // nach globals-Version (lokal) oder nicht (CI)
+  const ws = new globalThis.WebSocket(target.webSocketDebuggerUrl)
   const opened = await new Promise((resolve) => {
     ws.onopen = () => resolve(true)
     ws.onerror = () => resolve(false)

@@ -66,7 +66,7 @@ async function step(name, fn) {
 
 let prevTag
 await step('Voraussetzungen', async () => {
-  if (typeof WebSocket === 'undefined') {
+  if (typeof globalThis.WebSocket === 'undefined') {
     throw new Error(`Node ${process.version} hat kein WebSocket — Node 22 oder neuer nötig`)
   }
   if (!existsSync(appPath)) throw new Error(`App nicht gefunden: ${appPath}`)
