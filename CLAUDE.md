@@ -47,6 +47,7 @@ scripts/sim-clean-install.sh       # Simulate fresh/upgrade/models-only install;
 scripts/smoke-packaged.sh          # Runtime-Smoke aller gebundelten ML-Tools in Homebrew-/Cache-freier Sandbox; --app <pfad> | --dist | --staging, optional --ner-model-dir <pfad> (z. B. entpacktes Artefakt vor dem Upload)
 scripts/fetch-test-podcasts.sh     # Echte Test-Audios: 3 SRF-«Input»-Folgen (28–45 min, mehrere Sprecher) als SHA-verifizierte MP3 + WAV im Aufnahmeformat (48 kHz mono 16-bit, 44-Byte-Header — afconvert-Output wird neu geschrieben, sein FLLR-Chunk bräche AudioStitchService) nach tests/fixtures/podcast-audio/ (gitignored, urheberrechtlich geschützt, ~680 MB); Exit ≠ 0 bei fehlender/geänderter Folge
 python3 scripts/ner-parity.py <ref-ner-dir> <kandidat-ner-dir>  # NER-Entity-Parität zweier Modellverzeichnisse (tests/fixtures/ner-parity/)
+node scripts/release-check/run.mjs --app <App> [--prev-tag vX.Y.Z]  # Release-Prüfung (#170): isolierter Start ohne Daten, auf dem Seed der Vorversion (Datenerhalt), Aufnahme + PDF bis zur Zusammenfassung; läuft in release.sh vor Tag/Push, Freigabe trotz Rot nur mit --override-release-check "<Begründung>". Öffnet sichtbare App-Fenster, Seed-Cache unter ~/Library/Caches/therascript-release-check/
 scripts/verify-bundles.sh          # Statische Bundle-Verifikation; --app <pfad> prüft die gepackte .app, --smoke chained smoke-packaged.sh
 ```
 
