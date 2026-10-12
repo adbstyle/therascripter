@@ -11,11 +11,11 @@ module.exports = async function afterPack(context) {
 
   // Owner-Write-Bit auf ALLEN Dateien erzwingen. Homebrew-Bottles shippen
   // Mach-Os teils mit Modus 444/555, und die Setup-Skripte übernehmen den
-  // Modus via `cp` nach resources/. Ohne u+w schlägt auf Endnutzer-Macs die
-  // Gatekeeper-Anleitung `xattr -cr` mit EACCES fehl (xattr braucht
-  // Write-Permission, Ownership reicht nicht) — die Quarantäne bleibt auf
-  // genau diesen Dateien und Gatekeeper killt das ad-hoc-signierte Binary
-  // beim Spawn per SIGKILL, ohne stderr. chmod verändert keine Mach-O-Bytes
+  // Modus via `cp` nach resources/. «Dennoch öffnen» (Systemeinstellungen →
+  // Datenschutz & Sicherheit) schreibt die Freigabe in JEDE Datei des Bundles
+  // (ADR-009); auf einer Datei ohne u+w bleibt die unfreigegebene Quarantäne
+  // stehen und Gatekeeper killt das ad-hoc-signierte Binary beim Spawn per
+  // SIGKILL, ohne stderr. chmod verändert keine Mach-O-Bytes
   // und invalidiert keine Signatur. Chokepoint hier statt in den einzelnen
   // Setup-Skripten: deckt jede Ressource ab, egal wie sie in die App kam.
   execFileSync('chmod', ['-R', 'u+w', appPath])

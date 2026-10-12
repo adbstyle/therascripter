@@ -130,13 +130,12 @@ The ad-hoc signature (`codesign --sign -`) ensures the binary's code pages are v
 
 ## Gatekeeper
 
-Because the app uses an ad-hoc signature (not notarized by Apple), macOS Gatekeeper blocks it on first launch. Users must:
+Because the app uses an ad-hoc signature (not notarized by Apple), macOS blocks the first launch of a browser-downloaded version. Users allow it once per downloaded version:
 
-1. Right-click the app in Finder
-2. Select "Open" from the context menu
-3. Confirm the security dialog
+1. Open the app — macOS shows «"Therascript" Not Opened» with «Done» / «Move to Bin»; click «Done»
+2. System Settings → Privacy & Security → «Open Anyway» («Dennoch öffnen»), confirm with password or Touch ID
 
-This is a one-time action. After the first launch, macOS remembers the user's choice and the app opens normally.
+The approval covers every file of the bundle, including the bundled ML tools, as long as each file is owner-writable (`verify-bundles.sh` gate). Right-click → Open no longer bypasses the block on macOS 26. Details and the manual release check: ADR-009; end-user wording: `scripts/release-install-guide.md` and `website/installation.html`.
 
 ## Preload Security
 

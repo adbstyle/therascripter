@@ -278,8 +278,9 @@ git push origin "v$NEW_VERSION"
 # Die Installationsanleitung (scripts/release-install-guide.md) wird IMMER an
 # die Notes angehängt — die Anwender sind technisch nicht versiert und
 # brauchen bei jedem Release die exakten Schritte. Der Guide liegt als eigene
-# Markdown-Datei vor (editierbar ohne Shell-Quoting-Fallen); Fakten dort mit
-# README.md synchron halten.
+# Markdown-Datei vor (editierbar ohne Shell-Quoting-Fallen); Schritte und
+# Fakten mit README.md, website/installation.html und build/dmg-background.svg
+# synchron halten.
 
 echo ""
 echo "→ Erstelle GitHub Release v$NEW_VERSION …"

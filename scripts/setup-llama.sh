@@ -91,9 +91,9 @@ fi
 cp "$LIBOMP_PREFIX/lib/libomp.dylib" "$LIB_DIR/"
 
 # Homebrew-Bottles shippen viele Mach-Os ohne Owner-Write-Bit (444/555) und
-# `cp` übernimmt den Modus. Ohne u+w schlägt beim Endnutzer `xattr -cr` mit
-# EACCES fehl (xattr braucht Write-Permission, Ownership reicht nicht) — die
-# Quarantäne bleibt und Gatekeeper killt llama-cli beim Spawn per SIGKILL.
+# `cp` übernimmt den Modus. Ohne u+w kann «Dennoch öffnen» beim Endnutzer die
+# Freigabe nicht in die Datei schreiben (ADR-009) — die Quarantäne bleibt und
+# Gatekeeper killt llama-cli beim Spawn per SIGKILL.
 # afterPack.js chmod-t zusätzlich die ganze gepackte App (Chokepoint);
 # hier trotzdem fixen, damit der Staging-Tree sauber ist und
 # verify-bundles.sh (Owner-Write-Gate) direkt nach dem Setup grün läuft.

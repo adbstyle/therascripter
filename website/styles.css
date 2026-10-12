@@ -656,3 +656,25 @@ body.legal ul {
   font-size: 1rem;
   line-height: 1.65;
 }
+
+body.legal ol {
+  font-size: 1rem;
+  line-height: 1.65;
+  padding-left: 1.5rem;
+}
+
+body.legal section > ol li + li {
+  margin-top: 0.5rem;
+}
+
+/* === Installation page === */
+
+.install-download {
+  margin-bottom: var(--space-xl);
+}
+
+.install-download .hint {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+  margin: var(--space-sm) 0 0;
+}
