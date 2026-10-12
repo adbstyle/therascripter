@@ -8,6 +8,7 @@ import type {
 } from '../../../shared/types'
 import { formatBytes } from '../utils/formatBytes'
 import AppLogo from './AppLogo'
+import MicrophoneSetupRow from './MicrophoneSetupRow'
 
 interface FirstLaunchScreenProps {
   onComplete: () => void
@@ -225,6 +226,8 @@ export default function FirstLaunchScreen({
             Hinweis: Bei Abbruch wird der Download beim nächsten Start automatisch fortgesetzt.
           </p>
         )}
+
+        <MicrophoneSetupRow />
       </div>
     </div>
   )

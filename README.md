@@ -38,7 +38,7 @@ Ausführliche Anleitung mit Erklärungen: [adbstyle.github.io/therascripter/inst
 
 **Warum die Programm-Freigabe?** Apple bestätigt Apps nur gegen eine jährliche Gebühr. Therascript ist kostenlos und quelloffen und verzichtet auf diese Beglaubigung. Die Freigabe gilt für die ganze App samt der eingebauten Werkzeuge für Transkription, Sprechererkennung, Pseudonymisierung, Texterkennung und Zusammenfassung. Niemand bestätigt unabhängig, dass die heruntergeladene Datei vom Projekt stammt: Laden Sie Therascript nur über die Website oder die [Release-Seite](https://github.com/adbstyle/therascripter/releases).
 
-**Auf eine neue Version aktualisieren:** Therascript über das Symbol in der Menüleiste («Therascript beenden») oder mit `⌘ Q` beenden (das Schliessen des Fensters beendet die App nicht), die neue Version herunterladen, die App im Ordner **Programme** ersetzen und Schritt 2 und 3 wiederholen. Transkriptionen, Einstellungen und Modelle bleiben erhalten. Fragt macOS danach erneut nach dem Mikrofon, den Zugriff erlauben; fragt es nach dem Schlüsselbund, **Immer erlauben** wählen.
+**Auf eine neue Version aktualisieren:** Therascript über das Symbol in der Menüleiste («Therascript beenden») oder mit `⌘ Q` beenden (das Schliessen des Fensters beendet die App nicht), die neue Version herunterladen, die App im Ordner **Programme** ersetzen und Schritt 2 und 3 wiederholen. Transkriptionen, Einstellungen und Modelle bleiben erhalten. Beim ersten Update auf eine Version, die Berechtigungen über Updates hinweg behält, fragt macOS einmalig erneut: Mikrofon erlauben, beim Schlüsselbund **Immer erlauben** wählen. Spätere Updates fragen nicht mehr.
 
 > **Empfehlung:** FileVault-Verschlüsselung aktivieren — Therascript warnt, falls deaktiviert.
 

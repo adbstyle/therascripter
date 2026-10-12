@@ -133,6 +133,12 @@ beforeEach(() => {
       updateTitle: vi.fn().mockResolvedValue(undefined),
       updateText: vi.fn().mockResolvedValue(undefined)
     },
+    microphone: {
+      getState: vi.fn().mockResolvedValue({ status: 'granted', previouslyGranted: true }),
+      ensureAccess: vi.fn().mockResolvedValue('granted'),
+      dismissHint: vi.fn().mockResolvedValue(undefined),
+      openSettings: vi.fn().mockResolvedValue(undefined)
+    },
     nav: {
       onOpenSettings: vi.fn().mockReturnValue(() => {})
     },
@@ -234,5 +240,32 @@ describe('App — Navigation während der Aufnahme', () => {
     await waitFor(() => {
       expect(screen.getByText('Mikrofonzugriff wurde verweigert.')).toBeInTheDocument()
     })
+  })
+})
+
+describe('App — Mikrofon-Berechtigung (Issue #161)', () => {
+  it('weist nach dem Start auf eine verlorene Berechtigung hin', async () => {
+    window.api.microphone.getState = vi
+      .fn()
+      .mockResolvedValue({ status: 'not-determined', previouslyGranted: true })
+    renderApp()
+
+    expect(
+      await screen.findByText(/braucht Therascript die Mikrofon-Berechtigung/)
+    ).toBeInTheDocument()
+  })
+
+  it('zeigt den Hinweis nie während einer Aufnahme', async () => {
+    mockRecordingState.isRecording = true
+    window.api.microphone.getState = vi
+      .fn()
+      .mockResolvedValue({ status: 'not-determined', previouslyGranted: true })
+    renderApp()
+
+    await waitFor(() => expect(window.api.microphone.getState).toHaveBeenCalled())
+    await screen.findByText('PDF importieren')
+    expect(
+      screen.queryByText(/braucht Therascript die Mikrofon-Berechtigung/)
+    ).not.toBeInTheDocument()
   })
 })

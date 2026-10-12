@@ -12,6 +12,8 @@
 #   6. Owner-Write-Bit (u+w) auf jedem gebundelten Pfad — auf read-only
 #      kopierte Homebrew-Mach-Os kann «Dennoch öffnen» die Freigabe nicht
 #      schreiben (Quarantäne bleibt → Gatekeeper killt das Binary per SIGKILL)
+#   7. (nur --app) Signatur: Designated Requirement `identifier "<bundle-id>"`
+#      auf App und Helpern, gültiges Siegel, deutscher Mikrofon-Prüftext
 #
 # Usage:
 #   ./scripts/verify-bundles.sh                  # prüft den Repo-Staging-Tree
@@ -338,6 +340,47 @@ if [ -f "$ASAR" ]; then
   fi
 else
   missing_bundle 'asar' "$ASAR"
+fi
+
+# Signatur (ADR-009, Issue #161): Haupt-App und Helper brauchen die explizite
+# Designated Requirement `designated => identifier "<bundle-id>"`. Mit der
+# ad-hoc-Default-Requirement (`cdhash H"…"`) verliert jedes Update die
+# Mikrofon-Berechtigung und den Schlüsselbund-Zugriff — still, erst die
+# Nutzer:in merkt es. afterPack.js signiert so; dieser Check fängt einen
+# Rückfall (z. B. ein flipFuses-Update, das danach erneut signiert).
+if [ -n "$APP_PATH" ]; then
+  echo ""
+  echo "=== signature (designated requirement, Info.plist) ==="
+  SIG_FAIL=0
+  sig_bundles=("$APP_PATH")
+  for helper in "$APP_PATH"/Contents/Frameworks/*.app; do
+    [ -d "$helper" ] && sig_bundles+=("$helper")
+  done
+  for bundle in "${sig_bundles[@]}"; do
+    bundle_id=$(plutil -extract CFBundleIdentifier raw "$bundle/Contents/Info.plist" 2>/dev/null || true)
+    # Eine implizite Requirement druckt codesign auskommentiert
+    # (`# designated => cdhash H"…"`) — mit ausgeben, aber nie als gültig werten.
+    requirement=$(codesign -d -r- "$bundle" 2>&1 | grep 'designated =>' || true)
+    if [ "$requirement" != "designated => identifier \"$bundle_id\"" ]; then
+      echo "FAIL [sig]: $(basename "$bundle"): erwartet designated => identifier \"$bundle_id\", ist: ${requirement:-<keine>}" >&2
+      SIG_FAIL=1
+    fi
+  done
+  if ! seal_out=$(codesign --verify --deep --strict "$APP_PATH" 2>&1); then
+    echo "FAIL [sig]: codesign --verify --deep --strict schlägt fehl:" >&2
+    echo "$seal_out" >&2
+    SIG_FAIL=1
+  fi
+  mic_usage=$(plutil -extract NSMicrophoneUsageDescription raw "$APP_PATH/Contents/Info.plist" 2>/dev/null || true)
+  if [[ "$mic_usage" != Therascript* ]]; then
+    echo "FAIL [sig]: NSMicrophoneUsageDescription ist nicht der deutsche Prüftext: ${mic_usage:-<fehlt>}" >&2
+    SIG_FAIL=1
+  fi
+  if [ $SIG_FAIL -eq 0 ]; then
+    echo "ok   [sig]: ${#sig_bundles[@]} Bundles mit stabiler Designated Requirement, Siegel gültig, deutscher Mikrofon-Prüftext"
+  else
+    FAIL=1
+  fi
 fi
 
 echo ""

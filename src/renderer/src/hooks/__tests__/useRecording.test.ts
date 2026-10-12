@@ -7,20 +7,31 @@ import type { LevelCallback } from '../../services/AudioRecorder'
 // Der Test steuert die Worklet-Pegel über das gemerkte onLevel.
 let emitLevel: LevelCallback = () => {}
 let emitDuration: (data: { seconds: number }) => void = () => {}
+let recorderStart: (onLevel: LevelCallback) => Promise<string> = async (onLevel) => {
+  emitLevel = onLevel
+  return 'session-1'
+}
 vi.mock('../../services/AudioRecorder', () => ({
   AudioRecorder: class {
-    async start(onLevel: LevelCallback): Promise<string> {
-      emitLevel = onLevel
-      return 'session-1'
+    start(onLevel: LevelCallback): Promise<string> {
+      return recorderStart(onLevel)
     }
     async stop(): Promise<void> {}
   }
 }))
 
+let ensureAccess: ReturnType<typeof vi.fn>
+
 beforeEach(() => {
   emitLevel = () => {}
   emitDuration = () => {}
+  recorderStart = async (onLevel) => {
+    emitLevel = onLevel
+    return 'session-1'
+  }
+  ensureAccess = vi.fn().mockResolvedValue('granted')
   window.api = {
+    microphone: { ensureAccess },
     recording: {
       onDuration: vi.fn((cb) => {
         emitDuration = cb
@@ -108,5 +119,56 @@ describe('useRecording – Pegel und Dauer', () => {
 
     await act(() => result.current.startRecording())
     expect(result.current.duration.get()).toBe(0)
+  })
+})
+
+describe('useRecording – Mikrofon-Berechtigung (Issue #161)', () => {
+  it('klärt die Berechtigung vor dem Start und meldet den Status', async () => {
+    const onMicrophoneStatus = vi.fn()
+    const { result } = renderHook(() => useRecording({ onMicrophoneStatus }))
+    await act(() => result.current.startRecording())
+    expect(ensureAccess).toHaveBeenCalledOnce()
+    expect(onMicrophoneStatus).toHaveBeenCalledWith('granted')
+    expect(result.current.isRecording).toBe(true)
+  })
+
+  it('meldet eine erteilte Berechtigung auch, wenn die Aufnahme danach scheitert', async () => {
+    recorderStart = () => Promise.reject(new DOMException('none', 'NotFoundError'))
+    const onMicrophoneStatus = vi.fn()
+    const { result } = renderHook(() => useRecording({ onMicrophoneStatus }))
+
+    await act(() => result.current.startRecording())
+
+    expect(onMicrophoneStatus).toHaveBeenCalledWith('granted')
+    expect(result.current.error).toMatch(/Kein Mikrofon gefunden/)
+  })
+
+  it.each(['denied', 'restricted'])(
+    'startet bei Status %s nicht und meldet die Ablehnung statt eines Toasts',
+    async (status) => {
+      ensureAccess.mockResolvedValue(status)
+      const start = vi.fn()
+      recorderStart = start
+      const onMicrophoneStatus = vi.fn()
+      const { result } = renderHook(() => useRecording({ onMicrophoneStatus }))
+
+      await act(() => result.current.startRecording())
+
+      expect(start).not.toHaveBeenCalled()
+      expect(onMicrophoneStatus).toHaveBeenCalledWith(status)
+      expect(result.current.isRecording).toBe(false)
+      expect(result.current.error).toBeNull()
+    }
+  )
+
+  it('meldet NotAllowedError von getUserMedia ebenfalls als Ablehnung', async () => {
+    recorderStart = () => Promise.reject(new DOMException('denied', 'NotAllowedError'))
+    const onMicrophoneStatus = vi.fn()
+    const { result } = renderHook(() => useRecording({ onMicrophoneStatus }))
+
+    await act(() => result.current.startRecording())
+
+    expect(onMicrophoneStatus).toHaveBeenLastCalledWith('denied')
+    expect(result.current.error).toBeNull()
   })
 })

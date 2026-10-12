@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AudioRecorder } from '../services/AudioRecorder'
 import { createValueStore, type ValueStore } from '../utils/valueStore'
+import type { MicrophoneStatus } from '../../../shared/types/Microphone'
 
 interface UseRecordingResult {
   isRecording: boolean
@@ -16,7 +17,17 @@ interface UseRecordingResult {
   stopRecording: () => Promise<void>
 }
 
-export function useRecording(): UseRecordingResult {
+interface UseRecordingOptions {
+  /**
+   * Mikrofon-Status, den der Aufnahmestart festgestellt hat (Issue #161). Bei
+   * einer Ablehnung zeigt der Aufrufer einen bleibenden Hinweis mit dem Weg
+   * über die Systemeinstellungen statt eines 3-s-Toasts; eine erteilte
+   * Berechtigung räumt einen veralteten Hinweis.
+   */
+  onMicrophoneStatus?: (status: MicrophoneStatus) => void
+}
+
+export function useRecording({ onMicrophoneStatus }: UseRecordingOptions = {}): UseRecordingResult {
   const [isRecording, setIsRecording] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const recorderRef = useRef<AudioRecorder | null>(null)
@@ -25,6 +36,10 @@ export function useRecording(): UseRecordingResult {
   // Lazy-Initializer: ein Store pro Hook-Instanz, nicht pro Render
   const [level] = useState(() => createValueStore(0))
   const [duration] = useState(() => createValueStore(0))
+  // Ref statt Dependency: startRecording bleibt stabil, auch wenn der
+  // Aufrufer den Callback bei jedem Render neu erzeugt.
+  const onMicrophoneStatusRef = useRef(onMicrophoneStatus)
+  onMicrophoneStatusRef.current = onMicrophoneStatus
 
   const stopRecording = useCallback(async () => {
     if (stoppingRef.current) return
@@ -54,19 +69,23 @@ export function useRecording(): UseRecordingResult {
     // Stopp) darf die neue Karte nicht mit der alten Zeit starten lassen.
     duration.set(0)
 
-    const recorder = new AudioRecorder()
-    recorderRef.current = recorder
-
     try {
+      // Vor getUserMedia klären: Ist noch nichts festgelegt, fragt macOS
+      // jetzt; nach einer Ablehnung fragt es nie wieder, dann bleibt nur der
+      // Weg über die Systemeinstellungen. So entsteht auch keine Session.
+      const micStatus = await window.api.microphone.ensureAccess()
+      onMicrophoneStatusRef.current?.(micStatus)
+      if (micStatus === 'denied' || micStatus === 'restricted') return
+
+      const recorder = new AudioRecorder()
+      recorderRef.current = recorder
       await recorder.start(level.set)
       setIsRecording(true)
     } catch (err) {
       recorderRef.current = null
 
       if (err instanceof DOMException && err.name === 'NotAllowedError') {
-        setError(
-          'Mikrofonzugriff wurde verweigert. Bitte erlauben Sie den Zugriff in den Systemeinstellungen.'
-        )
+        onMicrophoneStatusRef.current?.('denied')
       } else if (err instanceof DOMException && err.name === 'NotFoundError') {
         setError('Kein Mikrofon gefunden. Bitte schliessen Sie ein Mikrofon an.')
       } else {

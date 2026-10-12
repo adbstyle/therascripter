@@ -5,6 +5,7 @@ import type { EntityMap, PlaceholderType } from './EntityMap'
 import type { TipTapDocument } from './TipTapDocument'
 import type { PendingModelUpdate, AppUpdateStatus, CheckResult } from './ModelUpdate'
 import type { ReconcileEvent } from './ReconcileEvent'
+import type { MicrophoneState, MicrophoneStatus } from './Microphone'
 import type { ProcessedModelsSnapshot, AudioStats } from './Provenance'
 import type {
   ModelCatalogEntry,
@@ -217,6 +218,16 @@ export interface SummaryApi {
   updateText(sessionId: string, text: string): Promise<void>
 }
 
+export interface MicrophoneApi {
+  getState(): Promise<MicrophoneState>
+  /** Fragt macOS, solange noch nichts festgelegt ist; liefert den Status danach. */
+  ensureAccess(): Promise<MicrophoneStatus>
+  /** «Später» beim Start-Hinweis — danach erst beim Aufnahmestart wieder fragen. */
+  dismissHint(): Promise<void>
+  /** Öffnet Systemeinstellungen → Datenschutz & Sicherheit → Mikrofon. */
+  openSettings(): Promise<void>
+}
+
 export interface NavApi {
   onOpenSettings(callback: () => void): () => void
 }
@@ -262,5 +273,6 @@ export interface IpcApi {
   pipeline: PipelineApi
   appUpdate: AppUpdateApi
   summary: SummaryApi
+  microphone: MicrophoneApi
   nav: NavApi
 }

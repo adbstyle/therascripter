@@ -134,7 +134,7 @@ Key details:
 - **`@renderer` path alias** resolves to `src/renderer/src/` — used for all renderer-internal imports.
 - `electron-store` and `@electron-toolkit/preload` are excluded from `externalizeDeps` so they are bundled into the output (they do not work as true externals in the Electron context).
 - Tailwind CSS v4 is loaded as a Vite plugin (not a PostCSS plugin) — no `tailwind.config.js` needed.
-- Electron Fuses are applied in `afterPack.js` after the build and re-signed with an ad-hoc signature (`codesign --sign -`).
+- Electron Fuses are applied in `afterPack.js` after the build and re-signed with an ad-hoc signature (`codesign --sign -`) carrying the Designated Requirement `identifier "<bundle-id>"` (ADR-009).
 
 ---
 

@@ -4,6 +4,7 @@ import SessionDashboard from './components/SessionDashboard'
 import FirstLaunchScreen from './components/FirstLaunchScreen'
 import ModelUpdateScreen from './components/ModelUpdateScreen'
 import UpdateBanner from './components/UpdateBanner'
+import MicrophoneBanner from './components/MicrophoneBanner'
 import { ConsentBanner } from './components/ConsentBanner'
 import TitleBar from './components/shell/TitleBar'
 import BottomNav from './components/shell/BottomNav'
@@ -12,13 +13,17 @@ import Settings from './views/Settings'
 import ReviewEditor from './views/ReviewEditor'
 import { useRecording } from './hooks/useRecording'
 import { useModelUpdates } from './hooks/useModelUpdates'
+import { useMicrophonePermission } from './hooks/useMicrophonePermission'
 import { useToast } from './hooks/useToast'
 import type { PendingModelUpdate } from '../../shared/types/ModelUpdate'
 
 type View = 'sessions' | 'settings' | 'review'
 
 export default function App(): React.JSX.Element {
-  const { isRecording, level, duration, error, startRecording, stopRecording } = useRecording()
+  const microphone = useMicrophonePermission()
+  const { isRecording, level, duration, error, startRecording, stopRecording } = useRecording({
+    onMicrophoneStatus: microphone.reportStatus
+  })
   const { availableUpdates, clearUpdates } = useModelUpdates()
   const toast = useToast()
   const [modelsReady, setModelsReady] = useState<boolean | null>(null)
@@ -75,9 +80,9 @@ export default function App(): React.JSX.Element {
     prevRecording.current = isRecording
   }, [isRecording])
 
-  // Mikrofon-/Aufnahmefehler als Toast: seit dem Wegfall der Vollbild-
-  // RecordingView gibt es keinen dedizierten Anzeigeort mehr. (Vorher war
-  // ein Fehler beim Start sogar unsichtbar — die View mountete nie.)
+  // Aufnahmefehler als Toast: seit dem Wegfall der Vollbild-RecordingView
+  // gibt es keinen dedizierten Anzeigeort mehr. Eine fehlende Mikrofon-
+  // Berechtigung zeigt stattdessen der MicrophoneBanner (Issue #161).
   useEffect(() => {
     if (error) toast.error(error)
   }, [error, toast])
@@ -214,6 +219,16 @@ export default function App(): React.JSX.Element {
           updates={availableUpdates}
           onRestart={handleRestartForUpdate}
           onDismiss={handleDismissUpdates}
+        />
+      )}
+
+      {/* Mikrofon-Berechtigung (Issue #161) — nie während einer Aufnahme */}
+      {microphone.hint && !isRecording && (
+        <MicrophoneBanner
+          variant={microphone.hint}
+          onAllow={microphone.allow}
+          onOpenSettings={microphone.openSettings}
+          onDismiss={microphone.dismiss}
         />
       )}
 

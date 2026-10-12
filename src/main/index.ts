@@ -11,6 +11,7 @@ import {
   recoverCrashedRecordings
 } from './ipc/recording-handlers'
 import { registerSettingsHandlers } from './ipc/settings-handlers'
+import { registerMicrophoneHandlers } from './ipc/microphone-handlers'
 import { registerTaskHandlers } from './ipc/task-handlers'
 import { registerBlocklistHandlers } from './ipc/blocklist-handlers'
 import { registerPDFHandlers } from './ipc/pdf-handlers'
@@ -284,6 +285,7 @@ app.whenReady().then(() => {
   registerModelReconcileHandlers()
   registerPipelineHandlers()
   registerAppUpdateHandlers()
+  registerMicrophoneHandlers()
   registerSummaryHandlers({ sessionService })
 
   setupCSP()
