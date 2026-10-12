@@ -19,8 +19,10 @@
  * zeigen muss.
  */
 import { execFileSync } from 'child_process'
+import { createHash } from 'crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import { importPdf, listSessions, startRecording, waitUntilProcessed } from './app-actions.mjs'
 import { launchInstance } from './instance.mjs'
 import {
@@ -34,12 +36,13 @@ import {
   writeModelSettings
 } from './workspace.mjs'
 
-export const SEED_SETTINGS_KEYS = [
-  'theme',
-  'reviewPanelOpen',
-  'consentReminderShown',
-  'activeModels'
-]
+/**
+ * Vom Nutzer gesetzte Einstellungen, die exakt erhalten bleiben müssen. Nicht
+ * activeModels: Eine neue Version darf aktive Modelle beim Start bewusst
+ * ablösen (retireObsoleteModels, reconcileActiveModels) — dafür prüft
+ * checks.mjs, dass jedes aktive Modell installiert ist.
+ */
+export const SEED_SETTINGS_KEYS = ['theme', 'reviewPanelOpen', 'consentReminderShown']
 
 const BLOCKLIST = [
   ['Praxis Seefeld', 'ORGANISATION'],
@@ -51,14 +54,37 @@ const BLOCKLIST = [
   ['Projekt Nordlicht', 'SONSTIGES']
 ]
 
-const seedDir = (tag) => join(BASE, 'seeds', tag)
+/**
+ * Der Cache-Schlüssel enthält neben dem Tag einen Hash über den Seed-Aufbau
+ * und die Testdaten: Kommt eine neue Datenart in den Seed (NFR 6), entsteht
+ * ein neuer Seed, statt dass ein alter aus dem Cache sie still auslässt.
+ */
+function seedDir(tag, fixtures) {
+  const here = dirname(fileURLToPath(import.meta.url))
+  const hash = createHash('sha256')
+  for (const file of [
+    join(here, 'seed.mjs'),
+    join(here, 'app-actions.mjs'),
+    fixtures.wav,
+    fixtures.pdf
+  ]) {
+    hash.update(readFileSync(file))
+  }
+  return join(BASE, 'seeds', `${tag}-${hash.digest('hex').slice(0, 12)}`)
+}
 
-/** Bearbeitung wie im Review-Editor: Text ergänzen, Sprecher umbenennen. */
+/**
+ * Bearbeitung wie im Review-Editor: Text ergänzen, den ersten Sprecher
+ * umbenennen (unabhängig von seiner ID). Beides muss stattfinden, sonst
+ * prüfte die neue Version still eine unbearbeitete Sitzung.
+ */
 function editDocument(doc) {
   let textEdited = false
+  let speaker = null
   const visit = (node) => {
-    if (node.type === 'speakerLabel' && node.attrs?.speaker === 'A') {
-      node.attrs.label = 'Therapeutin'
+    if (node.type === 'speakerLabel') {
+      speaker ??= node.attrs?.speaker
+      if (node.attrs?.speaker === speaker) node.attrs.label = 'Therapeutin'
     }
     if (!textEdited && node.type === 'text' && node.text?.trim()) {
       node.text = `${node.text} Im Seed ergänzt.`
@@ -68,6 +94,7 @@ function editDocument(doc) {
   }
   visit(doc)
   if (!textEdited) throw new Error('Seed: Transkript enthält keinen Text zum Bearbeiten')
+  if (speaker == null) throw new Error('Seed: Transkript enthält keinen Sprecher zum Umbenennen')
   return doc
 }
 
@@ -76,10 +103,10 @@ function editDocument(doc) {
  * nicht im Cache liegt. Danach liegt er entpackt in SEED_HOME.
  */
 export async function ensureSeed({ tag, appPath, fixtures, logFile, log }) {
-  const dir = seedDir(tag)
+  const dir = seedDir(tag, fixtures)
   if (existsSync(join(dir, 'expectations.json'))) {
     log(`Seed für ${tag} aus dem Cache`)
-    return restoreSeed(tag)
+    return restoreSeed(dir)
   }
 
   log(`Baue Seed mit ${tag} (einmalig, dauert einige Minuten) …`)
@@ -180,12 +207,11 @@ export async function ensureSeed({ tag, appPath, fixtures, logFile, log }) {
   writeFileSync(join(dir, 'settings.json'), JSON.stringify(settings, null, 2))
   writeFileSync(join(dir, 'expectations.json'), JSON.stringify(expectations, null, 2))
   log(`Seed für ${tag} gespeichert (${dir})`)
-  return restoreSeed(tag)
+  return restoreSeed(dir)
 }
 
 /** Entpackt den Seed nach SEED_HOME und klont die Modelle dazu. */
-export function restoreSeed(tag) {
-  const dir = seedDir(tag)
+function restoreSeed(dir) {
   resetHome(SEED_HOME)
   mkdirSync(dataDir(SEED_HOME), { recursive: true })
   execFileSync('tar', ['-xzf', join(dir, 'data.tar.gz'), '-C', dataDir(SEED_HOME)])

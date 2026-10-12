@@ -102,6 +102,40 @@ class CdpPage {
 }
 
 /**
+ * Ein Verbindungsversuch zum Renderer. Liefert null, solange die App noch
+ * startet (CDP-Port zu, noch kein Fenster, window.api noch nicht da). Alles
+ * andere ist ein echter Fehler und wird geworfen — sonst erschiene z. B. ein
+ * fehlendes WebSocket (Node < 22) nur als 60-s-Zeitüberschreitung.
+ */
+async function connectPage(port) {
+  let targets
+  try {
+    targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
+  } catch (err) {
+    if (err.cause?.code === 'ECONNREFUSED' || err.cause?.code === 'ECONNRESET') return null
+    throw err
+  }
+  const target = targets.find((t) => t.type === 'page')
+  if (!target) return null
+  const ws = new WebSocket(target.webSocketDebuggerUrl)
+  const opened = await new Promise((resolve) => {
+    ws.onopen = () => resolve(true)
+    ws.onerror = () => resolve(false)
+  })
+  if (!opened) return null
+  const candidate = new CdpPage(ws)
+  let ready = false
+  try {
+    ready = await candidate.eval('typeof window.api === "object"', { timeoutMs: 5000 })
+  } catch {
+    // Renderer lädt noch (Kontext ersetzt, Timeout) — nächster Versuch
+  }
+  if (ready) return candidate
+  candidate.close()
+  return null
+}
+
+/**
  * Startet die App und wartet, bis `window.api` im Renderer bereitsteht.
  * @param {{ appPath: string, home: string, logFile: string, label: string }} opts
  */
@@ -156,25 +190,7 @@ export async function launchInstance({ appPath, home, logFile, label }) {
       child.kill('SIGKILL')
       throw new Error(`${label}: App nicht innert 60 s per CDP erreichbar (Log: ${logFile})`)
     }
-    try {
-      const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
-      const target = targets.find((t) => t.type === 'page')
-      if (target) {
-        const ws = new WebSocket(target.webSocketDebuggerUrl)
-        await new Promise((resolve, reject) => {
-          ws.onopen = resolve
-          ws.onerror = reject
-        })
-        const candidate = new CdpPage(ws)
-        if (await candidate.eval('typeof window.api === "object"', { timeoutMs: 5000 })) {
-          page = candidate
-        } else {
-          candidate.close()
-        }
-      }
-    } catch {
-      // App startet noch
-    }
+    page = await connectPage(port)
     if (!page) await sleep(500)
   }
 

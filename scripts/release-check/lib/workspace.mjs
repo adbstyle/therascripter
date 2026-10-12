@@ -7,7 +7,15 @@
  * Prüfung verwenden immer dasselbe SEED_HOME.
  */
 import { execFileSync } from 'child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync
+} from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 
@@ -150,8 +158,12 @@ export function previousApp(tag) {
       }
     )
     try {
+      // Erst vollständig kopieren, dann umbenennen: Eine abgebrochene Kopie
+      // gälte sonst beim nächsten Lauf als vorhandene Vorversion.
+      const partial = join(download, 'Therascript.app')
+      execFileSync('ditto', [join(mount, 'Therascript.app'), partial])
       mkdirSync(join(appPath, '..'), { recursive: true })
-      execFileSync('ditto', [join(mount, 'Therascript.app'), appPath])
+      renameSync(partial, appPath)
     } finally {
       execFileSync('hdiutil', ['detach', mount, '-quiet'])
     }

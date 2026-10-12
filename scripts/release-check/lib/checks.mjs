@@ -151,6 +151,18 @@ export async function checkSeededRun({ appPath, logFile, expectations, fixtures,
       const norm = (list) => list.map((e) => `${e.placeholderType}:${e.term}`).sort()
       record('Sperrliste erhalten', same(norm(blocklist), norm(expectations.blocklist)))
 
+      const notInstalled = []
+      for (const group of ['asr', 'diarization', 'ner', 'summarization']) {
+        const entries = await page.eval(`window.api.modelCatalog.list(${JSON.stringify(group)})`)
+        const active = entries.find((e) => e.isActive)
+        if (!active || !active.isInstalled)
+          notInstalled.push(`${group}: ${active?.id ?? 'keins aktiv'}`)
+      }
+      record(
+        'Jedes aktive Modell ist installiert',
+        notInstalled.length ? notInstalled.join(', ') : null
+      )
+
       const settings = JSON.parse(readFileSync(settingsPath(SEED_HOME), 'utf8'))
       record(
         'Einstellungen erhalten',

@@ -51,7 +51,9 @@ A check that cannot run (missing previous DMG, missing models, timeout) counts a
 
 **Test data** (`tests/fixtures/release-check/`, invented, no patient data): `gespraech.wav` (~20 s, two voices, recording format) and `bericht.pdf` (text page + scanned page). Regenerate with `node scripts/release-check/build-fixtures.mjs`.
 
-**Not covered** (manual check, ADR-009): Gatekeeper behaviour, first launch with model download, older versions than the last release, ML quality.
+The seed cache key is `<tag>-<hash of seed.mjs, app-actions.mjs and the fixtures>`: extending the seed builds a new seed instead of reusing an old one. Settings compared exactly are the user-set ones (`theme`, `reviewPanelOpen`, `consentReminderShown`); for `activeModels` the check only requires every active model to be installed, because a new version may replace models on purpose (e.g. retiring a model).
+
+**Not covered** (manual check, ADR-009): Gatekeeper behaviour, first launch with model download, older versions than the last release, ML quality. Known gap: the seed has no session whose task was *running* when the previous version quit (`processing`, recovered by `recoverStuckTasks`), because such a state cannot be produced reproducibly through the UI API — the `queued` session covers the resume path only.
 
 ## Build Pipeline
 
