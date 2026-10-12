@@ -69,14 +69,15 @@ export default function AboutPage(): React.JSX.Element {
         <div className="space-y-2 text-sm text-text-secondary">
           <p>
             Alle Verarbeitung findet auf Ihrem Mac statt. Aufnahmen, Transkripte, PDFs und
-            Zusammenfassungen verlassen ihn nie.
+            Zusammenfassungen übermittelt TheraScript nie.
           </p>
           <p>
             Mit dem Internet verbindet sich TheraScript nur, um Sprachmodelle herunterzuladen (bei
             der Ersteinrichtung, beim Hinzufügen eines Modells und bei Modell-Updates) und um nach
             neuen Versionen zu suchen (beim Start, alle 24 Stunden und mit «Nach Updates suchen»).
             Dabei sieht der Anbieter Cloudflare Ihre IP-Adresse, den Zeitpunkt und die abgerufene
-            Datei. TheraScript sendet kein Konto, keine Kennung und keine Nutzungsdaten.
+            Datei. TheraScript sendet kein Konto, keine Kennung und keine Nutzungsdaten. Nach der
+            Ersteinrichtung funktioniert TheraScript auch ohne Internet.
           </p>
         </div>
 

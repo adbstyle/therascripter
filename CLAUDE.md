@@ -110,7 +110,7 @@ Dev-Läufe mit dem ausgelieferten Python-Interpreter: `THERASCRIPT_USE_STANDALON
 
 **Key constraints:**
 - 8 GB minimum RAM budget (~3.5 GB process peak incl. GPU memory during flair NER on 8-GB Macs — see NER-RAM gotcha)
-- Production CSP: `connect-src 'none'` (zero network access)
+- Production CSP: `connect-src 'none'` — the renderer has no network access. The app as a whole does: the main process fetches the R2 manifest (start, every 24 h, manual check) and model downloads. Public texts must say exactly that (Issue #162: website FAQ, `impressum.html#app-datenschutz`, README, AboutPage, FirstLaunchScreen) — never «offline» or «keine Verbindung».
 - Context isolation + sandbox always enabled
 - All ML models must be swappable (plugin architecture, NFR-9/10)
 - Electron Fuses hardened at build time (RunAsNode disabled, OnlyLoadAppFromAsar, cookie encryption)

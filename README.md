@@ -2,7 +2,7 @@
 
 Lokale Therapiesitzungs-Transkription, Anonymisierung und Zusammenfassung für macOS.
 
-Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufnimmt, automatisch transkribiert, Sprecher erkennt, personenbezogene Daten anonymisiert und optional eine Zusammenfassung erstellt. Die gesamte Verarbeitung erfolgt lokal auf dem Mac, Inhalte aus Sitzungen verlassen ihn nie. Mit dem Internet verbindet sich die App nur für Modell-Downloads und die Suche nach neuen Versionen (siehe [Datenschutz](#datenschutz-und-internetverbindung)).
+Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufnimmt, automatisch transkribiert, Sprecher erkennt, personenbezogene Daten anonymisiert und optional eine Zusammenfassung erstellt. Die gesamte Verarbeitung erfolgt lokal auf dem Mac, die App übermittelt keine Inhalte aus Sitzungen. Mit dem Internet verbindet sich die App nur für Modell-Downloads und die Suche nach neuen Versionen (siehe [Datenschutz](#datenschutz-und-internetverbindung)).
 
 ## Features
 
@@ -15,7 +15,7 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 - **Review-Editor** — TipTap-basierter Editor zur Nachbearbeitung mit Clipboard-Export und Quick-Add zur Sperrliste
 - **Modell-Management** — Austauschbare ML-Modelle pro Pipeline-Schritt, verwaltbar im Einstellungen-Bereich
 - **Auto-Update für Modelle** — Hintergrund-Check gegen Cloudflare R2-Manifest, atomarer Tausch beim Neustart
-- **Datenschutz** — Sitzungsinhalte verlassen den Mac nie; Renderer ohne Netzwerkzugriff (CSP `connect-src 'none'`), Netzwerk nur im Main-Prozess für Modelle und Versionsprüfung, Electron Fuses gehärtet, FileVault-Prüfung
+- **Datenschutz** — keine Übermittlung von Sitzungsinhalten; Renderer ohne Netzwerkzugriff (CSP `connect-src 'none'`), Netzwerk nur im Main-Prozess für Modelle und Versionsprüfung, Electron Fuses gehärtet, FileVault-Prüfung
 - **System-Tray** — App läuft im Hintergrund weiter, Aufnahme über Menüleisten-Icon stoppbar
 - **Auto-Löschung** — Sitzungen werden 30 Tage nach Erstellung automatisch gelöscht
 
@@ -44,7 +44,7 @@ Ausführliche Anleitung mit Erklärungen: [adbstyle.github.io/therascripter/inst
 
 ## Datenschutz und Internetverbindung
 
-Aufnahmen, Transkripte, PDFs und Zusammenfassungen verlassen den Mac nie. Mit dem Internet verbindet sich Therascript nur in zwei Fällen:
+Aufnahmen, Transkripte, PDFs und Zusammenfassungen übermittelt Therascript nie; sie verlassen den Mac nur, wenn man sie selbst kopiert. Mit dem Internet verbindet sich Therascript nur in zwei Fällen:
 
 - **Sprachmodelle herunterladen:** bei der Ersteinrichtung, beim Hinzufügen eines Modells in den Einstellungen und beim Installieren eines Modell-Updates.
 - **Nach neuen Versionen suchen:** beim Start, danach alle 24 Stunden und auf Klick unter «Über».

@@ -24,7 +24,7 @@ form-action 'none';
 Key directives:
 
 - **`default-src 'none'`** — Blocks everything not explicitly allowed.
-- **`connect-src 'none'`** — Zero network access. No XHR, fetch, WebSocket, or EventSource requests can be made from the renderer. This is the backbone of NFR-12 (no cloud communication).
+- **`connect-src 'none'`** — The renderer has zero network access (the main process still fetches the R2 manifest and model downloads, see [settings.md](../features/settings.md) and Issue #162). No XHR, fetch, WebSocket, or EventSource requests can be made from the renderer. This is the backbone of NFR-12 (no cloud communication).
 - **`frame-src 'none'`** and **`object-src 'none'`** — No iframes, embeds, or plugins.
 - **`base-uri 'none'`** and **`form-action 'none'`** — Prevent base tag injection and form submission attacks.
 - **`style-src 'self' 'unsafe-inline'`** — Inline styles are allowed because Tailwind CSS and TipTap generate them at runtime.
