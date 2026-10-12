@@ -152,7 +152,6 @@ type View = 'sessions' | 'settings' | 'review'
 |---|---|
 | `modelsReady === null` | Empty loading screen (transparent, no flash) |
 | `modelsReady === false` | `FirstLaunchScreen` — model download wizard |
-| `pendingUpdates !== null` | `ModelUpdateScreen` — applies staged model updates |
 | `isRecording === true` | No dedicated view — the sessions list renders a live `RecordingSessionCard`; other views show the `RecordingBar` |
 | `currentView === 'review'` | `ReviewEditor` (full-screen, own header) |
 | `currentView === 'sessions'` | `SessionDashboard` |
@@ -160,6 +159,5 @@ type View = 'sessions' | 'settings' | 'review'
 
 **Navigation constraints:**
 - Sidebar navigation (Sitzungen / Einstellungen) is disabled during recording and during review.
-- `UpdateBanner` overlays the top of the app (non-blocking) when new model versions are available after a background update check.
 - The app stays alive in the macOS menu bar when the window is closed (standard macOS behavior via `TrayService`).
-- App update availability shows as a sidebar link that opens GitHub Releases in the default browser.
+- Updates (app and models as one, #167) show as «Update bereit» / «Update verfügbar» in the bottom bar, which opens Settings → Updates; installing restarts the app once.

@@ -159,7 +159,6 @@ The `api` object exposes these namespaces:
 | `review` | `load`, `save`, `exportClipboard` |
 | `system` | `aboutInfo`, `uninstall`, `openInFinder` |
 | `modelDownload` | `status`, `checkDiskSpace`, `start`, `onStatus` |
-| `modelUpdate` | `check`, `restart`, `startDownload`, `getPending`, `getAvailable`, `clearPending`, `dismissVersions`, `onAvailable`, `onDownloadProgress`, `onDownloadComplete`, `onDownloadError` |
 | `appUpdate` | `getState`, `check`, `download`, `cancelDownload`, `install`, `setAutoUpdate`, `openInstallGuide`, `onState` |
 
 Each method maps to a single `ipcRenderer.invoke` or `ipcRenderer.send` call with a specific channel name. The renderer has no access to arbitrary IPC channels, `require()`, or any Node.js API. Event listeners return unsubscribe functions to prevent memory leaks.

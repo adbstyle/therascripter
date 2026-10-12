@@ -77,9 +77,9 @@ The theme system spans three Electron processes:
 
 `ThemeContext` is created in `src/renderer/src/contexts/themeTypes.ts` with a `ThemeContextValue` interface providing `theme` (current preference) and `setTheme` (setter). Components access it via the `useTheme` hook.
 
-## App Update Indicator in Sidebar
+## Update Indicator in the Bottom Bar
 
-When `appUpdateStatus?.available` is true, the sidebar bottom shows a clickable "Update verfügbar" hint (primary color) that calls `openReleasePage()`. Otherwise, it shows the current app version prefixed with a lock icon.
+When an update needs attention (`updateNeedsAttention()` in `useAppUpdate.ts`: phase `ready`, `available` or `unsupported`), the bottom bar shows «Update bereit» / «Update verfügbar»; a click opens Settings → Updates (`UpdateSettings.tsx`). Otherwise it shows the current app version. An update covers the app and the models as one operation (#167); see model-management.md «Update Flow».
 
 ## electron-store Keys
 
@@ -96,8 +96,9 @@ All settings are persisted via `electron-store` in `SettingsService.ts`. The sto
 | `modelsDownloaded` | `boolean` | `false` | Whether all ML models have been downloaded |
 | `theme` | `ThemePreference` | `'system'` | Theme preference: `'light'`, `'system'`, or `'dark'` |
 | `installedModelVersions` | `Record<string, InstalledModelVersion>` | `{}` | Tracks installed version info per model |
-| `pendingModelUpdates` | `PendingModelUpdate[] \| null` | `null` | Staged model updates to apply on next restart |
-| `cachedAppUpdateStatus` | `AppUpdateStatus \| null` | `null` | Last known app update check result |
+| `autoUpdate` | `boolean` | `true` | Automatic updates of app and models (#165, #167) |
+| `appUpdate` | `PersistedUpdate \| null` | `null` | Selected update (app part, models, install journal) — see model-management.md |
+| `startHiddenAfterUpdate` | `boolean` | `false` | Relaunch after an update with a hidden window (#164) |
 
 ## Key Source Files
 

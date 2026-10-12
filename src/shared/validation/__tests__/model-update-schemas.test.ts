@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { ManifestSchema, ManifestModelSchema } from '../model-update-schemas'
+import { describe, it, expect, vi } from 'vitest'
+import { z } from 'zod'
+import { ManifestModelSchema, parseManifest } from '../model-update-schemas'
 
 const validModel = {
   id: 'whisper-large-v3-turbo',
@@ -55,9 +56,74 @@ describe('ManifestModelSchema', () => {
   })
 })
 
-describe('ManifestSchema', () => {
+describe('ManifestModelSchema — Ablage und Herkunft (#167)', () => {
+  const layout = { relativePath: 'ner', checkPath: 'ner/hf/model', archive: true, required: true }
+
+  it('akzeptiert die Ablage des echten Katalogs', () => {
+    expect(ManifestModelSchema.safeParse({ ...validModel, ...layout }).success).toBe(true)
+    expect(
+      ManifestModelSchema.safeParse({
+        ...validModel,
+        relativePath: 'asr/ggml.bin',
+        checkPath: 'asr/ggml.bin'
+      }).success
+    ).toBe(true)
+  })
+
+  it.each([
+    ['../x', '../x'],
+    ['/abs', '/abs'],
+    ['a//b', 'a//b'],
+    ['.update', '.update'],
+    ['a/../b', 'a/../b'],
+    ['a\\b', 'a\\b'],
+    ['a\u0000b', 'a\u0000b']
+  ])('weist den Pfad %s ab', (relativePath, checkPath) => {
+    expect(ManifestModelSchema.safeParse({ ...validModel, relativePath, checkPath }).success).toBe(
+      false
+    )
+  })
+
+  it('verlangt einen Prüfpfad innerhalb des Ordners', () => {
+    expect(
+      ManifestModelSchema.safeParse({ ...validModel, ...layout, checkPath: 'diarization/x' })
+        .success
+    ).toBe(false)
+    expect(ManifestModelSchema.safeParse({ ...validModel, relativePath: 'ner' }).success).toBe(
+      false
+    )
+  })
+
+  it('erlaubt Archive nur in einem eigenen Ordner direkt unter models/', () => {
+    expect(
+      ManifestModelSchema.safeParse({
+        ...validModel,
+        relativePath: 'asr/sub',
+        checkPath: 'asr/sub',
+        archive: true
+      }).success
+    ).toBe(false)
+  })
+
+  it('lädt nur verschlüsselt', () => {
+    expect(
+      ManifestModelSchema.safeParse({ ...validModel, url: 'http://example.com/m.bin' }).success
+    ).toBe(false)
+  })
+
+  it('weist Modell-IDs mit Pfadzeichen ab', () => {
+    expect(ManifestModelSchema.safeParse({ ...validModel, id: 'a/b' }).success).toBe(false)
+    expect(ManifestModelSchema.safeParse({ ...validModel, id: '..' }).success).toBe(false)
+  })
+
+  it('nimmt eine unbekannte Modellgruppe hin', () => {
+    expect(ManifestModelSchema.safeParse({ ...validModel, group: 'embedding' }).success).toBe(true)
+  })
+})
+
+describe('parseManifest', () => {
   it('parses a valid manifest', () => {
-    const result = ManifestSchema.parse(validManifest)
+    const result = parseManifest(validManifest)
     expect(result.generatedAt).toBe('2025-01-15T00:00:00Z')
     expect(result.models).toHaveLength(1)
     expect(result.models[0].id).toBe('whisper-large-v3-turbo')
@@ -72,28 +138,65 @@ describe('ManifestSchema', () => {
         { ...validModel, id: 'flair-ner-german-large', sha256: 'c'.repeat(64) }
       ]
     }
-    expect(ManifestSchema.parse(manifest).models).toHaveLength(3)
+    expect(parseManifest(manifest).models).toHaveLength(3)
   })
 
   it('rejects empty models array', () => {
-    expect(() => ManifestSchema.parse({ ...validManifest, models: [] })).toThrow()
+    expect(() => parseManifest({ ...validManifest, models: [] })).toThrow()
   })
 
   it('rejects missing generatedAt', () => {
-    expect(() => ManifestSchema.parse({ models: [validModel] })).toThrow()
+    expect(() => parseManifest({ models: [validModel] })).toThrow()
   })
 
-  it('rejects invalid model in array', () => {
+  it('verwirft nur den fehlerhaften Modell-Eintrag, nicht die ganze Beschreibung', () => {
+    const log = vi.fn()
     const manifest = {
       ...validManifest,
-      models: [{ ...validModel, sha256: 'invalid' }]
+      models: [
+        { ...validModel, sha256: 'invalid' },
+        { ...validModel, id: 'pyannote-suite' }
+      ]
     }
-    expect(() => ManifestSchema.parse(manifest)).toThrow()
+    expect(parseManifest(manifest, log).models.map((m) => m.id)).toEqual(['pyannote-suite'])
+    expect(log).toHaveBeenCalledOnce()
+  })
+
+  it('verwirft einen unbrauchbaren App-Eintrag, behält die Modelle', () => {
+    const manifest = { ...validManifest, app: { version: '1.0', url: 'x' } }
+    const parsed = parseManifest(manifest)
+    expect(parsed.app).toBeUndefined()
+    expect(parsed.models).toHaveLength(1)
   })
 
   it('rejects non-object input', () => {
-    expect(() => ManifestSchema.parse('{"models":[]}')).toThrow()
-    expect(() => ManifestSchema.parse(null)).toThrow()
-    expect(() => ManifestSchema.parse(42)).toThrow()
+    expect(() => parseManifest('{"models":[]}')).toThrow()
+    expect(() => parseManifest(null)).toThrow()
+    expect(() => parseManifest(42)).toThrow()
+  })
+
+  it('ältere Apps lesen die neue Beschreibung weiter — die Ablage-Felder fallen weg', () => {
+    // Schema bis v0.9.x (vor #167), unverändert kopiert
+    const OldModelSchema = z.object({
+      id: z.string().min(1),
+      version: z.string().min(1),
+      label: z.string().min(1),
+      url: z.string().url(),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+      sizeBytes: z.number().int().positive(),
+      minAppVersion: z
+        .string()
+        .regex(/^\d+\.\d+\.\d+$/)
+        .optional()
+    })
+    const entry = {
+      ...validModel,
+      relativePath: 'ner',
+      checkPath: 'ner/x',
+      archive: true,
+      group: 'ner',
+      required: true
+    }
+    expect(OldModelSchema.parse(entry)).toEqual(validModel)
   })
 })

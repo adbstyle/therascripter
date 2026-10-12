@@ -1,30 +1,21 @@
-import { app, BrowserWindow } from 'electron'
 import { createHash } from 'crypto'
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statfsSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'fs'
 import { join } from 'path'
 import { get as httpsGet } from 'https'
 import { getSettings } from './SettingsService'
 import { getModelDefinitions, getModelsDir, isModelInstalled } from './ModelDownloadService'
 import { getInstalledVersions, setInstalledVersion } from './InstalledVersionsStore'
-import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
-import {
-  ManifestSchema,
-  PendingModelUpdateSchema
-} from '../../shared/validation/model-update-schemas'
+import { verifyFileSha256 } from './DownloadService'
+import { parseManifest, type Manifest } from '../../shared/validation/model-update-schemas'
 import { UPDATE_SIGNING_KEYS, manifestSignaturePath } from '../../shared/update-keys'
 import { verifyManifestSignature } from './ManifestSignature'
-import { sendToRenderer } from '../utils/ipc-helpers'
-import type { ModelDownloadStatus } from '../../shared/types/IpcApi'
-import type {
-  PendingModelUpdate,
-  CheckResult,
-  InstalledModelVersion
-} from '../../shared/types/ModelUpdate'
 import { getAppUpdateService } from './app-update-deps'
-import { getTaskQueue } from './TaskQueueService'
-import { z } from 'zod'
 
-type Manifest = z.infer<typeof ManifestSchema>
+/**
+ * Prüft auf Updates (Issues #163, #167): lädt die Update-Beschreibung samt
+ * Signatur und übergibt sie dem AppUpdateService, der daraus das gemeinsame
+ * Update aus App und Modellen berechnet, lädt und installiert.
+ */
 
 const MANIFEST_URL = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/manifest.json'
 
@@ -95,478 +86,70 @@ export async function fetchVerifiedManifest(
   if (!verifyManifestSignature(bytes, signature, UPDATE_SIGNING_KEYS)) {
     throw new Error('Signatur der Update-Beschreibung ungültig — Updates werden ignoriert')
   }
-  return ManifestSchema.parse(JSON.parse(bytes.toString('utf8')))
-}
-
-// ─── Manifest dismissal ──────────────────────────────────────────────────────
-
-/**
- * Issue #84 / Story F+G — stable key for "this exact manifest entry was
- * dismissed by the user". Combines model id and sha256 so that a new manifest
- * publishing a different hash for the same id is automatically eligible again,
- * without explicit cleanup.
- */
-export function manifestEntryKey(id: string, sha256: string): string {
-  return `${id}@${sha256}`
-}
-
-/** Append entries to the dismiss list, preserving order and dropping duplicates. */
-export function dismissManifestVersions(entries: Array<{ id: string; sha256: string }>): void {
-  const settings = getSettings()
-  const raw = settings.get('dismissedManifestVersions')
-  const existing = Array.isArray(raw) ? raw : []
-  const seen = new Set(existing)
-  for (const e of entries) {
-    seen.add(manifestEntryKey(e.id, e.sha256))
-  }
-  settings.set('dismissedManifestVersions', Array.from(seen))
-  // Banner und Badge in den Einstellungen verschwinden gemeinsam (#144)
-  refreshAvailableModelUpdates()
-}
-
-function dismissedManifestKeys(): Set<string> {
-  const raw = getSettings().get('dismissedManifestVersions')
-  return new Set(Array.isArray(raw) ? raw : [])
-}
-
-// ─── Verfügbare Modell-Updates (Issue #144) ──────────────────────────────────
-
-/**
- * Manifest-Einträge der letzten gelungenen Prüfung für bekannte Modelle —
- * ungefiltert. Was davon angeboten wird, berechnet getAvailableModelUpdates()
- * bei jedem Abruf aus dem aktuellen Stand (installiert, verworfen). So kann
- * kein Weg, der Modelle ändert, einen veralteten Hinweis hinterlassen; er muss
- * nur refreshAvailableModelUpdates() aufrufen, damit der Renderer es erfährt.
- */
-let manifestModelCandidates: PendingModelUpdate[] = []
-
-/** Angeboten: installiert, nicht in dieser Version installiert, nicht verworfen. */
-function isOffered(
-  update: PendingModelUpdate,
-  installed: Record<string, InstalledModelVersion>,
-  dismissed: Set<string>
-): boolean {
-  // Nur installierte Modelle — optionale Alternativen ohne Install werden nicht beworben
-  if (!isModelInstalled(update.id)) return false
-  if (installed[update.id]?.sha256 === update.sha256) return false
-  // Issue #84 / Story F+G — user actively dismissed this exact manifest entry
-  // (UpdateBanner dismiss or ModelUpdateScreen "Diese Version überspringen").
-  // Re-becomes eligible when the manifest publishes a new sha256 for the same id.
-  return !dismissed.has(manifestEntryKey(update.id, update.sha256))
-}
-
-/**
- * Eine Quelle der Wahrheit für alle Renderer-Stellen (Banner, Einstellungen).
- * Wer nach dem Start-Push mountet, holt den Stand über modelUpdate:getAvailable.
- */
-export function getAvailableModelUpdates(): PendingModelUpdate[] {
-  const installed = getInstalledVersions()
-  const dismissed = dismissedManifestKeys()
-  return manifestModelCandidates.filter((u) => isOffered(u, installed, dismissed))
-}
-
-/**
- * Nach jeder Änderung an Manifest, installierten Modellen oder verworfenen
- * Versionen: Stand neu berechnen und pushen — auch eine leere Liste.
- */
-export function refreshAvailableModelUpdates(): PendingModelUpdate[] {
-  const updates = getAvailableModelUpdates()
-  sendToRenderer('modelUpdate:available', updates)
-  return updates
+  return parseManifest(JSON.parse(bytes.toString('utf8')), (m) =>
+    console.warn(`UpdateCheckService: ${m}`)
+  )
 }
 
 // ─── checkForUpdates ─────────────────────────────────────────────────────────
 
-let checkRunning: Promise<CheckResult> | null = null
+let checkRunning: Promise<void> | null = null
 
 /**
- * Prüft Modell- und App-Updates. Gleichzeitige Aufrufe (Start, Intervall,
- * «Nach Updates suchen») teilen sich einen Lauf.
+ * Prüft auf Updates. Gleichzeitige Aufrufe (Start, Intervall, «Nach Updates
+ * suchen») teilen sich einen Lauf. Fehler bleiben still — der Update-Zustand
+ * zeigt «Prüfung nicht gelungen».
  */
-export function checkForUpdates(): Promise<CheckResult> {
+export function checkForUpdates(): Promise<void> {
   checkRunning ??= runCheck().finally(() => {
     checkRunning = null
   })
   return checkRunning
 }
 
-async function runCheck(): Promise<CheckResult> {
+async function runCheck(): Promise<void> {
   try {
     const manifest = await fetchVerifiedManifest()
-
-    const installedVersions = getInstalledVersions()
-    const dismissed = dismissedManifestKeys()
-    const definitions = getModelDefinitions()
-
-    // ── Model update check ──
-    const candidates: PendingModelUpdate[] = []
-
-    for (const manifestModel of manifest.models) {
-      // Path-traversal guard on id
-      if (manifestModel.id.includes('..') || manifestModel.id.includes('/')) {
-        console.warn(`UpdateCheckService: suspicious model id skipped: ${manifestModel.id}`)
-        continue
-      }
-
-      // Find structural info from local MODEL_DEFINITIONS
-      const definition = definitions.find((d) => d.id === manifestModel.id)
-      if (!definition) {
-        console.warn(`UpdateCheckService: unknown model id in manifest: ${manifestModel.id}`)
-        continue
-      }
-
-      // Path-traversal guard on relativePath
-      if (definition.relativePath.includes('..')) {
-        console.warn(
-          `UpdateCheckService: suspicious relativePath skipped: ${definition.relativePath}`
-        )
-        continue
-      }
-
-      const candidate: PendingModelUpdate = {
-        id: manifestModel.id,
-        version: manifestModel.version,
-        label: manifestModel.label,
-        url: manifestModel.url,
-        sha256: manifestModel.sha256,
-        sizeBytes: manifestModel.sizeBytes,
-        relativePath: definition.relativePath,
-        archive: definition.archive,
-        checkPath: definition.checkPath
-      }
-      candidates.push(candidate)
-
-      // Lazy heal of the legacy '' sentinel from migrateInstalledVersions:
-      // for non-archive models we can hash the file on disk and compare against
-      // the manifest. If they match, the install is bit-identical to the
-      // current manifest version — backfill the real hash, which takes the
-      // entry out of the offered updates (closing the upgrade-from-old-build
-      // false-positive, Issue #84 / Story B). Archive models can't be hashed
-      // post-extract (the .tar.gz is gone), so they stay offered; one accepted
-      // update will then write the real hash via executeUpdates.
-      const installed = installedVersions[manifestModel.id]
-      if (
-        installed?.sha256 === '' &&
-        !definition.archive &&
-        isOffered(candidate, installedVersions, dismissed)
-      ) {
-        const filePath = join(getModelsDir(), definition.relativePath)
-        if (existsSync(filePath) && (await verifyFileSha256(filePath, manifestModel.sha256))) {
-          const healed = { ...installed, sha256: manifestModel.sha256 }
-          setInstalledVersion(manifestModel.id, healed)
-          installedVersions[manifestModel.id] = healed
-        }
-      }
-    }
-
-    manifestModelCandidates = candidates
-    const modelUpdates = refreshAvailableModelUpdates()
-
-    // ── App update (Issue #164) ──
-    getAppUpdateService()?.handleManifest(manifest.app)
-
-    return { modelUpdates }
+    await healLegacyInstalledHashes(manifest)
+    getAppUpdateService()?.handleManifest(manifest)
   } catch (error) {
-    // Non-blocking: update check failures are silently ignored
     console.log(`UpdateCheckService: Update-Check fehlgeschlagen (ignoriert): ${error}`)
     // Sonst stünde in Einstellungen → Updates «aktuell», obwohl nichts geprüft wurde
     getAppUpdateService()?.handleCheckFailed()
-    return { modelUpdates: [] }
   }
 }
-
-// ─── triggerUpdateRestart ────────────────────────────────────────────────────
 
 /**
- * Persists the pending updates and relaunches the app so the next boot picks
- * them up via `getPending()` and renders ModelUpdateScreen.
- *
- * Dev-mode shim (Issue #84 follow-up): in `npm run dev`, `app.relaunch()`
- * spawns a fresh electron pointed at `localhost:5173`, but the `app.quit()`
- * that follows kills electron-vite's parent process — the dev server dies
- * before the new electron can load anything, leaving a white window.
- *
- * In dev we instead reload the renderer in place. The renderer remounts,
- * its startup `getPending()` call sees the freshly-written
- * `pendingModelUpdates`, and ModelUpdateScreen appears — same observable
- * UX as the production restart, without trashing the dev server. Main-
- * process state (TaskQueue, etc.) is not actually reset, but for QA of
- * the update flow the renderer remount is what's being exercised.
+ * Lazy heal of the legacy '' sentinel from migrateInstalledVersions: for
+ * non-archive models we can hash the file on disk and compare against the
+ * manifest. If they match, the install is bit-identical to the current
+ * manifest version — backfill the real hash so it is not offered as an
+ * update (Issue #84 / Story B). Archive models can't be hashed post-extract
+ * (the .tar.gz is gone); they are offered once, and installing writes the
+ * real hash.
  */
-export function triggerUpdateRestart(updates: PendingModelUpdate[]): void {
-  getSettings().set('pendingModelUpdates', updates)
-
-  if (!app.isPackaged) {
-    const mainWindow = BrowserWindow.getAllWindows()[0]
-    mainWindow?.webContents.reload()
-    return
-  }
-
-  app.relaunch()
-  app.quit()
-}
-
-// ─── executeUpdates ───────────────────────────────────────────────────────────
-
-let modelUpdatesRunning = false
-
-/** Laufen gerade Modell-Updates (ModelUpdateScreen)? Ein App-Update wartet dann (#164). */
-export function isModelUpdateRunning(): boolean {
-  return modelUpdatesRunning
-}
-
-export async function executeUpdates(): Promise<void> {
-  modelUpdatesRunning = true
-  try {
-    await executeUpdatesInner()
-  } finally {
-    modelUpdatesRunning = false
-  }
-}
-
-async function executeUpdatesInner(): Promise<void> {
-  const settings = getSettings()
-
-  // Re-validate stored data before using it (guards against corruption or tampered settings)
-  const rawUpdates = settings.get('pendingModelUpdates')
-  const parseResult = z.array(PendingModelUpdateSchema).safeParse(rawUpdates)
-  if (!parseResult.success || parseResult.data.length === 0) {
-    settings.set('pendingModelUpdates', null)
-    return
-  }
-  const updates = parseResult.data
-
-  const modelsDir = getModelsDir()
-  const stagingDir = join(modelsDir, '.staging')
-  const backupDir = join(modelsDir, '.backup')
-  mkdirSync(stagingDir, { recursive: true })
-  mkdirSync(backupDir, { recursive: true })
-
-  const overallTotal = updates.reduce((sum, u) => sum + u.sizeBytes, 0)
-
-  // Disk-Precheck: Download (staging) + Backup der alten Version brauchen
-  // kurzzeitig ~2× die Update-Größe. Vorher lief der Download bis zum
-  // ENOSPC-Fehler mitten im Swap.
-  try {
-    const stats = statfsSync(modelsDir)
-    const availableBytes = stats.bavail * stats.bsize
-    const requiredBytes = overallTotal * 2
-    if (availableBytes < requiredBytes) {
-      const requiredGb = (requiredBytes / 1024 ** 3).toFixed(1)
-      sendToRenderer(
-        'modelUpdate:downloadError',
-        `Nicht genügend freier Speicherplatz für das Update (benötigt ca. ${requiredGb} GB). ` +
-          'Bitte schaffen Sie Platz und versuchen Sie es erneut.'
-      )
-      return
-    }
-  } catch (err) {
-    // Precheck ist best-effort — bei statfs-Fehlern normal fortfahren
-    console.warn('[UpdateCheck] Disk-Precheck fehlgeschlagen:', err)
-  }
-
-  // Queue-Quiescence: nach dem Relaunch resumed die TaskQueue recovered
-  // Tasks, während wir hier Modellfiles swappen — renameSync konnte das
-  // ASR-Modell unter einem laufenden whisper-Prozess wegtauschen.
-  // shutdown() abortet den laufenden Task (er geht zurück auf pending und
-  // resumed nach dem Swap mit dem NEUEN Modell); finally startet die Queue
-  // auf jedem Ausgang wieder.
-  try {
-    await getTaskQueue().shutdown(15_000)
-  } catch {
-    // TaskQueue ggf. nicht initialisiert (z. B. im ModelUpdateScreen-Boot)
-  }
-
-  try {
-    await runUpdates(updates, stagingDir, backupDir, modelsDir, overallTotal)
-  } finally {
-    try {
-      getTaskQueue().start()
-    } catch {
-      // TaskQueue ggf. nicht initialisiert
+async function healLegacyInstalledHashes(manifest: Manifest): Promise<void> {
+  const installed = getInstalledVersions()
+  for (const entry of manifest.models) {
+    const record = installed[entry.id]
+    const definition = getModelDefinitions().find((d) => d.id === entry.id)
+    if (record?.sha256 !== '' || !definition || definition.archive) continue
+    if (!isModelInstalled(entry.id)) continue
+    const filePath = join(getModelsDir(), definition.relativePath)
+    if (existsSync(filePath) && (await verifyFileSha256(filePath, entry.sha256))) {
+      setInstalledVersion(entry.id, { ...record, sha256: entry.sha256 })
     }
   }
-}
-
-async function runUpdates(
-  updates: PendingModelUpdate[],
-  stagingDir: string,
-  backupDir: string,
-  modelsDir: string,
-  overallTotal: number
-): Promise<void> {
-  const settings = getSettings()
-  let overallDownloaded = 0
-
-  for (const update of updates) {
-    const baseOverall = overallDownloaded
-
-    // ── 1. Download ──
-    const downloadTarget = update.archive
-      ? join(stagingDir, `${update.id}.tar.gz`)
-      : join(stagingDir, `${update.id}.bin`)
-
-    sendToRenderer('modelUpdate:downloadProgress', {
-      state: 'downloading',
-      progress: {
-        currentModel: update.id,
-        currentModelLabel: update.label,
-        currentModelProgress: 0,
-        currentModelDownloaded: 0,
-        currentModelTotal: update.sizeBytes,
-        overallDownloaded: baseOverall,
-        overallTotal,
-        overallPercent: overallTotal > 0 ? Math.round((baseOverall / overallTotal) * 100) : 0
-      }
-    } satisfies ModelDownloadStatus)
-
-    const downloadResult = await downloadFile(update.url, downloadTarget, (progress) => {
-      sendToRenderer('modelUpdate:downloadProgress', {
-        state: 'downloading',
-        progress: {
-          currentModel: update.id,
-          currentModelLabel: update.label,
-          currentModelProgress: progress.percent,
-          currentModelDownloaded: progress.downloadedBytes,
-          currentModelTotal: progress.totalBytes,
-          overallDownloaded: baseOverall + progress.downloadedBytes,
-          overallTotal,
-          overallPercent:
-            overallTotal > 0
-              ? Math.round(((baseOverall + progress.downloadedBytes) / overallTotal) * 100)
-              : 0
-        }
-      } satisfies ModelDownloadStatus)
-    })
-
-    if (!downloadResult.success) {
-      sendToRenderer(
-        'modelUpdate:downloadError',
-        downloadResult.error ?? `Download fehlgeschlagen: ${update.label}`
-      )
-      return
-    }
-
-    // ── 2. SHA-256 verification ──
-    sendToRenderer('modelUpdate:downloadProgress', {
-      state: 'verifying',
-      modelId: update.id
-    } satisfies ModelDownloadStatus)
-    const valid = downloadResult.sha256
-      ? downloadResult.sha256 === update.sha256
-      : await verifyFileSha256(downloadTarget, update.sha256)
-    if (!valid) {
-      try {
-        rmSync(downloadTarget)
-      } catch {
-        /* non-fatal */
-      }
-      sendToRenderer('modelUpdate:downloadError', `SHA-256-Prüfung fehlgeschlagen: ${update.label}`)
-      return
-    }
-
-    // ── 3. Extract archive (if needed) ──
-    let stagedPath: string
-    if (update.archive) {
-      sendToRenderer('modelUpdate:downloadProgress', {
-        state: 'extracting',
-        modelId: update.id
-      } satisfies ModelDownloadStatus)
-      stagedPath = join(stagingDir, update.id)
-      mkdirSync(stagedPath, { recursive: true })
-      const extractResult = await extractTarGz(downloadTarget, stagedPath)
-      if (!extractResult.success) {
-        try {
-          rmSync(stagedPath, { recursive: true })
-        } catch {
-          /* non-fatal */
-        }
-        sendToRenderer(
-          'modelUpdate:downloadError',
-          extractResult.error ?? `Entpacken fehlgeschlagen: ${update.label}`
-        )
-        return
-      }
-    } else {
-      stagedPath = downloadTarget
-    }
-
-    // ── 4. Backup current model ──
-    const finalPath = join(modelsDir, update.relativePath)
-    const backupPath = join(backupDir, update.id)
-
-    if (existsSync(finalPath)) {
-      try {
-        renameSync(finalPath, backupPath)
-      } catch (err) {
-        try {
-          rmSync(stagedPath, { recursive: true })
-        } catch {
-          /* non-fatal */
-        }
-        sendToRenderer(
-          'modelUpdate:downloadError',
-          `Backup fehlgeschlagen: ${update.label}: ${err}`
-        )
-        return
-      }
-    }
-
-    // ── 5. Atomic swap: staging → final ──
-    // Ensure parent directory exists (e.g. models/asr/)
-    if (update.relativePath.includes('/')) {
-      const parentDir = join(modelsDir, update.relativePath.split('/').slice(0, -1).join('/'))
-      mkdirSync(parentDir, { recursive: true })
-    }
-
-    try {
-      renameSync(stagedPath, finalPath)
-    } catch (err) {
-      // Rollback: restore backup
-      if (existsSync(backupPath)) {
-        try {
-          renameSync(backupPath, finalPath)
-        } catch {
-          /* non-fatal */
-        }
-      }
-      sendToRenderer('modelUpdate:downloadError', `Swap fehlgeschlagen: ${update.label}: ${err}`)
-      return
-    }
-
-    // ── 6. Cleanup backup ──
-    if (existsSync(backupPath)) {
-      try {
-        rmSync(backupPath, { recursive: true })
-      } catch {
-        /* non-fatal */
-      }
-    }
-
-    // ── 7. Record installed version ──
-    setInstalledVersion(update.id, {
-      version: update.version,
-      sha256: update.sha256,
-      installedAt: new Date().toISOString()
-    })
-    // Sofort aus dem Angebot — auch wenn ein späteres Update dieses Laufs scheitert
-    refreshAvailableModelUpdates()
-
-    overallDownloaded += update.sizeBytes
-  }
-
-  // All updates done — clear pending and cleanup staging
-  settings.set('pendingModelUpdates', null)
-  try {
-    rmSync(stagingDir, { recursive: true })
-  } catch {
-    /* non-fatal */
-  }
-  sendToRenderer('modelUpdate:downloadComplete')
 }
 
 // ─── cleanupIncompleteUpdates ────────────────────────────────────────────────
 
+/**
+ * Altlast des Modell-Update-Ablaufs vor #167 (models/.staging, .backup):
+ * räumt nach einem Update aus einer älteren Version auf und stellt ein
+ * Modell aus einem abgebrochenen Austausch wieder her. Das gemeinsame
+ * Update stellt unter models/.update/ bereit (model-staging.ts).
+ */
 export function cleanupIncompleteUpdates(): void {
   const modelsDir = getModelsDir()
   const stagingDir = join(modelsDir, '.staging')

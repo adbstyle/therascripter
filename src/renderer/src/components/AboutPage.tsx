@@ -47,12 +47,13 @@ export default function AboutPage(): React.JSX.Element {
           </p>
           <p>
             Mit dem Internet verbindet sich TheraScript nur, um Sprachmodelle herunterzuladen (bei
-            der Ersteinrichtung, beim Hinzufügen eines Modells und bei Modell-Updates), um nach
-            neuen Versionen zu suchen (beim Start und alle 4 Stunden) und um neue Versionen
-            herunterzuladen (automatisch oder auf Klick, siehe Einstellungen → Updates). Dabei sehen
-            die Anbieter Cloudflare und GitHub Ihre IP-Adresse, den Zeitpunkt und die abgerufene
-            Datei. TheraScript sendet kein Konto, keine Kennung und keine Nutzungsdaten. Nach der
-            Ersteinrichtung funktioniert TheraScript auch ohne Internet.
+            der Ersteinrichtung und beim Hinzufügen eines Modells), um nach neuen Versionen zu
+            suchen (beim Start und alle 4 Stunden) und um Updates herunterzuladen — neue Versionen
+            samt neuen Fassungen der Sprachmodelle, automatisch oder auf Klick (siehe Einstellungen
+            → Updates). Dabei sehen die Anbieter Cloudflare und GitHub Ihre IP-Adresse, den
+            Zeitpunkt und die abgerufene Datei. TheraScript sendet kein Konto, keine Kennung und
+            keine Nutzungsdaten. Nach der Ersteinrichtung funktioniert TheraScript auch ohne
+            Internet.
           </p>
         </div>
 

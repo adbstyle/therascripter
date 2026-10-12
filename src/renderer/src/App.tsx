@@ -2,8 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { FileText, Mic } from 'lucide-react'
 import SessionDashboard from './components/SessionDashboard'
 import FirstLaunchScreen from './components/FirstLaunchScreen'
-import ModelUpdateScreen from './components/ModelUpdateScreen'
-import UpdateBanner from './components/UpdateBanner'
 import MicrophoneBanner from './components/MicrophoneBanner'
 import { ConsentBanner } from './components/ConsentBanner'
 import TitleBar from './components/shell/TitleBar'
@@ -12,10 +10,8 @@ import RecordingBar from './components/shell/RecordingBar'
 import Settings, { type SubPage } from './views/Settings'
 import ReviewEditor from './views/ReviewEditor'
 import { useRecording } from './hooks/useRecording'
-import { useModelUpdates } from './hooks/useModelUpdates'
 import { useMicrophonePermission } from './hooks/useMicrophonePermission'
 import { useToast } from './hooks/useToast'
-import type { PendingModelUpdate } from '../../shared/types/ModelUpdate'
 
 type View = 'sessions' | 'settings' | 'review'
 
@@ -24,10 +20,8 @@ export default function App(): React.JSX.Element {
   const { isRecording, level, duration, error, startRecording, stopRecording } = useRecording({
     onMicrophoneStatus: microphone.reportStatus
   })
-  const { availableUpdates } = useModelUpdates()
   const toast = useToast()
   const [modelsReady, setModelsReady] = useState<boolean | null>(null)
-  const [pendingUpdates, setPendingUpdates] = useState<PendingModelUpdate[] | null>(null)
   const [currentView, setCurrentView] = useState<View>('sessions')
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [isImporting, setIsImporting] = useState(false)
@@ -105,32 +99,8 @@ export default function App(): React.JSX.Element {
     setSettingsResetKey((k) => k + 1)
   }, [])
 
-  // Check for pending model updates on startup (set before restart)
-  // Note: background update check is now handled by main process (startup + 24h timer)
-  useEffect(() => {
-    if (modelsReady !== true) return
-    window.api.modelUpdate.getPending().then((pending) => {
-      if (pending && pending.length > 0) {
-        setPendingUpdates(pending)
-      }
-    })
-  }, [modelsReady])
-
   const handleModelsComplete = useCallback(() => {
     setModelsReady(true)
-  }, [])
-
-  // Die angewendeten Updates entfernt der Main-Prozess aus den verfügbaren (#144)
-  const handleUpdateComplete = useCallback(() => {
-    setPendingUpdates(null)
-  }, [])
-
-  // Issue #84 / Story G — "Später" + Error-Continue exits leave the
-  // pending entry in electron-store intact (next-launch retry promise) and
-  // must not clear the live banner state — the user did not dismiss the
-  // update, only the current screen.
-  const handleUpdateLater = useCallback(() => {
-    setPendingUpdates(null)
   }, [])
 
   // "Zur Aufnahme" aus der RecordingBar: zur Liste (Live-Karte) wechseln.
@@ -151,26 +121,6 @@ export default function App(): React.JSX.Element {
   const handleScrollComplete = useCallback(() => {
     scrollToSessionId.current = null
   }, [])
-
-  const handleRestartForUpdate = useCallback(async () => {
-    if (!availableUpdates) return
-
-    const result = await window.api.modelUpdate.restart(availableUpdates)
-    if (!result.allowed) {
-      if (result.reason === 'recording') {
-        alert('Bitte stoppen Sie zuerst die laufende Aufnahme.')
-      } else if (result.reason === 'processing') {
-        alert('Bitte warten Sie, bis die aktuelle Verarbeitung abgeschlossen ist.')
-      }
-    }
-    // If allowed, the app will relaunch — no further action needed
-  }, [availableUpdates])
-
-  const handleDismissUpdates = useCallback(async () => {
-    if (!availableUpdates || availableUpdates.length === 0) return
-    // Der Main-Prozess pusht den neuen Stand an Banner und Einstellungen (#144)
-    await window.api.modelUpdate.dismissVersions(availableUpdates)
-  }, [availableUpdates])
 
   const isInReview = currentView === 'review'
 
@@ -203,34 +153,9 @@ export default function App(): React.JSX.Element {
     )
   }
 
-  // Pending model updates (set before restart): show update download screen
-  if (pendingUpdates !== null) {
-    return (
-      <div className="flex h-screen flex-col bg-surface-0">
-        <TitleBar />
-        <div className="min-h-0 flex-1">
-          <ModelUpdateScreen
-            updates={pendingUpdates}
-            onComplete={handleUpdateComplete}
-            onLater={handleUpdateLater}
-          />
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="flex h-screen flex-col bg-surface-0">
       <TitleBar />
-
-      {/* Update banner — shown when updates are available (non-blocking) */}
-      {availableUpdates && availableUpdates.length > 0 && (
-        <UpdateBanner
-          updates={availableUpdates}
-          onRestart={handleRestartForUpdate}
-          onDismiss={handleDismissUpdates}
-        />
-      )}
 
       {/* Mikrofon-Berechtigung (Issue #161) — nie während einer Aufnahme */}
       {microphone.hint && !isRecording && (

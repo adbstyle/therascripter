@@ -1,15 +1,14 @@
 import { getActiveSessionId } from '../ipc/recording-handlers'
 import { getTaskQueue } from './TaskQueueService'
 import { isModelDownloadRunning } from './ModelDownloadService'
-import { isModelUpdateRunning } from './UpdateCheckService'
 
 export type BusyReason = 'recording' | 'processing' | 'download'
 
 /**
- * Was spricht gerade gegen einen Neustart der App? Eine gemeinsame Antwort
- * für App-Update (#164) und Modell-Update-Neustart: nie während einer
- * Aufnahme, eines laufenden oder wartenden Verarbeitungsschritts oder eines
- * Modell-Downloads. null = ein Neustart unterbricht nichts.
+ * Was spricht gerade gegen das Installieren eines Updates (#164, #167)? Nie
+ * während einer Aufnahme, eines laufenden oder wartenden
+ * Verarbeitungsschritts oder eines Modell-Downloads (Ersteinrichtung,
+ * Einstellungen → Modelle). null = ein Neustart unterbricht nichts.
  */
 export function currentWork(): BusyReason | null {
   if (getActiveSessionId() !== null) return 'recording'
@@ -18,6 +17,6 @@ export function currentWork(): BusyReason | null {
   } catch {
     // TaskQueue noch nicht initialisiert — dann läuft auch nichts
   }
-  if (isModelDownloadRunning() || isModelUpdateRunning()) return 'download'
+  if (isModelDownloadRunning()) return 'download'
   return null
 }

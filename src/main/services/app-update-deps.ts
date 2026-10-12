@@ -9,6 +9,10 @@ import { currentWork } from './WorkGuard'
 import { runSubprocess } from '../utils/subprocess'
 import { sendToRenderer } from '../utils/ipc-helpers'
 import { AppUpdateService, type AppUpdateDeps } from './AppUpdateService'
+import { checkModelsExist, getModelDefinitions, getModelsDir } from './ModelDownloadService'
+import { getInstalledVersion, setInstalledVersion } from './InstalledVersionsStore'
+import { stageModel } from './model-staging'
+import { RETIRED_MODELS } from '../../shared/model-catalog'
 import type { AppUpdateState } from '../../shared/types/AppUpdate'
 
 const BUNDLE_ID = 'com.therascript.app'
@@ -136,12 +140,21 @@ async function verifyApp(
   }
 }
 
+/** Entpackt ein Modell-Archiv — über runSubprocess, damit Abbrechen auch tar stoppt. */
+async function extractTarGz(
+  archive: string,
+  targetDir: string,
+  signal: AbortSignal
+): Promise<void> {
+  await run('/usr/bin/tar', ['-xzf', archive, '-C', targetDir], 20 * 60_000, signal)
+}
+
 async function download(
   url: string,
   target: string,
   onProgress: (percent: number) => void,
   abortSignal: AbortSignal
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; sha256?: string }> {
   const result = await downloadFile(url, target, (p) => onProgress(p.percent), abortSignal)
   // Ein vollständiges .partial beantwortet der Server mit 416 — neu laden
   if (!result.success && result.error?.includes('416')) {
@@ -155,9 +168,28 @@ export function createAppUpdateDeps(onState: (state: AppUpdateState) => void): A
   const settings = getSettings()
   return {
     currentVersion: app.getVersion(),
+    isPackaged: app.isPackaged,
     bundlePath: runningBundlePath(),
     workDir: join(app.getPath('userData'), 'app-update'),
+    modelsDir: getModelsDir(),
     selfReplaceBlocker: () => selfReplaceBlocker(),
+    setupComplete: checkModelsExist,
+    localLayouts: () =>
+      getModelDefinitions().map((d) => ({
+        id: d.id,
+        relativePath: d.relativePath,
+        checkPath: d.checkPath,
+        archive: d.archive === true,
+        required: d.isRequired === true
+      })),
+    retiredIds: () => new Set(RETIRED_MODELS.map((m) => m.id)),
+    installedSha: (id) => getInstalledVersion(id)?.sha256 ?? null,
+    recordInstalledModel: (model) =>
+      setInstalledVersion(model.id, {
+        version: model.version,
+        sha256: model.sha256,
+        installedAt: new Date().toISOString()
+      }),
     getAutoUpdate: () => settings.get('autoUpdate') !== false,
     setAutoUpdate: (enabled) => settings.set('autoUpdate', enabled),
     readPersisted: () => settings.get('appUpdate'),
@@ -175,6 +207,14 @@ export function createAppUpdateDeps(onState: (state: AppUpdateState) => void): A
     },
     extractApp,
     verifyApp,
+    stageModel: (model, onProgress, signal) =>
+      stageModel(
+        getModelsDir(),
+        model,
+        { download, sha256OfFile, extractTarGz },
+        onProgress,
+        signal
+      ),
     currentWork,
     idleSeconds: () => powerMonitor.getSystemIdleTime(),
     isWindowVisible: () => BrowserWindow.getAllWindows()[0]?.isVisible() ?? false,

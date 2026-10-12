@@ -34,8 +34,6 @@ export type {
   DiskSpaceInfo,
   ModelDownloadApi,
   ModelCatalogApi,
-  ModelUpdateRestartResult,
-  ModelUpdateApi,
   AppUpdateApi,
   IpcApi
 } from './IpcApi'
@@ -74,13 +72,12 @@ export type {
 
 export type { PageData, ExtractionResult } from './PDFTypes'
 
+export type { InstalledModelVersion } from './ModelUpdate'
 export type {
-  ManifestModel,
-  Manifest,
-  PendingModelUpdate,
-  InstalledModelVersion,
-  CheckResult
-} from './ModelUpdate'
-export type { AppUpdateState, AppUpdatePhase, AppUpdateInstallResult } from './AppUpdate'
+  AppUpdateState,
+  AppUpdatePhase,
+  AppUpdateInstallResult,
+  AppUpdateModel
+} from './AppUpdate'
 
 export type { ModelSnapshot, ProcessedModelsSnapshot, AudioStats } from './Provenance'

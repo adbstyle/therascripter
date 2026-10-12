@@ -12,6 +12,12 @@ export interface ManifestModel {
   sha256: string
   sizeBytes: number
   minAppVersion?: string
+  // Ablage (#167): damit eine ältere App ein Modell der neuen Version mitladen kann
+  relativePath?: string
+  checkPath?: string
+  archive?: boolean
+  group?: string
+  required?: boolean
 }
 
 export interface ManifestApp {
@@ -34,6 +40,11 @@ export interface CatalogModel {
   url: string
   sha256: string
   sizeBytes: number
+  relativePath: string
+  checkPath: string
+  archive?: boolean
+  group?: string
+  isRequired?: boolean
 }
 
 export interface BuildManifestInput {
@@ -65,7 +76,13 @@ export function buildManifest(input: BuildManifestInput): UpdateManifest {
       sizeBytes: m.sizeBytes,
       // Ab welcher App-Version das Artefakt passt (AK 2): ein unverändertes
       // behält seinen Wert, ein neues gilt erst ab der App, die es mitbringt.
-      minAppVersion: (unchanged && previous.minAppVersion) || appVersion
+      minAppVersion: (unchanged && previous.minAppVersion) || appVersion,
+      // Immer aus dem Katalog dieses Releases — auch für unveränderte Artefakte
+      relativePath: m.relativePath,
+      checkPath: m.checkPath,
+      archive: m.archive === true,
+      ...(m.group ? { group: m.group } : {}),
+      required: m.isRequired === true
     }
   })
 

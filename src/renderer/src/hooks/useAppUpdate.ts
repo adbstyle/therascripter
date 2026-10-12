@@ -11,6 +11,11 @@ export function updateNeedsAttention(state: AppUpdateState | null): boolean {
   return state?.phase === 'ready' || state?.phase === 'unsupported' || state?.phase === 'available'
 }
 
+/** «Version 1.2.0» bzw. «Modell-Update» (#167: ein Update kann nur Modelle enthalten). */
+export function updateTitle(state: Pick<AppUpdateState, 'version'>): string {
+  return state.version ? `Version ${state.version}` : 'Modell-Update'
+}
+
 interface UseAppUpdateResult {
   state: AppUpdateState | null
   needsAttention: boolean

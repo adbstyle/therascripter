@@ -83,24 +83,34 @@ The manifest is fetched from:
 https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/manifest.json
 ```
 
-Validated by `ManifestSchema` (Zod):
+Parsed by `parseManifest()` (`src/shared/validation/model-update-schemas.ts`) after the signature check. Entries are validated one by one — an invalid model or app entry is dropped and logged, the rest of the manifest stays usable (a new model group must not stop all updates):
 
 ```typescript
 {
   generatedAt: string,            // ISO timestamp
-  latestAppVersion?: string,      // semver (e.g., "1.2.0") — optional
+  latestAppVersion?: string,      // semver
+  app?: { version, url, sha256, sizeBytes },   // DMG of the newest release (#163)
   models: [                       // at least 1 entry
     {
-      id: string,                 // e.g., "whisper-large-v3-turbo"
-      version: string,            // e.g., "1.1.0"
-      label: string,              // human-readable name
-      url: string,                // download URL
-      sha256: string,             // 64-char hex hash
-      sizeBytes: number           // positive integer
+      id: string,                 // a-z, 0-9, '-', '.'
+      version: string,            // informational date, e.g. "2026-10-12"
+      label: string,
+      url: string,                // https only (#167 AK 7)
+      sha256: string,             // 64-char hex — the only update trigger
+      sizeBytes: number,
+      minAppVersion?: string,     // first app version the artifact fits (#163)
+      // Layout (#167) — lets an older app stage a model its own catalog does not know:
+      relativePath?: string,      // below models/, safe segments only (no '..', no hidden dirs)
+      checkPath?: string,         // equals or lies inside relativePath
+      archive?: boolean,          // tar.gz into its own top-level folder
+      group?: string,             // free text on purpose
+      required?: boolean
     }
   ]
 }
 ```
+
+`buildManifest()` (`src/shared/update-manifest.ts`, called by `scripts/manifest-from-catalog.ts`) always writes the layout from the release's catalog. Older apps (≤ v0.9.x) strip the layout fields (zod drops unknown keys) and keep working.
 
 ### Fetch Details
 
@@ -110,97 +120,50 @@ Validated by `ManifestSchema` (Zod):
 
 ### Caching Strategy
 
-There is no HTTP-level caching of the manifest itself. Instead:
-- **App update status** is persisted in electron-store as `cachedAppUpdateStatus` so the sidebar hint appears immediately on next launch without a network call.
-- At startup, `invalidateCachedAppUpdateIfNeeded()` clears the cache if the current app version is >= the cached `latestVersion` (user already updated).
-- The manifest is fetched fresh on each check (startup + periodic timer in the main process).
+The manifest is fetched fresh on each check (start, every 4 hours, «Nach Updates suchen»). What survives a restart is the selected update itself (`appUpdate` setting, see below), not the manifest.
 
-## Model Update Flow
+## Update Flow — App and Models as One (Issues #164, #165, #167)
 
-Model updates are checked by `UpdateCheckService.checkForUpdates()`, which is called by the main process at startup and periodically (24-hour timer).
-
-### Detection
-
-For each model in the manifest:
-1. Path-traversal guards reject IDs containing `..` or `/`.
-2. Compare the manifest's `sha256` against the locally stored `installedModelVersions[id].sha256`.
-3. If the SHA differs (or the model has no recorded version), it is flagged as a pending update.
-4. The model's `relativePath`, `archive` flag, and `checkPath` are looked up from the local `MODEL_DEFINITIONS`.
-
-The main process keeps the manifest entries of the last successful check for known models — unfiltered — and computes the offered updates on every read from the current state: model installed (`isModelInstalled`), installed sha256 differs, version not dismissed (Issue #144). This is the single source of truth for every renderer view; no code path that changes models can leave a stale hint behind. `refreshAvailableModelUpdates()` recomputes and pushes via `modelUpdate:available`, **including an empty list**: after every successful check, after «Verwerfen» (`dismissManifestVersions`), after **each** update applied by `executeUpdates` (a later failing update in the same run does not keep the applied one on offer) and after downloading or deleting a model in Settings → Modelle (`model-catalog-handlers.ts`). A failed check keeps the previous manifest entries. `useModelUpdates` fetches the state on mount via `modelUpdate:getAvailable` and then follows the pushes (a push arriving while fetching wins), so the Settings «Update» badge on the Modelle card no longer depends on being mounted at startup.
-
-### Version Migration
-
-On first run after the update system was added, `migrateInstalledVersions()` seeds `installedModelVersions` for any models that already exist on disk. These entries use `version: 'pre-update'` and an empty `sha256`, which ensures the next manifest check triggers an update.
-
-### UpdateBanner (Non-blocking Notification)
-
-When `useModelUpdates` reports updates, `App.tsx` renders `UpdateBanner` at the top of the main UI. The banner shows:
-- Number of models with updates and total download size.
-- A "Jetzt neu starten" (restart now) button.
-
-The banner is non-blocking — users can continue using the app normally.
-
-### Restart Guard
-
-When the user clicks restart, `modelUpdate:restart` is called. The handler **refuses** to restart if:
-- A recording is active (`getActiveSessionId() !== null`).
-- A processing task is running (`getTaskQueue().isProcessing()`).
-
-If allowed, `triggerUpdateRestart()` persists the updates array to `pendingModelUpdates` in electron-store, then calls `app.relaunch()` + `app.quit()`.
-
-### ModelUpdateScreen (Post-Restart Download)
-
-After restart, `App.tsx` reads `pendingModelUpdates` from electron-store via `modelUpdate:getPending`. If updates are pending, the `ModelUpdateScreen` is rendered (full-screen, blocking the main UI).
-
-User options:
-- **"Update starten"** — calls `modelUpdate:startDownload`, which runs `executeUpdates()`.
-- **"Uberspringen"** (skip) — calls `modelUpdate:clearPending`, clears `pendingModelUpdates` from settings, and proceeds to the main app. The update banner will reappear on the next manifest check.
-
-### Atomic Download and Swap
-
-`executeUpdates()` in `UpdateCheckService.ts` performs a safe update per model:
-
-1. **Download** to `~/.therascript/models/.staging/<id>.tar.gz` (or `.bin`).
-2. **SHA-256 verification** — on failure, the staged file is deleted and an error is sent.
-3. **Extract** archives into `.staging/<id>/`.
-4. **Backup** the current model by renaming it to `~/.therascript/models/.backup/<id>`.
-5. **Atomic swap** via `renameSync()` from staging to the final path.
-6. **Cleanup** the backup on success.
-7. **Record** the new version in `installedModelVersions` with `version`, `sha256`, and `installedAt`.
-
-After all updates complete, `pendingModelUpdates` is cleared and `.staging/` is removed.
-
-### Crash Recovery
-
-`cleanupIncompleteUpdates()` runs at startup to handle interrupted updates:
-- Deletes any leftover `.staging/` directory.
-- Scans `.backup/` — if a backup exists but the model's `checkPath` is missing (swap was interrupted), restores from backup. If the model exists (swap completed but cleanup was missed), removes the backup.
-
-### Progress UI
-
-`ModelUpdateScreen` mirrors the `FirstLaunchScreen` progress display:
-- Per-model progress bars, extracting/verifying status text.
-- Overall progress bar across all updates.
-- On error: message with "Weiter" (continue) button. The error message reassures users that existing models are unchanged.
-
-## App Update Flow (Issues #164, #165)
-
-The app updates itself without Developer ID (ADR-009). `AppUpdateService` (`src/main/services/AppUpdateService.ts`, platform access injected via `app-update-deps.ts`) owns the state; the renderer only displays it.
+The app updates itself without Developer ID (ADR-009). App and model updates are **one operation with a single restart** (#167): `AppUpdateService` (`src/main/services/AppUpdateService.ts`, platform access injected via `app-update-deps.ts`) owns the state; the renderer only displays it. There is no separate model-update flow any more (the former `UpdateBanner`, `ModelUpdateScreen`, `pendingModelUpdates`, «Diese Version überspringen» and the `modelUpdate:*` IPC channels are gone).
 
 ### Signed manifest
 
-`checkForUpdates()` fetches `manifest.json` as raw bytes, then `signatures/<sha256 of the bytes>.json`, and verifies the Ed25519 signature against `UPDATE_SIGNING_KEYS` (`fetchVerifiedManifest`). Without a valid signature there are **no** app or model updates. Checks run at start, every 4 hours and on «Nach Updates suchen» (single-flight). The manifest's `app` entry (version, URL, size, sha256 of the DMG) goes to `AppUpdateService.handleManifest()`; only strictly newer versions count.
+`checkForUpdates()` fetches `manifest.json` as raw bytes, then `signatures/<sha256 of the bytes>.json`, and verifies the Ed25519 signature against `UPDATE_SIGNING_KEYS` (`fetchVerifiedManifest`). Without a valid signature there are **no** app or model updates. Checks run at start, every 4 hours and on «Nach Updates suchen» (single-flight). Before handing over, the check heals legacy `installedModelVersions` entries with an unknown sha256 (`''`, from `migrateInstalledVersions`) by hashing flat model files. The whole manifest goes to `AppUpdateService.handleManifest()`.
+
+### What belongs to an update
+
+`selectBundle()` (`src/shared/update-bundle.ts`, pure) computes the update from the manifest and the local state:
+
+- **App:** the manifest's `app` if strictly newer **and** the app can replace itself. Otherwise the app part is dropped and shown as «von Hand» (`manualVersion`, guide button) — model parts still install.
+- **Model updates:** every manifest model whose `checkPath` exists on disk and whose installed sha256 differs (legacy `''` counts as different). Optional models that are not installed are never offered.
+- **New required models (AK 4):** a `required` model that is not on disk comes along **only together with a new app** — the new version would otherwise start into the first-launch screen.
+- **Compatibility (AK 6):** a model with `minAppVersion` above the version after the update (new app version, else the running one) is skipped. A model for a newer app thus only comes with that app.
+- **Layout:** manifest layout first, else the local catalog's. Without a new app the layout must equal the local one (the running app must find the model). A model is skipped if its folder equals, contains or lies inside another model's folder (an archive swap replaces its whole folder). Retired ids (`RETIRED_MODELS`) never come back.
+
+The update is identified by `bundleKey()` (app version/sha + sorted `id@sha256`); a changed key replaces a waiting or downloading update, already staged parts are reused. Nothing is selected before the first-launch download is complete (`checkModelsExist()`) or in the dev build (a relaunch would kill the dev server). Downloading or deleting a model in Settings → Modelle recomputes the update (`handleModelsChanged()`); a Settings download pauses staging first (`withStagingPaused()`, strictly one download at a time) and staging resumes afterwards.
+
+### Staging (restart-proof)
+
+Parts are staged one after another, app first:
+
+- **App:** DMG download → sha256 vs. signed manifest → `hdiutil attach` on a private mount point → `ditto --noqtn` into `userData/app-update/<version>/` → `hdiutil detach` → check version, `codesign --verify --deep --strict` and the Designated Requirement (`identifier "com.therascript.app"`, #161).
+- **Models** (`src/main/services/model-staging.ts`): into `~/.therascript/models/.update/<sha256>/` — on the same volume as the models (the swap is a rename), outside the legacy `models/.staging` that `cleanupIncompleteUpdates()` still wipes at every start. Download (`artifact.tar.gz|.bin`, resumes via `.partial` after a restart) → sha256 vs. signed manifest → archive: `/usr/bin/tar` via `runSubprocess` (abortable) into `payload.tmp/`, reject symlinks pointing outside the tree, require `checkPath` inside → rename to `payload`. «Staged» means `payload` exists; the folder is content-addressed, a new version lands elsewhere by itself.
+
+Legacy (pre-#167): `cleanupIncompleteUpdates()` still deletes `models/.staging` and restores a model from `models/.backup` after an interrupted swap of the old model-update flow — needed once for installations updating from v0.9.x; remove after a few releases. `migrateInstalledVersions()` seeds `installedModelVersions` for models already on disk (`version: 'pre-update'`, `sha256: ''`).
+
+Disk space (NFR 1): `diskNeedBytes` = app × 5 + archive model × 2.5 + flat model × 1 (only parts not yet staged), checked against the free space of both the app work dir and the models dir. Manual: need must fit, else «Nicht genügend Speicherplatz … mindestens N GB». Automatic (AK 8): 5 GB must remain free afterwards, else a hint naming the space.
 
 ### Phases
 
 | Phase | Meaning |
 |---|---|
 | `idle` | no update known — up to date, not yet checked or last check failed (`checkedAt`, `checkFailed`) |
-| `available` | newer version known, not downloaded (auto-update off, < 5 GB free after download — with a hint naming the space needed — or a failed background download); always shown in the bottom bar |
-| `downloading` | DMG download → sha256 vs. signed manifest → `hdiutil attach` on a private mount point → `ditto --noqtn` of the app into `userData/app-update/<version>/` → `hdiutil detach` → check version, `codesign --verify --deep --strict` and the Designated Requirement (`identifier "com.therascript.app"`, #161) |
-| `ready` | verified copy waits; persisted in the `appUpdate` setting so a restart keeps it |
-| `unsupported` | the app cannot replace itself (not in `/Applications` or `~/Applications`, App Translocation, DMG volume, no write permission or foreign owner) → hint with the website installation guide |
+| `available` | update known, not fully staged (auto-update off, too little space — with a hint naming the space needed — or a failed background download); always shown in the bottom bar |
+| `downloading` | staging of all parts (see above); progress weighted by size |
+| `ready` | all parts staged and verified; persisted in the `appUpdate` setting so a restart keeps it |
+| `unsupported` | only a new app version that cannot replace itself (not in `/Applications` or `~/Applications`, App Translocation, DMG volume, no write permission or foreign owner) → hint with the website installation guide |
+
+`AppUpdateState` carries `version` (app part, `null` = model-only update), `sizeBytes` (total download, AK 3), `appSizeBytes`, `models[]` (`label`, `sizeBytes`, `kind: 'update' | 'new'`), `diskNeedBytes`, and `manualVersion`/`unsupportedReason` for an app part that needs a manual install.
 
 A background download stays invisible while it runs; if it fails, the update shows up as `available` without an error text (retry at the next check, or download by hand). A download interrupted by quitting resumes at the next start. A manual download shows progress, can be cancelled and reports errors. A newer version replaces a waiting or downloading one.
 
@@ -208,15 +171,15 @@ Cancelling aborts the running step (`AbortSignal` into download, `hdiutil`, `dit
 
 ### Installing
 
-- **Triggers:** click in Settings → Updates or in the menu-bar item «Update auf Version X installieren»; automatically after 10 minutes without input (`powerMonitor.getSystemIdleTime`, checked every minute) or when the app quits — the latter two only with automatic updates on.
-- **Never interrupt work:** `WorkGuard.currentWork()` (recording, running **or pending** task — `TaskQueueService.hasWork()`, model download, model update) is checked immediately before installing. A click during work marks the install as pending; it runs as soon as nothing is busy. The quit decision is taken at the very beginning of `before-quit`, before the recording cleanup.
-- **Swap:** after the ordered shutdown (queue stopped, DB closed) two renames — `Therascript.app` → `.Therascript-previous.app`, staged copy → `Therascript.app` — then `app.exit(0)` (with `app.relaunch()` for a click/idle install). **Not `app.quit()`:** after renaming its own bundle macOS aborts a regular termination and the process lingers (measured on the packaged app). Quit incl. swap: ~150 ms.
+- **Triggers:** click in Settings → Updates or in the menu-bar item «Update auf Version X installieren» / «Modell-Update installieren»; automatically after 10 minutes without input (`powerMonitor.getSystemIdleTime`, checked every minute) or when the app quits — the latter two only with automatic updates on.
+- **Never interrupt work:** `WorkGuard.currentWork()` (recording, running **or pending** task — `TaskQueueService.hasWork()`, model download in first launch or Settings) is checked immediately before installing. A click during work marks the install as pending; it runs as soon as nothing is busy. The quit decision is taken at the very beginning of `before-quit`, before the recording cleanup.
+- **Swap (only renames, NFR 5):** after the ordered shutdown (queue stopped, DB closed), first the models — per model `models/<relativePath>` → `models/.update/backup/<id>`, `payload` → `models/<relativePath>` (`swapModelsIn`) — then the app: `Therascript.app` → `.Therascript-previous.app`, staged copy → `Therascript.app`. The app swap is the commit point. If any rename fails, everything is renamed back (`rollbackModels`, decided purely from the disk state, idempotent) — app and models stay at the previous state (PC 2). A model-only update relaunches as well (AK 2). Then `app.exit(0)` (with `app.relaunch()` for a click/idle install). **Not `app.quit()`:** after renaming its own bundle macOS aborts a regular termination and the process lingers (measured on the packaged app). Quit incl. swap: ~150 ms. While quitting the update is frozen — a late check must not clear what is being installed.
 - **Hidden window:** if the window was hidden, `startHiddenAfterUpdate` makes the relaunch start with `show: false` and ignore the launch `activate` event.
-- **Next start:** `init()` compares the installed version with the attempted one: success → remove staging and the previous bundle (via `/bin/rm` — Electron's `fs` treats `app.asar` inside a bundle as a virtual directory and silently deletes nothing); failure → status «nicht gelungen … automatisch erneut» and the update stays ready. If the app now cannot replace itself (e.g. started from the DMG), a staged update is restored as `unsupported` instead of `ready`, so no swap is attempted on every quit.
+- **Next start:** `init()` evaluates the journal (`installAttemptedAt`) against the disk: app version reached **and** every model swapped in (`payload` gone, `checkPath` present) → success: only now the new model versions go into `installedModelVersions`, staging, model backups and the previous bundle are removed (via `/bin/rm` — Electron's `fs` treats `app.asar` inside a bundle as a virtual directory and silently deletes nothing). Otherwise (failed swap, crash in the middle) → `rollbackModels`, status «nicht gelungen … automatisch erneut», the update stays ready. After `MAX_SILENT_INSTALL_ATTEMPTS` (3) failures it installs only on click — no endless idle-restart loop. The persisted update is then re-validated against today's state (app updated by hand, model deleted → that part drops out). If the app now cannot replace itself (e.g. started from the DMG), the app part becomes «von Hand», so no swap is attempted on every quit. `migrateInstalledVersions()` runs **before** `init()`: otherwise the success path would write versions first and the migration would skip the legacy models.
 
 ### Automatic updates (#165)
 
-Setting `autoUpdate` (default `true`, also for existing installations via electron-store defaults). Off: no automatic download or install (also not on quit); checks continue and new versions are shown; an update already downloaded stays installable; a running background download is cancelled. UI: Settings → Updates (`UpdateSettings.tsx`, `Toggle.tsx`); the bottom bar shows «Update bereit» / «Update verfügbar» and opens that page — whenever `updateNeedsAttention()` (`useAppUpdate.ts`, also used for the highlighted Settings card) is true: phase `ready`, `unsupported` or `available`.
+Setting `autoUpdate` (default `true`, also for existing installations via electron-store defaults) — covers app **and** models. Off: no automatic download or install (also not on quit); checks continue and updates are shown; an update already downloaded stays installable; a running background download is cancelled. An update can be postponed but not skipped (#167 AK 5) — there is no dismiss any more; the former `dismissedManifestVersions` and `pendingModelUpdates` settings are deleted at start, so a previously skipped model is offered again once. UI: Settings → Updates (`UpdateSettings.tsx`, `Toggle.tsx`); the bottom bar shows «Update bereit» / «Update verfügbar» and opens that page — whenever `updateNeedsAttention()` (`useAppUpdate.ts`, also used for the highlighted Settings card) is true: phase `ready`, `unsupported` or `available`.
 
 ## electron-store Keys
 
@@ -224,9 +187,8 @@ Setting `autoUpdate` (default `true`, also for existing installations via electr
 |-----|------|---------|
 | `modelsDownloaded` | `boolean` | Set to `true` after first-launch download completes |
 | `installedModelVersions` | `Record<string, { version, sha256, installedAt }>` | Tracks installed model versions for update comparison |
-| `pendingModelUpdates` | `PendingModelUpdate[] \| null` | Set before restart with updates to apply; cleared after download or skip |
-| `autoUpdate` | `boolean` | Automatic app updates (download + install), default `true` (#165) |
-| `appUpdate` | `PersistedAppUpdate \| null` | Downloaded/ready app update, install attempt, failure count (#164) |
+| `autoUpdate` | `boolean` | Automatic updates of app and models (download + install), default `true` (#165, #167) |
+| `appUpdate` | `PersistedUpdate \| null` | The selected update: app part (incl. staged path), models with layout, install journal, failure count (#164, #167; the pre-#167 app-only shape is read and migrated) |
 | `startHiddenAfterUpdate` | `boolean` | Start the relaunched app with a hidden window (#164) |
 
 ## IPC Channels
@@ -240,28 +202,12 @@ Setting `autoUpdate` (default `true`, also for existing installations via electr
 | `modelDownload:start` | handle | Starts sequential model download |
 | `modelDownload:status` (event) | send | Pushes `ModelDownloadStatus` progress to renderer |
 
-### Model Updates
-
-| Channel | Direction | Purpose |
-|---------|-----------|---------|
-| `modelUpdate:check` | handle | Triggers manifest check, returns model updates |
-| `modelUpdate:restart` | handle | Persists updates + relaunches app (guarded) |
-| `modelUpdate:startDownload` | handle | Executes pending updates after restart |
-| `modelUpdate:getPending` | handle | Returns pending updates from electron-store |
-| `modelUpdate:getAvailable` | handle | Returns the offered updates, recomputed from the last check and the current install/dismiss state (#144) |
-| `modelUpdate:clearPending` | handle | Clears pending updates (skip) |
-| `modelUpdate:dismissVersions` | handle | Records dismissed versions, pushes the recomputed list |
-| `modelUpdate:available` | send | Pushes every change of the available updates, also an empty list |
-| `modelUpdate:downloadProgress` | send | Pushes download progress during update |
-| `modelUpdate:downloadComplete` | send | Signals all updates finished |
-| `modelUpdate:downloadError` | send | Sends error message to renderer |
-
 ### App Updates
 
 | Channel | Direction | Purpose |
 |---------|-----------|---------|
 | `appUpdate:getState` | handle | Current `AppUpdateState` |
-| `appUpdate:check` | handle | Manifest check (model + app), returns the state |
+| `appUpdate:check` | handle | Manifest check (app + models), returns the state |
 | `appUpdate:download` / `appUpdate:cancelDownload` | handle | Manual download with progress |
 | `appUpdate:install` | handle | Install now (relaunch) or mark as pending while work runs |
 | `appUpdate:setAutoUpdate` | handle | Toggle automatic updates |

@@ -132,7 +132,7 @@ Never re-package and re-upload under an existing file name: gzip timestamps chan
 Two caveats:
 
 - The released code must still handle the previous artifact. Reverting the catalog entry alone is only safe if the sidecar/app code shipped with the rollback release still supports the old layout. Check the PR that introduced the new artifact for code changes it depended on.
-- Installs that already took the bad artifact only get a dismissible model update. Anyone who dismisses it stays on the bad artifact until they accept the offer or reinstall.
+- Installs that already took the bad artifact get the previous artifact as a regular update (since #167 it cannot be skipped, only postponed). With automatic updates on it installs on the next quit or idle phase. Apps up to v0.9.x still show the old dismissible model update.
 
 ## Troubleshooting
 

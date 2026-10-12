@@ -9,12 +9,16 @@ const base: AppUpdateState = {
   currentVersion: '1.0.0',
   version: null,
   sizeBytes: null,
+  appSizeBytes: null,
+  models: [],
+  diskNeedBytes: null,
   progress: null,
   manualDownload: false,
   autoUpdate: true,
   installPending: false,
   message: null,
   unsupportedReason: null,
+  manualVersion: null,
   checkedAt: '2026-10-12T10:00:00Z',
   checkFailed: false
 }
@@ -46,7 +50,7 @@ describe('UpdateSettings', () => {
     show({ autoUpdate: false })
     const toggle = await screen.findByRole('switch', { name: 'Automatische Updates' })
     expect(toggle).toHaveAttribute('aria-checked', 'false')
-    expect(screen.getByText(/Fehlerbehebungen kommen erst an/)).toBeInTheDocument()
+    expect(screen.getByText(/kommen erst an, wenn Sie sie hier selbst herunterladen/)).toBeInTheDocument()
 
     await userEvent.click(toggle)
     expect(api.setAutoUpdate).toHaveBeenCalledWith(true)
@@ -89,6 +93,7 @@ describe('UpdateSettings', () => {
     show({
       phase: 'unsupported',
       version: '1.1.0',
+      manualVersion: '1.1.0',
       unsupportedReason: 'Therascript läuft nicht aus dem Ordner «Programme».'
     })
     expect(await screen.findByText(/nicht aus dem Ordner «Programme»/)).toBeInTheDocument()
@@ -106,6 +111,51 @@ describe('UpdateSettings', () => {
     show({ checkedAt: null })
     expect(await screen.findByText(/Noch nicht nach Updates gesucht/)).toBeInTheDocument()
     expect(screen.queryByText(/ist aktuell/)).not.toBeInTheDocument()
+  })
+
+  it('zeigt alle Teile des Updates mit Gesamtgrösse und Speicherbedarf (#167 AK 3)', async () => {
+    show({
+      phase: 'available',
+      autoUpdate: false,
+      version: '1.1.0',
+      sizeBytes: 1300 * 1024 * 1024,
+      appSizeBytes: 300 * 1024 * 1024,
+      diskNeedBytes: 4 * 1024 ** 3,
+      models: [
+        { id: 'ner', label: 'Anonymisierung', sizeBytes: 1000 * 1024 * 1024, kind: 'update' }
+      ]
+    })
+    expect(await screen.findByText('Therascript 1.1.0')).toBeInTheDocument()
+    expect(screen.getByText(/Anonymisierung \(neue Fassung\)/)).toBeInTheDocument()
+    expect(screen.getByText('Gesamt')).toBeInTheDocument()
+    expect(screen.getByText(/freien Speicherplatz/)).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Version 1\.1\.0 herunterladen \(1\.3/ })
+    ).toBeInTheDocument()
+  })
+
+  it('nennt ein reines Modell-Update als solches (#167 AK 2)', async () => {
+    show({
+      phase: 'ready',
+      sizeBytes: 500,
+      models: [{ id: 'ner', label: 'Anonymisierung', sizeBytes: 500, kind: 'update' }]
+    })
+    await userEvent.click(await screen.findByRole('button', { name: 'Modell-Update installieren' }))
+    expect(api.install).toHaveBeenCalledOnce()
+  })
+
+  it('stellt Modelle bereit und verweist zugleich für die App auf die Anleitung', async () => {
+    show({
+      phase: 'ready',
+      sizeBytes: 500,
+      models: [{ id: 'ner', label: 'Anonymisierung', sizeBytes: 500, kind: 'update' }],
+      manualVersion: '1.1.0',
+      unsupportedReason: 'Therascript läuft nicht aus dem Ordner «Programme».'
+    })
+    expect(
+      await screen.findByRole('button', { name: 'Modell-Update installieren' })
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Anleitung öffnen' })).toBeInTheDocument()
   })
 
   it('zeigt eine gescheiterte Installation als Status (AK 16)', async () => {

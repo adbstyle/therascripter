@@ -1,39 +1,12 @@
-export interface ManifestModel {
-  id: string
-  version: string
-  label: string
-  url: string
-  sha256: string
-  sizeBytes: number
-}
-
-export interface Manifest {
-  generatedAt: string
-  latestAppVersion?: string
-  models: ManifestModel[]
-}
-
-export interface PendingModelUpdate {
-  id: string
-  version: string
-  label: string
-  url: string
-  sha256: string
-  sizeBytes: number
-  // Structural info from MODEL_DEFINITIONS (needed for executeUpdates without re-fetching)
-  relativePath: string
-  archive?: boolean
-  checkPath: string
-}
-
+/**
+ * Installierte Fassung eines Modells (Einstellung installedModelVersions,
+ * pro Kanal, siehe InstalledVersionsStore). sha256 '' = unbekannt (Altbestand
+ * vor der Versionsverfolgung); die Update-Prüfung heilt bzw. aktualisiert ihn.
+ * Update-Beschreibung und Update-Pakete: shared/validation/model-update-schemas.ts,
+ * shared/update-bundle.ts.
+ */
 export interface InstalledModelVersion {
   version: string
   sha256: string
   installedAt: string
-}
-
-// App-Updates: siehe AppUpdate.ts (Issue #164)
-
-export interface CheckResult {
-  modelUpdates: PendingModelUpdate[]
 }

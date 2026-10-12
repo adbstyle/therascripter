@@ -152,8 +152,9 @@ Stored in `~/Library/Application Support/Therascript/settings.json`.
 | `modelsDownloaded` | boolean | `false` | Whether all required models have been downloaded |
 | `theme` | `'light' \| 'dark' \| 'system'` | `'system'` | UI colour scheme preference |
 | `installedModelVersions` | `Record<string, InstalledModelVersion>` | `{}` | Map of model ID → `{ version, sha256, installedAt }` for update tracking |
-| `pendingModelUpdates` | `PendingModelUpdate[] \| null` | `null` | Model updates that have been downloaded and are staged for apply-on-restart |
-| `cachedAppUpdateStatus` | `AppUpdateStatus \| null` | `null` | Last known app update check result (`{ available, latestVersion, checkedAt }`) |
+| `autoUpdate` | `boolean` | `true` | Automatic updates of app and models (#165, #167) |
+| `appUpdate` | `PersistedUpdate \| null` | `null` | Selected update (app part, models, install journal) — see model-management.md |
+| `startHiddenAfterUpdate` | `boolean` | `false` | Relaunch after an update with a hidden window (#164) |
 
 ---
 
@@ -183,8 +184,12 @@ All application data lives under `~/.therascript/`. Every directory is created a
 ├── models/
 │   ├── asr/                    # Whisper model files (~0.6 GB, Q5_0 quantized GGUF)
 │   ├── diarization/            # pyannote model files (~0.06 GB)
-│   └── ner/                    # flair NER model files (~1.1 GB, fp16)
+│   ├── ner/                    # flair NER model files (~1.1 GB, fp16)
+│   └── .update/                # staged model updates (<sha256>/payload) and backups during
+│                               #   the swap (#167) — survives restarts, same volume as models/
 ```
+
+The staged app of an update lives outside `~/.therascript/`, in `<userData>/app-update/<version>/` (same volume as the app bundle).
 
 ---
 
