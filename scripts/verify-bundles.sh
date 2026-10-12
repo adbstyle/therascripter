@@ -321,8 +321,11 @@ if [ -f "$ASAR" ]; then
   # Privater Signaturschlüssel der Update-Beschreibung (Issue #163, AK 7):
   # liegt im Schlüsselbund bzw. offline. Weder Schlüsseldateien noch
   # Schlüsselmaterial dürfen ins Paket — sonst kann jeder Updates fälschen.
-  if grep -qiE '\.pem$|\.key$|update-signing' <<<"$asar_list"; then
-    echo "FAIL [asar]: Schlüsseldatei in app.asar: $(grep -iE '\.pem$|\.key$|update-signing' <<<"$asar_list" | head -3 | tr '\n' ' ')" >&2
+  # Dateinamen bewusst eng (.pem, update-signing): ein .key-Muster träfe
+  # harmlose Testzertifikate aus Abhängigkeiten. Schlüsselmaterial selbst
+  # findet die Inhaltsprüfung darunter.
+  if grep -qiE '\.pem$|update-signing' <<<"$asar_list"; then
+    echo "FAIL [asar]: Schlüsseldatei in app.asar: $(grep -iE '\.pem$|update-signing' <<<"$asar_list" | head -3 | tr '\n' ' ')" >&2
     ASAR_FAIL=1
   fi
   if LC_ALL=C grep -aqE 'PRIVATE KEY|RESERVESCHL' "$ASAR"; then

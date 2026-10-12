@@ -31,9 +31,9 @@ The release script performs these steps in order:
 
 8. **Tag + push** — Only after green gates: creates the annotated tag `vX.Y.Z` (skipped if it exists) and pushes commit + tag.
 
-9. **GitHub Release** — If no notes were provided, generates them from commit history via `gh api repos/{owner}/{repo}/releases/generate-notes` (must run after the tag push; the built-in `--generate-notes` flag cannot be combined with `--notes-file`, which is needed for the appended install guide). A failed generation is reported loudly but does not abort — the release then ships with the install guide only. Creates the release via `gh release create vX.Y.Z --notes-file …` with the DMG attached.
+9. **GitHub Release** — If no notes were provided, generates them from commit history via `gh api repos/{owner}/{repo}/releases/generate-notes` (must run after the tag push; the built-in `--generate-notes` flag cannot be combined with `--notes-file`, which is needed for the appended install guide). A failed generation is reported loudly but does not abort — the release then ships with the install guide only. Creates the release **as a draft** via `gh release create vX.Y.Z --draft --notes-file …` with the DMG attached — not public yet (release page, website «latest» download).
 
-10. **Signed update description** — Checks that the DMG asset on GitHub has the local sha256 (`digest` of the release asset) and is downloadable, then runs `scripts/publish-manifest.sh --from-catalog --dmg dist/Therascript.dmg`: model entries from `src/shared/model-catalog.ts` (each checked against R2 via HEAD), an `app` entry (version, URL, size, sha256 of the DMG), Ed25519 signature uploaded first to `signatures/<sha256>.json`, then `manifest.json`, then both re-fetched from the public URL. Any failure **aborts with exit 1** and the reason: the release is on GitHub but not offered to the app; fix and rerun the printed command. New artifacts must be on R2 before releasing (see `model-pipeline.md`).
+10. **Signed update description + publish** — Checks that the DMG in the draft has the local sha256 (asset `digest`), then runs `scripts/publish-manifest.sh --from-catalog --dmg dist/Therascript.dmg`: model entries from `src/shared/model-catalog.ts` (each checked against R2 via HEAD), an `app` entry (version, URL, size, sha256 of the DMG), Ed25519 signature uploaded first to `signatures/<sha256>.json`, then `manifest.json`, then both re-fetched from the public URL. Only then the draft is published (`gh release edit --draft=false --latest`) and the download URL is checked. Any failure **aborts with exit 1** and the next command; before the publish step the version stays a non-public draft. New artifacts must be on R2 before releasing (see `model-pipeline.md`).
 
 ### Release check (scripts/release-check/)
 
@@ -66,7 +66,14 @@ The app trusts the Ed25519 public keys in `src/shared/update-keys.ts` (`UPDATE_S
 
 Created once with `npx tsx scripts/generate-signing-keys.ts` (writes the public keys into `update-keys.ts`; no private key is printed).
 
-**Planned rotation / after loss:** generate a new pair (temporarily move the old entries aside so the script runs, then keep the still-valid old public keys in the list), ship a release that trusts old + new keys, keep signing with a key the installed base already trusts until that release is widespread, then switch the keychain entry and drop retired keys from the list in a later release. After a **loss** the backup key signs the release that introduces the new pair — no reinstall. After a **theft** an attacker can sign; then a one-time manual reinstall with new keys is accepted (Issue #163, Out of Scope 2).
+**Planned rotation / after loss** (no reinstall):
+
+1. `npx tsx scripts/generate-signing-keys.ts --rotate` appends a new pair to `UPDATE_SIGNING_KEYS` (old entries stay) and stores the new primary as `therascript-update-signing-next` in the keychain; the new backup goes to a desktop file → password manager.
+2. Ship a release that trusts both generations, signed with the current primary — after a **loss** with the backup key (`THERASCRIPT_SIGNING_KEY_FILE=…`).
+3. Once that release is widespread: `npx tsx scripts/generate-signing-keys.ts --activate-next` (the successor becomes the signing key).
+4. Drop the retired entries from `update-keys.ts` in a later release.
+
+After a **theft** an attacker can sign; then a one-time manual reinstall with new keys is accepted (Issue #163, Out of Scope 2).
 
 ## Build Pipeline
 

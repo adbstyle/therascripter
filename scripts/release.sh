@@ -373,7 +373,11 @@ trap 'rm -f "$NOTES_TMP"' EXIT
   cat "$INSTALL_GUIDE_FILE"
 } > "$NOTES_TMP"
 
+# Als Entwurf: Öffentlich (Release-Seite, «latest»-Download der Website)
+# wird die Version erst, wenn ihr DMG geprüft und die signierte
+# Update-Beschreibung veröffentlicht ist (Issue #163, AK 4).
 gh release create "v$NEW_VERSION" \
+  --draft \
   --title "Therascript v$NEW_VERSION" \
   --notes-file "$NOTES_TMP" \
   "$DMG_PATH"
@@ -385,14 +389,12 @@ gh release create "v$NEW_VERSION" \
 echo ""
 echo "→ Prüfe das hochgeladene DMG …"
 LOCAL_DMG_SHA=$(shasum -a 256 "$DMG_PATH" | cut -d' ' -f1)
-REMOTE_DMG_DIGEST=$(gh api "repos/{owner}/{repo}/releases/tags/v$NEW_VERSION" \
+REMOTE_DMG_DIGEST=$(gh release view "v$NEW_VERSION" --json assets \
   --jq '.assets[] | select(.name == "Therascript.dmg") | .digest')
-DMG_URL="https://github.com/adbstyle/therascripter/releases/download/v$NEW_VERSION/Therascript.dmg"
-if [ "$REMOTE_DMG_DIGEST" != "sha256:$LOCAL_DMG_SHA" ] || ! curl -fsSIL -o /dev/null "$DMG_URL"; then
-  echo "❌ Das DMG auf GitHub ist nicht abrufbar oder weicht ab (lokal sha256:$LOCAL_DMG_SHA, GitHub ${REMOTE_DMG_DIGEST:-<fehlt>})."
-  echo "   Das Release ist auf GitHub, wird der App aber NICHT angeboten (kein Manifest)."
-  echo "   DMG ersetzen: gh release upload v$NEW_VERSION \"$DMG_PATH\" --clobber"
-  echo "   Dann: scripts/publish-manifest.sh --from-catalog --dmg \"$DMG_PATH\""
+if [ "$REMOTE_DMG_DIGEST" != "sha256:$LOCAL_DMG_SHA" ]; then
+  echo "❌ Das DMG im Release-Entwurf weicht ab (lokal sha256:$LOCAL_DMG_SHA, GitHub ${REMOTE_DMG_DIGEST:-<fehlt>})."
+  echo "   Der Entwurf ist nicht öffentlich. DMG ersetzen: gh release upload v$NEW_VERSION \"$DMG_PATH\" --clobber"
+  echo "   Dann: scripts/publish-manifest.sh --from-catalog --dmg \"$DMG_PATH\" && gh release edit v$NEW_VERSION --draft=false"
   exit 1
 fi
 
@@ -403,8 +405,22 @@ fi
 echo ""
 echo "→ Veröffentliche die signierte Update-Beschreibung (latestAppVersion=$NEW_VERSION) …"
 if ! "$ROOT_DIR/scripts/publish-manifest.sh" --from-catalog --dmg "$DMG_PATH"; then
-  echo "❌ Manifest nicht veröffentlicht — das Release ist auf GitHub, wird der App aber NICHT angeboten."
-  echo "   Grund siehe oben. Beheben, dann: scripts/publish-manifest.sh --from-catalog --dmg \"$DMG_PATH\""
+  echo "❌ Manifest nicht veröffentlicht — der Release bleibt ein nicht öffentlicher Entwurf."
+  echo "   Grund siehe oben. Beheben, dann: scripts/publish-manifest.sh --from-catalog --dmg \"$DMG_PATH\" && gh release edit v$NEW_VERSION --draft=false"
+  exit 1
+fi
+
+# Erst jetzt öffentlich. Das Manifest zeigt schon auf die Download-URL; bis
+# der Entwurf veröffentlicht ist, scheitert ein Download dort und wird von der
+# App später wiederholt — umgekehrt wäre die Version ohne Echtheitsnachweis
+# öffentlich.
+echo ""
+echo "→ Veröffentliche den Release …"
+DMG_URL="https://github.com/adbstyle/therascripter/releases/download/v$NEW_VERSION/Therascript.dmg"
+if ! gh release edit "v$NEW_VERSION" --draft=false --latest >/dev/null || ! curl -fsSIL -o /dev/null "$DMG_URL"; then
+  echo "❌ Release nicht veröffentlicht oder DMG nicht abrufbar ($DMG_URL)."
+  echo "   Das signierte Manifest ist schon live und zeigt auf diese URL — sofort beheben:"
+  echo "   gh release edit v$NEW_VERSION --draft=false --latest"
   exit 1
 fi
 
