@@ -377,6 +377,20 @@ export class TaskQueueService {
   }
 
   /**
+   * Läuft ein Schritt oder wartet einer? Anders als isProcessing() auch true
+   * zwischen zwei Pipeline-Schritten und während die Warteschlange für eine
+   * Aufnahme pausiert — ein App-Update darf dann nicht neu starten (#164).
+   */
+  hasWork(): boolean {
+    if (this.processing) return true
+    try {
+      return this.repository.findPending() !== null
+    } catch {
+      return false
+    }
+  }
+
+  /**
    * Pausiert/resumt die Queue für die Dauer einer Aufnahme. Greift im
    * processNext()-Guard, also zwischen Pipeline-Steps — jeder Step
    * (whisper/pyannote/flair/llama) ist rechenintensiv. Idempotent.

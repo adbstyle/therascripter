@@ -106,7 +106,7 @@ Validated by `ManifestSchema` (Zod):
 
 - Uses Node.js `https.get` with a **15-second timeout**.
 - Response body is capped at **100 KB** (guard against oversized responses).
-- Errors are silently logged and ignored — the app continues without update information.
+- Errors are logged and otherwise ignored — the app continues without update information. `AppUpdateService.handleCheckFailed()` records the failure so Settings → Updates says «Die Suche nach Updates ist nicht gelungen» instead of «aktuell» (also for an invalid signature); «aktuell» appears only after a successful check (`checkedAt`).
 
 ### Caching Strategy
 
@@ -184,34 +184,39 @@ After all updates complete, `pendingModelUpdates` is cleared and `.staging/` is 
 - Overall progress bar across all updates.
 - On error: message with "Weiter" (continue) button. The error message reassures users that existing models are unchanged.
 
-## App Update Flow
+## App Update Flow (Issues #164, #165)
 
-App updates are checked as part of the same `checkForUpdates()` call that checks model updates.
+The app updates itself without Developer ID (ADR-009). `AppUpdateService` (`src/main/services/AppUpdateService.ts`, platform access injected via `app-update-deps.ts`) owns the state; the renderer only displays it.
 
-### Detection
+### Signed manifest
 
-1. The manifest's optional `latestAppVersion` field is compared against `app.getVersion()` using `isNewerVersion()` (strict semver comparison without pre-release tags).
-2. If a newer version exists, `AppUpdateStatus` is set to `{ available: true, latestVersion, checkedAt }`.
-3. The status is persisted in electron-store as `cachedAppUpdateStatus` and pushed to the renderer via `appUpdate:status`.
+`checkForUpdates()` fetches `manifest.json` as raw bytes, then `signatures/<sha256 of the bytes>.json`, and verifies the Ed25519 signature against `UPDATE_SIGNING_KEYS` (`fetchVerifiedManifest`). Without a valid signature there are **no** app or model updates. Checks run at start, every 4 hours and on «Nach Updates suchen» (single-flight). The manifest's `app` entry (version, URL, size, sha256 of the DMG) goes to `AppUpdateService.handleManifest()`; only strictly newer versions count.
 
-### Sidebar Hint
+### Phases
 
-When `appUpdateStatus.available` is `true`, the sidebar in `App.tsx` replaces the version number with a clickable "Update verfugbar" link (styled as primary color with a dot indicator). Clicking it calls `appUpdate:openReleasePage`, which opens the GitHub Releases page in the default browser:
+| Phase | Meaning |
+|---|---|
+| `idle` | no update known — up to date, not yet checked or last check failed (`checkedAt`, `checkFailed`) |
+| `available` | newer version known, not downloaded (auto-update off, < 5 GB free after download — with a hint naming the space needed — or a failed background download); always shown in the bottom bar |
+| `downloading` | DMG download → sha256 vs. signed manifest → `hdiutil attach` on a private mount point → `ditto --noqtn` of the app into `userData/app-update/<version>/` → `hdiutil detach` → check version, `codesign --verify --deep --strict` and the Designated Requirement (`identifier "com.therascript.app"`, #161) |
+| `ready` | verified copy waits; persisted in the `appUpdate` setting so a restart keeps it |
+| `unsupported` | the app cannot replace itself (not in `/Applications` or `~/Applications`, App Translocation, DMG volume, no write permission or foreign owner) → hint with the website installation guide |
 
-```
-https://github.com/adbstyle/therascripter/releases/latest
-```
+A background download stays invisible while it runs; if it fails, the update shows up as `available` without an error text (retry at the next check, or download by hand). A download interrupted by quitting resumes at the next start. A manual download shows progress, can be cancelled and reports errors. A newer version replaces a waiting or downloading one.
 
-### About Page
+Cancelling aborts the running step (`AbortSignal` into download, `hdiutil`, `ditto`, `codesign`); the next run waits until the cancelled one has detached its DMG (`lastRun`), so two runs never share a mount point or staging folder. Folders are deleted by first renaming them to `<name>.deleting-<ts>` (atomic) and then running `/bin/rm` in the background via `runSubprocess` — a download starting right after a replacement can never land in a folder that `rm` is still emptying. `init()` sweeps leftover `.deleting-` folders.
 
-The Settings view's About tab provides a manual "check for updates" button via `useAppUpdate().checkNow()`, which triggers a full `checkForUpdates()` call and updates the status.
+### Installing
 
-### Cached Status Lifecycle
+- **Triggers:** click in Settings → Updates or in the menu-bar item «Update auf Version X installieren»; automatically after 10 minutes without input (`powerMonitor.getSystemIdleTime`, checked every minute) or when the app quits — the latter two only with automatic updates on.
+- **Never interrupt work:** `WorkGuard.currentWork()` (recording, running **or pending** task — `TaskQueueService.hasWork()`, model download, model update) is checked immediately before installing. A click during work marks the install as pending; it runs as soon as nothing is busy. The quit decision is taken at the very beginning of `before-quit`, before the recording cleanup.
+- **Swap:** after the ordered shutdown (queue stopped, DB closed) two renames — `Therascript.app` → `.Therascript-previous.app`, staged copy → `Therascript.app` — then `app.exit(0)` (with `app.relaunch()` for a click/idle install). **Not `app.quit()`:** after renaming its own bundle macOS aborts a regular termination and the process lingers (measured on the packaged app). Quit incl. swap: ~150 ms.
+- **Hidden window:** if the window was hidden, `startHiddenAfterUpdate` makes the relaunch start with `show: false` and ignore the launch `activate` event.
+- **Next start:** `init()` compares the installed version with the attempted one: success → remove staging and the previous bundle (via `/bin/rm` — Electron's `fs` treats `app.asar` inside a bundle as a virtual directory and silently deletes nothing); failure → status «nicht gelungen … automatisch erneut» and the update stays ready. If the app now cannot replace itself (e.g. started from the DMG), a staged update is restored as `unsupported` instead of `ready`, so no swap is attempted on every quit.
 
-The `cachedAppUpdateStatus` electron-store key follows this lifecycle:
-1. **Set** after each successful manifest fetch with `{ available, latestVersion, checkedAt }`.
-2. **Read** on renderer mount by `useAppUpdate` via `appUpdate:getStatus` (no network needed).
-3. **Cleared** at startup by `invalidateCachedAppUpdateIfNeeded()` if the user has installed the update (current version >= cached latest version).
+### Automatic updates (#165)
+
+Setting `autoUpdate` (default `true`, also for existing installations via electron-store defaults). Off: no automatic download or install (also not on quit); checks continue and new versions are shown; an update already downloaded stays installable; a running background download is cancelled. UI: Settings → Updates (`UpdateSettings.tsx`, `Toggle.tsx`); the bottom bar shows «Update bereit» / «Update verfügbar» and opens that page — whenever `updateNeedsAttention()` (`useAppUpdate.ts`, also used for the highlighted Settings card) is true: phase `ready`, `unsupported` or `available`.
 
 ## electron-store Keys
 
@@ -220,7 +225,9 @@ The `cachedAppUpdateStatus` electron-store key follows this lifecycle:
 | `modelsDownloaded` | `boolean` | Set to `true` after first-launch download completes |
 | `installedModelVersions` | `Record<string, { version, sha256, installedAt }>` | Tracks installed model versions for update comparison |
 | `pendingModelUpdates` | `PendingModelUpdate[] \| null` | Set before restart with updates to apply; cleared after download or skip |
-| `cachedAppUpdateStatus` | `{ available, latestVersion, checkedAt } \| null` | Persisted app update status for immediate sidebar display |
+| `autoUpdate` | `boolean` | Automatic app updates (download + install), default `true` (#165) |
+| `appUpdate` | `PersistedAppUpdate \| null` | Downloaded/ready app update, install attempt, failure count (#164) |
+| `startHiddenAfterUpdate` | `boolean` | Start the relaunched app with a hidden window (#164) |
 
 ## IPC Channels
 
@@ -251,10 +258,13 @@ The `cachedAppUpdateStatus` electron-store key follows this lifecycle:
 
 | Channel | Direction | Purpose |
 |---------|-----------|---------|
-| `appUpdate:getStatus` | handle | Returns cached `AppUpdateStatus` (no network) |
-| `appUpdate:check` | handle | Triggers full manifest check (model + app) |
-| `appUpdate:openReleasePage` | handle | Opens GitHub Releases in default browser |
-| `appUpdate:status` | send | Pushes app update status to renderer |
+| `appUpdate:getState` | handle | Current `AppUpdateState` |
+| `appUpdate:check` | handle | Manifest check (model + app), returns the state |
+| `appUpdate:download` / `appUpdate:cancelDownload` | handle | Manual download with progress |
+| `appUpdate:install` | handle | Install now (relaunch) or mark as pending while work runs |
+| `appUpdate:setAutoUpdate` | handle | Toggle automatic updates |
+| `appUpdate:openInstallGuide` | handle | Website installation guide (fallback when the app cannot replace itself) |
+| `appUpdate:state` | send | Pushes every state change |
 
 ## ASR Model Catalog
 

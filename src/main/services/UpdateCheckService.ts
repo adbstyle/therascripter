@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from 'electron'
+import { createHash } from 'crypto'
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statfsSync } from 'fs'
 import { join } from 'path'
 import { get as httpsGet } from 'https'
@@ -10,88 +11,87 @@ import {
   ManifestSchema,
   PendingModelUpdateSchema
 } from '../../shared/validation/model-update-schemas'
+import { UPDATE_SIGNING_KEYS, manifestSignaturePath } from '../../shared/update-keys'
+import { verifyManifestSignature } from './ManifestSignature'
 import { sendToRenderer } from '../utils/ipc-helpers'
 import type { ModelDownloadStatus } from '../../shared/types/IpcApi'
-import type {
-  PendingModelUpdate,
-  AppUpdateStatus,
-  CheckResult
-} from '../../shared/types/ModelUpdate'
+import type { PendingModelUpdate, CheckResult } from '../../shared/types/ModelUpdate'
+import { getAppUpdateService } from './app-update-deps'
 import { getTaskQueue } from './TaskQueueService'
 import { z } from 'zod'
 
+type Manifest = z.infer<typeof ManifestSchema>
+
 const MANIFEST_URL = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/manifest.json'
-
-// ─── Version comparison ──────────────────────────────────────────────────────
-
-/** Returns true if `latest` is strictly newer than `current` (semver without pre-release). */
-export function isNewerVersion(current: string, latest: string): boolean {
-  const parse = (v: string): [number, number, number] => {
-    const parts = v.split('.').map(Number)
-    if (parts.length !== 3 || parts.some(isNaN)) return [0, 0, 0]
-    return parts as [number, number, number]
-  }
-  const [cMaj, cMin, cPat] = parse(current)
-  const [lMaj, lMin, lPat] = parse(latest)
-  if (lMaj !== cMaj) return lMaj > cMaj
-  if (lMin !== cMin) return lMin > cMin
-  return lPat > cPat
-}
 
 // ─── Manifest fetch ───────────────────────────────────────────────────────────
 
-function fetchManifestJson(url: string): Promise<unknown> {
+/** Lädt eine kleine Datei als Bytes (Manifest, Signatur — beide < 100 KB). */
+function fetchSmallFile(url: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     let settled = false
+    const fail = (err: Error): void => {
+      if (settled) return
+      settled = true
+      reject(err)
+    }
     const request = httpsGet(url, { timeout: 15000 }, (response) => {
       if (response.statusCode !== 200) {
         response.destroy()
-        settled = true
-        reject(new Error(`Manifest HTTP ${response.statusCode}`))
+        fail(new Error(`HTTP ${response.statusCode} für ${url}`))
         return
       }
-
-      let data = ''
+      const chunks: Buffer[] = []
+      let size = 0
       response.on('data', (chunk: Buffer) => {
-        data += chunk.toString()
-        // Guard against huge responses (manifest should be < 10 KB)
-        if (data.length > 100_000 && !settled) {
-          settled = true
+        size += chunk.length
+        if (size > 100_000) {
           response.destroy()
-          reject(new Error('Manifest zu gross'))
+          fail(new Error(`${url}: zu gross`))
+          return
         }
+        chunks.push(chunk)
       })
       response.on('end', () => {
         if (settled) return
         settled = true
-        try {
-          resolve(JSON.parse(data))
-        } catch {
-          reject(new Error('Manifest: ungültiges JSON'))
-        }
+        resolve(Buffer.concat(chunks))
       })
-      response.on('error', (err) => {
-        if (!settled) {
-          settled = true
-          reject(err)
-        }
-      })
+      response.on('error', fail)
     })
-
-    request.on('error', (err) => {
-      if (!settled) {
-        settled = true
-        reject(err)
-      }
-    })
+    request.on('error', fail)
     request.on('timeout', () => {
       request.destroy()
-      if (!settled) {
-        settled = true
-        reject(new Error('Manifest: Timeout'))
-      }
+      fail(new Error(`${url}: Timeout`))
     })
   })
+}
+
+/**
+ * Lädt die Update-Beschreibung und prüft ihre Signatur (Issue #163/#164).
+ * Die Signatur liegt unter signatures/<sha256 der Manifest-Bytes>.json — so
+ * passt sie immer zu genau den Bytes, die diese App erhalten hat. Ohne gültige
+ * Signatur eines vertrauenswürdigen Schlüssels gibt es weder App- noch
+ * Modell-Updates: ein kompromittierter Download-Server kann nichts unterschieben.
+ */
+export async function fetchVerifiedManifest(
+  fetchFile: (url: string) => Promise<Buffer> = fetchSmallFile
+): Promise<Manifest> {
+  const bytes = await fetchFile(MANIFEST_URL)
+  const sha256 = createHash('sha256').update(bytes).digest('hex')
+  const signatureUrl = MANIFEST_URL.replace(/manifest\.json$/, manifestSignaturePath(sha256))
+  let signature: unknown
+  try {
+    signature = JSON.parse((await fetchFile(signatureUrl)).toString('utf8'))
+  } catch (err) {
+    throw new Error(
+      `Signatur der Update-Beschreibung fehlt: ${err instanceof Error ? err.message : err}`
+    )
+  }
+  if (!verifyManifestSignature(bytes, signature, UPDATE_SIGNING_KEYS)) {
+    throw new Error('Signatur der Update-Beschreibung ungültig — Updates werden ignoriert')
+  }
+  return ManifestSchema.parse(JSON.parse(bytes.toString('utf8')))
 }
 
 // ─── Manifest dismissal ──────────────────────────────────────────────────────
@@ -120,12 +120,22 @@ export function dismissManifestVersions(entries: Array<{ id: string; sha256: str
 
 // ─── checkForUpdates ─────────────────────────────────────────────────────────
 
-const NO_APP_UPDATE: AppUpdateStatus = { available: false, latestVersion: null, checkedAt: null }
+let checkRunning: Promise<CheckResult> | null = null
 
-export async function checkForUpdates(): Promise<CheckResult> {
+/**
+ * Prüft Modell- und App-Updates. Gleichzeitige Aufrufe (Start, Intervall,
+ * «Nach Updates suchen») teilen sich einen Lauf.
+ */
+export function checkForUpdates(): Promise<CheckResult> {
+  checkRunning ??= runCheck().finally(() => {
+    checkRunning = null
+  })
+  return checkRunning
+}
+
+async function runCheck(): Promise<CheckResult> {
   try {
-    const raw = await fetchManifestJson(MANIFEST_URL)
-    const manifest = ManifestSchema.parse(raw)
+    const manifest = await fetchVerifiedManifest()
 
     const settings = getSettings()
     const installedVersions = getInstalledVersions()
@@ -215,24 +225,16 @@ export async function checkForUpdates(): Promise<CheckResult> {
       sendToRenderer('modelUpdate:available', modelUpdates)
     }
 
-    // ── App update check ──
-    const currentVersion = app.getVersion()
-    const latestVersion = manifest.latestAppVersion ?? null
-    const available = latestVersion !== null && isNewerVersion(currentVersion, latestVersion)
-    const checkedAt = new Date().toISOString()
+    // ── App update (Issue #164) ──
+    getAppUpdateService()?.handleManifest(manifest.app)
 
-    const appUpdate: AppUpdateStatus = { available, latestVersion, checkedAt }
-
-    // Persist for offline reads via appUpdate:getStatus
-    settings.set('cachedAppUpdateStatus', appUpdate)
-
-    sendToRenderer('appUpdate:status', appUpdate)
-
-    return { modelUpdates, appUpdate }
+    return { modelUpdates }
   } catch (error) {
     // Non-blocking: update check failures are silently ignored
     console.log(`UpdateCheckService: Update-Check fehlgeschlagen (ignoriert): ${error}`)
-    return { modelUpdates: [], appUpdate: NO_APP_UPDATE }
+    // Sonst stünde in Einstellungen → Updates «aktuell», obwohl nichts geprüft wurde
+    getAppUpdateService()?.handleCheckFailed()
+    return { modelUpdates: [] }
   }
 }
 
@@ -269,7 +271,23 @@ export function triggerUpdateRestart(updates: PendingModelUpdate[]): void {
 
 // ─── executeUpdates ───────────────────────────────────────────────────────────
 
+let modelUpdatesRunning = false
+
+/** Laufen gerade Modell-Updates (ModelUpdateScreen)? Ein App-Update wartet dann (#164). */
+export function isModelUpdateRunning(): boolean {
+  return modelUpdatesRunning
+}
+
 export async function executeUpdates(): Promise<void> {
+  modelUpdatesRunning = true
+  try {
+    await executeUpdatesInner()
+  } finally {
+    modelUpdatesRunning = false
+  }
+}
+
+async function executeUpdatesInner(): Promise<void> {
   const settings = getSettings()
 
   // Re-validate stored data before using it (guards against corruption or tampered settings)
@@ -629,24 +647,4 @@ export function migrateInstalledVersions(): void {
   if (migrated > 0) {
     console.log(`UpdateCheckService: ${migrated} bestehende Modelle migriert`)
   }
-}
-
-// ─── invalidateCachedAppUpdate ───────────────────────────────────────────────
-
-/**
- * Called at startup: if the user installed the update (current version >= cached
- * latestVersion), clear the stale "update available" cache. If the user has NOT
- * upgraded, preserve the cache so the sidebar hint appears immediately.
- */
-export function invalidateCachedAppUpdateIfNeeded(): void {
-  const settings = getSettings()
-  const cached = settings.get('cachedAppUpdateStatus')
-  if (!cached || !cached.available) return
-
-  const currentVersion = app.getVersion()
-  if (cached.latestVersion && !isNewerVersion(currentVersion, cached.latestVersion)) {
-    // User installed the update (or a newer version) — clear stale cache
-    settings.set('cachedAppUpdateStatus', null)
-  }
-  // Otherwise: update still pending, keep the cache so sidebar shows hint immediately
 }

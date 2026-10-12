@@ -79,8 +79,8 @@ export type {
   Manifest,
   PendingModelUpdate,
   InstalledModelVersion,
-  AppUpdateStatus,
   CheckResult
 } from './ModelUpdate'
+export type { AppUpdateState, AppUpdatePhase, AppUpdateInstallResult } from './AppUpdate'
 
 export type { ModelSnapshot, ProcessedModelsSnapshot, AudioStats } from './Provenance'

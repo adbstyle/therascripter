@@ -1,26 +1,44 @@
 import { ipcMain, shell } from 'electron'
-import { getSettings } from '../services/SettingsService'
+import { z } from 'zod'
 import { checkForUpdates } from '../services/UpdateCheckService'
-import { AppUpdateStatusSchema } from '../../shared/validation/model-update-schemas'
+import { getAppUpdateService } from '../services/app-update-deps'
+import type { AppUpdateInstallResult, AppUpdateState } from '../../shared/types/AppUpdate'
 
-const GITHUB_RELEASES_URL = 'https://github.com/adbstyle/therascripter/releases/latest'
+// Ausweg, wenn sich die App nicht selbst ersetzen kann (#164 AK 9): die
+// Installationsanleitung mit dem Update-Weg von Hand (#160)
+const INSTALL_GUIDE_URL = 'https://adbstyle.github.io/therascripter/installation.html#update'
+
+const SetAutoUpdateSchema = z.object({ enabled: z.boolean() })
+
+function service() {
+  const s = getAppUpdateService()
+  if (!s) throw new Error('App-Update nicht initialisiert')
+  return s
+}
 
 export function registerAppUpdateHandlers(): void {
-  // Return cached app update status (no network) — used by renderer on mount
-  ipcMain.handle('appUpdate:getStatus', () => {
-    const raw = getSettings().get('cachedAppUpdateStatus')
-    const parsed = AppUpdateStatusSchema.safeParse(raw)
-    if (!parsed.success) return { available: false, latestVersion: null, checkedAt: null }
-    return parsed.data
+  ipcMain.handle('appUpdate:getState', (): AppUpdateState => service().getState())
+
+  // «Nach Updates suchen»: Ergebnis kommt über appUpdate:state
+  ipcMain.handle('appUpdate:check', async (): Promise<AppUpdateState> => {
+    await checkForUpdates()
+    return service().getState()
   })
 
-  // Trigger a full consolidated check (model + app) — used by About page manual check
-  ipcMain.handle('appUpdate:check', async () => {
-    return checkForUpdates()
+  ipcMain.handle('appUpdate:download', () => {
+    void service().download({ manual: true })
   })
 
-  // Open GitHub releases page in default browser
-  ipcMain.handle('appUpdate:openReleasePage', async () => {
-    await shell.openExternal(GITHUB_RELEASES_URL)
+  ipcMain.handle('appUpdate:cancelDownload', () => service().cancelDownload())
+
+  ipcMain.handle('appUpdate:install', (): AppUpdateInstallResult => service().requestInstall())
+
+  ipcMain.handle('appUpdate:setAutoUpdate', (_event, args: unknown) => {
+    const { enabled } = SetAutoUpdateSchema.parse(args)
+    service().setAutoUpdate(enabled)
+  })
+
+  ipcMain.handle('appUpdate:openInstallGuide', async () => {
+    await shell.openExternal(INSTALL_GUIDE_URL)
   })
 }

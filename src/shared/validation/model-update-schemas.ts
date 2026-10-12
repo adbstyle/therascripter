@@ -58,10 +58,3 @@ export const RestartUpdateSchema = z.object({
 export const DismissUpdatesSchema = z.object({
   updates: z.array(PendingModelUpdateSchema).min(1)
 })
-
-// App update status (persisted in electron-store, validated on read)
-export const AppUpdateStatusSchema = z.object({
-  available: z.boolean(),
-  latestVersion: z.string().nullable(),
-  checkedAt: z.string().nullable()
-})

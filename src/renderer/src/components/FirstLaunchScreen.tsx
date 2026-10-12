@@ -105,9 +105,9 @@ export default function FirstLaunchScreen({
           <h1 className="mb-2 text-2xl font-bold text-text-primary">TheraScript</h1>
           <p className="text-sm text-text-secondary">
             Alle Verarbeitung findet auf Ihrem Mac statt, Inhalte aus Ihren Sitzungen übermittelt
-            TheraScript nie. Mit dem Internet verbindet sich TheraScript nur, um Sprachmodelle
-            herunterzuladen und nach neuen Versionen zu suchen. Nach der Ersteinrichtung
-            funktioniert es auch ohne Internet.
+            TheraScript nie. Mit dem Internet verbindet sich TheraScript nur, um Sprachmodelle und
+            neue Versionen herunterzuladen und nach neuen Versionen zu suchen. Nach der
+            Ersteinrichtung funktioniert es auch ohne Internet.
           </p>
         </div>
 

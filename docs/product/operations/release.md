@@ -55,6 +55,8 @@ A check that cannot run (missing previous DMG, missing models, timeout) counts a
 
 The seed cache key is `<tag>-<hash of seed.mjs, app-actions.mjs and the fixtures>`: extending the seed builds a new seed instead of reusing an old one. Settings compared exactly are the user-set ones (`theme`, `reviewPanelOpen`, `consentReminderShown`); for `activeModels` the check only requires every active model to be installed, because a new version may replace models on purpose (e.g. retiring a model).
 
+**Update path from the previous version** (#164 PC 8): not automated yet — the first release with the in-app updater has no predecessor that could update itself. From the second such release on, extend the release check: install the previous version into the test home's `~/Applications`, serve a manifest signed for the new DMG (the manifest base URL is hardcoded; this needs a test hook) and let the previous version update itself. Until then the manual check covers it.
+
 **Not covered** (manual check, ADR-009): Gatekeeper behaviour, first launch with model download, older versions than the last release, ML quality. Known gap: the seed has no session whose task was *running* when the previous version quit (`processing`, recovered by `recoverStuckTasks`), because such a state cannot be produced reproducibly through the UI API — the `queued` session covers the resume path only.
 
 ### Signing keys (Issue #163)

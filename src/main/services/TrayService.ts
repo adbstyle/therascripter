@@ -30,6 +30,8 @@ export class TrayService {
   private isRecording = false
   private onStopCallback: (() => void) | null = null
   private onOpenSettingsCallback: (() => void) | null = null
+  private onInstallUpdateCallback: (() => void) | null = null
+  private updateReadyVersion: string | null = null
 
   init(): void {
     this.idleIcon = loadTemplateIcon('TrayIconTemplate')
@@ -45,6 +47,18 @@ export class TrayService {
 
   onOpenSettings(callback: () => void): void {
     this.onOpenSettingsCallback = callback
+  }
+
+  /** Issue #164 AK 6 — «Update installieren» auch ohne geöffnetes Fenster. */
+  onInstallUpdate(callback: () => void): void {
+    this.onInstallUpdateCallback = callback
+  }
+
+  /** Bereitliegende Version (Menüeintrag sichtbar) oder null. */
+  setUpdateReady(version: string | null): void {
+    if (this.updateReadyVersion === version) return
+    this.updateReadyVersion = version
+    this.rebuildMenu()
   }
 
   setRecordingState(recording: boolean, duration?: number): void {
@@ -92,6 +106,7 @@ export class TrayService {
     }
     this.onStopCallback = null
     this.onOpenSettingsCallback = null
+    this.onInstallUpdateCallback = null
     // Reset singleton so initTray() can re-create if needed
     trayService = null
   }
@@ -133,6 +148,14 @@ export class TrayService {
       label: 'Fenster anzeigen',
       click: () => this.showWindow()
     })
+
+    if (this.updateReadyVersion) {
+      menuItems.push({ type: 'separator' })
+      menuItems.push({
+        label: `Update auf Version ${this.updateReadyVersion} installieren`,
+        click: () => this.onInstallUpdateCallback?.()
+      })
+    }
 
     menuItems.push({ type: 'separator' })
 

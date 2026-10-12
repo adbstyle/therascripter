@@ -16,7 +16,8 @@ import {
   TaskErrorDataSchema,
   QueuePositionsDataSchema
 } from '../shared/validation/task-schemas'
-import type { PendingModelUpdate, AppUpdateStatus } from '../shared/types/ModelUpdate'
+import type { PendingModelUpdate } from '../shared/types/ModelUpdate'
+import type { AppUpdateState } from '../shared/types/AppUpdate'
 import type { ModelGroup, DiarizationPipeline } from '../shared/validation/model-catalog-schemas'
 
 const api: IpcApi = {
@@ -210,15 +211,19 @@ const api: IpcApi = {
     }
   },
   appUpdate: {
-    getStatus: () => ipcRenderer.invoke('appUpdate:getStatus'),
+    getState: () => ipcRenderer.invoke('appUpdate:getState'),
     check: () => ipcRenderer.invoke('appUpdate:check'),
-    openReleasePage: () => ipcRenderer.invoke('appUpdate:openReleasePage'),
-    onStatus: (callback) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: AppUpdateStatus): void =>
+    download: () => ipcRenderer.invoke('appUpdate:download'),
+    cancelDownload: () => ipcRenderer.invoke('appUpdate:cancelDownload'),
+    install: () => ipcRenderer.invoke('appUpdate:install'),
+    setAutoUpdate: (enabled: boolean) => ipcRenderer.invoke('appUpdate:setAutoUpdate', { enabled }),
+    openInstallGuide: () => ipcRenderer.invoke('appUpdate:openInstallGuide'),
+    onState: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: AppUpdateState): void =>
         callback(data)
-      ipcRenderer.on('appUpdate:status', handler)
+      ipcRenderer.on('appUpdate:state', handler)
       return () => {
-        ipcRenderer.removeListener('appUpdate:status', handler)
+        ipcRenderer.removeListener('appUpdate:state', handler)
       }
     }
   },

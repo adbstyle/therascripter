@@ -28,7 +28,8 @@ vi.mock('electron-store', () => ({
     set: <K extends keyof FakeStoreState>(key: K, value: FakeStoreState[K]) => {
       const g = globalThis as unknown as { __settingsStoreState: FakeStoreState }
       g.__settingsStoreState = { ...g.__settingsStoreState, [key]: value }
-    }
+    },
+    delete: () => undefined
   }))
 }))
 

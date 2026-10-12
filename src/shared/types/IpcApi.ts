@@ -3,7 +3,8 @@ import type { Task, TaskType } from './Task'
 import type { BlocklistEntry } from './NerTypes'
 import type { EntityMap, PlaceholderType } from './EntityMap'
 import type { TipTapDocument } from './TipTapDocument'
-import type { PendingModelUpdate, AppUpdateStatus, CheckResult } from './ModelUpdate'
+import type { PendingModelUpdate } from './ModelUpdate'
+import type { AppUpdateInstallResult, AppUpdateState } from './AppUpdate'
 import type { ReconcileEvent } from './ReconcileEvent'
 import type { MicrophoneState, MicrophoneStatus } from './Microphone'
 import type { ProcessedModelsSnapshot, AudioStats } from './Provenance'
@@ -199,10 +200,18 @@ export interface ModelUpdateApi {
 }
 
 export interface AppUpdateApi {
-  getStatus(): Promise<AppUpdateStatus>
-  check(): Promise<CheckResult>
-  openReleasePage(): Promise<void>
-  onStatus(callback: (status: AppUpdateStatus) => void): () => void
+  getState(): Promise<AppUpdateState>
+  /** Sucht nach einer neuen Version; das Ergebnis kommt auch über onState. */
+  check(): Promise<AppUpdateState>
+  /** Selbst gestarteter Download (Fortschritt über onState). */
+  download(): Promise<void>
+  cancelDownload(): Promise<void>
+  /** Installiert jetzt (App startet neu) oder merkt vor, bis nichts mehr läuft. */
+  install(): Promise<AppUpdateInstallResult>
+  setAutoUpdate(enabled: boolean): Promise<void>
+  /** Website-Anleitung für den Weg von Hand (App kann sich nicht ersetzen). */
+  openInstallGuide(): Promise<void>
+  onState(callback: (state: AppUpdateState) => void): () => void
 }
 
 export interface SummaryRecord {

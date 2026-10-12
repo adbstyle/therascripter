@@ -68,7 +68,7 @@ Testumgebung: macOS 26.5, Apple Silicon, selbstverwaltetes Konto mit Administrat
 
 ## Offen für die Umsetzung
 
-- Selbst-Update mit der echten App (~1 GB, ~17'000 Dateien) prüfen: Ablage der neuen Version auf demselben Volume, Austausch bei laufendem Electron-Prozess.
+- ~~Selbst-Update mit der echten App prüfen~~ — erledigt mit #164 (2026-10-12): Bereitstellen aus dem echten DMG ~10 s, Austausch beim Beenden ~150 ms. Befund: Nach dem Umbenennen des eigenen Bundles bricht macOS ein reguläres `app.quit()` ab, deshalb `app.exit(0)`; Electrons `fs` löscht ein Bundle mit `app.asar` still nicht, deshalb `/bin/rm`.
 - Schlüsselbund-Eintrag «Safe Storage» über ein Update.
 - App- und Modell-Update als ein Vorgang.
-- Sauber abbrechen, wenn das Bundle nicht der Nutzer:in gehört oder nicht in `/Applications` liegt. Dieser Fall liegt ausserhalb der Zielgruppe.
+- ~~Sauber abbrechen, wenn das Bundle nicht der Nutzer:in gehört oder nicht in `/Applications` liegt~~ — erledigt mit #164: Hinweis mit dem Weg über die Website-Anleitung.

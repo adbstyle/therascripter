@@ -8,6 +8,8 @@ type View = 'sessions' | 'settings'
 interface BottomNavProps {
   current: View
   onChange: (view: View) => void
+  /** Öffnet Einstellungen → Updates (Hinweis «Update bereit», #164 AK 5). */
+  onOpenUpdates: () => void
 }
 
 const FEEDBACK_EMAIL = 'therascript.flatworm325@passmail.com'
@@ -17,7 +19,11 @@ const ITEMS: { id: View; icon: typeof Files; label: string }[] = [
   { id: 'settings', icon: Settings, label: 'Einstellungen' }
 ]
 
-export default function BottomNav({ current, onChange }: BottomNavProps): React.JSX.Element {
+export default function BottomNav({
+  current,
+  onChange,
+  onOpenUpdates
+}: BottomNavProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const itemRefs = useRef<Record<View, HTMLButtonElement | null>>({
     sessions: null,
@@ -27,7 +33,7 @@ export default function BottomNav({ current, onChange }: BottomNavProps): React.
   const [appVersion, setAppVersion] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const copyResetRef = useRef<number | null>(null)
-  const { status: appUpdateStatus, openReleasePage } = useAppUpdate()
+  const { state: appUpdate, needsAttention: updateNeedsAttention } = useAppUpdate()
   const { pendingCount: reconcilePending } = useReconcileEvents()
 
   useEffect(
@@ -61,7 +67,11 @@ export default function BottomNav({ current, onChange }: BottomNavProps): React.
     window.api.system.aboutInfo().then((info) => setAppVersion(info.version))
   }, [])
 
-  const updateAvailable = appUpdateStatus?.available === true
+  const updateHint = !updateNeedsAttention
+    ? null
+    : appUpdate?.phase === 'ready'
+      ? 'Update bereit'
+      : 'Update verfügbar'
 
   return (
     <div className="flex shrink-0 items-center justify-between gap-4 bg-surface-1 px-4 py-2">
@@ -145,14 +155,14 @@ export default function BottomNav({ current, onChange }: BottomNavProps): React.
             </span>
           )}
         </button>
-        {updateAvailable ? (
+        {updateHint ? (
           <button
             type="button"
-            onClick={openReleasePage}
+            onClick={onOpenUpdates}
             className="titlebar-no-drag flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary-light/30 hover:text-primary-hover"
           >
             <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
-            <span>Update verfügbar</span>
+            <span>{updateHint}</span>
           </button>
         ) : (
           <span className="px-2 text-xs text-text-tertiary">v{appVersion ?? '…'}</span>

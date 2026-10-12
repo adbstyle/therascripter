@@ -9,7 +9,7 @@ import { ConsentBanner } from './components/ConsentBanner'
 import TitleBar from './components/shell/TitleBar'
 import BottomNav from './components/shell/BottomNav'
 import RecordingBar from './components/shell/RecordingBar'
-import Settings from './views/Settings'
+import Settings, { type SubPage } from './views/Settings'
 import ReviewEditor from './views/ReviewEditor'
 import { useRecording } from './hooks/useRecording'
 import { useModelUpdates } from './hooks/useModelUpdates'
@@ -36,6 +36,8 @@ export default function App(): React.JSX.Element {
   // to remount with fresh subpage state — guarantees we land on the overview
   // even when the user is already deep in a sub-page.
   const [settingsResetKey, setSettingsResetKey] = useState(0)
+  // Unterseite beim nächsten Öffnen der Einstellungen (Hinweis «Update bereit»)
+  const [settingsSubpage, setSettingsSubpage] = useState<SubPage | null>(null)
   // Pro Aufnahme: wurde der Consent-Hinweis weggeklickt? Muss hier leben
   // (nicht im Banner) — die Sessions-View wird bei Navigation unmounted.
   const [consentDismissed, setConsentDismissed] = useState(false)
@@ -91,8 +93,16 @@ export default function App(): React.JSX.Element {
     return window.api.nav.onOpenSettings(() => {
       setReviewSessionId(null)
       setCurrentView('settings')
+      setSettingsSubpage(null)
       setSettingsResetKey((k) => k + 1)
     })
+  }, [])
+
+  const handleOpenUpdates = useCallback(() => {
+    setReviewSessionId(null)
+    setCurrentView('settings')
+    setSettingsSubpage('updates')
+    setSettingsResetKey((k) => k + 1)
   }, [])
 
   // Check for pending model updates on startup (set before restart)
@@ -287,10 +297,16 @@ export default function App(): React.JSX.Element {
             />
           </>
         ) : (
-          <Settings key={settingsResetKey} />
+          <Settings key={settingsResetKey} initialSubpage={settingsSubpage} />
         )}
 
-        {!isInReview && <BottomNav current={currentView} onChange={setCurrentView} />}
+        {!isInReview && (
+          <BottomNav
+            current={currentView}
+            onChange={setCurrentView}
+            onOpenUpdates={handleOpenUpdates}
+          />
+        )}
       </main>
     </div>
   )
