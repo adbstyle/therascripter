@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import type { AboutInfo } from '../../../shared/types'
 import { ConfirmDialog } from './ConfirmDialog'
 import { formatBytes } from '../utils/formatBytes'
-import { useAppUpdate } from '../hooks/useAppUpdate'
 import AppLogo from './AppLogo'
 import {
   MODEL_ACKNOWLEDGMENTS,
@@ -13,7 +12,6 @@ import {
 export default function AboutPage(): React.JSX.Element {
   const [info, setInfo] = useState<AboutInfo | null>(null)
   const [showUninstall, setShowUninstall] = useState(false)
-  const { status: appUpdateStatus, checking, checkNow, openReleasePage } = useAppUpdate()
 
   useEffect(() => {
     window.api.system.aboutInfo().then(setInfo)
@@ -42,30 +40,6 @@ export default function AboutPage(): React.JSX.Element {
           <p className="text-sm text-text-tertiary">Open Source (MIT-Lizenz)</p>
         </div>
 
-        {/* App Update */}
-        <div>
-          <div className="flex items-center gap-3">
-            <button
-              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-2 disabled:opacity-50"
-              onClick={checkNow}
-              disabled={checking}
-            >
-              {checking ? 'Prüfe…' : 'Nach Updates suchen'}
-            </button>
-            {appUpdateStatus?.available && (
-              <button
-                className="text-sm font-medium text-primary transition-colors hover:text-primary-hover"
-                onClick={openReleasePage}
-              >
-                Neue Version verfügbar &mdash; herunterladen
-              </button>
-            )}
-            {appUpdateStatus && !appUpdateStatus.available && appUpdateStatus.checkedAt && (
-              <span className="text-sm text-text-tertiary">TheraScript ist aktuell</span>
-            )}
-          </div>
-        </div>
-
         <div className="space-y-2 text-sm text-text-secondary">
           <p>
             Alle Verarbeitung findet auf Ihrem Mac statt. Aufnahmen, Transkripte, PDFs und
@@ -73,9 +47,10 @@ export default function AboutPage(): React.JSX.Element {
           </p>
           <p>
             Mit dem Internet verbindet sich TheraScript nur, um Sprachmodelle herunterzuladen (bei
-            der Ersteinrichtung, beim Hinzufügen eines Modells und bei Modell-Updates) und um nach
-            neuen Versionen zu suchen (beim Start, alle 24 Stunden und mit «Nach Updates suchen»).
-            Dabei sieht der Anbieter Cloudflare Ihre IP-Adresse, den Zeitpunkt und die abgerufene
+            der Ersteinrichtung, beim Hinzufügen eines Modells und bei Modell-Updates), um nach
+            neuen Versionen zu suchen (beim Start und alle 4 Stunden) und um neue Versionen
+            herunterzuladen (automatisch oder auf Klick, siehe Einstellungen → Updates). Dabei sehen
+            die Anbieter Cloudflare und GitHub Ihre IP-Adresse, den Zeitpunkt und die abgerufene
             Datei. TheraScript sendet kein Konto, keine Kennung und keine Nutzungsdaten. Nach der
             Ersteinrichtung funktioniert TheraScript auch ohne Internet.
           </p>

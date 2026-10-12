@@ -180,13 +180,26 @@ beforeEach(() => {
     },
     modelUpdate: mockModelUpdate,
     appUpdate: {
-      getStatus: vi.fn().mockResolvedValue(null),
-      check: vi.fn().mockResolvedValue({
-        modelUpdates: [],
-        appUpdate: { available: false, latestVersion: null, checkedAt: null }
+      getState: vi.fn().mockResolvedValue({
+        phase: 'idle',
+        currentVersion: '0.9.0',
+        version: null,
+        sizeBytes: null,
+        progress: null,
+        manualDownload: false,
+        autoUpdate: true,
+        installPending: false,
+        message: null,
+        unsupportedReason: null,
+        checkedAt: null
       }),
-      openReleasePage: vi.fn(),
-      onStatus: vi.fn().mockReturnValue(() => {})
+      check: vi.fn(),
+      download: vi.fn(),
+      cancelDownload: vi.fn(),
+      install: vi.fn(),
+      setAutoUpdate: vi.fn(),
+      openInstallGuide: vi.fn(),
+      onState: vi.fn().mockReturnValue(() => {})
     },
     summary: {
       get: vi.fn().mockResolvedValue(null),

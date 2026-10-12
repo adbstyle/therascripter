@@ -1,27 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronRight, Cpu, Info, Palette, ShieldCheck } from 'lucide-react'
+import { ChevronRight, Cpu, Info, Palette, RefreshCw, ShieldCheck } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import BlocklistManager, { type BlocklistManagerHandle } from '../components/BlocklistManager'
 import AppearanceSettings from '../components/AppearanceSettings'
 import AboutPage from '../components/AboutPage'
 import ModelsSettings from '../components/settings/ModelsSettings'
+import UpdateSettings from '../components/settings/UpdateSettings'
 import { useTheme } from '../hooks/useTheme'
 import { useAppUpdate } from '../hooks/useAppUpdate'
 import { useModelUpdates } from '../hooks/useModelUpdates'
 
-type SubPage = 'sperrliste' | 'darstellung' | 'modelle' | 'ueber'
+export type SubPage = 'sperrliste' | 'darstellung' | 'modelle' | 'updates' | 'ueber'
 
 const SUBPAGE_TITLES: Record<SubPage, string> = {
   sperrliste: 'Sperrliste',
   darstellung: 'Darstellung',
   modelle: 'Modelle',
+  updates: 'Updates',
   ueber: 'Über'
 }
 
 const THEME_LABELS = { light: 'Hell', dark: 'Dunkel', system: 'System' } as const
 
-export default function Settings(): React.JSX.Element {
-  const [subpage, setSubpage] = useState<SubPage | null>(null)
+interface SettingsProps {
+  /** Direkt eine Unterseite öffnen (z. B. «Update bereit» aus der unteren Leiste). */
+  initialSubpage?: SubPage | null
+}
+
+export default function Settings({ initialSubpage = null }: SettingsProps): React.JSX.Element {
+  const [subpage, setSubpage] = useState<SubPage | null>(initialSubpage)
   const blocklistRef = useRef<BlocklistManagerHandle>(null)
 
   let headerAction: React.ReactNode = null
@@ -52,6 +59,7 @@ export default function Settings(): React.JSX.Element {
           {subpage === 'sperrliste' && <BlocklistManager ref={blocklistRef} />}
           {subpage === 'darstellung' && <AppearanceSettings />}
           {subpage === 'modelle' && <ModelsSettings />}
+          {subpage === 'updates' && <UpdateSettings />}
           {subpage === 'ueber' && <AboutPage />}
         </div>
       )}
@@ -102,7 +110,7 @@ interface HomeProps {
 
 function SettingsHome({ onSelect }: HomeProps): React.JSX.Element {
   const { theme } = useTheme()
-  const { status: appUpdateStatus } = useAppUpdate()
+  const { state: appUpdate } = useAppUpdate()
   const { availableUpdates } = useModelUpdates()
 
   const [blocklist, setBlocklist] = useState<{ entries: number; categories: number } | null>(null)
@@ -146,9 +154,21 @@ function SettingsHome({ onSelect }: HomeProps): React.JSX.Element {
       : 'Keine aktiven Modelle'
     : 'Wird geladen…'
 
-  const aboutSummary = appVersion
-    ? `v${appVersion} · ${appUpdateStatus?.available ? 'Update verfügbar' : 'Aktuell'}`
-    : '…'
+  const aboutSummary = appVersion ? `v${appVersion}` : '…'
+
+  const updateSummary = !appUpdate
+    ? '…'
+    : appUpdate.phase === 'ready'
+      ? `Version ${appUpdate.version} bereit zur Installation`
+      : appUpdate.phase === 'available' || appUpdate.phase === 'unsupported'
+        ? `Version ${appUpdate.version} verfügbar`
+        : appUpdate.autoUpdate
+          ? 'Automatisch · Aktuell'
+          : 'Von Hand · Aktuell'
+  const updateHighlighted =
+    appUpdate?.phase === 'ready' ||
+    appUpdate?.phase === 'unsupported' ||
+    (appUpdate?.phase === 'available' && !appUpdate.autoUpdate)
 
   const items: SettingsItem[] = [
     {
@@ -171,11 +191,17 @@ function SettingsHome({ onSelect }: HomeProps): React.JSX.Element {
       badge: availableUpdates && availableUpdates.length > 0 ? 'Update' : undefined
     },
     {
+      id: 'updates',
+      icon: RefreshCw,
+      title: 'Updates',
+      summary: updateSummary,
+      summaryAccent: updateHighlighted ? 'primary' : undefined
+    },
+    {
       id: 'ueber',
       icon: Info,
       title: 'Über',
-      summary: aboutSummary,
-      summaryAccent: appUpdateStatus?.available ? 'primary' : undefined
+      summary: aboutSummary
     }
   ]
 

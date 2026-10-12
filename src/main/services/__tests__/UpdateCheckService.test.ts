@@ -99,6 +99,17 @@ vi.mock('../DownloadService', () => ({
   extractTarGz: (...a: unknown[]) => mockExtractTarGz(...a)
 }))
 
+// Signatur: standardmässig gültig — eigene Tests prüfen den Ablehnungsfall
+const mockVerifySignature = vi.fn().mockReturnValue(true)
+vi.mock('../ManifestSignature', () => ({
+  verifyManifestSignature: (...a: unknown[]) => mockVerifySignature(...a)
+}))
+
+const mockHandleManifest = vi.fn()
+vi.mock('../app-update-deps', () => ({
+  getAppUpdateService: () => ({ handleManifest: mockHandleManifest })
+}))
+
 // ─── Import after mocks ───────────────────────────────────────────────────────
 
 import {
@@ -434,91 +445,72 @@ describe('dismissManifestVersions', () => {
   })
 })
 
-describe('checkForUpdates — app update', () => {
+describe('checkForUpdates — signierte Update-Beschreibung (Issues #163/#164)', () => {
+  const appEntry = {
+    version: '1.0.0',
+    url: 'https://github.com/adbstyle/therascripter/releases/download/v1.0.0/Therascript.dmg',
+    sha256: 'd'.repeat(64),
+    sizeBytes: 300
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
-    // Default: no model updates (all sha256 match)
-    mockSettingsStore.get.mockReturnValue({
-      'whisper-large-v3-turbo': {
-        version: '2025-01-15',
-        sha256: 'cccc' + 'c'.repeat(60),
-        installedAt: ''
-      },
-      'pyannote-suite': {
-        version: '2025-01-15',
-        sha256: 'bbbb' + 'b'.repeat(60),
-        installedAt: ''
-      }
-    })
+    mockVerifySignature.mockReturnValue(true)
+    mockSettingsStore.get.mockReturnValue({})
   })
 
-  it('returns appUpdate.available=true when manifest version is newer', async () => {
-    const manifest = JSON.stringify({
-      generatedAt: '2025-01-15T00:00:00Z',
-      latestAppVersion: '1.0.0',
-      models: validManifestModels
-    })
-    makeHttpsResponse(200, manifest)
-
-    const { appUpdate } = await checkForUpdates()
-    expect(appUpdate.available).toBe(true)
-    expect(appUpdate.checkedAt).toBeTruthy()
-  })
-
-  it('returns appUpdate.available=false when versions match', async () => {
-    const manifest = JSON.stringify({
-      generatedAt: '2025-01-15T00:00:00Z',
-      latestAppVersion: '0.3.3',
-      models: validManifestModels
-    })
-    makeHttpsResponse(200, manifest)
-
-    const { appUpdate } = await checkForUpdates()
-    expect(appUpdate.available).toBe(false)
-  })
-
-  it('returns appUpdate.available=false when latestAppVersion is absent', async () => {
+  it('lädt die Signatur unter dem Hash der Manifest-Bytes', async () => {
     makeHttpsResponse(200, validManifest)
-
-    const { appUpdate } = await checkForUpdates()
-    expect(appUpdate.available).toBe(false)
-    expect(appUpdate.checkedAt).toBeTruthy()
-  })
-
-  it('returns appUpdate.available=false when installed is newer than manifest', async () => {
-    const manifest = JSON.stringify({
-      generatedAt: '2025-01-15T00:00:00Z',
-      latestAppVersion: '0.2.0',
-      models: validManifestModels
-    })
-    makeHttpsResponse(200, manifest)
-
-    const { appUpdate } = await checkForUpdates()
-    expect(appUpdate.available).toBe(false)
-  })
-
-  it('persists cachedAppUpdateStatus to settings', async () => {
-    const manifest = JSON.stringify({
-      generatedAt: '2025-01-15T00:00:00Z',
-      latestAppVersion: '1.0.0',
-      models: validManifestModels
-    })
-    makeHttpsResponse(200, manifest)
-
     await checkForUpdates()
-
-    expect(mockSettingsStore.set).toHaveBeenCalledWith(
-      'cachedAppUpdateStatus',
-      expect.objectContaining({ available: true })
+    const urls = mockGet.mock.calls.map((c) => c[0] as string)
+    expect(urls[0]).toMatch(/manifest\.json$/)
+    expect(urls[1]).toMatch(/\/signatures\/[a-f0-9]{64}\.json$/)
+    expect(mockVerifySignature).toHaveBeenCalledWith(
+      Buffer.from(validManifest),
+      expect.anything(),
+      expect.anything()
     )
   })
 
-  it('returns appUpdate.available=false on network error', async () => {
-    makeHttpsError('Connection refused')
+  it('reicht den App-Eintrag an das App-Update weiter', async () => {
+    makeHttpsResponse(
+      200,
+      JSON.stringify({
+        generatedAt: '2025-01-15T00:00:00Z',
+        app: appEntry,
+        models: validManifestModels
+      })
+    )
+    await checkForUpdates()
+    expect(mockHandleManifest).toHaveBeenCalledWith(appEntry)
+  })
 
-    const { appUpdate } = await checkForUpdates()
-    expect(appUpdate.available).toBe(false)
-    expect(appUpdate.checkedAt).toBeNull()
+  it('ignoriert ein Manifest mit ungültiger Signatur ganz — keine App- und keine Modell-Updates', async () => {
+    mockVerifySignature.mockReturnValue(false)
+    makeHttpsResponse(
+      200,
+      JSON.stringify({
+        generatedAt: '2025-01-15T00:00:00Z',
+        app: appEntry,
+        models: validManifestModels
+      })
+    )
+    const { modelUpdates } = await checkForUpdates()
+    expect(modelUpdates).toEqual([])
+    expect(mockHandleManifest).not.toHaveBeenCalled()
+  })
+
+  it('teilt gleichzeitige Prüfungen in einen Lauf', async () => {
+    makeHttpsResponse(200, validManifest)
+    await Promise.all([checkForUpdates(), checkForUpdates()])
+    expect(mockGet).toHaveBeenCalledTimes(2) // Manifest + Signatur, nicht doppelt
+  })
+
+  it('liefert bei Netzwerkfehler keine Updates', async () => {
+    makeHttpsError('Connection refused')
+    const { modelUpdates } = await checkForUpdates()
+    expect(modelUpdates).toEqual([])
+    expect(mockHandleManifest).not.toHaveBeenCalled()
   })
 })
 

@@ -1,10 +1,7 @@
 import Store from 'electron-store'
 import type { ThemePreference } from '../../shared/types'
-import type {
-  PendingModelUpdate,
-  InstalledModelVersion,
-  AppUpdateStatus
-} from '../../shared/types/ModelUpdate'
+import type { PendingModelUpdate, InstalledModelVersion } from '../../shared/types/ModelUpdate'
+import type { PersistedAppUpdate } from './AppUpdateService'
 import type { ReconcileEvent } from '../../shared/types/ReconcileEvent'
 import { getModelDefinitions, defaultActiveModelFor } from './ModelDownloadService'
 import {
@@ -39,7 +36,12 @@ export interface AppSettings {
   reviewPanelOpen: boolean
   installedModelVersions: Record<string, InstalledModelVersion>
   pendingModelUpdates: PendingModelUpdate[] | null
-  cachedAppUpdateStatus: AppUpdateStatus | null
+  /** Issue #165 — automatische Updates (Download und Installation), standardmässig an. */
+  autoUpdate: boolean
+  /** Issue #164 — geladenes bzw. bereitliegendes App-Update (validiert beim Lesen). */
+  appUpdate: PersistedAppUpdate | null
+  /** Issue #164 — nach einem Update-Neustart Fenster nicht zeigen (war versteckt). */
+  startHiddenAfterUpdate: boolean
   reconcileEvents: ReconcileEvent[]
   /**
    * Issue #84 / Story F+G — manifest entries the user has actively dismissed.
@@ -78,7 +80,9 @@ const defaults: AppSettings = {
   reviewPanelOpen: false,
   installedModelVersions: {},
   pendingModelUpdates: null,
-  cachedAppUpdateStatus: null,
+  autoUpdate: true,
+  appUpdate: null,
+  startHiddenAfterUpdate: false,
   reconcileEvents: [],
   dismissedManifestVersions: []
 }
@@ -230,6 +234,10 @@ export function initSettings(): Store<AppSettings> {
   if (store.get('microphoneWasGranted') === undefined) {
     store.set('microphoneWasGranted', store.get('modelsDownloaded') === true)
   }
+
+  // Issue #164 — der frühere reine Hinweis auf eine neue App-Version ist durch
+  // den Update-Zustand (appUpdate, AppUpdateService) ersetzt.
+  ;(store as unknown as { delete: (key: string) => void }).delete('cachedAppUpdateStatus')
 
   // installedModelVersions: Altlasten-Keys (Legacy + PR-Zwischenstände) auf den neuen
   // Key umbenennen, sonst bleiben sie für immer verwaist (UpdateCheckService iteriert

@@ -32,15 +32,8 @@ export interface InstalledModelVersion {
   installedAt: string
 }
 
-// ─── App Update ──────────────────────────────────────────────────────────────
-
-export interface AppUpdateStatus {
-  available: boolean
-  latestVersion: string | null // version from manifest (e.g. "0.4.0"), null if unknown
-  checkedAt: string | null // ISO timestamp of last check
-}
+// App-Updates: siehe AppUpdate.ts (Issue #164)
 
 export interface CheckResult {
   modelUpdates: PendingModelUpdate[]
-  appUpdate: AppUpdateStatus
 }

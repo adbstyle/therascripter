@@ -338,9 +338,10 @@
           <article>
             <h3>Internet nur für Modelle und Updates</h3>
             <p>
-              Mit dem Internet verbindet sich TheraScript nur, um Sprachmodelle herunterzuladen und
-              nach neuen Versionen zu suchen. Dabei sieht der Anbieter Cloudflare Ihre IP-Adresse,
-              den Zeitpunkt und die abgerufene Datei – keine Inhalte aus Ihren Sitzungen.
+              Mit dem Internet verbindet sich TheraScript nur, um Sprachmodelle und neue Versionen
+              herunterzuladen und nach neuen Versionen zu suchen. Dabei sehen die Anbieter
+              Cloudflare und GitHub Ihre IP-Adresse, den Zeitpunkt und die abgerufene Datei – keine
+              Inhalte aus Ihren Sitzungen.
               <a href="impressum.html#app-datenschutz">Mehr dazu</a>
             </p>
           </article>
@@ -388,24 +389,28 @@
         <details id="faq-internet">
           <summary>Wann verbindet sich TheraScript mit dem Internet?</summary>
           <div>
-            <p>TheraScript verbindet sich nur in zwei Fällen mit dem Internet:</p>
+            <p>TheraScript verbindet sich nur in drei Fällen mit dem Internet:</p>
             <ul>
               <li>
                 <strong>Sprachmodelle herunterladen:</strong> bei der Ersteinrichtung, wenn Sie in
                 den Einstellungen ein Modell hinzufügen und wenn Sie ein Modell-Update installieren.
               </li>
               <li>
-                <strong>Nach neuen Versionen suchen:</strong> bei jedem Start, danach alle 24
-                Stunden und wenn Sie unter «Über» auf «Nach Updates suchen» klicken.
+                <strong>Nach neuen Versionen suchen:</strong> bei jedem Start, danach alle 4 Stunden
+                und wenn Sie unter Einstellungen → Updates auf «Nach Updates suchen» klicken.
+              </li>
+              <li>
+                <strong>Neue Versionen herunterladen:</strong> automatisch, sobald eine erscheint,
+                oder nur auf Klick, wenn Sie unter Einstellungen → Updates die automatischen Updates
+                ausschalten.
               </li>
             </ul>
             <p>
-              Beide Verbindungen gehen an den Dienst Cloudflare, bei dem die Modelle und die
-              Versionsliste liegen. Cloudflare sieht dabei Ihre IP-Adresse, den Zeitpunkt und die
-              abgerufene Datei. TheraScript sendet kein Konto, keine Kennung und keine Nutzungsdaten
-              mit. Aufnahmen, Transkripte, PDFs und Zusammenfassungen übermittelt TheraScript nie.
-              Links zu GitHub oder Hugging Face öffnen sich in Ihrem Browser, nur wenn Sie sie
-              anklicken.
+              Modelle und Versionsliste liegen beim Dienst Cloudflare, neue Versionen bei GitHub.
+              Beide sehen dabei Ihre IP-Adresse, den Zeitpunkt und die abgerufene Datei. TheraScript
+              sendet kein Konto, keine Kennung und keine Nutzungsdaten mit. Aufnahmen, Transkripte,
+              PDFs und Zusammenfassungen übermittelt TheraScript nie. Links zu GitHub oder Hugging
+              Face öffnen sich in Ihrem Browser, nur wenn Sie sie anklicken.
             </p>
             <p>
               Nach der Ersteinrichtung funktioniert TheraScript auch ohne Internet. Einzelheiten
@@ -486,10 +491,12 @@
         <details>
           <summary>Wie erhalte ich Updates?</summary>
           <p>
-            TheraScript zeigt an, wenn eine neue Version verfügbar ist. Beenden Sie die App über das
-            Symbol in der Menüleiste, laden Sie die neue Version herunter, ersetzen Sie die App im
-            Ordner «Programme» und geben Sie sie wie bei der Erstinstallation frei. Die Schritte
-            stehen in der <a href="installation.html#update">Installationsanleitung</a>. Ihre
+            TheraScript aktualisiert sich selbst: Neue Versionen werden im Hintergrund geladen und
+            installiert, wenn Sie 10 Minuten nicht am Mac arbeiten oder TheraScript beenden – nie
+            während einer Aufnahme oder Verarbeitung. Unter Einstellungen → Updates installieren Sie
+            ein bereitliegendes Update sofort oder schalten die automatischen Updates aus. Ältere
+            Versionen ohne diese Einstellung aktualisieren Sie einmalig von Hand, wie in der
+            <a href="installation.html#update">Installationsanleitung</a> beschrieben. Ihre
             Transkriptionen, Einstellungen und Modelle bleiben erhalten.
           </p>
         </details>

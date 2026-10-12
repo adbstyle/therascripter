@@ -30,6 +30,10 @@ vi.mock('electron-store', () => {
       get<K extends keyof FakeStoreState>(key: K): FakeStoreState[K] {
         return storeState[key]
       }
+      delete(key: string): void {
+        storeState = { ...storeState }
+        delete (storeState as unknown as Record<string, unknown>)[key]
+      }
       set<K extends keyof FakeStoreState>(key: K, value: FakeStoreState[K]): void {
         storeState = { ...storeState, [key]: value }
       }

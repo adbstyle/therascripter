@@ -1,43 +1,64 @@
-import { useEffect, useState, useCallback } from 'react'
-import type { AppUpdateStatus, CheckResult } from '../../../shared/types/ModelUpdate'
+import { useCallback, useEffect, useState } from 'react'
+import type { AppUpdateInstallResult, AppUpdateState } from '../../../shared/types/AppUpdate'
 
 interface UseAppUpdateResult {
-  status: AppUpdateStatus | null
+  state: AppUpdateState | null
   checking: boolean
-  checkNow: () => Promise<void>
-  openReleasePage: () => void
+  check: () => Promise<void>
+  download: () => void
+  cancelDownload: () => void
+  install: () => Promise<AppUpdateInstallResult | null>
+  setAutoUpdate: (enabled: boolean) => void
+  openInstallGuide: () => void
 }
 
+/** App-Update-Zustand aus dem Main-Prozess (Issues #164, #165). */
 export function useAppUpdate(): UseAppUpdateResult {
-  const [status, setStatus] = useState<AppUpdateStatus | null>(null)
+  const [state, setState] = useState<AppUpdateState | null>(null)
   const [checking, setChecking] = useState(false)
 
   useEffect(() => {
-    // Populate from cached value immediately (no network)
     window.api.appUpdate
-      .getStatus()
-      .then(setStatus)
+      .getState()
+      .then(setState)
       .catch(() => {})
-    // Listen for push updates from main process
-    const unsub = window.api.appUpdate.onStatus(setStatus)
-    return unsub
+    return window.api.appUpdate.onState(setState)
   }, [])
 
-  const checkNow = useCallback(async () => {
+  const check = useCallback(async () => {
     setChecking(true)
     try {
-      const result: CheckResult = await window.api.appUpdate.check()
-      setStatus(result.appUpdate)
+      setState(await window.api.appUpdate.check())
     } catch {
-      // Preserve existing status — don't overwrite a known "update available" with nulls
+      // Zustand bleibt — ein fehlgeschlagener Abruf ist kein Update-Fehler
     } finally {
       setChecking(false)
     }
   }, [])
 
-  const openReleasePage = useCallback(() => {
-    window.api.appUpdate.openReleasePage()
+  const download = useCallback(() => void window.api.appUpdate.download(), [])
+  const cancelDownload = useCallback(() => void window.api.appUpdate.cancelDownload(), [])
+  const install = useCallback(async () => {
+    try {
+      return await window.api.appUpdate.install()
+    } catch {
+      return null
+    }
   }, [])
+  const setAutoUpdate = useCallback(
+    (enabled: boolean) => void window.api.appUpdate.setAutoUpdate(enabled),
+    []
+  )
+  const openInstallGuide = useCallback(() => void window.api.appUpdate.openInstallGuide(), [])
 
-  return { status, checking, checkNow, openReleasePage }
+  return {
+    state,
+    checking,
+    check,
+    download,
+    cancelDownload,
+    install,
+    setAutoUpdate,
+    openInstallGuide
+  }
 }

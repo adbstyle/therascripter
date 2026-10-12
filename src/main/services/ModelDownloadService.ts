@@ -33,6 +33,11 @@ export type ModelDownloadStatus =
 
 let abortSignal: { aborted: boolean } | null = null
 
+/** Läuft gerade ein Modell-Download (Ersteinrichtung oder Einstellungen)? */
+export function isModelDownloadRunning(): boolean {
+  return abortSignal !== null
+}
+
 // Sentinel for "hash not yet synced from R2 manifest" — keeps the catalog entry in
 // the source for IDE navigation + manifest extraction (publish-manifest.sh reads
 // MODEL_DEFINITIONS directly), but hides the model from runtime accessors so the

@@ -33,11 +33,11 @@ import {
 import { checkFileVaultOnStartup } from './services/FileVaultService'
 import { backfillAnonymizationCounts } from './services/AnonymizationCountBackfillService'
 import { registerAppUpdateHandlers } from './ipc/app-update-handlers'
+import { getAppUpdateService, initAppUpdateService } from './services/app-update-deps'
 import {
   cleanupIncompleteUpdates,
   migrateInstalledVersions,
-  checkForUpdates,
-  invalidateCachedAppUpdateIfNeeded
+  checkForUpdates
 } from './services/UpdateCheckService'
 import { sweepStaleArtifactsAtStartup } from './services/StartupCleanupService'
 import { WhisperService } from './ml/WhisperService'
@@ -62,6 +62,12 @@ import { registerSummaryHandlers } from './ipc/summary-handlers'
 // (hide) from "app is shutting down" (allow destroy).
 let isQuitting = false
 
+// Issue #164 — nach einem Update-Neustart bleibt ein vorher verstecktes
+// Fenster versteckt (Datenschutz: keine Sitzungstitel auf dem Bildschirm,
+// während niemand davor sitzt). macOS meldet beim Start ein 'activate', das
+// das Fenster sonst sofort zeigen würde.
+let suppressActivateUntil = 0
+
 function showBackgroundReminderOnce(): void {
   const settings = getSettings()
   if (settings.get('backgroundReminderShown')) return
@@ -77,6 +83,12 @@ function showBackgroundReminderOnce(): void {
 }
 
 function createWindow(): void {
+  const startHidden = getSettings().get('startHiddenAfterUpdate') === true
+  if (startHidden) {
+    getSettings().set('startHiddenAfterUpdate', false)
+    suppressActivateUntil = Date.now() + 5_000
+  }
+
   // Set background color based on theme to prevent white flash in dark mode
   const isDark =
     nativeTheme.themeSource === 'dark' ||
@@ -88,6 +100,7 @@ function createWindow(): void {
     minWidth: 800,
     minHeight: 600,
     title: 'TheraScript',
+    show: !startHidden,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 15, y: 11 },
     backgroundColor: isDark ? '#0f1117' : '#ffffff',
@@ -205,6 +218,17 @@ app.whenReady().then(() => {
 
   // Clean up any incomplete model updates from a previous crashed update
   cleanupIncompleteUpdates()
+
+  // Issue #164 — App-Update: Ergebnis eines Austauschs auswerten, Reste
+  // aufräumen, ein bereitliegendes Update wieder anbieten. Die Menüleiste
+  // entsteht erst später, deshalb defensiv.
+  initAppUpdateService((state) => {
+    try {
+      getTray().setUpdateReady(state.phase === 'ready' ? state.version : null)
+    } catch {
+      // Tray noch nicht initialisiert — initTray liest den Zustand selbst
+    }
+  })
 
   // Delete models dropped from the catalog (e.g. Gemma 3) and clear their
   // slot BEFORE the reconciler — it would otherwise report them as missing.
@@ -325,6 +349,9 @@ app.whenReady().then(() => {
   const tray = initTray()
   tray.onStop(() => stopRecordingFromTray())
   tray.onOpenSettings(() => sendToRenderer('nav:openSettings'))
+  tray.onInstallUpdate(() => getAppUpdateService()?.requestInstall())
+  const updateState = getAppUpdateService()?.getState()
+  tray.setUpdateReady(updateState?.phase === 'ready' ? updateState.version : null)
 
   // Application Menu owns ⌘, (Einstellungen) and ⌘Q (Beenden) so the
   // shortcuts only fire while Therascript is the focused app.
@@ -341,25 +368,28 @@ app.whenReady().then(() => {
   // Start auto-deletion (30-day cleanup at startup + every 6h)
   startAutoDeletion()
 
-  // Invalidate stale cached app update status if user installed a new version
-  invalidateCachedAppUpdateIfNeeded()
-
   // Non-blocking: check for model + app updates on startup
   checkForUpdates().catch(() => {
     /* already handled inside */
   })
 
-  // Periodic update check every 24h while app is running
+  // Alle 4 Stunden: Eine korrigierte Version erreicht so auch eine App, die
+  // wochenlang im Hintergrund läuft (Issue #164, PO-Entscheid).
   setInterval(
     () => {
       checkForUpdates().catch(() => {
         /* already handled inside */
       })
     },
-    24 * 60 * 60 * 1000
+    4 * 60 * 60 * 1000
   )
 
+  // Jede Minute: vorgemerkte Installation nachholen, nach 10 Minuten ohne
+  // Eingabe selbständig installieren (#164 AK 7)
+  setInterval(() => getAppUpdateService()?.tick(), 60 * 1000)
+
   app.on('activate', () => {
+    if (Date.now() < suppressActivateUntil) return
     const windows = BrowserWindow.getAllWindows()
     if (windows.length === 0) {
       createWindow()
@@ -394,6 +424,9 @@ app.on('before-quit', (event) => {
   isQuitting = true
   if (quitCleanupDone) return
   event.preventDefault()
+  // Vor cleanupRecordingOnQuit entscheiden: danach wäre eine laufende
+  // Aufnahme nicht mehr erkennbar (#164 AK 14)
+  const installPlan = getAppUpdateService()?.prepareQuitInstall() ?? null
   void (async () => {
     cleanupRecordingOnQuit()
     stopAutoDeletion()
@@ -409,6 +442,15 @@ app.on('before-quit', (event) => {
     }
     closeDatabase()
     quitCleanupDone = true
+    if (installPlan) {
+      // Nur Umbenennungen — die neue Version liegt schon geprüft bereit (NFR 5).
+      // Danach exit statt quit: Nach dem Umbenennen des eigenen Bundles bricht
+      // macOS ein reguläres Beenden ab, der Prozess liefe weiter (am echten
+      // Build gemessen). Aufgeräumt ist hier schon alles.
+      getAppUpdateService()?.performQuitInstall(installPlan)
+      app.exit(0)
+      return
+    }
     app.quit()
   })()
 })
