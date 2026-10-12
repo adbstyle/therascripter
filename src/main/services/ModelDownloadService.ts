@@ -7,7 +7,7 @@ import { getSettings, type AppSettings } from './SettingsService'
 import { deleteInstalledVersion, setInstalledVersion } from './InstalledVersionsStore'
 import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
 import type { ModelGroup } from '../../shared/validation/model-catalog-schemas'
-import { MODEL_DEFINITIONS, type ModelDefinition } from '../../shared/model-catalog'
+import { MODEL_DEFINITIONS, RETIRED_MODELS, type ModelDefinition } from '../../shared/model-catalog'
 import type { ReconcileEvent, ReconcileReason } from '../../shared/types/ReconcileEvent'
 
 export type { ModelGroup, ModelDefinition }
@@ -524,6 +524,32 @@ export async function downloadSingleModel(id: string): Promise<void> {
 }
 
 /**
+ * Entfernt ein Modell und alles, was ein Download oder Update dafür anlegen
+ * kann: `relativeTarget` (Datei oder Verzeichnis) samt `.partial` eines
+ * abgebrochenen Downloads, das Archiv `<id>.tar.gz` (auch `.partial`) und
+ * `.backup/<id>` eines abgebrochenen Update-Swaps. Ein Fehler beim Haupt-Ziel
+ * wird geworfen; Reste werden best effort entfernt.
+ */
+function removeModelArtifacts(id: string, relativeTarget: string): void {
+  const modelsDir = getModelsDir()
+  const target = join(modelsDir, relativeTarget)
+  rmSync(target, { recursive: true, force: true })
+  const archive = join(modelsDir, `${id}.tar.gz`)
+  for (const leftover of [
+    `${target}.partial`,
+    archive,
+    `${archive}.partial`,
+    join(modelsDir, '.backup', id)
+  ]) {
+    try {
+      rmSync(leftover, { recursive: true, force: true })
+    } catch {
+      /* non-fatal */
+    }
+  }
+}
+
+/**
  * Löscht ein einzelnes Modell von Disk. Verboten für:
  *   - unbekannte IDs
  *   - Pflicht-Modelle (isRequired, z.B. flair NER + pyannote-Suite)
@@ -554,20 +580,7 @@ export async function deleteModel(id: string): Promise<void> {
     )
   }
 
-  const modelsDir = getModelsDir()
-  const target = join(modelsDir, def.checkPath)
-  if (existsSync(target)) {
-    rmSync(target, { recursive: true, force: true })
-  }
-  const archivePath = join(modelsDir, `${def.id}.tar.gz`)
-  if (existsSync(archivePath)) {
-    try {
-      unlinkSync(archivePath)
-    } catch {
-      /* non-fatal */
-    }
-  }
-
+  removeModelArtifacts(id, def.checkPath)
   deleteInstalledVersion(id)
 
   // Optionale Gruppen: war das gelöschte Modell aktiv, Active-Slot räumen,
@@ -817,18 +830,7 @@ export function reconcileActiveModels(): ReadonlyArray<ReconcileRepair> {
         eventsChanged = true
         continue
       }
-      events = [
-        ...events,
-        {
-          id: randomUUID(),
-          timestamp: new Date().toISOString(),
-          group: r.group,
-          fromModelId: r.fromModelId,
-          toModelId: r.toModelId,
-          reason: r.reason,
-          status: 'pending'
-        }
-      ]
+      events = [...events, newReconcileEvent(r)]
       eventsChanged = true
     }
     if (eventsChanged) {
@@ -842,6 +844,84 @@ export function reconcileActiveModels(): ReadonlyArray<ReconcileRepair> {
   }
 
   return repairs
+}
+
+/** Anzeigename für das Banner — auch für IDs, die nur noch in RETIRED_MODELS stehen. */
+function modelLabel(id: string | null): string | null {
+  if (id === null) return null
+  return getModelById(id)?.label ?? RETIRED_MODELS.find((m) => m.id === id)?.label ?? id
+}
+
+function newReconcileEvent(repair: ReconcileRepair): ReconcileEvent {
+  return {
+    id: randomUUID(),
+    timestamp: new Date().toISOString(),
+    group: repair.group,
+    fromModelId: repair.fromModelId,
+    toModelId: repair.toModelId,
+    fromLabel: modelLabel(repair.fromModelId),
+    toLabel: modelLabel(repair.toModelId),
+    reason: repair.reason,
+    status: 'pending'
+  }
+}
+
+/**
+ * Räumt aus dem Katalog entfernte Modelle (`RETIRED_MODELS`) auf: löscht die
+ * Datei samt Download-/Update-Resten (`removeModelArtifacts` — kennt sonst
+ * niemand mehr), verwirft vorgemerkte Updates für die ID, löscht den
+ * Installed-Version-Eintrag (No-op, wenn schon weg) und —
+ * falls das Modell aktiv war — den Slot. Ein geleerter Slot wird als
+ * `model-retired`-ReconcileEvent gemeldet (BottomNav-Dot → Banner in
+ * Einstellungen → Modelle), damit der Nutzer den Nachfolger herunterlädt;
+ * ungefragt geladen wird nichts.
+ *
+ * Muss VOR `reconcileActiveModels()` laufen: der sähe sonst eine unbekannte
+ * ID im Slot und meldete "nicht mehr gefunden". Idempotent — nach dem ersten
+ * Lauf ist alles weg und jeder weitere Aufruf ein No-op. Löschfehler (z. B.
+ * Rechte) werden geloggt; der Slot wird trotzdem geleert, weil der Katalog
+ * die ID nicht mehr kennt.
+ */
+export function retireObsoleteModels(): void {
+  const settings = getSettings()
+  const retiredIds = new Set(RETIRED_MODELS.map((m) => m.id))
+  const events: ReconcileEvent[] = []
+  let active = settings.get('activeModels')
+
+  for (const retired of RETIRED_MODELS) {
+    try {
+      removeModelArtifacts(retired.id, retired.relativePath)
+    } catch (err) {
+      console.error(`[retire] ${retired.id}: Löschen fehlgeschlagen`, err)
+    }
+    deleteInstalledVersion(retired.id)
+
+    const slot = GROUP_TO_SETTINGS_KEY[retired.group]
+    if (active[slot] !== retired.id) continue
+    active = { ...active, [slot]: null }
+    events.push(
+      newReconcileEvent({
+        group: retired.group,
+        fromModelId: retired.id,
+        toModelId: null,
+        reason: 'model-retired'
+      })
+    )
+  }
+
+  // Ein vor dem Upgrade vorgemerktes Update würde das Modell beim nächsten
+  // Neustart (ModelUpdateScreen) sonst wieder herunterladen.
+  const pending = settings.get('pendingModelUpdates')
+  if (Array.isArray(pending) && pending.some((u) => retiredIds.has(u.id))) {
+    const rest = pending.filter((u) => !retiredIds.has(u.id))
+    settings.set('pendingModelUpdates', rest.length > 0 ? rest : null)
+  }
+
+  if (events.length === 0) return
+  settings.set('activeModels', active)
+  // Kein Round-Trip-Collapse wie im Reconciler nötig: ein Retire wird nie
+  // rückgängig gemacht, die ID kommt nicht in den Katalog zurück.
+  settings.set('reconcileEvents', [...(settings.get('reconcileEvents') ?? []), ...events])
 }
 
 // ─── Reconcile event lifecycle ────────────────────────────────────────────────

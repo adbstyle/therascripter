@@ -28,10 +28,12 @@ The renderer captures Float32 samples from the AudioWorklet; conversion to 16-bi
 
 The `VUMeter` component provides real-time audio level feedback during recording.
 
-- **Input**: RMS level (0.0 -- 1.0) from the AudioWorklet.
-- **Visualization**: 16 vertical bars arranged symmetrically -- center bars are taller, edge bars shorter, all scaled by the current audio level.
+- **Input**: RMS level (0.0 -- 1.0) from the AudioWorklet, one value per ~16 ms window (768 samples, 62.5 messages/s).
+- **Delivery (Issue #140)**: Neither the level nor the duration enters React state. `useRecording` exposes both as value stores (`level`, `duration`; `src/renderer/src/utils/valueStore.ts`). `VUMeter` subscribes itself and paints bar heights, colors and `aria-valuenow` directly via refs, at most once per animation frame; `RecordingSessionCard` and `RecordingBar` read the duration via `useSyncExternalStore`. Keeping the level in state re-rendered the whole app 60--120 times per second during recording. New consumers (e.g. a level warning) should subscribe the same way.
+- **No signal**: If no level arrives for 100 ms (mic unplugged, AudioContext interrupted), the meter decays to zero instead of freezing on the last speech level.
+- **Visualization**: 6 vertical bars arranged symmetrically -- center bars are taller, edge bars shorter, all scaled by the current audio level.
 - **dB normalization**: Raw RMS is converted to dB (`20 * log10(level)`), then normalized to a 0--1 range between -60 dB (silence) and -6 dBFS (loud speech). This provides perceptually correct scaling across different microphones.
-- **Smoothing**: Exponential smoothing (0.5 attack / 0.5 decay) for visual continuity without sluggishness.
+- **Smoothing**: Exponential smoothing (0.5 attack / 0.5 decay) per worklet value for visual continuity without sluggishness.
 - **Color coding**:
   - Green (`#16a34a`) -- normal speech levels (height <= 0.5)
   - Orange (`#ea580c`) -- loud (height > 0.5)
@@ -98,7 +100,7 @@ Only two actions remain blocked while recording: starting a second recording (bu
 |---|---|
 | `src/renderer/src/components/RecordingSessionCard.tsx` | Live recording control in the sessions list: timer, compact VU meter, stop button, auto-stop countdown |
 | `src/renderer/src/components/shell/RecordingBar.tsx` | Slim recording status bar shown in Settings/Review |
-| `src/renderer/src/components/VUMeter.tsx` | Audio level visualization (16-bar symmetric meter) |
+| `src/renderer/src/components/VUMeter.tsx` | Audio level visualization (6-bar symmetric meter, subscribes to the level itself) |
 | `src/renderer/src/components/ConsentBanner.tsx` | First-recording consent reminder |
 | `src/main/ipc/recording-handlers.ts` | IPC handlers: start, stop, data streaming, auto-stop, recovery |
 | `src/main/services/AudioFileService.ts` | WAV file creation, chunk writing, header finalization, crash recovery |

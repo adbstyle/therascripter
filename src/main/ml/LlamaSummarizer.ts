@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve as resolvePath, relative } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { buildSummarizationPrompt } from './summarization-prompt'
-import { SUMMARIZATION_JSON_SCHEMA, SummarizationOutputSchema } from './summarization-schema'
+import { SUMMARIZATION_GBNF, SummarizationOutputSchema } from './summarization-schema'
 import { runSubprocess } from '../utils/subprocess'
 
 // Unter der 600-s-Watchdog-Wall (STALL_THRESHOLDS.summarization), damit ein
@@ -23,11 +23,16 @@ export function buildLlamaArgs(input: LlamaArgsInput): string[] {
     '-f',
     input.promptFilePath,
     // Constrains token sampling so the model can ONLY emit tokens that
-    // lead to a valid JSON document matching SUMMARIZATION_JSON_SCHEMA.
-    // Removes the entire format-following risk class — model cannot emit
-    // prose, headers, markdown, free-form German, or any non-JSON output.
-    '--json-schema',
-    SUMMARIZATION_JSON_SCHEMA,
+    // lead to a valid {title, summary} JSON object. Removes the entire
+    // format-following risk class — model cannot emit prose, headers,
+    // markdown, free-form German, or any non-JSON output. GBNF instead of
+    // --json-schema: see SUMMARIZATION_GBNF (Gemma 4 crashes the converter).
+    '--grammar',
+    SUMMARIZATION_GBNF,
+    // Gemma 4 ist ein Reasoning-Modell und schreibt sonst vor der Antwort
+    // einen Denk-Block. Gemessen wurde nur mit -rea off (Issue #57).
+    '-rea',
+    'off',
     // Single-turn mode: applies the model's jinja chat template + exits
     // after one assistant response. Without this, llama-cli b8920+ either
     // skips the chat template (raw -p mode) or hangs interactively.

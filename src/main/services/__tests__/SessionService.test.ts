@@ -374,7 +374,7 @@ describe('SessionService', () => {
         session.id,
         'Schlafstörungen und Arbeitsstress',
         'Der Patient berichtet von Einschlafproblemen. Vereinbart wird ein Schlaftagebuch.',
-        'gemma-summarization'
+        'gemma-4-e2b-summarization'
       )
 
       const summary = service.getSummary(session.id)
@@ -383,7 +383,7 @@ describe('SessionService', () => {
       expect(summary?.text).toBe(
         'Der Patient berichtet von Einschlafproblemen. Vereinbart wird ein Schlaftagebuch.'
       )
-      expect(summary?.modelId).toBe('gemma-summarization')
+      expect(summary?.modelId).toBe('gemma-4-e2b-summarization')
       expect(summary?.summarizedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
     })
 
@@ -399,7 +399,12 @@ describe('SessionService', () => {
 
     it('updateSummaryText clears summary_model_id (user edit overrides LLM provenance)', () => {
       const session = service.createSession('Original', 'audio')
-      service.saveGeneratedSummary(session.id, 'LLM Title', 'LLM text.', 'gemma-summarization')
+      service.saveGeneratedSummary(
+        session.id,
+        'LLM Title',
+        'LLM text.',
+        'gemma-4-e2b-summarization'
+      )
 
       service.updateSummaryText(session.id, 'User-edited summary.')
 

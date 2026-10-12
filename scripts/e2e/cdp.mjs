@@ -14,8 +14,12 @@ const pending = new Map()
 ws.onmessage = (ev) => {
   const msg = JSON.parse(ev.data)
   if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id) }
+  else if (msg.method) for (const fn of listeners) fn(msg)
 }
-function send(method, params) {
+const listeners = new Set()
+/** CDP-Events (z. B. Page.screencastFrame); liefert eine Abmelde-Funktion. */
+export function onEvent(fn) { listeners.add(fn); return () => listeners.delete(fn) }
+export function send(method, params) {
   return new Promise((resolve) => {
     const id = ++msgId
     pending.set(id, resolve)

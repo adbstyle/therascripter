@@ -80,6 +80,15 @@ describe('groupSessionsByTime', () => {
     expect(result.get('Heute')).toHaveLength(1)
     expect(result.get('Gestern')).toHaveLength(1)
   })
+
+  // SessionDashboard übergibt das "Heute" aus useStartOfToday, damit Gruppen
+  // und Karten-Zeitstempel denselben Tag zugrunde legen.
+  it('gruppiert relativ zum übergebenen Zeitpunkt', () => {
+    const session = makeSession({ createdAt: new Date(2026, 9, 11, 23, 10).toISOString() })
+
+    expect(groupSessionsByTime([session], new Date(2026, 9, 11)).get('Heute')).toHaveLength(1)
+    expect(groupSessionsByTime([session], new Date(2026, 9, 12)).get('Gestern')).toHaveLength(1)
+  })
 })
 
 const mockSessions = {

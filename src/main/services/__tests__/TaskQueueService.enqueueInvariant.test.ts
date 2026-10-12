@@ -84,7 +84,7 @@ describe('TaskQueueService — enqueue + plannedSteps invariant', () => {
     })
 
     it('includes summarization when an LLM model is active AND installed', () => {
-      vi.mocked(getActiveModelId).mockReturnValue('gemma-3-4b')
+      vi.mocked(getActiveModelId).mockReturnValue('gemma-4-e2b-summarization')
       const session = sessionRepo.create({ title: 'T', type: 'audio', status: 'queued' })
       queue.enqueuePipeline(session.id, 'audio')
 

@@ -55,9 +55,15 @@ export function setInstalledVersion(modelId: string, val: InstalledModelVersion)
   writeRaw(next)
 }
 
-/** Removes the installed-version record for the active channel. */
+/**
+ * Removes the installed-version record for the active channel. No-op (and no
+ * settings write) when there is none — the boot-time retirement calls this
+ * on every start for ids that are long gone.
+ */
 export function deleteInstalledVersion(modelId: string): void {
-  const next = { ...readRaw() }
+  const raw = readRaw()
+  if (!(tagKey(modelId) in raw)) return
+  const next = { ...raw }
   delete next[tagKey(modelId)]
   writeRaw(next)
 }

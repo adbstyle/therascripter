@@ -39,7 +39,7 @@ describe('buildSummarizationPrompt', () => {
   it('does NOT diktat the line-by-line format (the JSON schema enforces structure)', () => {
     const prompt = buildSummarizationPrompt('test')
     // The old prompt forced "TITEL:" / "ZUSAMMENFASSUNG:" headers via text
-    // instructions; we now rely on llama-cli's --json-schema grammar engine
+    // instructions; we now rely on llama-cli's grammar engine (--grammar)
     // to enforce structure at the token-sampling level. Belt-and-suspenders
     // guard so a future edit doesn't accidentally re-introduce the old
     // free-text-format approach without also dropping the schema constraint.

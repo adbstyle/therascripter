@@ -7,10 +7,10 @@ import {
   extractFirstJSONObject,
   validateModelPath
 } from '../LlamaSummarizer'
-import { SUMMARIZATION_JSON_SCHEMA } from '../summarization-schema'
+import { SUMMARIZATION_GBNF } from '../summarization-schema'
 
 describe('buildLlamaArgs', () => {
-  it('passes the JSON schema as --json-schema and uses single-turn mode', () => {
+  it('passes the grammar as --grammar, disables reasoning and uses single-turn mode', () => {
     const args = buildLlamaArgs({
       modelPath: '/models/gemma.gguf',
       promptFilePath: '/tmp/prompt.txt',
@@ -20,10 +20,12 @@ describe('buildLlamaArgs', () => {
     expect(args).toContain('/models/gemma.gguf')
     expect(args).toContain('-f')
     expect(args).toContain('/tmp/prompt.txt')
-    // The grammar engine sees this schema and constrains token sampling so
-    // the model can only emit valid {title, summary} JSON objects.
-    expect(args).toContain('--json-schema')
-    expect(args).toContain(SUMMARIZATION_JSON_SCHEMA)
+    // The grammar engine constrains token sampling so the model can only
+    // emit valid {title, summary} JSON objects.
+    expect(args[args.indexOf('--grammar') + 1]).toBe(SUMMARIZATION_GBNF)
+    // --json-schema crasht den Sampler-Init mit Gemma 4 und exitet 0 (Issue #57).
+    expect(args).not.toContain('--json-schema')
+    expect(args[args.indexOf('-rea') + 1]).toBe('off')
     expect(args).toContain('-st')
     expect(args).toContain('-n')
     expect(args).toContain('200')
@@ -93,6 +95,16 @@ describe('parseLlamaOutput', () => {
     expect(result.title).toBe('Elektronische Verfügungszustellung')
     expect(result.text).toMatch(/Postversand/)
     expect(result.text.length).toBeGreaterThan(50)
+  })
+
+  it('parses real captured Gemma 4 E2B stdout (pretty-printed JSON, b9200)', () => {
+    const fixture = readFileSync(
+      join(__dirname, '__fixtures__', 'llama-cli-gemma4-e2b-stdout.txt'),
+      'utf-8'
+    )
+    const result = parseLlamaOutput(fixture)
+    expect(result.title).toBe('Kunstprojekte, familiäre Konflikte und Zukunftswünsche')
+    expect(result.text).toMatch(/Malaktivitäten/)
   })
 
   it('throws a readable error when stdout has no JSON object', () => {

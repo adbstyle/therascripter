@@ -60,7 +60,7 @@ describe('computePlannedSteps — Issue #80 Phase H', () => {
     })
 
     it('includes summarization when a model is active AND installed', () => {
-      vi.mocked(getActiveModelId).mockReturnValue('gemma-3-4b')
+      vi.mocked(getActiveModelId).mockReturnValue('gemma-4-e2b-summarization')
       const session = makeSession({ type: 'audio' })
       expect(computePlannedSteps(session)).toEqual([
         'diarization',
@@ -91,7 +91,7 @@ describe('computePlannedSteps — Issue #80 Phase H', () => {
     })
 
     it('includes summarization when an LLM model is active', () => {
-      vi.mocked(getActiveModelId).mockReturnValue('gemma-3-4b')
+      vi.mocked(getActiveModelId).mockReturnValue('gemma-4-e2b-summarization')
       const session = makeSession({ type: 'pdf' })
       expect(computePlannedSteps(session)).toEqual([
         'extraction',

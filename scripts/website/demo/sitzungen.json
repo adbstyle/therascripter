@@ -1,0 +1,60 @@
+{
+  "_hinweis": "Frei erfundene Demo-Inhalte für Bilder und Animationen der Landing Page (Epic #172). Kein Bezug zu realen Behandlungsfällen oder Personen. Stimmen: macOS «say» mit Anna; «Anna@0.78» heisst um den Faktor 0.78 tiefer (Tempo bleibt), damit die Sprechererkennung die Gesprächspartner:innen trennen kann. Die übrigen deutschen say-Stimmen versteht Whisper kaum.",
+  "sitzungen": [
+    {
+      "id": "haupt",
+      "titelHinweis": "Hauptsitzung: Panikattacken, Reise nach Bern",
+      "tageZurueck": 0,
+      "uhrzeit": "10:00",
+      "turns": [
+        ["Anna@0.76", "Guten Tag, Frau Brunner. Schön, dass Sie da sind. Wie ist es Ihnen seit unserem letzten Termin ergangen?"],
+        ["Anna", "Ehrlich gesagt war es eine anstrengende Woche. Am Montag hatte ich im Zug nach Zürich wieder so eine Attacke. Mein Herz hat gerast, und ich musste in Winterthur aussteigen."],
+        ["Anna@0.76", "Das klingt sehr belastend. Was ist Ihnen in dem Moment durch den Kopf gegangen?"],
+        ["Anna", "Ich dachte, ich kippe gleich um. Danach habe ich meinen Mann angerufen. Marco hat mich dann am Bahnhof abgeholt."],
+        ["Anna@0.76", "Wie hat Ihr Mann reagiert?"],
+        ["Anna", "Er war ruhig und hat mir zugehört. Aber ich schäme mich, dass ich wieder nicht zur Arbeit gekommen bin. In der Gärtnerei Lindenhof warten sie auf mich, und meine Chefin, Frau Ammann, hat schon nachgefragt."],
+        ["Anna@0.76", "Sie haben das Gefühl, andere zu enttäuschen. Haben Sie die Atemübung seit unserem letzten Gespräch ausprobiert?"],
+        ["Anna", "Ja, an drei Abenden. Sie hilft gegen meine Schlafstörung. Doktor Keller meint, das sei eine Panikstörung, und hat die Dosis von Sertralin angepasst."],
+        ["Anna@0.76", "Gut, dass Sie dranbleiben. Merken Sie schon eine Veränderung?"],
+        ["Anna", "Ein bisschen. Ich schlafe besser. Aber vor der Reise zu meiner Schwester nach Bern habe ich grosse Angst."],
+        ["Anna@0.76", "Dann nehmen wir uns diese Reise heute vor. Wir überlegen gemeinsam, wie Sie sich darauf vorbereiten können, und üben die Atemtechnik noch einmal zusammen."],
+        ["Anna", "Das wäre gut. Ich möchte Sarah unbedingt besuchen."],
+        ["Anna@0.76", "Das schaffen wir. Lassen Sie uns mit der Situation im Zug beginnen."]
+      ]
+    },
+    {
+      "id": "steiner",
+      "titelHinweis": "Arbeitsbelastung, Rückkehr an den Arbeitsplatz",
+      "tageZurueck": 1,
+      "uhrzeit": "14:30",
+      "turns": [
+        ["Anna@0.76", "Herr Steiner, letzte Woche haben wir über Ihre Rückkehr an den Arbeitsplatz gesprochen. Wie ist der erste Tag in Basel gelaufen?"],
+        ["Anna@0.86", "Besser als befürchtet. Mein Teamleiter, Herr Vogel, hat mich freundlich empfangen. Am Nachmittag war ich aber völlig erschöpft."],
+        ["Anna@0.76", "Das ist nach so langer Pause verständlich. Wie haben Sie sich am Abend erholt?"],
+        ["Anna@0.86", "Ich bin mit dem Hund am Rhein spazieren gegangen. Das hat gutgetan. Trotzdem habe ich schlecht geschlafen."],
+        ["Anna@0.76", "Dann schauen wir heute, wie Sie Ihre Energie über die Woche besser verteilen können."]
+      ]
+    },
+    {
+      "id": "meier",
+      "titelHinweis": "Prüfungsangst, Gespräch mit Mutter",
+      "tageZurueck": 3,
+      "uhrzeit": "16:15",
+      "turns": [
+        ["Anna@0.76", "Jonas, deine Mutter hat erzählt, dass die Prüfungen in Luzern näher rücken. Wie geht es dir damit?"],
+        ["Anna@1.12", "Nicht so gut. Vor der Mathematikprüfung konnte ich zwei Nächte kaum schlafen."],
+        ["Anna@0.94", "Er sitzt jeden Abend bis spät am Schreibtisch. Ich mache mir Sorgen, dass er sich zu viel Druck macht."],
+        ["Anna@0.76", "Danke, Frau Meier. Jonas, was hilft dir, wenn die Gedanken am Abend kreisen?"],
+        ["Anna@1.12", "Musik hören, glaube ich. Und mit meinem Freund Luca reden."]
+      ]
+    }
+  ],
+  "aufnahmeAnimation": {
+    "_hinweis": "Kurzes Gespräch für die Animation «Aufnahme bis Transkript»; capture.mjs nimmt es über Chromiums Fake-Mikrofon auf und löscht die Sitzung danach wieder.",
+    "id": "aufnahme-animation",
+    "turns": [
+      ["Anna@0.76", "Guten Tag, Frau Brunner. Wie ist die Woche gelaufen?"],
+      ["Anna", "Besser. Die Atemübung hilft mir, und am Samstag fahre ich zu Sarah nach Bern."]
+    ]
+  }
+}

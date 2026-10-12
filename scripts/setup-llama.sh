@@ -21,13 +21,6 @@ rm -f \
   "$REPO_ROOT/resources/lib/"libmtmd*.dylib \
   "$REPO_ROOT/resources/lib/"libggml*.dylib 2>/dev/null || true
 
-# Gemma 4 E4B Q4_K_M GGUF was not yet published when this feature shipped — see
-# CLAUDE.md ("Gemma 4 E4B GGUF source"). Fallback: Gemma 3 4B Instruct Q4_K_M.
-# The repo is HuggingFace-gated → run `huggingface-cli login` before --model.
-GGUF_FILENAME='google_gemma-3-4b-it-Q4_K_M.gguf'
-GGUF_REPO='bartowski/google_gemma-3-4b-it-GGUF'
-GGUF_URL="https://huggingface.co/${GGUF_REPO}/resolve/main/${GGUF_FILENAME}"
-
 mkdir -p "$BIN_DIR" "$LIB_DIR"
 
 echo '==> Installing llama.cpp via Homebrew'
@@ -180,28 +173,31 @@ echo '==> Verifying binary'
 "$BIN_DIR/llama-cli" --version
 
 if [[ "${1:-}" == '--model' ]]; then
-  MODEL_DIR="$HOME/.therascript/models/summarization"
-  mkdir -p "$MODEL_DIR"
-  MODEL_FILE="$MODEL_DIR/$GGUF_FILENAME"
+  # Pfad, URL (R2) und sha256 aus dem Katalog — dieselbe Datei, die die App
+  # lädt und gegen die sie verifiziert. Kein zweiter Hash zum Synchronhalten.
+  read -r GGUF_RELPATH GGUF_URL GGUF_SHA256 < <(cd "$REPO_ROOT" && node_modules/.bin/tsx -e \
+    "import { MODEL_DEFINITIONS } from './src/shared/model-catalog'
+     const m = MODEL_DEFINITIONS.find((d) => d.group === 'summarization')
+     if (m) console.log(m.relativePath, m.url, m.sha256)")
+  if [ -z "${GGUF_SHA256:-}" ]; then
+    echo 'Kein Summarization-Modell im Katalog gefunden (npm install gelaufen?)' >&2
+    exit 1
+  fi
+  MODEL_FILE="$HOME/.therascript/models/$GGUF_RELPATH"
+  mkdir -p "$(dirname "$MODEL_FILE")"
   if [ ! -f "$MODEL_FILE" ]; then
-    echo "==> Downloading Gemma 3 4B Instruct Q4_K_M (~2.5 GB)"
-    # Prefer the new `hf` CLI (huggingface-hub >=0.26); fall back to the legacy
-    # `huggingface-cli` for older installs, then to a direct curl (which fails
-    # for gated repos like bartowski/gemma-3-4b-it-GGUF).
-    if command -v hf >/dev/null 2>&1; then
-      hf download "$GGUF_REPO" "$GGUF_FILENAME" --local-dir "$MODEL_DIR"
-    elif command -v huggingface-cli >/dev/null 2>&1; then
-      huggingface-cli download "$GGUF_REPO" \
-        "$GGUF_FILENAME" --local-dir "$MODEL_DIR" --local-dir-use-symlinks False
-    else
-      echo "Neither hf nor huggingface-cli found — falling back to direct curl (will fail if gated)" >&2
-      curl -L --fail -o "$MODEL_FILE" "$GGUF_URL"
-    fi
+    echo "==> Downloading $(basename "$MODEL_FILE")"
+    curl -L --fail -o "$MODEL_FILE.part" "$GGUF_URL"
+    mv "$MODEL_FILE.part" "$MODEL_FILE"
   else
     echo "Model already present: $MODEL_FILE"
   fi
-  echo '==> SHA-256:'
-  shasum -a 256 "$MODEL_FILE"
+  echo '==> Verifying SHA-256 against model-catalog.ts'
+  if ! echo "$GGUF_SHA256  $MODEL_FILE" | shasum -a 256 -c -; then
+    echo "SHA-256 stimmt nicht mit dem Katalog überein — Datei gelöscht: $MODEL_FILE" >&2
+    rm -f "$MODEL_FILE"
+    exit 1
+  fi
 fi
 
 echo '==> Done'

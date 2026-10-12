@@ -8,6 +8,9 @@ export type ReconcileReason =
   | 'default-promoted'
   // Optional slot had a missing model and was cleared to null (no replacement).
   | 'group-cleared'
+  // Active model was removed from the catalog (RETIRED_MODELS); its file was
+  // deleted at startup and the slot cleared. The successor must be downloaded.
+  | 'model-retired'
 
 export interface ReconcileEvent {
   /** ULID-ish unique id; generated via crypto.randomUUID(). */
@@ -17,6 +20,13 @@ export interface ReconcileEvent {
   group: ModelGroup
   fromModelId: string | null
   toModelId: string | null
+  /**
+   * Display names captured when the event was written — a retired model is no
+   * longer in the catalog, so the renderer could not resolve its id. Optional:
+   * events persisted by older versions have none (banner falls back to the id).
+   */
+  fromLabel?: string | null
+  toLabel?: string | null
   reason: ReconcileReason
   /**
    * Lifecycle:

@@ -138,21 +138,50 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
     hfRepo: 'flair/ner-german-large'
   },
   {
-    // Optional summarization model — Gemma 3 4B Instruct Q4_K_M (Gemma 4 E4B fallback,
-    // see CLAUDE.md "Gemma 4 E4B GGUF source"). Hash + size must be re-synced after
-    // running scripts/publish-manifest.sh per the model-hash-sync gotcha.
-    id: 'gemma-summarization',
-    label: 'Gemma 3 4B Instruct',
-    url: `${R2_CDN}/google_gemma-3-4b-it-Q4_K_M.gguf`,
-    relativePath: 'summarization/google_gemma-3-4b-it-Q4_K_M.gguf',
-    checkPath: 'summarization/google_gemma-3-4b-it-Q4_K_M.gguf',
-    sizeBytes: 2_489_758_112,
-    sha256: '4996030242583a40aa151ff93f49ed787ac8c25e4120c3ae4588b2e2a7d1ae94',
+    // Optionales Zusammenfassungsmodell — Googles offizielles QAT-GGUF, Apache 2.0
+    // (löste Gemma 3 4B unter den Gemma Terms of Use ab, siehe RETIRED_MODELS).
+    // sha256 + sizeBytes müssen dem auf R2 HOCHGELADENEN Objekt entsprechen
+    // (model-hash-sync gotcha); sie sind identisch mit dem HF-LFS-Objekt.
+    id: 'gemma-4-e2b-summarization',
+    label: 'Gemma 4 E2B',
+    url: `${R2_CDN}/gemma-4-E2B_q4_0-it.gguf`,
+    relativePath: 'summarization/gemma-4-E2B_q4_0-it.gguf',
+    checkPath: 'summarization/gemma-4-E2B_q4_0-it.gguf',
+    sizeBytes: 3_349_516_256,
+    sha256: 'fa401b55b07ee70a54c6dae3903c783a6e65064312529ea57175cb5f8dec6634',
     group: 'summarization',
     isRequired: false,
     description:
       'Sprachmodell von Google. Versteht und erzeugt natürliche Sprache in mehreren Sprachen — hier eingesetzt für prägnante 2-Satz-Zusammenfassungen am Ende jeder Verarbeitung. Läuft komplett lokal auf der Apple-Silicon-GPU.',
     languages: ['de', 'en'],
-    hfRepo: 'bartowski/google_gemma-3-4b-it-GGUF'
+    hfRepo: 'google/gemma-4-E2B-it-qat-q4_0-gguf'
+  }
+]
+
+/** Ein aus dem Katalog entferntes Modell, dessen Datei noch auf Nutzer-Macs liegen kann. */
+export interface RetiredModel {
+  id: string
+  /** Name, unter dem der Nutzer das Modell kannte — für das Banner. */
+  label: string
+  group: ModelGroup
+  /** Datei bzw. Verzeichnis relativ zu modelsDir, wie es der alte Katalog schrieb. */
+  relativePath: string
+}
+
+/**
+ * Aus dem Katalog entfernte Modelle, deren Datei beim App-Start gelöscht wird
+ * (`retireObsoleteModels`, läuft VOR dem Reconciler). Ohne diesen Eintrag
+ * bliebe die Datei unsichtbar auf der Platte liegen — `deleteModel` kennt
+ * nur Katalog-IDs — und der Reconciler meldete irreführend "nicht mehr
+ * gefunden". Einträge nie entfernen: auch Nutzer, die mehrere Versionen
+ * überspringen, müssen noch aufgeräumt werden.
+ */
+export const RETIRED_MODELS: RetiredModel[] = [
+  // Gemma 3 4B unter den Gemma Terms of Use — abgelöst durch Gemma 4 E2B (Apache 2.0).
+  {
+    id: 'gemma-summarization',
+    label: 'Gemma 3 4B Instruct',
+    group: 'summarization',
+    relativePath: 'summarization/google_gemma-3-4b-it-Q4_K_M.gguf'
   }
 ]

@@ -1,0 +1,128 @@
+<!doctype html>
+<!--
+  Frei erfundener Arztbericht für die Demo-Sitzung der Landing Page (Epic #172).
+  Kein Bezug zu realen Personen, Praxen oder Behandlungsfällen. Telefonnummer und
+  AHV-Nummer sind erfunden, die E-Mail-Domain example.ch ist reserviert.
+  build-demo-assets.mjs druckt daraus ein Text-PDF und ein gescanntes PDF.
+-->
+<html lang="de-CH">
+  <head>
+    <meta charset="utf-8" />
+    <title>Bericht Hausarztpraxis am Stadtgarten</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 22mm 22mm 20mm;
+      }
+      body {
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-size: 11pt;
+        line-height: 1.5;
+        color: #111;
+        margin: 0;
+      }
+      .absender {
+        font-size: 9.5pt;
+        color: #333;
+        border-bottom: 1px solid #999;
+        padding-bottom: 6pt;
+        margin-bottom: 18pt;
+      }
+      .absender strong {
+        font-size: 12pt;
+        color: #111;
+      }
+      h1 {
+        font-size: 14pt;
+        margin: 18pt 0 10pt;
+      }
+      h2 {
+        font-size: 11pt;
+        margin: 14pt 0 4pt;
+      }
+      p {
+        margin: 0 0 8pt;
+      }
+      table {
+        border-collapse: collapse;
+        margin-bottom: 8pt;
+      }
+      td {
+        padding: 1pt 14pt 1pt 0;
+        vertical-align: top;
+      }
+      .ort-datum {
+        text-align: right;
+        margin-bottom: 6pt;
+      }
+      .gruss {
+        margin-top: 18pt;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="absender">
+      <strong>Hausarztpraxis am Stadtgarten</strong><br />
+      Dr. med. Petra Keller, Fachärztin für Allgemeine Innere Medizin<br />
+      Stadthausstrasse 12, 8400 Winterthur · Tel. 052 000 12 34 · praxis@example.ch
+    </div>
+
+    <p>
+      Praxis für Psychotherapie<br />
+      lic. phil. Daniel Frei<br />
+      Marktgasse 7<br />
+      8400 Winterthur
+    </p>
+
+    <p class="ort-datum">Winterthur, 02.10.2026</p>
+
+    <h1>Bericht zur Überweisung</h1>
+
+    <table>
+      <tr>
+        <td>Patientin</td>
+        <td>Lea Brunner, geb. 14.02.1991</td>
+      </tr>
+      <tr>
+        <td>Adresse</td>
+        <td>Tösstalstrasse 48, 8400 Winterthur</td>
+      </tr>
+      <tr>
+        <td>AHV-Nr.</td>
+        <td>756.9217.0483.55</td>
+      </tr>
+    </table>
+
+    <h2>Fragestellung</h2>
+    <p>
+      Wir bitten um psychotherapeutische Mitbehandlung von Frau Brunner bei wiederkehrenden
+      Panikattacken.
+    </p>
+
+    <h2>Anamnese</h2>
+    <p>
+      Frau Brunner berichtet seit dem Frühjahr über plötzlich auftretendes Herzrasen, Atemnot und
+      Schwindel, vor allem auf Zugfahrten zwischen Winterthur und Zürich. Mehrmals musste sie die
+      Fahrt unterbrechen. Seit August ist sie an ihrer Arbeitsstelle in der Gärtnerei Lindenhof
+      zu 50 % krankgeschrieben. Kardiologische Abklärungen bei Dr. med. Thomas Huber ergaben
+      keinen auffälligen Befund.
+    </p>
+
+    <h2>Diagnose</h2>
+    <p>Panikstörung (F41.0), Schlafstörung</p>
+
+    <h2>Medikation</h2>
+    <p>Sertralin 50 mg, 1-0-0, seit 15.09.2026</p>
+
+    <h2>Procedere</h2>
+    <p>
+      Wir danken für die Übernahme. Für Rückfragen erreichen Sie mich unter der oben genannten
+      Telefonnummer. Eine Verlaufskontrolle in unserer Praxis ist in vier Wochen geplant.
+    </p>
+
+    <p class="gruss">
+      Freundliche Grüsse<br /><br />
+      Dr. med. Petra Keller
+    </p>
+  </body>
+</html>

@@ -18,7 +18,7 @@ import type { PendingModelUpdate } from '../../shared/types/ModelUpdate'
 type View = 'sessions' | 'settings' | 'review'
 
 export default function App(): React.JSX.Element {
-  const { isRecording, duration, level, error, startRecording, stopRecording } = useRecording()
+  const { isRecording, level, duration, error, startRecording, stopRecording } = useRecording()
   const { availableUpdates, clearUpdates } = useModelUpdates()
   const toast = useToast()
   const [modelsReady, setModelsReady] = useState<boolean | null>(null)
@@ -78,12 +78,9 @@ export default function App(): React.JSX.Element {
   // Mikrofon-/Aufnahmefehler als Toast: seit dem Wegfall der Vollbild-
   // RecordingView gibt es keinen dedizierten Anzeigeort mehr. (Vorher war
   // ein Fehler beim Start sogar unsichtbar — die View mountete nie.)
-  // Dep auf toast.error (stabiler useCallback), NICHT auf das pro Render
-  // neu gebaute Context-Objekt — sonst re-triggert jeder neue Toast den Effekt.
-  const showErrorToast = toast.error
   useEffect(() => {
-    if (error) showErrorToast(error)
-  }, [error, showErrorToast])
+    if (error) toast.error(error)
+  }, [error, toast])
 
   useEffect(() => {
     return window.api.nav.onOpenSettings(() => {

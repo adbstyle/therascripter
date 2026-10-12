@@ -93,6 +93,14 @@ describe('InstalledVersionsStore — Issue #84 Story D', () => {
     })
   })
 
+  it('deleteInstalledVersion does not write when the record is absent', () => {
+    mockGet.mockReturnValue({ 'staging:flair-ner-german-large': sampleEntry(SHA('b')) })
+
+    deleteInstalledVersion('flair-ner-german-large')
+
+    expect(mockSet).not.toHaveBeenCalled()
+  })
+
   it('respects a non-prod channel for reads and writes', () => {
     mockGetChannel.mockReturnValue('local')
     mockGet.mockReturnValue({

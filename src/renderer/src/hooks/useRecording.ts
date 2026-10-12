@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AudioRecorder } from '../services/AudioRecorder'
+import { createValueStore, type ValueStore } from '../utils/valueStore'
 
 interface UseRecordingResult {
   isRecording: boolean
-  duration: number
-  level: number
+  // Pegel und Dauer liegen bewusst NICHT im React-State: sonst rendert die
+  // ganze App mit jedem Wert neu (Issue #140) — beim Pegel ~60× pro Sekunde.
+  // Nur die Anzeigen abonnieren sie (VUMeter, RecordingSessionCard, RecordingBar).
+  /** Live-Pegel: RMS 0–1, ein Wert pro ~16-ms-Fenster des Worklets */
+  level: ValueStore<number>
+  /** Aufnahmedauer in Sekunden, sekündlich vom Main-Prozess */
+  duration: ValueStore<number>
   error: string | null
   startRecording: () => Promise<void>
   stopRecording: () => Promise<void>
@@ -12,15 +18,13 @@ interface UseRecordingResult {
 
 export function useRecording(): UseRecordingResult {
   const [isRecording, setIsRecording] = useState(false)
-  const [duration, setDuration] = useState(0)
-  const [level, setLevel] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const recorderRef = useRef<AudioRecorder | null>(null)
   const startingRef = useRef(false)
   const stoppingRef = useRef(false)
-  const levelRef = useRef(0)
-  const levelCountRef = useRef(0)
-  const rafRef = useRef(0)
+  // Lazy-Initializer: ein Store pro Hook-Instanz, nicht pro Render
+  const [level] = useState(() => createValueStore(0))
+  const [duration] = useState(() => createValueStore(0))
 
   const stopRecording = useCallback(async () => {
     if (stoppingRef.current) return
@@ -34,32 +38,27 @@ export function useRecording(): UseRecordingResult {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Stoppen der Aufnahme')
     } finally {
-      levelRef.current = 0
-      levelCountRef.current = 0
       setIsRecording(false)
-      setDuration(0)
-      setLevel(0)
+      duration.set(0)
+      level.set(0)
       stoppingRef.current = false
     }
-  }, [])
+  }, [duration, level])
 
   const startRecording = useCallback(async () => {
     if (startingRef.current || recorderRef.current) return
     startingRef.current = true
 
     setError(null)
+    // Ein verspätetes Dauer-Event der vorigen Aufnahme (nach dem Reset beim
+    // Stopp) darf die neue Karte nicht mit der alten Zeit starten lassen.
+    duration.set(0)
 
     const recorder = new AudioRecorder()
     recorderRef.current = recorder
 
     try {
-      await recorder.start((rmsLevel) => {
-        // Accumulate all RMS samples between display frames.
-        // The rAF loop (~60 Hz) reads the average of ~6 worklet values (~375 Hz),
-        // so silence stays low and speech registers high — no random sampling.
-        levelRef.current += rmsLevel
-        levelCountRef.current++
-      })
+      await recorder.start(level.set)
       setIsRecording(true)
     } catch (err) {
       recorderRef.current = null
@@ -76,39 +75,18 @@ export function useRecording(): UseRecordingResult {
     } finally {
       startingRef.current = false
     }
-  }, [])
+  }, [duration, level])
 
   // Listen for duration updates from main process
   useEffect(() => {
     if (!isRecording) return
 
     const cleanup = window.api.recording.onDuration(({ seconds }) => {
-      setDuration(seconds)
+      duration.set(seconds)
     })
 
     return cleanup
-  }, [isRecording])
-
-  // Sync audio level to React state at display refresh rate (~60 fps)
-  useEffect(() => {
-    if (!isRecording) return
-
-    let running = true
-    const tick = (): void => {
-      if (!running) return
-      const avg = levelCountRef.current > 0 ? levelRef.current / levelCountRef.current : 0
-      setLevel(avg)
-      levelRef.current = 0
-      levelCountRef.current = 0
-      rafRef.current = requestAnimationFrame(tick)
-    }
-    rafRef.current = requestAnimationFrame(tick)
-
-    return () => {
-      running = false
-      cancelAnimationFrame(rafRef.current)
-    }
-  }, [isRecording])
+  }, [isRecording, duration])
 
   // Listen for recording errors from main process
   useEffect(() => {
@@ -134,16 +112,14 @@ export function useRecording(): UseRecordingResult {
         recorderRef.current.stop().catch(() => {})
         recorderRef.current = null
       }
-      levelRef.current = 0
-      levelCountRef.current = 0
       setIsRecording(false)
-      setDuration(0)
-      setLevel(0)
+      duration.set(0)
+      level.set(0)
       stoppingRef.current = false
     })
 
     return cleanup
-  }, [isRecording])
+  }, [isRecording, duration, level])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -154,5 +130,5 @@ export function useRecording(): UseRecordingResult {
     }
   }, [])
 
-  return { isRecording, duration, level, error, startRecording, stopRecording }
+  return { isRecording, level, duration, error, startRecording, stopRecording }
 }

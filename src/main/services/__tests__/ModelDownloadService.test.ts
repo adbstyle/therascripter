@@ -120,7 +120,7 @@ describe('downloadSingleModel', () => {
     mockDownloadFile.mockResolvedValue({ success: true })
     mockVerifyFileSha256.mockResolvedValue(true)
 
-    await downloadSingleModel('gemma-summarization')
+    await downloadSingleModel('gemma-4-e2b-summarization')
 
     expect(mockMkdirSync).toHaveBeenCalledWith(expect.stringContaining('/models/summarization'), {
       recursive: true

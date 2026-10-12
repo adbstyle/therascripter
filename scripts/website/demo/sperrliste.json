@@ -1,0 +1,13 @@
+{
+  "_hinweis": "Erfundene Sperrlisten-Einträge der Demo (Epic #172). «Panikstörung» steht bewusst NICHT darauf: Die Animation zeigt, wie der Begriff im Editor auf die Sperrliste kommt.",
+  "eintraege": [
+    {
+      "begriff": "Sertralin",
+      "typ": "MEDIZINISCH"
+    },
+    {
+      "begriff": "Schlafstörung",
+      "typ": "MEDIZINISCH"
+    }
+  ]
+}
