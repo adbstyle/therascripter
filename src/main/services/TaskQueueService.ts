@@ -241,6 +241,8 @@ export class TaskQueueService {
    * an einem von macOS blockierten Werkzeug scheiterte (#168 PC 1), sonst null.
    */
   summaryMissingReason(sessionId: string): 'tool-blocked' | null {
+    // Ohne aktives Modell liesse sich nichts nachholen — dann kein Hinweis
+    if (getActiveModelId('summarization') === null) return null
     const latest = this.repository
       .findBySession(sessionId)
       .filter((t) => t.type === 'summarization')

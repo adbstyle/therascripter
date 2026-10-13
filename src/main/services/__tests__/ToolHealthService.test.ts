@@ -6,6 +6,7 @@ import {
   ToolHealthService,
   isApprovedQuarantine,
   setToolHealthService,
+  startToolCheck,
   throwIfToolBlocked,
   type RunResult,
   type ToolHealthDeps
@@ -165,12 +166,12 @@ describe('ToolHealthService (#168)', () => {
 })
 
 describe('throwIfToolBlocked — Fehler unterwegs (#168 PC 1)', () => {
-  const killed = { signal: 'SIGKILL' as const, timedOut: false, aborted: false }
+  const killed = { exitSignal: 'SIGKILL' as const, timedOut: false, aborted: false }
 
   it('lässt andere Gründe durch (kein SIGKILL, eigener Timeout/Abbruch)', async () => {
     setToolHealthService(new ToolHealthService(deps()))
     await expect(
-      throwIfToolBlocked('whisper', { signal: null, timedOut: false, aborted: false })
+      throwIfToolBlocked('whisper', { exitSignal: null, timedOut: false, aborted: false })
     ).resolves.toBeUndefined()
     await expect(
       throwIfToolBlocked('whisper', { ...killed, timedOut: true })
@@ -201,5 +202,56 @@ describe('throwIfToolBlocked — Fehler unterwegs (#168 PC 1)', () => {
     expect(err).toMatchObject({ tool: 'llama', repaired: false })
     expect(err.message).toMatch(/Zusammenfassung.*Hinweis/)
     expect(service.getState()).toMatchObject({ status: 'blocked', tools: ['llama'] })
+  })
+})
+
+describe('ToolHealthService — Ablauf (#168 Review)', () => {
+  it('prüft nach einem Abbruch ohne Blockade nur einmal', async () => {
+    const service = new ToolHealthService(deps())
+    await service.recheck('whisper')
+    expect(calls.filter((c) => c.startsWith('find'))).toHaveLength(1)
+  })
+
+  it('lässt Prüfungen nacheinander laufen — keine überschreibt die andere', async () => {
+    let active = 0
+    let overlapped = false
+    const service = new ToolHealthService(
+      deps({
+        run: async (bin, args) => {
+          active++
+          if (active > 1) overlapped = true
+          await new Promise((r) => setTimeout(r, 1))
+          active--
+          return fakeRun(bin, args)
+        }
+      })
+    )
+    addFile('llama/lib/libggml.0.dylib', UNAPPROVED, false)
+    mainMark = UNAPPROVED
+    await Promise.all([service.check(), service.recheck('whisper'), service.recheck('llama')])
+    expect(overlapped).toBe(false)
+    expect(service.getState()).toMatchObject({ status: 'blocked', tools: ['llama'] })
+  })
+})
+
+describe('startToolCheck — Verdrahtung beim Start', () => {
+  it('lässt die Verarbeitung auf die Prüfung warten', async () => {
+    let finish: () => void = () => undefined
+    const service = { check: () => new Promise<void>((r) => (finish = r)) }
+    let gate: Promise<unknown> = Promise.resolve()
+    startToolCheck(service, { holdUntil: (g) => (gate = g) }, 60_000)
+    let passed = false
+    void gate.then(() => (passed = true))
+    await new Promise((r) => setTimeout(r, 5))
+    expect(passed).toBe(false)
+    finish()
+    await vi.waitFor(() => expect(passed).toBe(true))
+  })
+
+  it('wartet höchstens bis zur Obergrenze', async () => {
+    const service = { check: () => new Promise<void>(() => undefined) }
+    let gate: Promise<unknown> = Promise.resolve()
+    startToolCheck(service, { holdUntil: (g) => (gate = g) }, 5)
+    await expect(gate).resolves.toBeUndefined()
   })
 })

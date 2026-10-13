@@ -5,9 +5,10 @@
  * Main-Prozess (Erkennen, Meldungen) und Oberfläche (Banner, Sitzungskarte).
  */
 
-export type BlockedTool = 'whisper' | 'python' | 'llama' | 'ocr'
+/** Eingebaute Werkzeuge — eine Liste für Prüfung, Meldungen und IPC-Schema. */
+export const BLOCKED_TOOLS = ['whisper', 'python', 'llama', 'ocr'] as const
 
-export const BLOCKED_TOOLS: readonly BlockedTool[] = ['whisper', 'python', 'llama', 'ocr']
+export type BlockedTool = (typeof BLOCKED_TOOLS)[number]
 
 /** Was ohne das Werkzeug nicht geht (AK 5) — Sie-Form, ohne Fachbegriffe. */
 export const TOOL_FEATURES: Record<BlockedTool, string> = {

@@ -82,6 +82,8 @@ async function tryRun(deps: ToolHealthDeps, bin: string, args: string[]): Promis
 export class ToolHealthService {
   private state: ToolHealthState
   private readyPromise: Promise<void> = Promise.resolve()
+  /** Letzte Prüfung — Prüfungen laufen nacheinander, sonst überschriebe eine die andere. */
+  private lastCheck: Promise<unknown> = Promise.resolve()
 
   constructor(private readonly deps: ToolHealthDeps) {
     this.state = {
@@ -112,21 +114,33 @@ export class ToolHealthService {
    * (z. B. Speichermangel) und bleibt, wie er ist.
    */
   async recheck(tool: BlockedTool): Promise<'none' | 'repaired' | 'blocked'> {
-    if (!this.deps.isPackaged) return 'none'
-    const before = await this.blockedFiles(tool)
-    if (before.length === 0) return 'none'
-    const remaining = await this.checkTools([tool])
-    return remaining.includes(tool) ? 'blocked' : 'repaired'
+    const { found, stillBlocked } = await this.checkTools([tool])
+    if (!found.includes(tool)) return 'none'
+    return stillBlocked.includes(tool) ? 'blocked' : 'repaired'
   }
 
-  /** Prüft die Werkzeuge, behebt wenn erlaubt; liefert die noch blockierten. */
-  private async checkTools(tools: readonly BlockedTool[]): Promise<BlockedTool[]> {
-    if (!this.deps.isPackaged) return []
+  /**
+   * Prüft die Werkzeuge, behebt wenn erlaubt. found: was blockiert war,
+   * stillBlocked: was es danach noch ist. Läuft nach einer laufenden Prüfung.
+   */
+  private checkTools(
+    tools: readonly BlockedTool[]
+  ): Promise<{ found: BlockedTool[]; stillBlocked: BlockedTool[] }> {
+    const run = this.lastCheck.then(() => this.runCheck(tools))
+    this.lastCheck = run.catch(() => undefined)
+    return run
+  }
+
+  private async runCheck(
+    tools: readonly BlockedTool[]
+  ): Promise<{ found: BlockedTool[]; stillBlocked: BlockedTool[] }> {
+    if (!this.deps.isPackaged) return { found: [], stillBlocked: [] }
     const blocked = new Map<BlockedTool, string[]>()
     for (const tool of tools) {
       const files = await this.blockedFiles(tool)
       if (files.length > 0) blocked.set(tool, files)
     }
+    const found = [...blocked.keys()]
     if (blocked.size > 0 && (await this.appApproved())) {
       const files = [...blocked.values()].flat()
       this.deps.log(`ToolHealth: ${files.length} blockierte Programmdateien — behebe still`)
@@ -147,7 +161,7 @@ export class ToolHealthService {
       bundlePath: this.deps.bundlePath
     }
     this.deps.onStateChange(this.state)
-    return stillBlocked
+    return { found, stillBlocked }
   }
 
   /** Programmdateien eines Werkzeugs, deren Markierung keine Freigabe trägt. */
@@ -215,6 +229,19 @@ export class ToolHealthService {
   }
 }
 
+/**
+ * Startprüfung anwerfen und die Verarbeitung darauf warten lassen — höchstens
+ * `capMs`, danach läuft sie trotzdem an. Die Oberfläche wartet nie (NFR 1).
+ */
+export function startToolCheck(
+  service: Pick<ToolHealthService, 'check'>,
+  queue: { holdUntil(gate: Promise<unknown>): void },
+  capMs = 10_000
+): void {
+  const cap = new Promise<void>((resolve) => setTimeout(resolve, capMs).unref?.())
+  queue.holdUntil(Promise.race([service.check(), cap]))
+}
+
 // ── Für die Werkzeug-Aufrufe ──────────────────────────────────────────────
 
 let service: ToolHealthService | null = null
@@ -235,9 +262,9 @@ export function getToolHealthService(): ToolHealthService | null {
  */
 export async function throwIfToolBlocked(
   tool: BlockedTool,
-  result: { signal: NodeJS.Signals | null; timedOut: boolean; aborted: boolean }
+  result: { exitSignal: NodeJS.Signals | null; timedOut: boolean; aborted: boolean }
 ): Promise<void> {
-  if (result.signal !== 'SIGKILL' || result.timedOut || result.aborted) return
+  if (result.exitSignal !== 'SIGKILL' || result.timedOut || result.aborted) return
   const outcome = (await service?.recheck(tool)) ?? 'none'
   if (outcome !== 'none') throw new ToolBlockedError(tool, outcome === 'repaired')
 }

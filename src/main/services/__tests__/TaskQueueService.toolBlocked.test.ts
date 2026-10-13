@@ -5,6 +5,7 @@ import { SessionRepository } from '../../db/repositories/SessionRepository'
 import { TaskRepository } from '../../db/repositories/TaskRepository'
 import { applyTestSchema } from '../../db/__tests__/test-utils'
 import { toolBlockedMessage } from '../../../shared/tool-blocked'
+import { getActiveModelId } from '../ModelDownloadService'
 
 vi.mock('../../utils/ipc-helpers', () => ({ sendToRenderer: vi.fn() }))
 vi.mock('../ModelDownloadService', () => ({
@@ -67,6 +68,14 @@ describe('TaskQueueService — blockierte Werkzeuge (#168)', () => {
       const task = taskRepo.create({ sessionId: id, type: 'summarization' })
       taskRepo.update(task.id, { status: 'failed', error: toolBlockedMessage('llama', false) })
       expect(queue.summaryMissingReason(id)).toBe('tool-blocked')
+    })
+
+    it('kein Hinweis, wenn sich ohne aktives Modell nichts nachholen lässt', () => {
+      const id = reviewSession()
+      const task = taskRepo.create({ sessionId: id, type: 'summarization' })
+      taskRepo.update(task.id, { status: 'failed', error: toolBlockedMessage('llama', false) })
+      vi.mocked(getActiveModelId).mockReturnValueOnce(null)
+      expect(queue.summaryMissingReason(id)).toBeNull()
     })
 
     it('kein Grund bei anderen Fehlern oder ohne Versuch', () => {

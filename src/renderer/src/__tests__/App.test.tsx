@@ -293,3 +293,30 @@ describe('App — Mikrofon-Berechtigung (Issue #161)', () => {
     ).not.toBeInTheDocument()
   })
 })
+
+describe('App — blockierte Werkzeuge (Issue #168)', () => {
+  const blocked = {
+    status: 'blocked' as const,
+    tools: ['python' as const],
+    bundlePath: '/Applications/Therascript.app'
+  }
+
+  it('zeigt den Hinweis, wenn macOS Werkzeuge blockiert, und blendet ihn auf Wunsch aus', async () => {
+    window.api.toolHealth.getState = vi.fn().mockResolvedValue(blocked)
+    renderApp()
+    expect(
+      await screen.findByText(/Betroffen: Sprechererkennung und Pseudonymisierung/)
+    ).toBeInTheDocument()
+    await userEvent.click(screen.getAllByRole('button', { name: 'Hinweis schliessen' })[0])
+    expect(screen.queryByText(/Betroffen:/)).not.toBeInTheDocument()
+  })
+
+  it('zeigt den Hinweis nie während einer Aufnahme', async () => {
+    mockRecordingState.isRecording = true
+    window.api.toolHealth.getState = vi.fn().mockResolvedValue(blocked)
+    renderApp()
+    await waitFor(() => expect(window.api.toolHealth.getState).toHaveBeenCalled())
+    await screen.findByText('PDF importieren')
+    expect(screen.queryByText(/Betroffen:/)).not.toBeInTheDocument()
+  })
+})

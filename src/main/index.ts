@@ -57,6 +57,7 @@ import {
   retireObsoleteModels
 } from './services/ModelDownloadService'
 import { registerSummaryHandlers } from './ipc/summary-handlers'
+import { startToolCheck } from './services/ToolHealthService'
 
 // Set in before-quit so the close-handler can distinguish "user closed window"
 // (hide) from "app is shutting down" (allow destroy).
@@ -263,10 +264,7 @@ app.whenReady().then(() => {
   // ~600 Programmdateien); die Oberfläche wartet nicht, nur die Verarbeitung —
   // sonst scheiterte die erste Aufgabe an einem Werkzeug, das gleich repariert
   // wird. Höchstens 10 s, danach läuft die Verarbeitung trotzdem an.
-  const toolHealth = initToolHealth()
-  taskQueue.holdUntil(
-    Promise.race([toolHealth.check(), new Promise((resolve) => setTimeout(resolve, 10_000))])
-  )
+  startToolCheck(initToolHealth(), taskQueue)
 
   // Register real ML executors (replacing stubs)
   taskQueue.registerExecutor('transcription', new WhisperService())

@@ -8,10 +8,7 @@ import {
   setToolHealthService
 } from '../services/ToolHealthService'
 import type { ToolHealthState } from '../../shared/tool-blocked'
-
-// Weg ohne Terminal (#168 AK 3): neu laden, im Ordner «Programme» ersetzen,
-// «Dennoch öffnen» — genau das beschreibt die Installationsanleitung.
-const INSTALL_GUIDE_URL = 'https://adbstyle.github.io/therascripter/installation.html#schritt-1'
+import { INSTALL_GUIDE_URL } from '../../shared/constants/website'
 
 /** Einmal beim Start (gepackte App: prüft und behebt im Hintergrund). */
 export function initToolHealth(): ToolHealthService {
@@ -42,6 +39,8 @@ export function registerToolHealthHandlers(): void {
   })
 
   ipcMain.handle('toolHealth:openGuide', async () => {
-    await shell.openExternal(INSTALL_GUIDE_URL)
+    // Weg ohne Terminal (#168 AK 3): neu laden, im Ordner «Programme»
+    // ersetzen, «Dennoch öffnen» — genau das beschreibt die Anleitung ab Schritt 1
+    await shell.openExternal(`${INSTALL_GUIDE_URL}#schritt-1`)
   })
 }

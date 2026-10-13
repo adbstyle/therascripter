@@ -49,7 +49,7 @@ describe('runSubprocess', () => {
 
   it('meldet das Signal eines von aussen beendeten Prozesses (#168)', async () => {
     const result = await runSubprocess({ bin: '/bin/sh', args: ['-c', 'kill -9 $$'] })
-    expect(result).toMatchObject({ code: null, signal: 'SIGKILL', timedOut: false, aborted: false })
+    expect(result).toMatchObject({ code: null, exitSignal: 'SIGKILL', timedOut: false, aborted: false })
   })
 
   it('escalates to SIGKILL when the process ignores SIGTERM on timeout', async () => {
