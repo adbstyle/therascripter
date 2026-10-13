@@ -8,6 +8,7 @@ import { SessionService } from '../services/SessionService'
 import { getDatabase, getDataDir } from '../db/connection'
 import { buildPDFTranscript } from '../utils/pdf-transcript-builder'
 import { runSubprocess } from '../utils/subprocess'
+import { throwIfToolBlocked } from '../services/ToolHealthService'
 
 /** Timeout per OCR page in milliseconds */
 const PAGE_TIMEOUT_MS = 30_000
@@ -158,6 +159,7 @@ export class VisionOCRService implements TaskExecutor {
       )
     }
     if (result.code !== 0) {
+      await throwIfToolBlocked('ocr', result)
       throw new Error(
         `Vision OCR Fehler auf Seite ${pageNumber} (Exit ${result.code}): ${result.stderr}`
       )

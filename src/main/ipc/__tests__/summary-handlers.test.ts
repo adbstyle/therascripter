@@ -2,7 +2,9 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   handleSummaryGet,
   handleSummaryUpdateTitle,
-  handleSummaryUpdateText
+  handleSummaryUpdateText,
+  handleSummaryMissingReason,
+  handleSummaryRegenerate
 } from '../summary-handlers'
 
 const makeDeps = (
@@ -16,6 +18,10 @@ const makeDeps = (
     getSummary: over.getSummary ?? vi.fn().mockReturnValue(null),
     updateTitle: over.updateTitle ?? vi.fn(),
     updateSummaryText: over.updateSummaryText ?? vi.fn()
+  },
+  summaries: {
+    missingReason: vi.fn().mockReturnValue('tool-blocked'),
+    regenerate: vi.fn().mockReturnValue(true)
   }
 })
 
@@ -76,5 +82,15 @@ describe('summary:updateText', () => {
   it('rejects text exceeding 2000 chars', () => {
     const long = 'x'.repeat(2_001)
     expect(() => handleSummaryUpdateText({ sessionId: 'abc', text: long }, makeDeps())).toThrow()
+  })
+})
+
+describe('summary:missingReason / summary:regenerate (#168)', () => {
+  it('reicht die Sitzung durch und prüft die Eingabe', () => {
+    const deps = makeDeps()
+    expect(handleSummaryMissingReason({ sessionId: 's1' }, deps)).toBe('tool-blocked')
+    expect(handleSummaryRegenerate({ sessionId: 's1' }, deps)).toBe(true)
+    expect(deps.summaries.regenerate).toHaveBeenCalledWith('s1')
+    expect(() => handleSummaryRegenerate({ sessionId: '' }, deps)).toThrow()
   })
 })

@@ -7,6 +7,8 @@ interface Props {
 
 export function SummaryPanel({ sessionId }: Props): React.JSX.Element | null {
   const [text, setText] = useState<string | null>(null)
+  // #168 — warum die Zusammenfassung fehlt; 'running' nach «Zusammenfassung erstellen»
+  const [missing, setMissing] = useState<'tool-blocked' | 'running' | null>(null)
   const [refetchCounter, setRefetchCounter] = useState(0)
   const originalRef = useRef<string>('')
 
@@ -19,9 +21,13 @@ export function SummaryPanel({ sessionId }: Props): React.JSX.Element | null {
         if (record && record.text && record.text.length > 0) {
           setText(record.text)
           originalRef.current = record.text
-        } else {
-          setText(null)
+          setMissing(null)
+          return
         }
+        setText(null)
+        return window.api.summary.missingReason(sessionId).then((reason) => {
+          if (!cancelled) setMissing(reason)
+        })
       })
       .catch((err) => {
         // IPC failure (DB closed during shutdown, schema drift, etc.) — degrade
@@ -45,7 +51,46 @@ export function SummaryPanel({ sessionId }: Props): React.JSX.Element | null {
     })
   }, [sessionId])
 
-  if (text === null) return null
+  // Ein gescheiterter Versuch (z. B. Werkzeug weiterhin blockiert) meldet sich hier
+  useEffect(() => {
+    return window.api.summary.onChanged((changed) => {
+      if (changed === sessionId) setRefetchCounter((c) => c + 1)
+    })
+  }, [sessionId])
+
+  if (text === null) {
+    if (missing === null) return null
+    const regenerate = (): void => {
+      setMissing('running')
+      window.api.summary
+        .regenerate(sessionId)
+        .then((started) => {
+          if (!started) setRefetchCounter((c) => c + 1)
+        })
+        .catch(() => setRefetchCounter((c) => c + 1))
+    }
+    return (
+      <section role="status" className="space-y-2 text-sm text-text-secondary">
+        {missing === 'running' ? (
+          <p>Die Zusammenfassung wird erstellt…</p>
+        ) : (
+          <>
+            <p>
+              Die Zusammenfassung fehlt, weil macOS ein Werkzeug von Therascript blockiert hat.
+              Sobald das behoben ist, können Sie sie hier nachholen.
+            </p>
+            <button
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-2"
+              onClick={regenerate}
+            >
+              Zusammenfassung erstellen
+            </button>
+          </>
+        )}
+        <hr className="mt-4 w-12 border-0 border-t border-border-strong" aria-hidden />
+      </section>
+    )
+  }
 
   const commit = (el: HTMLElement): void => {
     const next = (el.textContent ?? '').trim()

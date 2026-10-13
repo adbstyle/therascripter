@@ -51,6 +51,12 @@ export interface SubprocessResult {
   stderr: string
   /** null when the process was killed by a signal. */
   code: number | null
+  /**
+   * Signal, mit dem der Prozess endete (z. B. 'SIGKILL'), sonst null. Ein
+   * SIGKILL ohne timedOut/aborted kam von aussen — macOS beendet so ein
+   * blockiertes Werkzeug beim Start (#168), aber auch bei Speichermangel.
+   */
+  signal: NodeJS.Signals | null
   timedOut: boolean
   aborted: boolean
 }
@@ -101,7 +107,7 @@ export async function runSubprocess(opts: SubprocessOptions): Promise<Subprocess
   // Pre-aborted guard: 'abort' listeners never fire for an already-aborted
   // signal, so spawning would leak an unsupervised process.
   if (opts.signal?.aborted) {
-    return { stdout: '', stderr: '', code: null, timedOut: false, aborted: true }
+    return { stdout: '', stderr: '', code: null, signal: null, timedOut: false, aborted: true }
   }
 
   return new Promise((resolve, reject) => {
@@ -203,12 +209,12 @@ export async function runSubprocess(opts: SubprocessOptions): Promise<Subprocess
       reject(err)
     })
 
-    proc.on('close', (code) => {
+    proc.on('close', (code, signal) => {
       cleanup()
       if (opts.onStderrLine && stderrLineBuffer.length > 0) {
         opts.onStderrLine(stderrLineBuffer)
       }
-      resolve({ stdout, stderr, code, timedOut, aborted })
+      resolve({ stdout, stderr, code, signal, timedOut, aborted })
     })
   })
 }

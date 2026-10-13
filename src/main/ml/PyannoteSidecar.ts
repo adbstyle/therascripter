@@ -11,6 +11,7 @@ import { writeFileAtomic } from '../utils/file-ops'
 import { resolvePythonSidecar } from './resolve-python'
 import { getSettings } from '../services/SettingsService'
 import { parseSidecarStderrLine } from './sidecar-stderr'
+import { throwIfToolBlocked } from '../services/ToolHealthService'
 
 // Minimum segment duration in seconds. Segments shorter than this are
 // filtered as pyannote segmentation noise. The Python-side collar merge
@@ -161,6 +162,8 @@ export class PyannoteSidecar implements TaskExecutor {
       throw new Error(`Diarization abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`)
     }
     if (result.code !== 0) {
+      // Von macOS blockiert? Dann eine verständliche Meldung statt «Exit Code null» (#168)
+      await throwIfToolBlocked('python', result)
       const errorLines = result.stderr
         .split('\n')
         .filter(

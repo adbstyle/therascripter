@@ -12,6 +12,11 @@ export interface SummaryHandlerDeps {
     updateTitle(id: string, title: string): unknown
     updateSummaryText(id: string, text: string): unknown
   }
+  /** #168 — warum eine Zusammenfassung fehlt und sie nachholen. */
+  summaries: {
+    missingReason(id: string): 'tool-blocked' | null
+    regenerate(id: string): boolean
+  }
 }
 
 export function handleSummaryGet(input: unknown, deps: SummaryHandlerDeps): SummaryRecord | null {
@@ -29,7 +34,24 @@ export function handleSummaryUpdateText(input: unknown, deps: SummaryHandlerDeps
   deps.sessionService.updateSummaryText(parsed.sessionId, parsed.text)
 }
 
+export function handleSummaryMissingReason(
+  input: unknown,
+  deps: SummaryHandlerDeps
+): 'tool-blocked' | null {
+  return deps.summaries.missingReason(SummaryGetInputSchema.parse(input).sessionId)
+}
+
+export function handleSummaryRegenerate(input: unknown, deps: SummaryHandlerDeps): boolean {
+  return deps.summaries.regenerate(SummaryGetInputSchema.parse(input).sessionId)
+}
+
 export function registerSummaryHandlers(deps: SummaryHandlerDeps): void {
+  ipcMain.handle('summary:missingReason', (_evt, input: unknown) =>
+    handleSummaryMissingReason(input, deps)
+  )
+  ipcMain.handle('summary:regenerate', (_evt, input: unknown) =>
+    handleSummaryRegenerate(input, deps)
+  )
   ipcMain.handle('summary:get', (_evt, input: unknown) => handleSummaryGet(input, deps))
   ipcMain.handle('summary:updateTitle', (_evt, input: unknown) =>
     handleSummaryUpdateTitle(input, deps)

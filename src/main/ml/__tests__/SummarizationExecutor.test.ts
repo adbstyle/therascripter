@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { SummarizationExecutor } from '../SummarizationExecutor'
 import type { Task } from '../../../shared/types'
+import { ToolBlockedError } from '../../../shared/tool-blocked'
 
 const makeDeps = (
   over: {
@@ -104,5 +105,18 @@ describe('SummarizationExecutor', () => {
     expect(deps.llamaSummarizer.summarize).not.toHaveBeenCalled()
     expect(deps.sessionService.saveGeneratedSummary).not.toHaveBeenCalled()
     expect(deps.logger.info).toHaveBeenCalledWith(expect.stringMatching(/skip/i))
+  })
+})
+
+describe('SummarizationExecutor — blockiertes Werkzeug (#168)', () => {
+  it('überspringt nicht still: der Fehler geht an die Warteschlange (Sitzung bleibt im Review)', async () => {
+    const deps = makeDeps({
+      llamaSummarizer: {
+        summarize: vi.fn().mockRejectedValue(new ToolBlockedError('llama', false))
+      }
+    })
+    const exec = new SummarizationExecutor(deps)
+    await expect(exec.execute(task, onProgress, signal)).rejects.toBeInstanceOf(ToolBlockedError)
+    expect(deps.sessionService.saveGeneratedSummary).not.toHaveBeenCalled()
   })
 })

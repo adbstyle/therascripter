@@ -18,6 +18,7 @@ import { countPlaceholderChips } from '../../shared/utils/countPlaceholderChips'
 import { resolvePythonSidecar } from './resolve-python'
 import { parseSidecarStderrLine } from './sidecar-stderr'
 import { writeFileAtomic } from '../utils/file-ops'
+import { throwIfToolBlocked } from '../services/ToolHealthService'
 
 export class AnonymizationService implements TaskExecutor {
   private getCommand(): { bin: string; args: string[] } {
@@ -203,6 +204,8 @@ export class AnonymizationService implements TaskExecutor {
       throw new Error(`NER-Verarbeitung abgebrochen: Timeout nach ${Math.round(timeoutMs / 1000)}s`)
     }
     if (result.code !== 0) {
+      // Von macOS blockiert? Dann eine verständliche Meldung statt «Exit Code null» (#168)
+      await throwIfToolBlocked('python', result)
       const errorLines = result.stderr
         .split('\n')
         .filter(

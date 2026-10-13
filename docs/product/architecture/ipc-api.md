@@ -249,3 +249,22 @@ Source: `src/main/ipc/system-handlers.ts`
 | `task:error` | task |
 | `modelDownload:status` | model-download |
 | `appUpdate:state` | app-update |
+
+### Tool Health (Issue #168)
+
+Source: `src/main/ipc/tool-health-handlers.ts`
+
+| Channel | Direction | Input Schema | Return Type | Description |
+|---|---|---|---|---|
+| `toolHealth:getState` | invoke | _(none)_ | `ToolHealthState \| null` | Status of the bundled tools (`checking` / `ok` / `blocked`, blocked tools, bundle path) |
+| `toolHealth:recheck` | invoke | _(none)_ | `ToolHealthState \| null` | Check again (and repair silently if the app is approved) |
+| `toolHealth:openGuide` | invoke | _(none)_ | `void` | Opens the installation guide (way without terminal) |
+| `toolHealth:state` | event | — | `ToolHealthState` (`ToolHealthStateSchema`) | Every change of the tool status |
+
+### Summary — blocked tools (Issue #168)
+
+| Channel | Direction | Input Schema | Return Type | Description |
+|---|---|---|---|---|
+| `summary:missingReason` | invoke | `SummaryGetInputSchema` | `'tool-blocked' \| null` | Why the summary is missing: the last attempt failed on a tool blocked by macOS |
+| `summary:regenerate` | invoke | `SummaryGetInputSchema` | `boolean` | Enqueue one summarization task for a review session; false if nothing to do |
+| `summary:changed` | event | — | `{ sessionId }` (`SummaryChangedSchema`) | A summarization attempt failed — reload the hint |

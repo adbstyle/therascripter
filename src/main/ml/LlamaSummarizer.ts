@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { buildSummarizationPrompt } from './summarization-prompt'
 import { SUMMARIZATION_GBNF, SummarizationOutputSchema } from './summarization-schema'
 import { runSubprocess } from '../utils/subprocess'
+import { throwIfToolBlocked } from '../services/ToolHealthService'
 
 // Unter der 600-s-Watchdog-Wall (STALL_THRESHOLDS.summarization), damit ein
 // Stall hier als sauberer Graceful-Skip endet statt als Watchdog-Abort.
@@ -218,6 +219,8 @@ export class LlamaSummarizer {
       )
     }
     if (result.code !== 0) {
+      // Von macOS blockiert? SummarizationExecutor meldet das statt still zu überspringen (#168)
+      await throwIfToolBlocked('llama', result)
       throw new Error(`llama-cli exited with code ${result.code}: ${result.stderr.slice(-500)}`)
     }
     return result.stdout

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { SessionCard } from '../SessionCard'
 import { PIPELINE_UI_STRINGS } from '../../../../shared/constants/pipelineWording'
 import type { Session } from '../../../../shared/types'
+import { toolBlockedMessage } from '../../../../shared/tool-blocked'
 import { useTaskProgress } from '../../hooks/useTaskProgress'
 
 vi.mock('../../hooks/useTaskProgress', () => ({
@@ -433,5 +434,34 @@ describe('SessionCard — memo und Zeitstempel', () => {
       />
     )
     expect(screen.getByText(expected)).toBeInTheDocument()
+  })
+})
+
+describe('SessionCard — von macOS blockiertes Werkzeug (#168)', () => {
+  beforeEach(() => {
+    vi.mocked(useTaskProgress).mockReturnValue(emptyHookResult)
+  })
+
+  it('zeigt den verständlichen Hinweis und lässt «Erneut versuchen» auch nach 3 Versuchen zu', () => {
+    const onRetry = vi.fn()
+    render(
+      <SessionCard
+        session={makeSession({
+          status: 'error',
+          retryCount: 3,
+          errorMessage: toolBlockedMessage('whisper', false)
+        })}
+        onDelete={vi.fn()}
+        onRetry={onRetry}
+      />
+    )
+    expect(
+      screen.getByText(/macOS hat ein Werkzeug von Therascript blockiert \(Transkription\)/)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: PIPELINE_UI_STRINGS.retryButton })
+    ).toBeInTheDocument()
+    expect(screen.queryByText(PIPELINE_UI_STRINGS.retryExhausted)).not.toBeInTheDocument()
+    expect(screen.queryByText(PIPELINE_UI_STRINGS.retryAfterSecondFailure)).not.toBeInTheDocument()
   })
 })

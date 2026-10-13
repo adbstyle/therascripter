@@ -146,7 +146,10 @@ beforeEach(() => {
     summary: {
       get: vi.fn().mockResolvedValue(null),
       updateTitle: vi.fn().mockResolvedValue(undefined),
-      updateText: vi.fn().mockResolvedValue(undefined)
+      updateText: vi.fn().mockResolvedValue(undefined),
+      missingReason: vi.fn().mockResolvedValue(null),
+      regenerate: vi.fn().mockResolvedValue(false),
+      onChanged: vi.fn().mockReturnValue(() => {})
     },
     microphone: {
       getState: vi.fn().mockResolvedValue({ status: 'granted', previouslyGranted: true }),
@@ -156,6 +159,12 @@ beforeEach(() => {
     },
     nav: {
       onOpenSettings: vi.fn().mockReturnValue(() => {})
+    },
+    toolHealth: {
+      getState: vi.fn().mockResolvedValue({ status: 'ok', tools: [], bundlePath: '' }),
+      recheck: vi.fn(),
+      openGuide: vi.fn(),
+      onState: vi.fn().mockReturnValue(() => {})
     },
     modelReconcile: {
       getEvents: vi.fn().mockResolvedValue([]),

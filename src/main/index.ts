@@ -12,6 +12,7 @@ import {
 } from './ipc/recording-handlers'
 import { registerSettingsHandlers } from './ipc/settings-handlers'
 import { registerMicrophoneHandlers } from './ipc/microphone-handlers'
+import { initToolHealth, registerToolHealthHandlers } from './ipc/tool-health-handlers'
 import { registerTaskHandlers } from './ipc/task-handlers'
 import { registerBlocklistHandlers } from './ipc/blocklist-handlers'
 import { registerPDFHandlers } from './ipc/pdf-handlers'
@@ -257,6 +258,16 @@ app.whenReady().then(() => {
     console.log(`Task Queue: ${orphaned} orphaned session(s) marked as error`)
   }
 
+  // Issue #168 — Werkzeuge, die macOS blockiert, erkennen und (bei erteilter
+  // Programm-Freigabe) still beheben. Läuft im Hintergrund (~0.1 s, nur die
+  // ~600 Programmdateien); die Oberfläche wartet nicht, nur die Verarbeitung —
+  // sonst scheiterte die erste Aufgabe an einem Werkzeug, das gleich repariert
+  // wird. Höchstens 10 s, danach läuft die Verarbeitung trotzdem an.
+  const toolHealth = initToolHealth()
+  taskQueue.holdUntil(
+    Promise.race([toolHealth.check(), new Promise((resolve) => setTimeout(resolve, 10_000))])
+  )
+
   // Register real ML executors (replacing stubs)
   taskQueue.registerExecutor('transcription', new WhisperService())
   taskQueue.registerExecutor('diarization', new PyannoteSidecar())
@@ -314,7 +325,14 @@ app.whenReady().then(() => {
   registerPipelineHandlers()
   registerAppUpdateHandlers()
   registerMicrophoneHandlers()
-  registerSummaryHandlers({ sessionService })
+  registerToolHealthHandlers()
+  registerSummaryHandlers({
+    sessionService,
+    summaries: {
+      missingReason: (id) => getTaskQueue().summaryMissingReason(id),
+      regenerate: (id) => getTaskQueue().regenerateSummary(id)
+    }
+  })
 
   setupCSP()
   createWindow()

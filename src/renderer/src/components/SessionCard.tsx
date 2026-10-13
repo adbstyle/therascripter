@@ -4,6 +4,7 @@ import type { Session, SessionStatus } from '../../../shared/types'
 import { STEP_LABELS_DE, PIPELINE_UI_STRINGS } from '../../../shared/constants/pipelineWording'
 import { useTaskProgress } from '../hooks/useTaskProgress'
 import { startOfDay } from '../hooks/useStartOfToday'
+import { isToolBlockedMessage } from '../../../shared/tool-blocked'
 
 // Callbacks bekommen die Session bzw. ihre ID, damit SessionDashboard stabile
 // Handler statt Closures pro Karte durchreichen kann — sonst griffe memo nie.
@@ -100,6 +101,8 @@ export const SessionCard = memo(function SessionCard({
 
   // Phase L: Empty-speech is signalled via wordCount === 0 on a review session.
   // Visual treatment: Info icon + headline in the status row, body text below.
+  // #168 — Verarbeitung an einem von macOS blockierten Werkzeug gescheitert
+  const toolBlocked = isToolBlockedMessage(session.errorMessage)
   const isEmptySpeech = isReview && session.wordCount === 0
 
   let statusContent: React.ReactNode
@@ -236,18 +239,20 @@ export const SessionCard = memo(function SessionCard({
           {session.errorMessage}
         </p>
       )}
-      {/* Phase M: 3-stage retry-limit UX driven by Session.retryCount */}
-      {session.status === 'error' && session.retryCount === 1 && (
+      {/* Phase M: 3-stage retry-limit UX driven by Session.retryCount. Eine
+          Blockade durch macOS (#168) zählt nicht: die Meldung oben sagt, was zu
+          tun ist, und «Erneut versuchen» bleibt, bis sie behoben ist. */}
+      {session.status === 'error' && !toolBlocked && session.retryCount === 1 && (
         <p className="pointer-events-none relative z-[1] mt-1 text-xs text-text-tertiary">
           {PIPELINE_UI_STRINGS.retryAfterFirstFailure}
         </p>
       )}
-      {session.status === 'error' && session.retryCount === 2 && (
+      {session.status === 'error' && !toolBlocked && session.retryCount === 2 && (
         <p className="pointer-events-none relative z-[1] mt-1 text-xs text-text-tertiary">
           {PIPELINE_UI_STRINGS.retryAfterSecondFailure}
         </p>
       )}
-      {session.status === 'error' && session.retryCount < 3 && onRetry && (
+      {session.status === 'error' && (toolBlocked || session.retryCount < 3) && onRetry && (
         <button
           className="pointer-events-auto relative z-10 mt-1.5 text-xs font-medium text-primary hover:text-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => onRetry(session.id)}
@@ -257,7 +262,7 @@ export const SessionCard = memo(function SessionCard({
           {PIPELINE_UI_STRINGS.retryButton}
         </button>
       )}
-      {session.status === 'error' && session.retryCount >= 3 && (
+      {session.status === 'error' && !toolBlocked && session.retryCount >= 3 && (
         <p
           className="pointer-events-none relative z-[1] mt-1.5 text-xs text-text-tertiary"
           role="alert"
