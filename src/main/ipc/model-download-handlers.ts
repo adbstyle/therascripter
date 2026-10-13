@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { getAppUpdateService } from '../services/app-update-deps'
 import { statfsSync } from 'fs'
 import { getDataDir } from '../db/connection'
 import {
@@ -42,5 +43,7 @@ export function registerModelDownloadHandlers(): void {
 
   ipcMain.handle('modelDownload:start', async () => {
     await startModelDownload()
+    // Vor abgeschlossener Ersteinrichtung stellt das Update nichts bereit (#167)
+    getAppUpdateService()?.handleModelsChanged()
   })
 }

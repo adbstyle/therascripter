@@ -16,7 +16,6 @@ import {
   TaskErrorDataSchema,
   QueuePositionsDataSchema
 } from '../shared/validation/task-schemas'
-import type { PendingModelUpdate } from '../shared/types/ModelUpdate'
 import type { AppUpdateState } from '../shared/types/AppUpdate'
 import type { ModelGroup, DiarizationPipeline } from '../shared/validation/model-catalog-schemas'
 
@@ -169,47 +168,6 @@ const api: IpcApi = {
     getEvents: () => ipcRenderer.invoke('modelReconcile:getEvents'),
     markSeen: () => ipcRenderer.invoke('modelReconcile:markSeen'),
     dismiss: () => ipcRenderer.invoke('modelReconcile:dismiss')
-  },
-  modelUpdate: {
-    check: () => ipcRenderer.invoke('modelUpdate:check'),
-    restart: (updates: PendingModelUpdate[]) =>
-      ipcRenderer.invoke('modelUpdate:restart', { updates }),
-    startDownload: () => ipcRenderer.invoke('modelUpdate:startDownload'),
-    getPending: () => ipcRenderer.invoke('modelUpdate:getPending'),
-    getAvailable: () => ipcRenderer.invoke('modelUpdate:getAvailable'),
-    clearPending: () => ipcRenderer.invoke('modelUpdate:clearPending'),
-    dismissVersions: (updates: PendingModelUpdate[]) =>
-      ipcRenderer.invoke('modelUpdate:dismissVersions', { updates }),
-    onAvailable: (callback) => {
-      const handler = (_event: Electron.IpcRendererEvent, updates: PendingModelUpdate[]): void =>
-        callback(updates)
-      ipcRenderer.on('modelUpdate:available', handler)
-      return () => {
-        ipcRenderer.removeListener('modelUpdate:available', handler)
-      }
-    },
-    onDownloadProgress: (callback) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: ModelDownloadStatus): void =>
-        callback(data)
-      ipcRenderer.on('modelUpdate:downloadProgress', handler)
-      return () => {
-        ipcRenderer.removeListener('modelUpdate:downloadProgress', handler)
-      }
-    },
-    onDownloadComplete: (callback) => {
-      const handler = (): void => callback()
-      ipcRenderer.on('modelUpdate:downloadComplete', handler)
-      return () => {
-        ipcRenderer.removeListener('modelUpdate:downloadComplete', handler)
-      }
-    },
-    onDownloadError: (callback) => {
-      const handler = (_event: Electron.IpcRendererEvent, error: string): void => callback(error)
-      ipcRenderer.on('modelUpdate:downloadError', handler)
-      return () => {
-        ipcRenderer.removeListener('modelUpdate:downloadError', handler)
-      }
-    }
   },
   appUpdate: {
     getState: () => ipcRenderer.invoke('appUpdate:getState'),

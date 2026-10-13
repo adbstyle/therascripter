@@ -14,7 +14,7 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 - **PDF-Import** — Import und Anonymisierung von PDFs inkl. gescannter Dokumente via OCR
 - **Review-Editor** — TipTap-basierter Editor zur Nachbearbeitung mit Clipboard-Export und Quick-Add zur Sperrliste
 - **Modell-Management** — Austauschbare ML-Modelle pro Pipeline-Schritt, verwaltbar im Einstellungen-Bereich
-- **Updates in der App** — signierte Update-Beschreibung (Ed25519) auf Cloudflare R2; neue App-Versionen werden im Hintergrund geladen, geprüft und beim Beenden, nach 10 min Leerlauf oder auf Klick installiert (abschaltbar); Modell-Updates mit atomarem Tausch beim Neustart
+- **Updates in der App** — signierte Update-Beschreibung (Ed25519) auf Cloudflare R2; neue App-Versionen und neue Fassungen der Sprachmodelle kommen als **ein** Update: im Hintergrund geladen, geprüft und beim Beenden, nach 10 min Leerlauf oder auf Klick gemeinsam installiert, mit einem Neustart (abschaltbar; scheitert ein Teil, bleibt alles beim bisherigen Stand)
 - **Datenschutz** — keine Übermittlung von Sitzungsinhalten; Renderer ohne Netzwerkzugriff (CSP `connect-src 'none'`), Netzwerk nur im Main-Prozess für Modelle und Versionsprüfung, Electron Fuses gehärtet, FileVault-Prüfung
 - **System-Tray** — App läuft im Hintergrund weiter, Aufnahme über Menüleisten-Icon stoppbar
 - **Auto-Löschung** — Sitzungen werden 30 Tage nach Erstellung automatisch gelöscht
@@ -38,7 +38,7 @@ Ausführliche Anleitung mit Erklärungen: [adbstyle.github.io/therascripter/inst
 
 **Warum die Programm-Freigabe?** Apple bestätigt Apps nur gegen eine jährliche Gebühr. Therascript ist kostenlos und quelloffen und verzichtet auf diese Beglaubigung. Die Freigabe gilt für die ganze App samt der eingebauten Werkzeuge für Transkription, Sprechererkennung, Pseudonymisierung, Texterkennung und Zusammenfassung. Niemand bestätigt unabhängig, dass die heruntergeladene Datei vom Projekt stammt: Laden Sie Therascript nur über die Website oder die [Release-Seite](https://github.com/adbstyle/therascripter/releases).
 
-**Updates:** Therascript aktualisiert sich selbst — neue Versionen werden im Hintergrund geladen und installiert, wenn man 10 Minuten nicht am Mac arbeitet oder Therascript beendet, nie während einer Aufnahme oder Verarbeitung. Unter **Einstellungen → Updates** lässt sich ein bereitliegendes Update sofort installieren (auch über das Menüleisten-Symbol) oder die Automatik ausschalten.
+**Updates:** Therascript aktualisiert sich selbst — neue Versionen und neue Fassungen der Sprachmodelle werden im Hintergrund geladen und gemeinsam installiert, wenn man 10 Minuten nicht am Mac arbeitet oder Therascript beendet, nie während einer Aufnahme oder Verarbeitung. Unter **Einstellungen → Updates** lässt sich ein bereitliegendes Update sofort installieren (auch über das Menüleisten-Symbol) oder die Automatik ausschalten. Ein Update lässt sich verschieben, aber nicht überspringen.
 
 **Von Hand aktualisieren** (Versionen ohne «Einstellungen → Updates», oder wenn Therascript nicht aus dem Ordner «Programme» läuft): Therascript über das Symbol in der Menüleiste («Therascript beenden») oder mit `⌘ Q` beenden (das Schliessen des Fensters beendet die App nicht), die neue Version herunterladen, die App im Ordner **Programme** ersetzen und Schritt 2 und 3 wiederholen. Transkriptionen, Einstellungen und Modelle bleiben erhalten. Beim ersten Update auf eine Version, die Berechtigungen über Updates hinweg behält, fragt macOS einmalig erneut: Mikrofon erlauben, beim Schlüsselbund **Immer erlauben** wählen. Spätere Updates fragen nicht mehr.
 
@@ -48,7 +48,7 @@ Ausführliche Anleitung mit Erklärungen: [adbstyle.github.io/therascripter/inst
 
 Aufnahmen, Transkripte, PDFs und Zusammenfassungen übermittelt Therascript nie; sie verlassen den Mac nur, wenn man sie selbst kopiert. Mit dem Internet verbindet sich Therascript nur in drei Fällen:
 
-- **Sprachmodelle herunterladen:** bei der Ersteinrichtung, beim Hinzufügen eines Modells in den Einstellungen und beim Installieren eines Modell-Updates.
+- **Sprachmodelle herunterladen:** bei der Ersteinrichtung, beim Hinzufügen eines Modells in den Einstellungen und mit Updates: neue Fassungen der installierten Modelle und Modelle, die eine neue Version braucht, lädt Therascript automatisch zusammen mit dem Update; nach dem Ausschalten der automatischen Updates (Einstellungen → Updates) nur auf Klick.
 - **Nach neuen Versionen suchen:** beim Start, danach alle 4 Stunden und auf Klick unter Einstellungen → Updates.
 - **Neue Versionen herunterladen:** automatisch, sobald eine erscheint; nach dem Ausschalten der automatischen Updates (Einstellungen → Updates) nur auf Klick.
 
@@ -136,7 +136,7 @@ Streng sequenziell — immer nur ein Modell geladen:
 
 - Pro Pipeline-Schritt (ASR, Diarization, Summarization) ist ein Modell-Slot in `electron-store` aktiv
 - Verfügbare Modelle stehen im Modell-Katalog (`src/main/services/ModelCatalog.ts`); Nutzer aktivieren / deaktivieren / löschen sie über Einstellungen → Modelle
-- Update-Check vergleicht installierte Versionen mit `manifest.json` auf Cloudflare R2; Updates werden in einen Staging-Ordner heruntergeladen und beim Neustart atomar getauscht
+- Update-Check lädt die signierte `manifest.json` von Cloudflare R2; App und Modelle werden als ein Update bereitgestellt (`userData/app-update`, `models/.update`) und beim Beenden nur durch Umbenennen getauscht — Modelle zuerst, App zuletzt, bei einem Fehler alles zurück
 
 ### Speicherung
 

@@ -1,12 +1,15 @@
 import { AlertCircle, CheckCircle2, Download, Loader2 } from 'lucide-react'
 import Toggle from '../Toggle'
 import { useAppUpdate } from '../../hooks/useAppUpdate'
+import { updateTitle } from '../../../../shared/utils/updateTitle'
 import { formatBytes } from '../../utils/formatBytes'
+import type { AppUpdateState } from '../../../../shared/types/AppUpdate'
 
 /**
- * Einstellungen → Updates (Issues #164, #165): Schalter «Automatische
- * Updates» und Stand des App-Updates. Vor jedem selbst gestarteten Download
- * stehen Version und Grösse da (AK 4).
+ * Einstellungen → Updates (Issues #164, #165, #167): Schalter «Automatische
+ * Updates» und Stand des Updates. App und Modelle sind ein Vorgang; vor
+ * jedem selbst gestarteten Download stehen alle Teile, die gesamte Grösse
+ * und der nötige Speicherplatz da (AK 3, NFR 1).
  */
 export default function UpdateSettings(): React.JSX.Element {
   const {
@@ -24,6 +27,7 @@ export default function UpdateSettings(): React.JSX.Element {
     return <div className="p-8 text-sm text-text-tertiary">Wird geladen…</div>
   }
 
+  const title = updateTitle(state)
   const size = state.sizeBytes ? formatBytes(state.sizeBytes) : null
   const busyButton =
     'titlebar-no-drag rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:opacity-50'
@@ -44,18 +48,20 @@ export default function UpdateSettings(): React.JSX.Element {
         </div>
         {state.autoUpdate ? (
           <p className="text-sm text-text-secondary">
-            Neue Versionen werden im Hintergrund geladen und installiert, wenn Sie 10 Minuten nicht
-            am Mac arbeiten oder Therascript beenden — nie während einer Aufnahme oder Verarbeitung.
+            Neue Versionen und neue Fassungen der Sprachmodelle werden im Hintergrund geladen und
+            installiert, wenn Sie 10 Minuten nicht am Mac arbeiten oder Therascript beenden — nie
+            während einer Aufnahme oder Verarbeitung.
           </p>
         ) : (
           <p className="rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-sm text-warning-text">
-            Neue Versionen werden nur angezeigt. Fehlerbehebungen kommen erst an, wenn Sie sie hier
-            selbst herunterladen und installieren.
+            Updates werden nur angezeigt. Fehlerbehebungen und verbesserte Modelle kommen erst an,
+            wenn Sie sie hier selbst herunterladen und installieren. Ein Update lässt sich
+            verschieben, aber nicht überspringen.
           </p>
         )}
       </section>
 
-      {/* ── Stand (#164) ── */}
+      {/* ── Stand (#164, #167) ── */}
       <section className="space-y-3">
         <h3 className="text-sm font-semibold text-text-primary">
           Therascript {state.currentVersion}
@@ -87,13 +93,18 @@ export default function UpdateSettings(): React.JSX.Element {
 
         {state.phase === 'available' && (
           <div className="space-y-3">
-            <p className="text-sm text-text-secondary">
-              Version {state.version} ist verfügbar{size ? ` (Download ${size})` : ''}.
-            </p>
+            <p className="text-sm text-text-secondary">{title} ist verfügbar.</p>
+            <UpdateParts state={state} />
+            {state.diskNeedBytes !== null && (
+              <p className="text-xs text-text-tertiary">
+                Zum Herunterladen und Bereitstellen braucht es ca.{' '}
+                {formatBytes(state.diskNeedBytes)} freien Speicherplatz.
+              </p>
+            )}
             <button className={busyButton} onClick={download}>
               <span className="flex items-center gap-2">
                 <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-                Version {state.version} herunterladen{size ? ` (${size})` : ''}
+                {title} herunterladen{size ? ` (${size})` : ''}
               </span>
             </button>
           </div>
@@ -104,7 +115,7 @@ export default function UpdateSettings(): React.JSX.Element {
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm text-text-secondary">
                 <span>
-                  Version {state.version} wird geladen{size ? ` (${size})` : ''}…
+                  {title} wird geladen{size ? ` (${size})` : ''}…
                 </span>
                 <span>{state.progress ?? 0} %</span>
               </div>
@@ -133,7 +144,7 @@ export default function UpdateSettings(): React.JSX.Element {
                 aria-hidden="true"
               />
               <span className="text-sm text-text-secondary">
-                Version {state.version} wird im Hintergrund vorbereitet.
+                {title} wird im Hintergrund vorbereitet.
               </span>
             </div>
           ))}
@@ -141,23 +152,24 @@ export default function UpdateSettings(): React.JSX.Element {
         {state.phase === 'ready' && (
           <div className="space-y-3">
             <p className="text-sm text-text-secondary">
-              Version {state.version} liegt bereit. Therascript startet beim Installieren neu.
+              {title} liegt bereit. Therascript startet beim Installieren neu.
               {state.autoUpdate &&
-                ' Ohne Ihr Zutun wird sie installiert, wenn Sie 10 Minuten nicht am Mac arbeiten oder Therascript beenden.'}
+                ' Ohne Ihr Zutun wird es installiert, wenn Sie 10 Minuten nicht am Mac arbeiten oder Therascript beenden.'}
             </p>
+            <UpdateParts state={state} />
             {!state.installPending && (
               <button className={busyButton} onClick={() => void install()}>
-                Version {state.version} installieren
+                {title} installieren
               </button>
             )}
           </div>
         )}
 
-        {state.phase === 'unsupported' && (
+        {state.manualVersion && (
           <div className="space-y-3">
             <p className="text-sm text-text-secondary">
-              Version {state.version} ist verfügbar. {state.unsupportedReason} Die Anleitung zeigt,
-              wie Sie die neue Version von Hand installieren.
+              Version {state.manualVersion} ist verfügbar. {state.unsupportedReason} Die Anleitung
+              zeigt, wie Sie die neue Version von Hand installieren.
             </p>
             <button className={secondaryButton} onClick={openInstallGuide}>
               Anleitung öffnen
@@ -175,12 +187,48 @@ export default function UpdateSettings(): React.JSX.Element {
           </p>
         )}
 
-        {(state.phase === 'idle' || state.phase === 'available') && (
+        {(state.phase === 'idle' ||
+          state.phase === 'available' ||
+          state.phase === 'unsupported') && (
           <button className={secondaryButton} onClick={() => void check()} disabled={checking}>
             {checking ? 'Prüfe…' : 'Nach Updates suchen'}
           </button>
         )}
       </section>
     </div>
+  )
+}
+
+/** Teile des Updates mit Grösse und Summe (AK 3); nur nötig, wenn Modelle dabei sind. */
+function UpdateParts({ state }: { state: AppUpdateState }): React.JSX.Element | null {
+  if (state.models.length === 0) return null
+  return (
+    <ul className="space-y-1 rounded-lg border border-border px-3 py-2 text-sm text-text-secondary">
+      {state.version && state.appSizeBytes !== null && (
+        <PartRow label={`Therascript ${state.version}`} sizeBytes={state.appSizeBytes} />
+      )}
+      {state.models.map((model) => (
+        <PartRow
+          key={model.id}
+          label={`${model.label} (${model.kind === 'new' ? 'neu für diese Version' : 'neue Fassung'})`}
+          sizeBytes={model.sizeBytes}
+        />
+      ))}
+      {state.sizeBytes !== null && (
+        <li className="flex justify-between gap-4 border-t border-border pt-1 font-medium text-text-primary">
+          <span>Gesamt</span>
+          <span className="tabular-nums">{formatBytes(state.sizeBytes)}</span>
+        </li>
+      )}
+    </ul>
+  )
+}
+
+function PartRow({ label, sizeBytes }: { label: string; sizeBytes: number }): React.JSX.Element {
+  return (
+    <li className="flex justify-between gap-4">
+      <span>{label}</span>
+      <span className="shrink-0 tabular-nums">{formatBytes(sizeBytes)}</span>
+    </li>
   )
 }

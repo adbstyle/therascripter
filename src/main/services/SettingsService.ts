@@ -1,7 +1,7 @@
 import Store from 'electron-store'
 import type { ThemePreference } from '../../shared/types'
-import type { PendingModelUpdate, InstalledModelVersion } from '../../shared/types/ModelUpdate'
-import type { PersistedAppUpdate } from './AppUpdateService'
+import type { InstalledModelVersion } from '../../shared/types/ModelUpdate'
+import type { PersistedUpdate } from './AppUpdateService'
 import type { ReconcileEvent } from '../../shared/types/ReconcileEvent'
 import { getModelDefinitions, defaultActiveModelFor } from './ModelDownloadService'
 import {
@@ -35,21 +35,16 @@ export interface AppSettings {
   theme: ThemePreference
   reviewPanelOpen: boolean
   installedModelVersions: Record<string, InstalledModelVersion>
-  pendingModelUpdates: PendingModelUpdate[] | null
   /** Issue #165 — automatische Updates (Download und Installation), standardmässig an. */
   autoUpdate: boolean
-  /** Issue #164 — geladenes bzw. bereitliegendes App-Update (validiert beim Lesen). */
-  appUpdate: PersistedAppUpdate | null
+  /**
+   * Issues #164/#167 — geladenes bzw. bereitliegendes Update aus App und
+   * Modellen (validiert beim Lesen, auch im Format vor #167).
+   */
+  appUpdate: PersistedUpdate | null
   /** Issue #164 — nach einem Update-Neustart Fenster nicht zeigen (war versteckt). */
   startHiddenAfterUpdate: boolean
   reconcileEvents: ReconcileEvent[]
-  /**
-   * Issue #84 / Story F+G — manifest entries the user has actively dismissed.
-   * Each entry is `${modelId}@${sha256}`; the SHA-256 is what makes the entry
-   * obsolete on its own when a new manifest publishes a different hash for the
-   * same id, so no explicit cleanup is needed.
-   */
-  dismissedManifestVersions: string[]
   /**
    * Issue #161 — war die Mikrofon-Berechtigung schon einmal erteilt?
    * Bewusst OHNE Default: electron-store schreibt Defaults beim Init in den
@@ -79,12 +74,10 @@ const defaults: AppSettings = {
   theme: 'system',
   reviewPanelOpen: false,
   installedModelVersions: {},
-  pendingModelUpdates: null,
   autoUpdate: true,
   appUpdate: null,
   startHiddenAfterUpdate: false,
-  reconcileEvents: [],
-  dismissedManifestVersions: []
+  reconcileEvents: []
 }
 
 let store: Store<AppSettings> | null = null
@@ -221,11 +214,6 @@ export function initSettings(): Store<AppSettings> {
     store.set('reconcileEvents', [])
   }
 
-  // Issue #84 / Story F+G — same reasoning for dismissedManifestVersions.
-  if (!Array.isArray(store.get('dismissedManifestVersions'))) {
-    store.set('dismissedManifestVersions', [])
-  }
-
   // Issue #161 — Bestandsinstallationen kennen kein «war schon erlaubt». Wer
   // schon Modelle geladen hat, gilt einmalig als «war erlaubt»: Die neue
   // Signatur (Designated Requirement) setzt die Mikrofon-Berechtigung bei
@@ -237,7 +225,13 @@ export function initSettings(): Store<AppSettings> {
 
   // Issue #164 — der frühere reine Hinweis auf eine neue App-Version ist durch
   // den Update-Zustand (appUpdate, AppUpdateService) ersetzt.
-  ;(store as unknown as { delete: (key: string) => void }).delete('cachedAppUpdateStatus')
+  const removeKey = (store as unknown as { delete: (key: string) => void }).delete.bind(store)
+  removeKey('cachedAppUpdateStatus')
+  // Issue #167 — Modell-Updates laufen im gemeinsamen Update (appUpdate):
+  // kein Vormerken für den Neustart mehr, und eine Version überspringen geht
+  // nicht mehr — Modell-Updates lassen sich nur verschieben (AK 5).
+  removeKey('pendingModelUpdates')
+  removeKey('dismissedManifestVersions')
 
   // installedModelVersions: Altlasten-Keys (Legacy + PR-Zwischenstände) auf den neuen
   // Key umbenennen, sonst bleiben sie für immer verwaist (UpdateCheckService iteriert

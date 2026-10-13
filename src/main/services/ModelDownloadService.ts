@@ -889,7 +889,6 @@ function newReconcileEvent(repair: ReconcileRepair): ReconcileEvent {
  */
 export function retireObsoleteModels(): void {
   const settings = getSettings()
-  const retiredIds = new Set(RETIRED_MODELS.map((m) => m.id))
   const events: ReconcileEvent[] = []
   let active = settings.get('activeModels')
 
@@ -912,14 +911,6 @@ export function retireObsoleteModels(): void {
         reason: 'model-retired'
       })
     )
-  }
-
-  // Ein vor dem Upgrade vorgemerktes Update würde das Modell beim nächsten
-  // Neustart (ModelUpdateScreen) sonst wieder herunterladen.
-  const pending = settings.get('pendingModelUpdates')
-  if (Array.isArray(pending) && pending.some((u) => retiredIds.has(u.id))) {
-    const rest = pending.filter((u) => !retiredIds.has(u.id))
-    settings.set('pendingModelUpdates', rest.length > 0 ? rest : null)
   }
 
   if (events.length === 0) return

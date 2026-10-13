@@ -3,7 +3,6 @@ import type { Task, TaskType } from './Task'
 import type { BlocklistEntry } from './NerTypes'
 import type { EntityMap, PlaceholderType } from './EntityMap'
 import type { TipTapDocument } from './TipTapDocument'
-import type { PendingModelUpdate } from './ModelUpdate'
 import type { AppUpdateInstallResult, AppUpdateState } from './AppUpdate'
 import type { ReconcileEvent } from './ReconcileEvent'
 import type { MicrophoneState, MicrophoneStatus } from './Microphone'
@@ -176,35 +175,6 @@ export interface ModelDownloadApi {
   onStatus(callback: (status: ModelDownloadStatus) => void): () => void
 }
 
-export interface ModelUpdateRestartResult {
-  allowed: boolean
-  reason?: 'recording' | 'processing'
-}
-
-export interface ModelUpdateApi {
-  check(): Promise<PendingModelUpdate[]>
-  restart(updates: PendingModelUpdate[]): Promise<ModelUpdateRestartResult>
-  startDownload(): Promise<void>
-  getPending(): Promise<PendingModelUpdate[] | null>
-  /**
-   * Issue #144 — verfügbare Modell-Updates aus der letzten Prüfung (ohne
-   * verworfene). Für den Stand beim Mount; Änderungen kommen über onAvailable.
-   */
-  getAvailable(): Promise<PendingModelUpdate[]>
-  clearPending(): Promise<void>
-  /**
-   * Issue #84 / Story F+G — record that the user actively dismissed these
-   * manifest entries. Future update checks filter them out until the manifest
-   * publishes a new sha256 for the same id.
-   */
-  dismissVersions(updates: PendingModelUpdate[]): Promise<void>
-  /** Jede Änderung der verfügbaren Modell-Updates, auch eine leere Liste (#144). */
-  onAvailable(callback: (updates: PendingModelUpdate[]) => void): () => void
-  onDownloadProgress(callback: (status: ModelDownloadStatus) => void): () => void
-  onDownloadComplete(callback: () => void): () => void
-  onDownloadError(callback: (error: string) => void): () => void
-}
-
 export interface AppUpdateApi {
   getState(): Promise<AppUpdateState>
   /** Sucht nach einer neuen Version; das Ergebnis kommt auch über onState. */
@@ -283,7 +253,6 @@ export interface IpcApi {
   system: SystemApi
   modelDownload: ModelDownloadApi
   modelCatalog: ModelCatalogApi
-  modelUpdate: ModelUpdateApi
   modelReconcile: ModelReconcileApi
   pipeline: PipelineApi
   appUpdate: AppUpdateApi

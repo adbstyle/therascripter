@@ -141,17 +141,6 @@ describe('retireObsoleteModels', () => {
     expect(storeState.reconcileEvents).toEqual([])
   })
 
-  it('drops a pending model update for the retired id so it is not re-downloaded', () => {
-    storeState = {
-      ...state(null),
-      pendingModelUpdates: [{ id: 'gemma-summarization' }, { id: 'whisper-large-v3-turbo' }]
-    }
-
-    retireObsoleteModels()
-
-    expect(storeState.pendingModelUpdates).toEqual([{ id: 'whisper-large-v3-turbo' }])
-  })
-
   it('is a no-op on the second run', () => {
     storeState = state('gemma-summarization')
     files.add(GEMMA3)

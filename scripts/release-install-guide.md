@@ -46,7 +46,7 @@ Apple bestätigt Apps nur gegen eine jährliche Gebühr als geprüft. Therascrip
 
 ### Auf eine neue Version aktualisieren
 
-Therascript aktualisiert sich selbst: Neue Versionen werden im Hintergrund geladen und installiert, wenn Sie 10 Minuten nicht am Mac arbeiten oder Therascript beenden — nie während einer Aufnahme oder Verarbeitung. Unter **Einstellungen → Updates** installieren Sie ein bereitliegendes Update sofort (auch über das Therascript-Symbol in der Menüleiste) oder schalten die automatischen Updates aus.
+Therascript aktualisiert sich selbst: Neue Versionen und neue Fassungen der Sprachmodelle werden im Hintergrund geladen und gemeinsam mit einem einzigen Neustart installiert, wenn Sie 10 Minuten nicht am Mac arbeiten oder Therascript beenden — nie während einer Aufnahme oder Verarbeitung. Unter **Einstellungen → Updates** installieren Sie ein bereitliegendes Update sofort (auch über das Therascript-Symbol in der Menüleiste) oder schalten die automatischen Updates aus.
 
 Von Hand aktualisieren Sie nur einmalig von einer Version ohne «Einstellungen → Updates» oder wenn Therascript nicht aus dem Ordner **Programme** läuft:
 

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, nativeImage, Tray } from 'electron'
 import type { NativeImage } from 'electron'
 import { join } from 'path'
+import { updateTitle } from '../../shared/utils/updateTitle'
 
 function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600)
@@ -31,7 +32,8 @@ export class TrayService {
   private onStopCallback: (() => void) | null = null
   private onOpenSettingsCallback: (() => void) | null = null
   private onInstallUpdateCallback: (() => void) | null = null
-  private updateReadyVersion: string | null = null
+  /** Menüeintrag zum Installieren eines bereitliegenden Updates, null = keiner. */
+  private updateLabel: string | null = null
 
   init(): void {
     this.idleIcon = loadTemplateIcon('TrayIconTemplate')
@@ -54,10 +56,12 @@ export class TrayService {
     this.onInstallUpdateCallback = callback
   }
 
-  /** Bereitliegende Version (Menüeintrag sichtbar) oder null. */
-  setUpdateReady(version: string | null): void {
-    if (this.updateReadyVersion === version) return
-    this.updateReadyVersion = version
+  /** Bereitliegendes Update (version null = nur Modelle, #167) oder null. */
+  setUpdateReady(update: { version: string | null } | null): void {
+    // Wie der Knopf unter Einstellungen → Updates
+    const label = update ? `${updateTitle(update)} installieren` : null
+    if (this.updateLabel === label) return
+    this.updateLabel = label
     this.rebuildMenu()
   }
 
@@ -149,10 +153,10 @@ export class TrayService {
       click: () => this.showWindow()
     })
 
-    if (this.updateReadyVersion) {
+    if (this.updateLabel) {
       menuItems.push({ type: 'separator' })
       menuItems.push({
-        label: `Update auf Version ${this.updateReadyVersion} installieren`,
+        label: this.updateLabel,
         click: () => this.onInstallUpdateCallback?.()
       })
     }

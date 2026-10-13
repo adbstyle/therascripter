@@ -90,8 +90,6 @@ export async function checkSeededRun({ appPath, logFile, expectations, fixtures,
       const status = await page.eval('window.api.modelDownload.status()')
       if (!status.modelsReady)
         throw new Error('App verlangt die Ersteinrichtung (Modelle nicht erkannt)')
-      const pending = await page.eval('window.api.modelUpdate.getPending()')
-      if (pending?.length) throw new Error('App zeigt den Modell-Update-Bildschirm statt der Liste')
       const shown = await waitFor(
         () =>
           page.eval(`(() => {

@@ -73,6 +73,7 @@ export function writeModelSettings(home) {
     modelsDownloaded: true,
     firstLaunchDone: true,
     backgroundReminderShown: true,
+    // Für den Seed, den die Vorversion baut (vor #167 gab es den Merker noch)
     pendingModelUpdates: null,
     microphoneWasGranted: false
   }

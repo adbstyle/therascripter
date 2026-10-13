@@ -1,12 +1,33 @@
 import { describe, it, expect } from 'vitest'
 import { buildManifest, type CatalogModel, type ManifestModel } from '../update-manifest'
-import { ManifestSchema } from '../validation/model-update-schemas'
+import { parseManifest } from '../validation/model-update-schemas'
+import { MODEL_DEFINITIONS } from '../model-catalog'
 
 const sha = (c: string): string => c.repeat(64)
 const now = new Date('2026-10-12T10:00:00.123Z')
 const catalog: CatalogModel[] = [
-  { id: 'asr', label: 'ASR', url: 'https://cdn/asr.bin', sha256: sha('a'), sizeBytes: 10 },
-  { id: 'ner', label: 'NER', url: 'https://cdn/ner.tgz', sha256: sha('b'), sizeBytes: 20 }
+  {
+    id: 'asr',
+    label: 'ASR',
+    url: 'https://cdn/asr.bin',
+    sha256: sha('a'),
+    sizeBytes: 10,
+    relativePath: 'asr/asr.bin',
+    checkPath: 'asr/asr.bin',
+    group: 'asr'
+  },
+  {
+    id: 'ner',
+    label: 'NER',
+    url: 'https://cdn/ner.tgz',
+    sha256: sha('b'),
+    sizeBytes: 20,
+    relativePath: 'ner',
+    checkPath: 'ner/model',
+    archive: true,
+    group: 'ner',
+    isRequired: true
+  }
 ]
 const dmg = { url: 'https://gh/v1.2.0/Therascript.dmg', sha256: sha('d'), sizeBytes: 300 }
 const liveModel = (over: Partial<ManifestModel>): ManifestModel => ({
@@ -63,6 +84,38 @@ describe('buildManifest', () => {
 
   it('erzeugt ein Manifest, das die App einlesen kann', () => {
     const manifest = buildManifest({ catalog, live: {}, appVersion: '1.2.0', dmg, now })
-    expect(ManifestSchema.safeParse(manifest).success).toBe(true)
+    const parsed = parseManifest(JSON.parse(JSON.stringify(manifest)))
+    expect(parsed.models).toHaveLength(2)
+    expect(parsed.app).toEqual(manifest.app)
+  })
+
+  it('nennt für jedes Modell die Ablage aus dem Katalog (#167)', () => {
+    const live = { models: [liveModel({ minAppVersion: '1.0.0' })] }
+    const [asr, ner] = buildManifest({ catalog, live, appVersion: '1.2.0', dmg, now }).models
+    expect(asr).toMatchObject({
+      relativePath: 'asr/asr.bin',
+      checkPath: 'asr/asr.bin',
+      archive: false,
+      group: 'asr',
+      required: false
+    })
+    expect(ner).toMatchObject({
+      relativePath: 'ner',
+      checkPath: 'ner/model',
+      archive: true,
+      required: true
+    })
+  })
+
+  it('jedes Modell des echten Katalogs übersteht die Prüfung der App (#167)', () => {
+    const manifest = buildManifest({
+      catalog: MODEL_DEFINITIONS,
+      live: {},
+      appVersion: '1.2.0',
+      dmg,
+      now
+    })
+    const parsed = parseManifest(JSON.parse(JSON.stringify(manifest)))
+    expect(parsed.models.map((m) => m.id)).toEqual(MODEL_DEFINITIONS.map((m) => m.id))
   })
 })

@@ -8,7 +8,7 @@ import ModelsSettings from '../components/settings/ModelsSettings'
 import UpdateSettings from '../components/settings/UpdateSettings'
 import { useTheme } from '../hooks/useTheme'
 import { useAppUpdate } from '../hooks/useAppUpdate'
-import { useModelUpdates } from '../hooks/useModelUpdates'
+import { updateTitle } from '../../../shared/utils/updateTitle'
 
 export type SubPage = 'sperrliste' | 'darstellung' | 'modelle' | 'updates' | 'ueber'
 
@@ -111,7 +111,6 @@ interface HomeProps {
 function SettingsHome({ onSelect }: HomeProps): React.JSX.Element {
   const { theme } = useTheme()
   const { state: appUpdate, needsAttention: updateHighlighted } = useAppUpdate()
-  const { availableUpdates } = useModelUpdates()
 
   const [blocklist, setBlocklist] = useState<{ entries: number; categories: number } | null>(null)
   const [modelLabels, setModelLabels] = useState<string[] | null>(null)
@@ -159,9 +158,9 @@ function SettingsHome({ onSelect }: HomeProps): React.JSX.Element {
   const updateSummary = !appUpdate
     ? '…'
     : appUpdate.phase === 'ready'
-      ? `Version ${appUpdate.version} bereit zur Installation`
+      ? `${updateTitle(appUpdate)} bereit zur Installation`
       : appUpdate.phase === 'available' || appUpdate.phase === 'unsupported'
-        ? `Version ${appUpdate.version} verfügbar`
+        ? `${updateTitle(appUpdate)} verfügbar`
         : `${appUpdate.autoUpdate ? 'Automatisch' : 'Von Hand'} · ${
             appUpdate.checkFailed
               ? 'Prüfung nicht gelungen'
@@ -187,8 +186,7 @@ function SettingsHome({ onSelect }: HomeProps): React.JSX.Element {
       id: 'modelle',
       icon: Cpu,
       title: 'Modelle',
-      summary: modelSummary,
-      badge: availableUpdates && availableUpdates.length > 0 ? 'Update' : undefined
+      summary: modelSummary
     },
     {
       id: 'updates',

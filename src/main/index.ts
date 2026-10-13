@@ -19,7 +19,6 @@ import { registerReviewHandlers } from './ipc/review-handlers'
 import { registerSystemHandlers } from './ipc/system-handlers'
 import { registerModelDownloadHandlers } from './ipc/model-download-handlers'
 import { registerModelCatalogHandlers } from './ipc/model-catalog-handlers'
-import { registerModelUpdateHandlers } from './ipc/model-update-handlers'
 import { registerModelReconcileHandlers } from './ipc/model-reconcile-handlers'
 import { registerPipelineHandlers } from './ipc/pipeline-handlers'
 import { initTray, getTray } from './services/TrayService'
@@ -216,15 +215,21 @@ app.whenReady().then(() => {
     nativeTheme.themeSource = 'system'
   }
 
-  // Clean up any incomplete model updates from a previous crashed update
+  // Altlast des Modell-Update-Ablaufs vor #167 (models/.staging, .backup)
   cleanupIncompleteUpdates()
 
-  // Issue #164 — App-Update: Ergebnis eines Austauschs auswerten, Reste
-  // aufräumen, ein bereitliegendes Update wieder anbieten. Die Menüleiste
-  // entsteht erst später, deshalb defensiv.
+  // Migrate existing model installations to version tracking (one-time,
+  // idempotent). Vor dem Update-Start: der trägt nach einem gelungenen
+  // Update neue Modell-Fassungen ein — danach sähe die Migration einen
+  // nicht leeren Stand und überginge den Altbestand.
+  migrateInstalledVersions()
+
+  // Issues #164/#167 — Update aus App und Modellen: Ergebnis eines
+  // Austauschs auswerten, Reste aufräumen, ein bereitliegendes Update wieder
+  // anbieten. Die Menüleiste entsteht erst später, deshalb defensiv.
   initAppUpdateService((state) => {
     try {
-      getTray().setUpdateReady(state.phase === 'ready' ? state.version : null)
+      getTray().setUpdateReady(state.phase === 'ready' ? { version: state.version } : null)
     } catch {
       // Tray noch nicht initialisiert — initTray liest den Zustand selbst
     }
@@ -305,7 +310,6 @@ app.whenReady().then(() => {
   registerSystemHandlers()
   registerModelDownloadHandlers()
   registerModelCatalogHandlers()
-  registerModelUpdateHandlers()
   registerModelReconcileHandlers()
   registerPipelineHandlers()
   registerAppUpdateHandlers()
@@ -342,16 +346,13 @@ app.whenReady().then(() => {
     console.error('[Recovery] recoverCrashedRecordings fehlgeschlagen:', err)
   )
 
-  // Migrate existing model installations to version tracking (one-time, idempotent)
-  migrateInstalledVersions()
-
   // Initialize tray after window is created
   const tray = initTray()
   tray.onStop(() => stopRecordingFromTray())
   tray.onOpenSettings(() => sendToRenderer('nav:openSettings'))
   tray.onInstallUpdate(() => getAppUpdateService()?.requestInstall())
   const updateState = getAppUpdateService()?.getState()
-  tray.setUpdateReady(updateState?.phase === 'ready' ? updateState.version : null)
+  tray.setUpdateReady(updateState?.phase === 'ready' ? { version: updateState.version } : null)
 
   // Application Menu owns ⌘, (Einstellungen) and ⌘Q (Beenden) so the
   // shortcuts only fire while Therascript is the focused app.
