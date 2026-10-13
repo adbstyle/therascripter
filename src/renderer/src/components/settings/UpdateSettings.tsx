@@ -1,6 +1,7 @@
 import { AlertCircle, CheckCircle2, Download, Loader2 } from 'lucide-react'
 import Toggle from '../Toggle'
-import { updateTitle, useAppUpdate } from '../../hooks/useAppUpdate'
+import { useAppUpdate } from '../../hooks/useAppUpdate'
+import { updateTitle } from '../../../../shared/utils/updateTitle'
 import { formatBytes } from '../../utils/formatBytes'
 import type { AppUpdateState } from '../../../../shared/types/AppUpdate'
 

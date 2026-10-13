@@ -7,7 +7,8 @@ import AboutPage from '../components/AboutPage'
 import ModelsSettings from '../components/settings/ModelsSettings'
 import UpdateSettings from '../components/settings/UpdateSettings'
 import { useTheme } from '../hooks/useTheme'
-import { updateTitle, useAppUpdate } from '../hooks/useAppUpdate'
+import { useAppUpdate } from '../hooks/useAppUpdate'
+import { updateTitle } from '../../../shared/utils/updateTitle'
 
 export type SubPage = 'sperrliste' | 'darstellung' | 'modelle' | 'updates' | 'ueber'
 

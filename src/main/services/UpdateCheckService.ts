@@ -130,9 +130,10 @@ async function runCheck(): Promise<void> {
  */
 async function healLegacyInstalledHashes(manifest: Manifest): Promise<void> {
   const installed = getInstalledVersions()
+  const definitions = new Map(getModelDefinitions().map((d) => [d.id, d]))
   for (const entry of manifest.models) {
     const record = installed[entry.id]
-    const definition = getModelDefinitions().find((d) => d.id === entry.id)
+    const definition = definitions.get(entry.id)
     if (record?.sha256 !== '' || !definition || definition.archive) continue
     if (!isModelInstalled(entry.id)) continue
     const filePath = join(getModelsDir(), definition.relativePath)

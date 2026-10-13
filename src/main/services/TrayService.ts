@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, nativeImage, Tray } from 'electron'
 import type { NativeImage } from 'electron'
 import { join } from 'path'
+import { updateTitle } from '../../shared/utils/updateTitle'
 
 function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600)
@@ -57,11 +58,8 @@ export class TrayService {
 
   /** Bereitliegendes Update (version null = nur Modelle, #167) oder null. */
   setUpdateReady(update: { version: string | null } | null): void {
-    const label = !update
-      ? null
-      : update.version
-        ? `Update auf Version ${update.version} installieren`
-        : 'Modell-Update installieren'
+    // Wie der Knopf unter Einstellungen → Updates
+    const label = update ? `${updateTitle(update)} installieren` : null
     if (this.updateLabel === label) return
     this.updateLabel = label
     this.rebuildMenu()

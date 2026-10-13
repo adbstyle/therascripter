@@ -21,14 +21,12 @@ import type { BundleModel } from '../../shared/validation/model-update-schemas'
  */
 
 export const STAGE_DIR = '.update'
-const BACKUP_DIR = 'backup'
+/** Sicherungen der bisherigen Fassungen beim Austausch (nie automatisch aufräumen). */
+export const BACKUP_DIR = 'backup'
 
 export function modelStageRoot(modelsDir: string): string {
   return join(modelsDir, STAGE_DIR)
 }
-
-/** Name des Arbeitsordners für die Sicherungen (nie automatisch aufräumen). */
-export const BACKUP_DIR_NAME = BACKUP_DIR
 
 export interface StagePaths {
   dir: string

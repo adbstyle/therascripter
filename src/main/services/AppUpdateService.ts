@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, renameSync, rmSync } from 'fs'
 import { basename, dirname, join } from 'path'
 import { z } from 'zod'
 import type { ManifestApp } from '../../shared/update-manifest'
@@ -22,12 +22,13 @@ import type {
   AppUpdateState
 } from '../../shared/types/AppUpdate'
 import {
-  BACKUP_DIR_NAME,
+  BACKUP_DIR,
   hasLeftoverBackup,
   isModelStaged,
   modelStageRoot,
   modelsSwappedIn,
   rollbackModels,
+  safeReaddir,
   swapModelsIn
 } from './model-staging'
 import type { BusyReason } from './WorkGuard'
@@ -238,6 +239,10 @@ export class AppUpdateService {
   private quitPlan: QuitInstallPlan | null = null
   /** > 0, solange unter Einstellungen → Modelle ein Modell geladen wird. */
   private stagingPaused = 0
+  /** Automatisches Bereitstellen wartet, bis Aufnahme bzw. Verarbeitung vorbei sind. */
+  private autoDeferred = false
+  /** Für eindeutige Namen beiseite geschobener Ordner. */
+  private trashSeq = 0
 
   constructor(private readonly deps: AppUpdateDeps) {}
 
@@ -287,15 +292,22 @@ export class AppUpdateService {
 
   /** Bereitgestellte Teile entfernen, die nicht zu `keep` gehören. */
   private clearStaging(keep: UpdateBundle | null): void {
+    const keepAppDirs = new Set<string>()
+    if (keep?.app) {
+      keepAppDirs.add(basename(this.appStageDir(keep.app)))
+      // Eine schon bereitgestellte Kopie bleibt, wo sie liegt (auch aus älteren Versionen)
+      const staged = this.persisted()?.app?.stagedAppPath
+      if (staged && this.appStaged(keep.app)) keepAppDirs.add(basename(dirname(staged)))
+    }
     for (const name of safeReaddir(this.deps.workDir)) {
-      if (name.includes(TRASH_MARK) || name === keep?.app?.version) continue
+      if (name.includes(TRASH_MARK) || keepAppDirs.has(name)) continue
       this.removeAside(join(this.deps.workDir, name))
     }
     const root = modelStageRoot(this.deps.modelsDir)
     const keepShas = new Set(keep?.models.map((m) => m.sha256) ?? [])
     for (const name of safeReaddir(root)) {
       // Sicherungen nie hier: sie können die einzige Fassung eines Modells sein
-      if (name.includes(TRASH_MARK) || name === BACKUP_DIR_NAME || keepShas.has(name)) continue
+      if (name.includes(TRASH_MARK) || name === BACKUP_DIR || keepShas.has(name)) continue
       this.removeAside(join(root, name))
     }
   }
@@ -310,13 +322,21 @@ export class AppUpdateService {
     let target = path
     if (!basename(path).includes(TRASH_MARK)) {
       try {
-        target = `${path}${TRASH_MARK}${this.deps.now().getTime()}`
+        target = `${path}${TRASH_MARK}${this.deps.now().getTime()}-${++this.trashSeq}`
         renameSync(path, target)
       } catch {
         target = path
       }
     }
     this.deps.removeInBackground(target)
+  }
+
+  /**
+   * Arbeitsordner einer App-Version — mit Prüfsumme im Namen: Wird dieselbe
+   * Version neu veröffentlicht, setzt kein Download die alte Datei fort.
+   */
+  private appStageDir(app: ManifestApp): string {
+    return join(this.deps.workDir, `${app.version}-${app.sha256.slice(0, 12)}`)
   }
 
   private appStaged(app: ManifestApp, record = this.persisted()): boolean {
@@ -513,7 +533,7 @@ export class AppUpdateService {
         this.deps.log(`AppUpdate: Update ${ofUpdate(record)} installiert`)
         this.discard()
         // Die bisherigen Modell-Fassungen werden jetzt nicht mehr gebraucht
-        this.removeAside(join(modelStageRoot(this.deps.modelsDir), BACKUP_DIR_NAME))
+        this.removeAside(join(modelStageRoot(this.deps.modelsDir), BACKUP_DIR))
         return
       }
       // Austausch gescheitert oder abgebrochen: alles zurück, still erneut versuchen (AK 16, PC 5)
@@ -569,13 +589,18 @@ export class AppUpdateService {
    */
   async withStagingPaused<T>(work: () => Promise<T>): Promise<T> {
     this.stagingPaused++
+    // Ein selbst gestarteter Download läuft danach von selbst weiter
+    const resumeManual = this.phase === 'downloading' && this.manualDownload
     if (this.phase === 'downloading') this.cancelDownload()
     await this.lastRun
     try {
       return await work()
     } finally {
       this.stagingPaused--
-      if (this.stagingPaused === 0) this.handleModelsChanged()
+      if (this.stagingPaused === 0) {
+        this.handleModelsChanged()
+        if (resumeManual && this.phase === 'available') void this.download({ manual: true })
+      }
     }
   }
 
@@ -587,6 +612,13 @@ export class AppUpdateService {
    */
   private startAutoDownload(bundle: UpdateBundle): boolean {
     if (this.stagingPaused > 0) return false
+    // Nie neben Aufnahme oder Verarbeitung: Download und Entpacken grosser
+    // Modelle bremsen auf 8-GB-Macs die Pseudonymisierung bis zum Timeout
+    if (this.deps.currentWork() !== null) {
+      this.autoDeferred = true
+      return false
+    }
+    this.autoDeferred = false
     const need = this.stagingNeed(bundle)
     if (!this.hasFree(need + MIN_FREE_AFTER_DOWNLOAD)) {
       const gb = Math.ceil((need + MIN_FREE_AFTER_DOWNLOAD) / 1024 ** 3)
@@ -703,7 +735,7 @@ export class AppUpdateService {
     signal: AbortSignal,
     onProgress: (percent: number) => void
   ): Promise<void> {
-    const dir = join(this.deps.workDir, app.version)
+    const dir = this.appStageDir(app)
     const dmg = join(dir, 'Therascript.dmg')
     const stagedApp = join(dir, 'Therascript.app')
     mkdirSync(dir, { recursive: true })
@@ -793,7 +825,24 @@ export class AppUpdateService {
    * laufende Arbeit erfolgt unmittelbar vor dem Austausch.
    */
   tick(): void {
-    if (this.phase !== 'ready' || this.quitPlan) return
+    if (this.quitPlan) return
+    if (this.phase === 'downloading' && !this.manualDownload && this.deps.currentWork() !== null) {
+      // Ein Hintergrund-Download pausiert, sobald gearbeitet wird; er setzt
+      // später dort fort, wo er stand
+      this.cancelDownload()
+      this.autoDeferred = true
+      return
+    }
+    if (
+      this.phase === 'available' &&
+      this.autoDeferred &&
+      this.bundle &&
+      this.deps.getAutoUpdate()
+    ) {
+      if (!this.startAutoDownload(this.bundle)) this.emit()
+      return
+    }
+    if (this.phase !== 'ready') return
     const wantsInstall =
       this.installPending ||
       (this.silentInstallAllowed() && this.deps.idleSeconds() >= IDLE_INSTALL_SECONDS)
@@ -870,14 +919,6 @@ export class AppUpdateService {
       renameSync(previous, bundle)
       throw err
     }
-  }
-}
-
-function safeReaddir(dir: string): string[] {
-  try {
-    return readdirSync(dir)
-  } catch {
-    return []
   }
 }
 

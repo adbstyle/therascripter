@@ -179,7 +179,7 @@ describe('AppUpdateService — Angebot und Download', () => {
   it('lädt eine neuere Version automatisch und stellt sie geprüft bereit', async () => {
     const service = await readyService()
     expect(service.getState()).toMatchObject({ version: '1.1.0', progress: null, message: null })
-    expect(persisted?.app?.stagedAppPath).toMatch(/1\.1\.0\/Therascript\.app$/)
+    expect(persisted?.app?.stagedAppPath).toMatch(/1\.1\.0-a{12}\/Therascript\.app$/)
   })
 
   it('bietet gleiche oder ältere Versionen nicht an (AK 11)', () => {
@@ -289,7 +289,7 @@ describe('AppUpdateService — Angebot und Download', () => {
     await vi.waitFor(() => expect(service.getState().phase).toBe('ready'))
     for (const path of pending) rmSync(path, { recursive: true, force: true })
     expect(existsSync(persisted!.app!.stagedAppPath!)).toBe(true)
-    expect(persisted!.app!.stagedAppPath).toMatch(/1\.2\.0\/Therascript\.app$/)
+    expect(persisted!.app!.stagedAppPath).toMatch(/1\.2\.0-a{12}\/Therascript\.app$/)
   })
 
   it('startet nach einem Abbruch erst, wenn der abgebrochene Lauf aufgeräumt hat', async () => {
@@ -512,6 +512,74 @@ describe('AppUpdateService — App und Modelle als ein Vorgang (#167)', () => {
     expect(duringPause).toBe('available')
     await vi.waitFor(() => expect(service.getState().phase).toBe('ready'))
     expect(deps.stageModel).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('AppUpdateService — Rücksicht auf laufende Arbeit (#167)', () => {
+  it('lädt im Hintergrund nicht während einer Aufnahme und holt es danach nach', async () => {
+    work = 'recording'
+    deps = makeDeps()
+    const service = new AppUpdateService(deps)
+    service.handleManifest({ models: [modelEntry('ner', NEW_NER)] })
+    expect(service.getState().phase).toBe('available')
+    expect(deps.stageModel).not.toHaveBeenCalled()
+
+    service.tick()
+    expect(deps.stageModel).not.toHaveBeenCalled()
+    work = null
+    service.tick()
+    await vi.waitFor(() => expect(service.getState().phase).toBe('ready'))
+  })
+
+  it('pausiert einen Hintergrund-Download, sobald eine Verarbeitung beginnt', async () => {
+    deps = makeDeps({
+      stageModel: vi.fn(async (m: BundleModel, _p, signal: AbortSignal) => {
+        if (deps.stageModel.mock.calls.length === 1) {
+          await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve()))
+          throw new Error('Abgebrochen')
+        }
+        mkdirSync(stagePaths(modelsDir(), m).payload, { recursive: true })
+      })
+    })
+    const service = new AppUpdateService(deps)
+    service.handleManifest({ models: [modelEntry('ner', NEW_NER)] })
+    await vi.waitFor(() => expect(deps.stageModel).toHaveBeenCalledOnce())
+
+    work = 'processing'
+    service.tick()
+    expect(service.getState().phase).toBe('available')
+    work = null
+    service.tick()
+    await vi.waitFor(() => expect(service.getState().phase).toBe('ready'))
+  })
+
+  it('setzt einen selbst gestarteten Download nach einem Modell-Download in den Einstellungen fort', async () => {
+    autoUpdate = false
+    deps = makeDeps({
+      stageModel: vi.fn(async (m: BundleModel, _p, signal: AbortSignal) => {
+        if (deps.stageModel.mock.calls.length === 1) {
+          await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve()))
+          throw new Error('Abgebrochen')
+        }
+        mkdirSync(stagePaths(modelsDir(), m).payload, { recursive: true })
+      })
+    })
+    const service = new AppUpdateService(deps)
+    service.handleManifest({ models: [modelEntry('ner', NEW_NER)] })
+    void service.download({ manual: true })
+    await vi.waitFor(() => expect(deps.stageModel).toHaveBeenCalledOnce())
+
+    await service.withStagingPaused(async () => undefined)
+    await vi.waitFor(() => expect(service.getState().phase).toBe('ready'))
+    expect(deps.stageModel).toHaveBeenCalledTimes(2)
+  })
+
+  it('setzt bei neu veröffentlichter gleicher Version keinen alten Download fort', async () => {
+    const service = await readyService(appOnly('1.1.0'))
+    const first = persisted!.app!.stagedAppPath!
+    service.handleManifest({ app: offer('1.1.0', 'e'.repeat(64)), models: [] })
+    await vi.waitFor(() => expect(persisted?.app?.sha256).toBe('e'.repeat(64)))
+    expect(persisted!.app!.stagedAppPath ?? '').not.toBe(first)
   })
 })
 
