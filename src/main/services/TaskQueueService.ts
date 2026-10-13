@@ -11,6 +11,7 @@ import type { Task, TaskType, Session, SessionStatus, SessionType } from '../../
 import { AUDIO_PIPELINE, PDF_PIPELINE } from '../../shared/constants/pipeline'
 import { getActiveModelId } from './ModelDownloadService'
 import { captureProcessedModels } from './ProvenanceCapture'
+import { isToolBlockedMessage } from '../../shared/tool-blocked'
 
 // Issue #80 / DR-5: tasks[] is the source of truth for "current step".
 // SessionStatus only carries lifecycle phase (queued / processing / review / error / recording).
@@ -61,6 +62,8 @@ export class TaskQueueService {
 
   private processing = false
   private shouldStop = false
+  /** Verarbeitung wartet darauf — z. B. die Werkzeug-Prüfung beim Start (#168). */
+  private startGate: Promise<unknown> = Promise.resolve()
   // Während einer laufenden Aufnahme startet die Queue keine neuen Tasks
   // (kein Lüfterlärm in der Therapiesitzung); ein bereits laufender Task
   // läuft aus. In-memory: App-Neustart startet unpausiert.
@@ -216,7 +219,10 @@ export class TaskQueueService {
       this.sessionService.updateSession(sessionId, {
         status: 'queued',
         errorMessage: null,
-        retryCount: (session.retryCount ?? 0) + 1,
+        // Eine Blockade durch macOS zählt nicht zur Grenze von 3 Versuchen (#168 AK 6)
+        retryCount: isToolBlockedMessage(session.errorMessage)
+          ? (session.retryCount ?? 0)
+          : (session.retryCount ?? 0) + 1,
         plannedSteps: pipeline,
         processedWithModels
       })
@@ -228,6 +234,38 @@ export class TaskQueueService {
     )
 
     this.scheduleNext()
+  }
+
+  /**
+   * Warum fehlt die Zusammenfassung? 'tool-blocked', wenn der letzte Versuch
+   * an einem von macOS blockierten Werkzeug scheiterte (#168 PC 1), sonst null.
+   */
+  summaryMissingReason(sessionId: string): 'tool-blocked' | null {
+    // Ohne aktives Modell liesse sich nichts nachholen — dann kein Hinweis
+    if (getActiveModelId('summarization') === null) return null
+    const latest = this.repository
+      .findBySession(sessionId)
+      .filter((t) => t.type === 'summarization')
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+    return latest?.status === 'failed' && isToolBlockedMessage(latest.error) ? 'tool-blocked' : null
+  }
+
+  /**
+   * Zusammenfassung einer fertigen Sitzung nachholen, z. B. nachdem eine
+   * Blockade behoben ist (#168 AK 6). false, wenn es nichts zu tun gibt
+   * (Sitzung nicht im Review, kein Modell aktiv, Versuch läuft schon).
+   */
+  regenerateSummary(sessionId: string): boolean {
+    const session = this.sessionService.getSession(sessionId)
+    if (!session || session.status !== 'review') return false
+    if (getActiveModelId('summarization') === null) return false
+    const running = this.repository
+      .findBySession(sessionId)
+      .some((t) => t.type === 'summarization' && (t.status === 'pending' || t.status === 'running'))
+    if (running) return false
+    this.repository.create({ sessionId, type: 'summarization' })
+    this.scheduleNext()
+    return true
   }
 
   private findResumeIndex(session: Session, pipeline: readonly TaskType[]): number {
@@ -344,6 +382,15 @@ export class TaskQueueService {
     return recovered
   }
 
+  /**
+   * Hält die Verarbeitung an, bis `gate` erfüllt ist (auch für schon
+   * eingereihte Aufgaben). Für die Werkzeug-Prüfung beim Start: sonst
+   * scheiterte die erste Aufgabe an einem Werkzeug, das gleich repariert wird.
+   */
+  holdUntil(gate: Promise<unknown>): void {
+    this.startGate = gate.catch(() => undefined)
+  }
+
   start(): void {
     this.shouldStop = false
     this.startPeriodicRecovery()
@@ -410,6 +457,7 @@ export class TaskQueueService {
   }
 
   private async processNext(): Promise<void> {
+    await this.startGate
     if (this.processing || this.shouldStop || this.pausedForRecording) return
 
     let task: Task | null
@@ -665,6 +713,8 @@ export class TaskQueueService {
       console.warn(
         `[TaskQueue] Summarization für Session ${task.sessionId} fehlgeschlagen (${errorMessage}) — Session bleibt in review, Summary bleibt leer`
       )
+      // Der Review-Editor zeigt dann ggf. den Hinweis «Werkzeug blockiert» (#168)
+      sendToRenderer('summary:changed', { sessionId: task.sessionId })
       return
     }
 

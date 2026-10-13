@@ -11,12 +11,17 @@ import Settings, { type SubPage } from './views/Settings'
 import ReviewEditor from './views/ReviewEditor'
 import { useRecording } from './hooks/useRecording'
 import { useMicrophonePermission } from './hooks/useMicrophonePermission'
+import { useToolHealth } from './hooks/useToolHealth'
+import ToolsBlockedBanner from './components/ToolsBlockedBanner'
 import { useToast } from './hooks/useToast'
 
 type View = 'sessions' | 'settings' | 'review'
 
 export default function App(): React.JSX.Element {
   const microphone = useMicrophonePermission()
+  const toolHealth = useToolHealth()
+  // Pro App-Lauf ausgeblendet; nach dem nächsten Start kommt der Hinweis wieder
+  const [toolsHintDismissed, setToolsHintDismissed] = useState(false)
   const { isRecording, level, duration, error, startRecording, stopRecording } = useRecording({
     onMicrophoneStatus: microphone.reportStatus
   })
@@ -156,6 +161,17 @@ export default function App(): React.JSX.Element {
   return (
     <div className="flex h-screen flex-col bg-surface-0">
       <TitleBar />
+
+      {/* Von macOS blockierte Werkzeuge (Issue #168) — nie während einer Aufnahme */}
+      {toolHealth.state?.status === 'blocked' && !toolsHintDismissed && !isRecording && (
+        <ToolsBlockedBanner
+          state={toolHealth.state}
+          checking={toolHealth.checking}
+          onOpenGuide={toolHealth.openGuide}
+          onRecheck={() => void toolHealth.recheck()}
+          onDismiss={() => setToolsHintDismissed(true)}
+        />
+      )}
 
       {/* Mikrofon-Berechtigung (Issue #161) — nie während einer Aufnahme */}
       {microphone.hint && !isRecording && (

@@ -12,6 +12,7 @@ import type {
   ModelGroup,
   DiarizationPipeline
 } from '../validation/model-catalog-schemas'
+import type { ToolHealthState } from '../tool-blocked'
 
 export interface SessionApi {
   list(): Promise<Session[]>
@@ -201,6 +202,23 @@ export interface SummaryApi {
   get(sessionId: string): Promise<SummaryRecord | null>
   updateTitle(sessionId: string, title: string): Promise<void>
   updateText(sessionId: string, text: string): Promise<void>
+  /** #168 — 'tool-blocked', wenn die Zusammenfassung an einem blockierten Werkzeug scheiterte. */
+  missingReason(sessionId: string): Promise<'tool-blocked' | null>
+  /** #168 — Zusammenfassung nachholen; false, wenn nichts zu tun ist. */
+  regenerate(sessionId: string): Promise<boolean>
+  /** Ein Versuch ist gescheitert — Hinweis neu laden. */
+  onChanged(callback: (sessionId: string) => void): () => void
+}
+
+/** #168 — von macOS blockierte Werkzeuge. */
+export interface ToolHealthApi {
+  /** null in Tests/vor dem Start; in der Entwicklungsversion immer 'ok'. */
+  getState(): Promise<ToolHealthState | null>
+  /** Erneut prüfen (und still beheben, falls erlaubt). */
+  recheck(): Promise<ToolHealthState | null>
+  /** Installationsanleitung — der Weg ohne Terminal. */
+  openGuide(): Promise<void>
+  onState(callback: (state: ToolHealthState) => void): () => void
 }
 
 export interface MicrophoneApi {
@@ -258,5 +276,6 @@ export interface IpcApi {
   appUpdate: AppUpdateApi
   summary: SummaryApi
   microphone: MicrophoneApi
+  toolHealth: ToolHealthApi
   nav: NavApi
 }

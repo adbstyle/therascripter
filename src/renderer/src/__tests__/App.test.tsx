@@ -146,7 +146,10 @@ beforeEach(() => {
     summary: {
       get: vi.fn().mockResolvedValue(null),
       updateTitle: vi.fn().mockResolvedValue(undefined),
-      updateText: vi.fn().mockResolvedValue(undefined)
+      updateText: vi.fn().mockResolvedValue(undefined),
+      missingReason: vi.fn().mockResolvedValue(null),
+      regenerate: vi.fn().mockResolvedValue(false),
+      onChanged: vi.fn().mockReturnValue(() => {})
     },
     microphone: {
       getState: vi.fn().mockResolvedValue({ status: 'granted', previouslyGranted: true }),
@@ -156,6 +159,12 @@ beforeEach(() => {
     },
     nav: {
       onOpenSettings: vi.fn().mockReturnValue(() => {})
+    },
+    toolHealth: {
+      getState: vi.fn().mockResolvedValue({ status: 'ok', tools: [], bundlePath: '' }),
+      recheck: vi.fn(),
+      openGuide: vi.fn(),
+      onState: vi.fn().mockReturnValue(() => {})
     },
     modelReconcile: {
       getEvents: vi.fn().mockResolvedValue([]),
@@ -282,5 +291,32 @@ describe('App — Mikrofon-Berechtigung (Issue #161)', () => {
     expect(
       screen.queryByText(/braucht Therascript die Mikrofon-Berechtigung/)
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('App — blockierte Werkzeuge (Issue #168)', () => {
+  const blocked = {
+    status: 'blocked' as const,
+    tools: ['python' as const],
+    bundlePath: '/Applications/Therascript.app'
+  }
+
+  it('zeigt den Hinweis, wenn macOS Werkzeuge blockiert, und blendet ihn auf Wunsch aus', async () => {
+    window.api.toolHealth.getState = vi.fn().mockResolvedValue(blocked)
+    renderApp()
+    expect(
+      await screen.findByText(/Betroffen: Sprechererkennung und Pseudonymisierung/)
+    ).toBeInTheDocument()
+    await userEvent.click(screen.getAllByRole('button', { name: 'Hinweis schliessen' })[0])
+    expect(screen.queryByText(/Betroffen:/)).not.toBeInTheDocument()
+  })
+
+  it('zeigt den Hinweis nie während einer Aufnahme', async () => {
+    mockRecordingState.isRecording = true
+    window.api.toolHealth.getState = vi.fn().mockResolvedValue(blocked)
+    renderApp()
+    await waitFor(() => expect(window.api.toolHealth.getState).toHaveBeenCalled())
+    await screen.findByText('PDF importieren')
+    expect(screen.queryByText(/Betroffen:/)).not.toBeInTheDocument()
   })
 })

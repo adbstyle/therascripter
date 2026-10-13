@@ -7,6 +7,9 @@ export const SummaryGetInputSchema = z.object({
   sessionId: z.string().min(1)
 })
 
+/** Push summary:changed (#168). */
+export const SummaryChangedSchema = z.object({ sessionId: z.string().min(1) })
+
 export const SummaryUpdateTitleInputSchema = z.object({
   sessionId: z.string().min(1),
   title: z.string().max(MAX_TITLE_CHARS)

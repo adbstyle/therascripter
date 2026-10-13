@@ -23,6 +23,7 @@ import type { WhisperToken } from './token-processing'
 import { stitchSpeechSegments } from '../services/AudioStitchService'
 import type { StitchedAudio } from '../services/AudioStitchService'
 import { remapStitchedTimestamp, remapStitchedWordInterval } from './timestamp-remap'
+import { throwIfToolBlocked } from '../services/ToolHealthService'
 
 interface WhisperSegment {
   timestamps: { from: string; to: string }
@@ -285,6 +286,8 @@ export class WhisperService implements TaskExecutor {
         stderrErrors.length > 0 ? stderrErrors.join('; ') : result.stderr.slice(-500).trim()
 
       if (result.code !== 0) {
+        // Von macOS blockiert? Dann eine verständliche Meldung statt «Exit Code null» (#168)
+        await throwIfToolBlocked('whisper', result)
         throw new Error(
           `whisper-cli Fehler (Exit Code ${result.code}): ${stderrSummary || '(keine stderr-Ausgabe)'}`
         )

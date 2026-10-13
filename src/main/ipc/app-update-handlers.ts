@@ -3,10 +3,10 @@ import { z } from 'zod'
 import { checkForUpdates } from '../services/UpdateCheckService'
 import { getAppUpdateService } from '../services/app-update-deps'
 import type { AppUpdateInstallResult, AppUpdateState } from '../../shared/types/AppUpdate'
+import { INSTALL_GUIDE_URL } from '../../shared/constants/website'
 
 // Ausweg, wenn sich die App nicht selbst ersetzen kann (#164 AK 9): die
 // Installationsanleitung mit dem Update-Weg von Hand (#160)
-const INSTALL_GUIDE_URL = 'https://adbstyle.github.io/therascripter/installation.html#update'
 
 const SetAutoUpdateSchema = z.object({ enabled: z.boolean() })
 
@@ -39,6 +39,6 @@ export function registerAppUpdateHandlers(): void {
   })
 
   ipcMain.handle('appUpdate:openInstallGuide', async () => {
-    await shell.openExternal(INSTALL_GUIDE_URL)
+    await shell.openExternal(`${INSTALL_GUIDE_URL}#update`)
   })
 }

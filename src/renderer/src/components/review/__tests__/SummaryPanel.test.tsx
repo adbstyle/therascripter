@@ -9,20 +9,38 @@ type TaskCompletedHandler = (data: { sessionId: string; taskType: string }) => v
 // Summarization abschließt).
 let taskCompletedHandler: TaskCompletedHandler | null = null
 
+let summaryChangedHandler: ((sessionId: string) => void) | null = null
+
 const makeApi = (
-  over: { get?: ReturnType<typeof vi.fn>; updateText?: ReturnType<typeof vi.fn> } = {}
+  over: {
+    get?: ReturnType<typeof vi.fn>
+    updateText?: ReturnType<typeof vi.fn>
+    missingReason?: ReturnType<typeof vi.fn>
+    regenerate?: ReturnType<typeof vi.fn>
+  } = {}
 ): {
   summary: {
     get: ReturnType<typeof vi.fn>
     updateText: ReturnType<typeof vi.fn>
     updateTitle: ReturnType<typeof vi.fn>
+    missingReason: ReturnType<typeof vi.fn>
+    regenerate: ReturnType<typeof vi.fn>
+    onChanged: ReturnType<typeof vi.fn>
   }
   tasks: { onCompleted: ReturnType<typeof vi.fn> }
 } => ({
   summary: {
     get: over.get ?? vi.fn().mockResolvedValue(null),
     updateText: over.updateText ?? vi.fn().mockResolvedValue(undefined),
-    updateTitle: vi.fn().mockResolvedValue(undefined)
+    updateTitle: vi.fn().mockResolvedValue(undefined),
+    missingReason: over.missingReason ?? vi.fn().mockResolvedValue(null),
+    regenerate: over.regenerate ?? vi.fn().mockResolvedValue(true),
+    onChanged: vi.fn((cb: (sessionId: string) => void) => {
+      summaryChangedHandler = cb
+      return () => {
+        summaryChangedHandler = null
+      }
+    })
   },
   tasks: {
     onCompleted: vi.fn((cb: TaskCompletedHandler) => {
@@ -126,5 +144,29 @@ describe('SummaryPanel', () => {
     taskCompletedHandler?.({ sessionId: 'abc', taskType: 'anonymization' })
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(get).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('SummaryPanel — blockiertes Werkzeug (#168)', () => {
+  it('erklärt die fehlende Zusammenfassung und holt sie auf Klick nach', async () => {
+    const api = makeApi({ missingReason: vi.fn().mockResolvedValue('tool-blocked') })
+    ;(globalThis as unknown as { window: { api: unknown } }).window.api = api
+    render(<SummaryPanel sessionId="abc" />)
+    expect(await screen.findByText(/macOS ein Werkzeug von Therascript blockiert/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zusammenfassung erstellen' }))
+    expect(api.summary.regenerate).toHaveBeenCalledWith('abc')
+    expect(await screen.findByText(/wird erstellt/)).toBeTruthy()
+  })
+
+  it('zeigt den Hinweis wieder, wenn der neue Versuch erneut scheitert', async () => {
+    const missingReason = vi.fn().mockResolvedValue('tool-blocked')
+    const api = makeApi({ missingReason })
+    ;(globalThis as unknown as { window: { api: unknown } }).window.api = api
+    render(<SummaryPanel sessionId="abc" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Zusammenfassung erstellen' }))
+    await screen.findByText(/wird erstellt/)
+    summaryChangedHandler?.('abc')
+    expect(await screen.findByRole('button', { name: 'Zusammenfassung erstellen' })).toBeTruthy()
   })
 })

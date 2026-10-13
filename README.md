@@ -29,7 +29,7 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 
 ## Installation
 
-Ausführliche Anleitung mit Erklärungen: [adbstyle.github.io/therascripter/installation.html](https://adbstyle.github.io/therascripter/installation.html). Ein Terminal ist nicht nötig.
+Ausführliche Anleitung mit Erklärungen: [adbstyle.github.io/therascripter/installation.html](https://adbstyle.github.io/therascripter/installation.html). Ein Terminal ist nicht nötig. Blockiert macOS trotzdem einmal einen Teil der App, behebt Therascript das beim Start selbst oder erklärt im Hinweis oben in der App, was zu tun ist (neu herunterladen, ersetzen, Programm-Freigabe erneut erteilen).
 
 1. [`Therascript.dmg` herunterladen](https://github.com/adbstyle/therascripter/releases/latest/download/Therascript.dmg), doppelklicken und Therascript auf den Ordner **Programme** ziehen.
 2. Therascript im Ordner **Programme** öffnen. macOS meldet, Apple könne nicht überprüfen, ob die App frei von Schadsoftware ist. Auf **Fertig** klicken, nicht auf «In den Papierkorb legen».

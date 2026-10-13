@@ -18,6 +18,8 @@ import {
 } from '../shared/validation/task-schemas'
 import type { AppUpdateState } from '../shared/types/AppUpdate'
 import type { ModelGroup, DiarizationPipeline } from '../shared/validation/model-catalog-schemas'
+import { SummaryChangedSchema } from '../shared/validation/summary-schemas'
+import { ToolHealthStateSchema } from '../shared/validation/tool-health-schemas'
 
 const api: IpcApi = {
   sessions: {
@@ -169,6 +171,21 @@ const api: IpcApi = {
     markSeen: () => ipcRenderer.invoke('modelReconcile:markSeen'),
     dismiss: () => ipcRenderer.invoke('modelReconcile:dismiss')
   },
+  toolHealth: {
+    getState: () => ipcRenderer.invoke('toolHealth:getState'),
+    recheck: () => ipcRenderer.invoke('toolHealth:recheck'),
+    openGuide: () => ipcRenderer.invoke('toolHealth:openGuide'),
+    onState: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: unknown): void => {
+        const parsed = ToolHealthStateSchema.safeParse(data)
+        if (parsed.success) callback(parsed.data)
+      }
+      ipcRenderer.on('toolHealth:state', handler)
+      return () => {
+        ipcRenderer.removeListener('toolHealth:state', handler)
+      }
+    }
+  },
   appUpdate: {
     getState: () => ipcRenderer.invoke('appUpdate:getState'),
     check: () => ipcRenderer.invoke('appUpdate:check'),
@@ -191,7 +208,20 @@ const api: IpcApi = {
     updateTitle: (sessionId: string, title: string) =>
       ipcRenderer.invoke('summary:updateTitle', { sessionId, title }),
     updateText: (sessionId: string, text: string) =>
-      ipcRenderer.invoke('summary:updateText', { sessionId, text })
+      ipcRenderer.invoke('summary:updateText', { sessionId, text }),
+    missingReason: (sessionId: string) =>
+      ipcRenderer.invoke('summary:missingReason', { sessionId }),
+    regenerate: (sessionId: string) => ipcRenderer.invoke('summary:regenerate', { sessionId }),
+    onChanged: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: unknown): void => {
+        const parsed = SummaryChangedSchema.safeParse(data)
+        if (parsed.success) callback(parsed.data.sessionId)
+      }
+      ipcRenderer.on('summary:changed', handler)
+      return () => {
+        ipcRenderer.removeListener('summary:changed', handler)
+      }
+    }
   },
   microphone: {
     getState: () => ipcRenderer.invoke('microphone:getState'),

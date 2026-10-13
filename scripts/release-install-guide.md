@@ -41,7 +41,7 @@ Therascript startet und lädt beim ersten Start die Sprachmodelle herunter (je n
 
 Apple bestätigt Apps nur gegen eine jährliche Gebühr als geprüft. Therascript ist kostenlos und quelloffen und verzichtet deshalb auf diese Beglaubigung. Darum warnt macOS beim ersten Start.
 
-- **Was die Programm-Freigabe bewirkt:** Sie erlauben macOS, diese Version von Therascript zu starten. Die Freigabe gilt für die ganze App, auch für die eingebauten Werkzeuge für Transkription, Sprechererkennung, Pseudonymisierung, Texterkennung und Zusammenfassung. Ein Terminal ist nicht nötig.
+- **Was die Programm-Freigabe bewirkt:** Sie erlauben macOS, diese Version von Therascript zu starten. Die Freigabe gilt für die ganze App, auch für die eingebauten Werkzeuge für Transkription, Sprechererkennung, Pseudonymisierung, Texterkennung und Zusammenfassung. Ein Terminal ist nicht nötig. Blockiert macOS trotzdem einmal einen Teil der App, behebt Therascript das beim Start selbst; gelingt das nicht, erscheint oben in der App ein Hinweis: Therascript neu herunterladen, im Ordner «Programme» ersetzen und die Programm-Freigabe erneut erteilen. Ihre Transkriptionen bleiben erhalten.
 - **Was niemand unabhängig bestätigt:** Ohne Beglaubigung prüft weder Apple noch eine andere Stelle, dass die heruntergeladene Datei wirklich vom Therascript-Projekt stammt. Laden Sie Therascript deshalb nur über die Website https://adbstyle.github.io/therascripter/ oder die Release-Seite auf GitHub. Der Quellcode ist öffentlich einsehbar.
 
 ### Auf eine neue Version aktualisieren

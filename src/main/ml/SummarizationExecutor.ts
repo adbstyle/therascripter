@@ -1,5 +1,6 @@
 import type { Task } from '../../shared/types'
 import type { TaskExecutor } from '../services/task-executors'
+import { ToolBlockedError } from '../../shared/tool-blocked'
 
 export interface SummarizationExecutorDeps {
   llamaSummarizer: {
@@ -55,6 +56,10 @@ export class SummarizationExecutor implements TaskExecutor {
         signal ?? new AbortController().signal
       )
     } catch (err) {
+      // Von macOS blockiert (#168): nicht still überspringen — der Task
+      // scheitert, die Sitzung bleibt im Review, und der Review-Editor zeigt
+      // einen Hinweis samt «Zusammenfassung erstellen» (TaskQueueService).
+      if (err instanceof ToolBlockedError) throw err
       // Summarization is an OPTIONAL pipeline tail step. Any failure
       // (subprocess crash, abort, JSON-extraction failure, schema
       // validation failure, transient model error) must NOT poison the
