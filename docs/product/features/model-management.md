@@ -232,7 +232,7 @@ Since v0.5, the ASR model is user-selectable. `ModelDefinition` has two categori
 | `whisper-large-v3-turbo` (default) | Multilingual | 574 MB | General-purpose — handles High German, English, and more. |
 | `whisper-large-v3-turbo-german` | High German | 574 MB | Fine-tune for standard German (base: primeline/whisper-large-v3-turbo-german, Apache 2.0). More precise on High German; not suitable for strong Swiss-German dialect or other languages. |
 
-**Retired:** `whisper-large-v3-turbo-swiss` (CC BY-NC 4.0, not usable in paid therapy practices). `retireObsoleteModels()` deletes the file on the first start of the new version and, because ASR is a required group, activates an installed successor directly (default first) — one `model-retired` notice instead of a removal plus a `default-promoted`. Without any installed ASR model the slot stays empty and the first-launch screen downloads the default (`getModelsToLoadOnFirstLaunch`).
+**Retired:** `whisper-large-v3-turbo-swiss` (CC BY-NC 4.0, not usable in paid therapy practices). `retireObsoleteModels()` deletes the file on the first start of the new version and clears the slot. Because ASR is a required group, the reconciler then activates an installed successor (default first) — or, without any installed ASR model, the first-launch screen downloads the default (`getModelsToLoadOnFirstLaunch`) and the reconciler activates it afterwards. Either way the reconciler completes the pending `model-retired` event with the successor instead of adding a `default-promoted`, so the user sees one notice.
 
 ### Settings → Models
 

@@ -839,6 +839,28 @@ export function reconcileActiveModels(): ReadonlyArray<ReconcileRepair> {
         eventsChanged = true
         continue
       }
+      // Ein ausgemustertes Modell hat den Slot geleert (retireObsoleteModels),
+      // jetzt rückt ein Nachfolger nach — direkt beim Boot oder erst nach dem
+      // Ersteinrichtungs-Download. Eine Meldung «X ersetzt durch Y» statt
+      // «entfernt» plus «Standard aktiviert».
+      const retiredIdx = events.findIndex(
+        (e) =>
+          e.group === r.group &&
+          e.reason === 'model-retired' &&
+          e.toModelId === null &&
+          r.fromModelId === null
+      )
+      if (retiredIdx >= 0 && r.toModelId !== null) {
+        const folded = {
+          ...events[retiredIdx],
+          toModelId: r.toModelId,
+          toLabel: modelLabel(r.toModelId),
+          status: 'pending' as const
+        }
+        events = events.map((e, i) => (i === retiredIdx ? folded : e))
+        eventsChanged = true
+        continue
+      }
       events = [...events, newReconcileEvent(r)]
       eventsChanged = true
     }
@@ -878,13 +900,18 @@ function newReconcileEvent(repair: ReconcileRepair): ReconcileEvent {
 /**
  * Räumt aus dem Katalog entfernte Modelle (`RETIRED_MODELS`) auf: löscht die
  * Datei samt Download-/Update-Resten (`removeModelArtifacts` — kennt sonst
- * niemand mehr), verwirft vorgemerkte Updates für die ID, löscht den
- * Installed-Version-Eintrag (No-op, wenn schon weg) und —
- * falls das Modell aktiv war — den Slot: in Pflichtgruppen auf ein installiertes
- * Nachfolgemodell, sonst leer. Das wird als
- * `model-retired`-ReconcileEvent gemeldet (BottomNav-Dot → Banner in
- * Einstellungen → Modelle), damit der Nutzer den Nachfolger herunterlädt;
- * ungefragt geladen wird nichts.
+ * niemand mehr), den Installed-Version-Eintrag (No-op, wenn schon weg) und —
+ * falls das Modell aktiv war — leert den Slot und meldet ein
+ * `model-retired`-ReconcileEvent (BottomNav-Dot → Banner in Einstellungen →
+ * Modelle). Vorgemerkte Updates für die ID verwirft das Update-System selbst
+ * (`selectBundle` überspringt ausgemusterte IDs).
+ *
+ * Einen Nachfolger setzt erst der Reconciler: in Pflichtgruppen ein
+ * installiertes Modell (Standard zuerst), sonst lädt der Ersteinrichtungs-
+ * Bildschirm den Standard (`getModelsToLoadOnFirstLaunch`) und der Reconciler
+ * danach aktiviert ihn. In beiden Fällen ergänzt er dieses Event um den
+ * Nachfolger statt ein zweites anzulegen. Optionale Gruppen bleiben leer — der
+ * Nutzer lädt den Nachfolger selbst.
  *
  * Muss VOR `reconcileActiveModels()` laufen: der sähe sonst eine unbekannte
  * ID im Slot und meldete "nicht mehr gefunden". Idempotent — nach dem ersten
@@ -907,19 +934,12 @@ export function retireObsoleteModels(): void {
 
     const slot = GROUP_TO_SETTINGS_KEY[retired.group]
     if (active[slot] !== retired.id) continue
-    // Pflichtgruppe: gleich den Nachfolger setzen (Standard bevorzugt), damit
-    // der Reconciler nicht zusätzlich «Standard aktiviert» meldet — ein Event
-    // statt zwei. Ist keiner installiert, bleibt der Slot leer und der
-    // FirstLaunchScreen lädt den Standard (getModelsToLoadOnFirstLaunch).
-    const successor = OPTIONAL_GROUPS.has(retired.group)
-      ? null
-      : pickInstalledForGroup(retired.group)
-    active = { ...active, [slot]: successor }
+    active = { ...active, [slot]: null }
     events.push(
       newReconcileEvent({
         group: retired.group,
         fromModelId: retired.id,
-        toModelId: successor,
+        toModelId: null,
         reason: 'model-retired'
       })
     )
