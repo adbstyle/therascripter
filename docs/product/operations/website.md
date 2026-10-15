@@ -11,8 +11,15 @@ das Menü bleibt dann nur offen, bis man es selbst schliesst.
   Installation) und der Knopf «Kostenlos herunterladen» bleiben beim Scrollen sichtbar. Unter
   880 px wandert die Navigation in ein `<details>`-Menü, unter 560 px heisst der Knopf nur
   «Herunterladen». `scroll-padding-top` hält Anker-Ziele unter dem Header.
-- **Download-Knöpfe** führen auf `installation.html`; nur dort lädt der Header-Knopf direkt die
-  DMG.
+- **Download-Knöpfe** führen auf `installation.html`, damit Besucher:innen die macOS-Warnung
+  beim ersten Start kennen. Direkt die DMG laden nur der Header-Knopf auf `installation.html`
+  und der Knopf unter «In 3 Schritten startklar» – dort stehen die Schritte schon daneben.
+- **Header und Footer** stehen ohne Build-Schritt in allen drei Seiten. Änderungen in
+  `index.html`, `installation.html` und `impressum.html` gleich nachziehen; nur Ankerziele
+  (`index.html#…` ausserhalb der Startseite), `aria-current` und das Ziel des Header-Knopfs
+  unterscheiden sich.
+- **Links aus der App** öffnen `installation.html#update` und `installation.html#schritt-1`
+  (`src/shared/constants/website.ts`). Diese Anker nie umbenennen.
 - **Download-Bänder** (`.cta-band`) wiederholen den Knopf zwischen den Sektionen der Startseite.
 - **«In 3 Schritten startklar»** auf der Startseite ist die Kurzform der Installationsanleitung.
   Schritte und Fakten synchron halten mit `installation.html`, `scripts/release-install-guide.md`,

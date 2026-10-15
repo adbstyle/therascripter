@@ -49,8 +49,10 @@
   box-sizing: border-box;
 }
 
+/* scroll-padding-top hält Anker-Ziele unterhalb des sticky Headers */
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: 5.5rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -150,17 +152,13 @@ code {
 
 /* === Header === */
 
-/* Sticky: Logo, Navigation und Download bleiben beim Scrollen sichtbar.
-   scroll-padding-top hält Anker-Ziele unterhalb des Headers. */
-
-html {
-  scroll-padding-top: 5.5rem;
-}
+/* Sticky: Logo, Navigation und Download bleiben beim Scrollen sichtbar. */
 
 .site-header {
   position: sticky;
   top: 0;
   z-index: 50;
+  background: var(--bg-base);
   background: color-mix(in srgb, var(--bg-base) 88%, transparent);
   -webkit-backdrop-filter: saturate(180%) blur(12px);
   backdrop-filter: saturate(180%) blur(12px);
@@ -294,12 +292,11 @@ html {
 }
 
 @media (max-width: 880px) {
-  .site-nav {
+  .nav-links {
     display: none;
   }
   .nav-menu {
     display: block;
-    margin-left: auto;
   }
   .header-inner {
     gap: var(--space-xs);
