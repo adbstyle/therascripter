@@ -921,14 +921,9 @@ body.legal section > ol li + li {
 
 /* === Installation page === */
 
-.install-download {
-  margin-bottom: var(--space-xl);
-}
-
-.install-download .hint {
+body.legal .install-hint {
   font-size: 0.9375rem;
-  color: var(--text-secondary);
-  margin: var(--space-sm) 0 0;
+  margin-bottom: var(--space-xl);
 }
 
 body.legal h4 {

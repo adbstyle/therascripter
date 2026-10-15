@@ -13,7 +13,8 @@ das Menü bleibt dann nur offen, bis man es selbst schliesst.
   «Herunterladen». `scroll-padding-top` hält Anker-Ziele unter dem Header.
 - **Download-Knöpfe** führen auf `installation.html`, damit Besucher:innen die macOS-Warnung
   beim ersten Start kennen. Direkt die DMG laden nur der Header-Knopf auf `installation.html`
-  und der Knopf unter «In 3 Schritten startklar» – dort stehen die Schritte schon daneben.
+  (Schritt 1 dort verweist auf ihn, die Seite hat keinen eigenen Download-Knopf) und der Knopf
+  unter «In 3 Schritten startklar» – dort stehen die Schritte schon daneben.
 - **Header und Footer** stehen ohne Build-Schritt in allen drei Seiten. Änderungen in
   `index.html`, `installation.html` und `impressum.html` gleich nachziehen; nur Ankerziele
   (`index.html#…` ausserhalb der Startseite), `aria-current` und das Ziel des Header-Knopfs
