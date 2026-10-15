@@ -1,17 +1,40 @@
 # Landing Page
 
 Die Landing Page liegt unter `website/` und wird unter
-<https://adbstyle.github.io/therascripter/> veröffentlicht. Sie ist statisch und läuft ohne
-Skripte.
+<https://adbstyle.github.io/therascripter/> veröffentlicht. Sie ist statisch. Das einzige
+Skript, `site.js`, schliesst das mobile Menü nach einem Klick; ohne Skript funktioniert alles,
+das Menü bleibt dann nur offen, bis man es selbst schliesst.
+
+## Aufbau
+
+- **Sticky Header auf allen Seiten:** Logo, Ankernavigation (Funktionen, Datenschutz, Fragen,
+  Installation) und der Knopf «Kostenlos herunterladen» bleiben beim Scrollen sichtbar. Unter
+  880 px wandert die Navigation in ein `<details>`-Menü, unter 560 px heisst der Knopf nur
+  «Herunterladen». `scroll-padding-top` hält Anker-Ziele unter dem Header.
+- **Download-Knöpfe** führen auf `installation.html`, damit Besucher:innen die macOS-Warnung
+  beim ersten Start kennen. Direkt die DMG laden nur der Header-Knopf auf `installation.html`
+  (Schritt 1 dort verweist auf ihn, die Seite hat keinen eigenen Download-Knopf) und der Knopf
+  unter «In 3 Schritten startklar» – dort stehen die Schritte schon daneben.
+- **Header und Footer** stehen ohne Build-Schritt in allen drei Seiten. Änderungen in
+  `index.html`, `installation.html` und `impressum.html` gleich nachziehen; nur Ankerziele
+  (`index.html#…` ausserhalb der Startseite), `aria-current` und das Ziel des Header-Knopfs
+  unterscheiden sich.
+- **Links aus der App** öffnen `installation.html#update` und `installation.html#schritt-1`
+  (`src/shared/constants/website.ts`). Diese Anker nie umbenennen.
+- **Download-Bänder** (`.cta-band`) wiederholen den Knopf zwischen den Sektionen der Startseite.
+- **«In 3 Schritten startklar»** auf der Startseite ist die Kurzform der Installationsanleitung.
+  Schritte und Fakten synchron halten mit `installation.html`, `scripts/release-install-guide.md`,
+  README und `build/dmg-background.svg` (siehe [Release](release.md)).
 
 ## Veröffentlichung
 
 `.github/workflows/publish-website.yml` läuft bei jedem Push auf `main`, der `website/**`
 ändert, und bei Pull Requests:
 
-1. **Lighthouse CI** (`website/.lighthouserc.json`): Startseite und Impressum. Performance
-   und Best Practices müssen mindestens 0.9 bzw. 0.95 erreichen, Barrierefreiheit 0.95, SEO
-   (nur Startseite) 0.95. Grenzen: LCP unter 2 s, CLS unter 0.1.
+1. **Lighthouse CI** (`website/.lighthouserc.json`): Startseite, Impressum und
+   Installationsanleitung. Performance und Best Practices müssen mindestens 0.9 bzw. 0.95
+   erreichen, Barrierefreiheit 0.95, SEO (ohne Impressum) 0.95. Grenzen: LCP unter 2 s, CLS
+   unter 0.1.
 2. **Deploy** nach `gh-pages` (nur auf `main`). Die Seite deployt unabhängig von App-Releases.
 
 ## Bilder und Animationen
@@ -35,8 +58,8 @@ Die Seite wählt die Variante per `<picture>`: `prefers-color-scheme` für hell/
 bleiben am Ende 5 s auf dem Endzustand stehen (`END_PAUSE` in `build-gifs.sh`): Ein GIF startet
 beim Laden, und lazy lädt der Browser schon deutlich vor dem sichtbaren Bereich – einmal
 abgespielt sähen Besucher:innen oft nur das Ende. Anhalten lassen sich die Animationen nicht;
-die Abweichung von WCAG 2.2.2 ist bewusst akzeptiert (Epic #172), damit die Seite ohne Skripte
-auskommt.
+die Abweichung von WCAG 2.2.2 ist bewusst akzeptiert (Epic #172), damit die Seite nicht von
+Skripten abhängt.
 
 ### Demo-Sitzung neu erstellen
 

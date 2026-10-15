@@ -21,17 +21,68 @@
     <a class="skip-link" href="#main">Zum Inhalt springen</a>
 
     <header class="site-header">
-      <a class="brand" href="index.html" aria-label="Zur Startseite">
-        <img
-          class="brand-mark"
-          src="assets/logo.svg"
-          width="28"
-          height="28"
-          alt=""
-          aria-hidden="true"
-        />
-        TheraScript
-      </a>
+      <div class="header-inner">
+        <a class="brand" href="index.html" aria-label="TheraScript Startseite">
+          <img
+            class="brand-mark"
+            src="assets/logo.svg"
+            width="28"
+            height="28"
+            alt=""
+            aria-hidden="true"
+          />
+          <span class="brand-name">TheraScript</span>
+        </a>
+        <nav class="site-nav" aria-label="Hauptnavigation">
+          <ul class="nav-links">
+            <li><a href="index.html#funktionen">Funktionen</a></li>
+            <li><a href="index.html#datenschutz">Datenschutz</a></li>
+            <li><a href="index.html#fragen">Fragen</a></li>
+            <li><a href="installation.html" aria-current="page">Installation</a></li>
+          </ul>
+          <details class="nav-menu">
+            <summary aria-label="Menü">
+              <svg
+                viewBox="0 0 24 24"
+                width="24"
+                height="24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </summary>
+            <ul class="nav-menu-panel">
+              <li><a href="index.html#funktionen">Funktionen</a></li>
+              <li><a href="index.html#datenschutz">Datenschutz</a></li>
+              <li><a href="index.html#fragen">Fragen</a></li>
+              <li><a href="installation.html" aria-current="page">Installation</a></li>
+              <li><a href="https://github.com/adbstyle/therascripter" rel="noopener">GitHub</a></li>
+            </ul>
+          </details>
+        </nav>
+        <a class="btn btn-primary btn-sm header-cta" href="https://github.com/adbstyle/therascripter/releases/latest/download/Therascript.dmg">
+          <svg
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 3v14m-6-6 6 6 6-6" />
+            <path d="M5 21h14" />
+          </svg>
+          <span class="label-long">Kostenlos herunterladen</span>
+          <span class="label-short">Herunterladen</span>
+        </a>
+      </div>
     </header>
 
     <main id="main" class="legal-main">
@@ -43,33 +94,11 @@
           erscheint.
         </p>
 
-        <div class="install-download">
-          <a
-            class="btn btn-primary"
-            href="https://github.com/adbstyle/therascripter/releases/latest/download/Therascript.dmg"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="20"
-              height="20"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M12 3v14m-6-6 6 6 6-6" />
-              <path d="M5 21h14" />
-            </svg>
-            TheraScript herunterladen
-          </a>
-          <p class="hint">
-            Mac mit Apple-Chip (M1 oder neuer), macOS 26 (Tahoe) oder neuer, mindestens 8 GB
-            Arbeitsspeicher und ca. 5 GB freier Speicherplatz. Beim ersten Start lädt TheraScript
-            die Sprachmodelle herunter (~1.7 GB), dafür braucht es eine Internetverbindung.
-          </p>
-        </div>
+        <p class="install-hint">
+          Mac mit Apple-Chip (M1 oder neuer), macOS 26 (Tahoe) oder neuer, mindestens 8 GB
+          Arbeitsspeicher und ca. 5 GB freier Speicherplatz. Beim ersten Start lädt TheraScript die
+          Sprachmodelle herunter (~1.7 GB), dafür braucht es eine Internetverbindung.
+        </p>
 
         <nav class="toc" aria-label="Inhaltsverzeichnis">
           <ol>
@@ -85,7 +114,7 @@
           <h2 id="schritt-1-h">Schritt 1: Herunterladen und in «Programme» ziehen</h2>
           <ol>
             <li>
-              Oben auf <strong>TheraScript herunterladen</strong> klicken. Die Datei
+              Oben rechts auf <strong>Kostenlos herunterladen</strong> klicken. Die Datei
               <code>Therascript.dmg</code> landet in Ihrem Ordner «Downloads».
             </li>
             <li>Die Datei <code>Therascript.dmg</code> doppelklicken. Ein Fenster öffnet sich.</li>
@@ -217,7 +246,25 @@
     </main>
 
     <footer class="site-footer">
-      <p><a href="index.html">Zur Startseite</a></p>
+      <div class="footer-content">
+        <p>TheraScript ist Open Source unter MIT-Lizenz.</p>
+        <nav aria-label="Footer">
+          <a href="index.html">Startseite</a>
+          <a href="installation.html" aria-current="page">Installation</a>
+          <a href="https://github.com/adbstyle/therascripter" rel="noopener"
+            >Quellcode auf GitHub</a
+          >
+          <a
+            href="https://github.com/adbstyle/therascripter/blob/main/THIRD_PARTY_LICENSES.md"
+            rel="noopener"
+            >Lizenzen</a
+          >
+          <a href="mailto:therascript.flatworm325@passmail.com">Kontakt</a>
+          <a href="impressum.html">Impressum</a>
+          <a href="impressum.html#datenschutz">Datenschutzerklärung</a>
+        </nav>
+      </div>
     </footer>
+    <script src="site.js" defer></script>
   </body>
 </html>

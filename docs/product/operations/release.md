@@ -7,7 +7,7 @@ Therascript releases are built as macOS DMG installers targeting Apple Silicon (
 - **Interactive** (no arguments): prompts for the version choice, a confirmation, and optional release notes.
 - **Non-interactive** (`--bump patch|minor|major` or `--version X.Y.Z`, plus `--notes "text"` or `--notes-file <path>`): no prompts; intended for automated releases (e.g. Claude-driven). Refuses to run on any branch other than `main` — that guard replaces the human confirmation prompt. All flag inputs (bump value, version format, notes-file existence, mutually exclusive flag combinations) are validated up front, before anything is built or pushed.
 
-The end-user install guide (`scripts/release-install-guide.md`) is **always** appended to the release notes, regardless of how the notes were produced. The same guide appears on the website (`website/installation.html`, linked from every download button), in README.md ("Installation") and in short form in the DMG window (`build/dmg-background.svg`, rendered via `npm run dmg:background`). Keep steps and facts (macOS floor, model size, disk space) identical at all four places.
+The end-user install guide (`scripts/release-install-guide.md`) is **always** appended to the release notes, regardless of how the notes were produced. The same guide appears on the website (`website/installation.html`, linked from every download button), in README.md ("Installation") and in short form in the DMG window (`build/dmg-background.svg`, rendered via `npm run dmg:background`) and on the website's start page (`website/index.html`, section «In 3 Schritten startklar»). Keep steps and facts (macOS floor, model size, disk space) identical at all five places.
 
 ## Release Flow
 
