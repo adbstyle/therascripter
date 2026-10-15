@@ -1,17 +1,32 @@
 # Landing Page
 
 Die Landing Page liegt unter `website/` und wird unter
-<https://adbstyle.github.io/therascripter/> veröffentlicht. Sie ist statisch und läuft ohne
-Skripte.
+<https://adbstyle.github.io/therascripter/> veröffentlicht. Sie ist statisch. Das einzige
+Skript, `site.js`, schliesst das mobile Menü nach einem Klick; ohne Skript funktioniert alles,
+das Menü bleibt dann nur offen, bis man es selbst schliesst.
+
+## Aufbau
+
+- **Sticky Header auf allen Seiten:** Logo, Ankernavigation (Funktionen, Datenschutz, Fragen,
+  Installation) und der Knopf «Kostenlos herunterladen» bleiben beim Scrollen sichtbar. Unter
+  880 px wandert die Navigation in ein `<details>`-Menü, unter 560 px heisst der Knopf nur
+  «Herunterladen». `scroll-padding-top` hält Anker-Ziele unter dem Header.
+- **Download-Knöpfe** führen auf `installation.html`; nur dort lädt der Header-Knopf direkt die
+  DMG.
+- **Download-Bänder** (`.cta-band`) wiederholen den Knopf zwischen den Sektionen der Startseite.
+- **«In 3 Schritten startklar»** auf der Startseite ist die Kurzform der Installationsanleitung.
+  Schritte und Fakten synchron halten mit `installation.html`, `scripts/release-install-guide.md`,
+  README und `build/dmg-background.svg` (siehe [Release](release.md)).
 
 ## Veröffentlichung
 
 `.github/workflows/publish-website.yml` läuft bei jedem Push auf `main`, der `website/**`
 ändert, und bei Pull Requests:
 
-1. **Lighthouse CI** (`website/.lighthouserc.json`): Startseite und Impressum. Performance
-   und Best Practices müssen mindestens 0.9 bzw. 0.95 erreichen, Barrierefreiheit 0.95, SEO
-   (nur Startseite) 0.95. Grenzen: LCP unter 2 s, CLS unter 0.1.
+1. **Lighthouse CI** (`website/.lighthouserc.json`): Startseite, Impressum und
+   Installationsanleitung. Performance und Best Practices müssen mindestens 0.9 bzw. 0.95
+   erreichen, Barrierefreiheit 0.95, SEO (ohne Impressum) 0.95. Grenzen: LCP unter 2 s, CLS
+   unter 0.1.
 2. **Deploy** nach `gh-pages` (nur auf `main`). Die Seite deployt unabhängig von App-Releases.
 
 ## Bilder und Animationen
@@ -35,8 +50,8 @@ Die Seite wählt die Variante per `<picture>`: `prefers-color-scheme` für hell/
 bleiben am Ende 5 s auf dem Endzustand stehen (`END_PAUSE` in `build-gifs.sh`): Ein GIF startet
 beim Laden, und lazy lädt der Browser schon deutlich vor dem sichtbaren Bereich – einmal
 abgespielt sähen Besucher:innen oft nur das Ende. Anhalten lassen sich die Animationen nicht;
-die Abweichung von WCAG 2.2.2 ist bewusst akzeptiert (Epic #172), damit die Seite ohne Skripte
-auskommt.
+die Abweichung von WCAG 2.2.2 ist bewusst akzeptiert (Epic #172), damit die Seite nicht von
+Skripten abhängt.
 
 ### Demo-Sitzung neu erstellen
 

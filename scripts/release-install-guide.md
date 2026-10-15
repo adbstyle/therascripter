@@ -2,7 +2,8 @@
      angehängt. Zielgruppe: technisch nicht versierte Endanwender.
      Dieselbe Anleitung steht auf der Website (website/installation.html), im
      README («Installation») und in Kurzform im DMG-Fenster
-     (build/dmg-background.svg). Schritte und Fakten (macOS-Floor, Modellgrösse,
+     (build/dmg-background.svg) sowie auf der Startseite der Website
+     (website/index.html, «In 3 Schritten startklar»). Schritte und Fakten (macOS-Floor, Modellgrösse,
      Speicherplatz) an allen Stellen gleich halten. Sie-Form, Schweizer
      Rechtschreibung, keine Fachbegriffe wie Gatekeeper, Quarantäne oder
      Notarisierung (Epic #156). -->

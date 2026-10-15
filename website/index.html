@@ -47,20 +47,68 @@
     <a class="skip-link" href="#main">Zum Inhalt springen</a>
 
     <header class="site-header">
-      <a class="brand" href="#" aria-label="TheraScript Startseite">
-        <img
-          class="brand-mark"
-          src="assets/logo.svg"
-          width="28"
-          height="28"
-          alt=""
-          aria-hidden="true"
-        />
-        <span>TheraScript</span>
-      </a>
-      <a class="nav-link" href="https://github.com/adbstyle/therascripter" rel="noopener">
-        Auf GitHub ansehen
-      </a>
+      <div class="header-inner">
+        <a class="brand" href="#" aria-label="TheraScript Startseite">
+          <img
+            class="brand-mark"
+            src="assets/logo.svg"
+            width="28"
+            height="28"
+            alt=""
+            aria-hidden="true"
+          />
+          <span class="brand-name">TheraScript</span>
+        </a>
+        <nav class="site-nav" aria-label="Hauptnavigation">
+          <ul class="nav-links">
+            <li><a href="#funktionen">Funktionen</a></li>
+            <li><a href="#datenschutz">Datenschutz</a></li>
+            <li><a href="#fragen">Fragen</a></li>
+            <li><a href="installation.html">Installation</a></li>
+          </ul>
+        </nav>
+        <details class="nav-menu">
+          <summary aria-label="Menü">
+            <svg
+              viewBox="0 0 24 24"
+              width="24"
+              height="24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </summary>
+          <ul class="nav-menu-panel">
+            <li><a href="#funktionen">Funktionen</a></li>
+            <li><a href="#datenschutz">Datenschutz</a></li>
+            <li><a href="#fragen">Fragen</a></li>
+            <li><a href="installation.html">Installation</a></li>
+            <li><a href="https://github.com/adbstyle/therascripter" rel="noopener">GitHub</a></li>
+          </ul>
+        </details>
+        <a class="btn btn-primary btn-sm header-cta" href="installation.html">
+          <svg
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 3v14m-6-6 6 6 6-6" />
+            <path d="M5 21h14" />
+          </svg>
+          <span class="label-long">Kostenlos herunterladen</span>
+          <span class="label-short">Herunterladen</span>
+        </a>
+      </div>
     </header>
 
     <main id="main">
@@ -90,7 +138,58 @@
               </svg>
               Kostenlos herunterladen
             </a>
+            <a class="text-link" href="installation.html">Installationsanleitung ansehen <span aria-hidden="true">→</span></a>
           </div>
+          <ul class="trust-list">
+            <li>
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+              Kostenlos und ohne Konto
+            </li>
+            <li>
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+              Quelloffen
+            </li>
+            <li>
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+              Sitzungsinhalte bleiben auf Ihrem Mac
+            </li>
+          </ul>
           <p class="hint">Für Mac mit Apple-Chip (M1 oder neuer), macOS 26 (Tahoe) oder neuer</p>
         </div>
         <div class="hero-image">
@@ -136,7 +235,35 @@
         </div>
       </section>
 
-      <section class="features" aria-labelledby="features-h">
+      <section class="cta-band" aria-label="TheraScript herunterladen">
+        <div class="cta-band-inner">
+          <div>
+            <p class="cta-band-title">Kostenlos, ohne Konto, ohne Abo.</p>
+            <p class="cta-band-text">
+              TheraScript ist in wenigen Minuten auf Ihrem Mac installiert.
+            </p>
+          </div>
+          <a class="btn btn-primary" href="installation.html">
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 3v14m-6-6 6 6 6-6" />
+              <path d="M5 21h14" />
+            </svg>
+            Kostenlos herunterladen
+          </a>
+        </div>
+      </section>
+
+      <section id="funktionen" class="features" aria-labelledby="features-h">
         <h2 id="features-h">So arbeiten Sie mit TheraScript</h2>
 
         <article class="feature feature-left">
@@ -281,7 +408,41 @@
           </div>
         </article>
 
-        <div class="cta-group cta-center">
+      </section>
+
+      <!-- Kurzform der Installationsanleitung: Schritte und Fakten synchron mit
+           installation.html, scripts/release-install-guide.md, README und
+           build/dmg-background.svg halten -->
+      <section id="installation" class="steps" aria-labelledby="steps-h">
+        <h2 id="steps-h">In 3 Schritten startklar</h2>
+        <p class="steps-lede">
+          Die Installation dauert wenige Minuten und kommt ohne Terminal aus. Beim ersten Start
+          zeigt macOS eine Warnung – das ist erwartet.
+        </p>
+        <ol class="steps-grid">
+          <li class="step-card">
+            <h3>Herunterladen und in «Programme» ziehen</h3>
+            <p>
+              Die Datei <code>Therascript.dmg</code> öffnen und das TheraScript-Symbol auf den
+              Ordner «Programme» ziehen.
+            </p>
+          </li>
+          <li class="step-card">
+            <h3>Zum ersten Mal öffnen</h3>
+            <p>
+              macOS meldet, dass es TheraScript nicht überprüfen konnte. Auf «Fertig» klicken,
+              nicht auf «In den Papierkorb legen».
+            </p>
+          </li>
+          <li class="step-card">
+            <h3>Programm-Freigabe erteilen</h3>
+            <p>
+              In den Systemeinstellungen unter «Datenschutz &amp; Sicherheit» auf «Dennoch öffnen»
+              klicken. TheraScript startet und lädt einmalig die Sprachmodelle herunter.
+            </p>
+          </li>
+        </ol>
+        <div class="cta-group">
           <a class="btn btn-primary" href="installation.html">
             <svg
               viewBox="0 0 24 24"
@@ -299,6 +460,9 @@
             </svg>
             Kostenlos herunterladen
           </a>
+          <a class="text-link" href="installation.html"
+            >Ausführliche Anleitung mit allen Schritten <span aria-hidden="true">→</span></a
+          >
         </div>
       </section>
 
@@ -324,7 +488,7 @@
         </div>
       </section>
 
-      <section class="privacy" aria-labelledby="privacy-h">
+      <section id="datenschutz" class="privacy" aria-labelledby="privacy-h">
         <h2 id="privacy-h">Daten bleiben in Ihrer Hand</h2>
         <div class="privacy-grid">
           <article>
@@ -374,7 +538,7 @@
         </ul>
       </section>
 
-      <section class="faq" aria-labelledby="faq-h">
+      <section id="fragen" class="faq" aria-labelledby="faq-h">
         <h2 id="faq-h">Häufige Fragen</h2>
 
         <details>
@@ -505,12 +669,41 @@
           </p>
         </details>
       </section>
+
+      <section class="cta-band" aria-label="TheraScript herunterladen">
+        <div class="cta-band-inner">
+          <div>
+            <p class="cta-band-title">Bereit für weniger Tipparbeit?</p>
+            <p class="cta-band-text">
+              Laden Sie TheraScript herunter – die Anleitung führt Sie durch die Installation.
+            </p>
+          </div>
+          <a class="btn btn-primary" href="installation.html">
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 3v14m-6-6 6 6 6-6" />
+              <path d="M5 21h14" />
+            </svg>
+            Kostenlos herunterladen
+          </a>
+        </div>
+      </section>
     </main>
 
     <footer class="site-footer">
       <div class="footer-content">
         <p>TheraScript ist Open Source unter MIT-Lizenz.</p>
         <nav aria-label="Footer">
+          <a href="installation.html">Installation</a>
           <a href="https://github.com/adbstyle/therascripter" rel="noopener"
             >Quellcode auf GitHub</a
           >
@@ -525,5 +718,6 @@
         </nav>
       </div>
     </footer>
+    <script src="site.js" defer></script>
   </body>
 </html>
