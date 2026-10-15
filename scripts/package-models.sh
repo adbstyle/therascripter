@@ -78,13 +78,6 @@ if [ "$TARGET" = "all" ]; then
     echo "  SKIP: Whisper-Modell nicht gefunden: $WHISPER_MODEL"
   fi
 
-  # Whisper Swiss-German (flat file, optional)
-  WHISPER_SWISS="$MODELS_DIR/asr/ggml-large-v3-turbo-swiss-q5_0.bin"
-  if [ -f "$WHISPER_SWISS" ]; then
-    cp "$WHISPER_SWISS" "$OUTPUT_DIR/whisper-ggml-large-v3-turbo-swiss-q5_0.bin"
-    echo "  -> whisper-ggml-large-v3-turbo-swiss-q5_0.bin"
-  fi
-
   # Pyannote-Suite — monolithisches Paket mit allen vier benötigten Sub-Modellen
   package_pyannote_suite || exit 1
 fi

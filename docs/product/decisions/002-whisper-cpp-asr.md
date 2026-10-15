@@ -35,5 +35,5 @@ whisper.cpp (C++) mit dem Modell Whisper Large V3 Turbo in Q5_0-Quantisierung wi
 
 - **Separate Binary:** whisper.cpp muss als vorcompilierter Binary mitgeliefert werden (~5 MB).
 - **Modell-Download:** ~1.6 GB beim Erststart.
-- **Schweizerdeutsch-Limitation:** Starker Dialekt (Wallis, Graubünden) liefert schlechtere Ergebnisse. Post-MVP: Fine-Tuning auf STT4SG-Daten geplant.
+- **Schweizerdeutsch-Limitation:** Starker Dialekt (Wallis, Graubünden) liefert schlechtere Ergebnisse. Post-MVP: Fine-Tuning auf STT4SG-Daten geplant. *Nachtrag:* Ein externes Swiss-German-Fine-Tune (Flurin17) war von v0.8.x bis v0.10.0 im Katalog und wurde wegen seiner nicht-kommerziellen Lizenz (CC BY-NC 4.0) entfernt (#185). Ein Ersatz braucht eine Lizenz, die den Einsatz in Praxen erlaubt.
 - **Plugin-Architektur:** NFR-9/10 erfordern, dass das ASR-Modell austauschbar bleibt — z.B. gegen mlx-whisper oder ein fine-getuntes Modell.

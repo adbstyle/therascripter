@@ -216,11 +216,11 @@ describe('reconcileActiveModels', () => {
   })
 
   it('promotes the catalog default when an installed required slot points at a missing file', () => {
-    // ASR slot points at the swiss variant which is NOT installed; the
+    // ASR slot points at the German variant which is NOT installed; the
     // multilingual default IS installed → promote it.
     freshState({
       activeModels: {
-        transcription: 'whisper-large-v3-turbo-swiss',
+        transcription: 'whisper-large-v3-turbo-german',
         diarization: 'pyannote-suite',
         diarizationPipeline: 'pyannote/speaker-diarization-3.1',
         ner: 'flair-ner-german-large',
@@ -239,7 +239,7 @@ describe('reconcileActiveModels', () => {
     expect(repairs).toEqual([
       {
         group: 'asr',
-        fromModelId: 'whisper-large-v3-turbo-swiss',
+        fromModelId: 'whisper-large-v3-turbo-german',
         toModelId: 'whisper-large-v3-turbo',
         reason: 'default-promoted'
       }
@@ -248,7 +248,7 @@ describe('reconcileActiveModels', () => {
   })
 
   it('falls back to any installed group member when the catalog default itself is missing', () => {
-    // Only the swiss variant is installed; ASR slot points at the missing default.
+    // Only the German variant is installed; ASR slot points at the missing default.
     freshState({
       activeModels: {
         transcription: 'whisper-large-v3-turbo',
@@ -260,7 +260,7 @@ describe('reconcileActiveModels', () => {
       }
     })
     pretendInstalled(
-      'asr/ggml-large-v3-turbo-swiss-q5_0.bin', // only the swiss variant
+      'asr/ggml-large-v3-turbo-german-q5_0.bin', // only the German variant
       'diarization/models--pyannote--speaker-diarization-community-1',
       'ner/hf/hub/models--xlm-roberta-large'
     )
@@ -269,9 +269,9 @@ describe('reconcileActiveModels', () => {
 
     const asrRepair = repairs.find((r) => r.group === 'asr')
     expect(asrRepair).toBeDefined()
-    expect(asrRepair?.toModelId).toBe('whisper-large-v3-turbo-swiss')
+    expect(asrRepair?.toModelId).toBe('whisper-large-v3-turbo-german')
     expect(asrRepair?.reason).toBe('default-promoted')
-    expect(storeState.activeModels.transcription).toBe('whisper-large-v3-turbo-swiss')
+    expect(storeState.activeModels.transcription).toBe('whisper-large-v3-turbo-german')
   })
 
   it('emits model-removed when no installed alternative exists for a required group', () => {

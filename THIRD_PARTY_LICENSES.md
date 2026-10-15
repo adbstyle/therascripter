@@ -31,7 +31,7 @@ Die App lädt alle Modelle vom R2-CDN `https://pub-f6971d643e3a464ba6977c0816c43
 | --- | --- | --- | --- | --- | --- |
 | Whisper Large V3 Turbo | `whisper-ggml-large-v3-turbo-q5_0.bin` | MIT | zulässig unter Bedingungen | zulässig | v0.8.13, main |
 | Whisper Large V3 Turbo (German) | `whisper-ggml-large-v3-turbo-german-q5_0.bin` | Apache-2.0 | zulässig unter Bedingungen | zulässig | v0.8.13, main |
-| Whisper Large V3 Turbo (Swiss-German) | `whisper-ggml-large-v3-turbo-swiss-q5_0.bin` | **CC-BY-NC-4.0** | zulässig unter Bedingungen | **nicht zulässig** | v0.8.13, main |
+| Whisper Large V3 Turbo (Swiss-German) | `whisper-ggml-large-v3-turbo-swiss-q5_0.bin` | **CC-BY-NC-4.0** | zulässig unter Bedingungen | **nicht zulässig** | bis v0.10.0, **entfernt** (#185) |
 | pyannote speaker-diarization-3.1 | `pyannote-suite.tar.gz` | MIT | zulässig unter Bedingungen | zulässig | v0.8.13, main |
 | pyannote speaker-diarization-community-1 | `pyannote-suite.tar.gz` | CC-BY-4.0 | zulässig unter Bedingungen | zulässig | v0.8.13, main |
 | pyannote segmentation-3.0 | `pyannote-suite.tar.gz` | MIT | zulässig unter Bedingungen | zulässig | v0.8.13, main |
@@ -80,7 +80,8 @@ Die App lädt alle Modelle vom R2-CDN `https://pub-f6971d643e3a464ba6977c0816c43
 - **Geforderte Namensnennung:** Nach CC BY-NC 4.0 Abschnitt 3(a)(1): Urheber (Flurin17), Hinweis auf die Lizenz mit Link, Hinweis auf den Gewährleistungsausschluss, Link auf das Modell und Kennzeichnung der Konvertierung. Zusätzlich für das Basismodell der MIT-Hinweis «Copyright (c) 2022 OpenAI». **Derzeit nicht erfüllt.**
 - **Weitergabe über eigenes Hosting:** zulässig unter Bedingungen. TheraScript selbst verfolgt mit der kostenlosen Weitergabe keinen kommerziellen Zweck. Bedingungen: Namensnennung und Kennzeichnung der Konvertierung nach Abschnitt 3(a), keine zusätzlichen Einschränkungen nach Abschnitt 2(a)(5)(B). Die Namensnennung fehlt heute. Die Weitergabe richtet sich ausdrücklich an Therapiepraxen, deren Nutzung die Lizenz nicht deckt (siehe nächster Punkt).
 - **Einsatz in Therapiepraxen:** **nicht zulässig** (CC BY-NC 4.0 Abschnitt 2(a)(1) und 1(i)). Die Transkription von Sitzungen in einer entgeltlichen Praxis dient der Erbringung bezahlter Leistungen und ist damit nicht nicht-kommerziell. Ausgenommen wäre allenfalls ein Einsatz ohne Erwerbszweck. Die App bietet das Modell heute ohne Hinweis auf diese Einschränkung an.
-- **Ausgeliefert in:** v0.8.13, main.
+- **Ausgeliefert in:** v0.8.13 bis v0.10.0.
+- **Status:** **Entfernt** (#185). Die Folgeversion nimmt das Modell aus dem Katalog und löscht die Datei beim ersten Start; aktiv war es nur noch bis zu diesem Update. Die Datei auf R2 wird nach dem Release gelöscht.
 
 ### pyannote speaker-diarization-3.1
 
@@ -525,14 +526,13 @@ Bei der Auflösung fehlender oder widersprüchlicher Angaben ist Folgendes aufge
 
 ### Modelle
 
-1. **Swiss-German-Whisper: Einsatz in Therapiepraxen nicht zulässig.** Das Modell Flurin17/whisper-large-v3-turbo-swiss-german steht seit dem 17. April 2026 unter CC BY-NC 4.0, und die von TheraScript am 22. April 2026 konvertierte Revision trägt bereits diese Lizenz. Die Lizenz erlaubt die Nutzung nur zu nicht-kommerziellen Zwecken (Abschnitt 2(a)(1) und 1(i)). Der Einsatz in einer entgeltlichen Therapiepraxis fällt nicht darunter. Die Weitergabe über R2 ist nur mit Namensnennung und Kennzeichnung der Konvertierung zulässig, und beides fehlt. Die App bietet das Modell ohne Hinweis auf die NC-Bedingung an.
+1. **Swiss-German-Whisper: Einsatz in Therapiepraxen nicht zulässig.** **Erledigt:** Modell nach v0.10.0 entfernt (#185). Das Modell Flurin17/whisper-large-v3-turbo-swiss-german steht seit dem 17. April 2026 unter CC BY-NC 4.0, und die von TheraScript am 22. April 2026 konvertierte Revision trägt bereits diese Lizenz. Die Lizenz erlaubt die Nutzung nur zu nicht-kommerziellen Zwecken (Abschnitt 2(a)(1) und 1(i)). Der Einsatz in einer entgeltlichen Therapiepraxis fällt nicht darunter. Die Weitergabe über R2 ist nur mit Namensnennung und Kennzeichnung der Konvertierung zulässig, und beides fehlt. Die App bietet das Modell ohne Hinweis auf die NC-Bedingung an.
 2. **flair/ner-german-large: Weitergabe und Einsatz unklar.** Das Modell hat keine Lizenz, und seine Trainingsdaten (CoNLL-03 German aus der Frankfurter Rundschau im ECI-Korpus) sind nur für Forschungszwecke lizenziert. TheraScript verteilt zudem eine veränderte Fassung (fp16). Das Modell ist ein Pflichtmodell, ohne das die App nicht pseudonymisiert. Eine schriftliche Erlaubnis der flair-Maintainer würde die Frage klären.
 3. **Gemma 3 4B (v0.8.13): Weitergabebedingungen nicht erfüllt.** Die Gemma Terms of Use verlangen in Abschnitt 3.1 eine Notice-Datei, eine Kopie der Terms, die vertragliche Weitergabe der Nutzungsbeschränkungen und die Kennzeichnung von Änderungen. Keiner dieser Punkte ist in v0.8.13 oder auf R2 erfüllt, und die Datei liegt für v0.8.13 weiterhin auf R2. Der Einsatz in Therapiepraxen ist nur unter Einhaltung der Prohibited Use Policy zulässig (2.5.8 Einwilligungen bei sensiblen Daten, 3.4 keine automatisierten Entscheidungen im Gesundheitswesen).
 4. **Fehlende Namensnennung bei den übrigen Modellen.** Bei allen Modellen ausser Gemma 4 E2B in `main` fehlt die geforderte Namensnennung, sowohl in der App als auch auf R2:
    - MIT-Hinweise: Whisper/OpenAI, pyannote 3.1, segmentation-3.0, XLM-RoBERTa.
    - Apache-2.0-Lizenzkopie und Änderungsvermerk: German-Whisper.
    - CC-BY-Angaben: community-1, wespeaker.
-   - CC-BY-NC-Angaben: Swiss-German-Whisper.
 5. **Gated pyannote-Modelle über R2.** speaker-diarization-3.1, community-1 und segmentation-3.0 sind auf Hugging Face nur nach Zustimmung zur Weitergabe der Kontaktdaten erhältlich. Die Lizenzen (MIT bzw. CC BY 4.0) erlauben die Weitergabe. Der vollständige Text der Zugangsbedingungen ist nur nach Login einsehbar und wurde nicht geprüft.
 
 ### Software

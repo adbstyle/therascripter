@@ -22,6 +22,16 @@ const REASON_LABEL: Record<ReconcileReason, string> = {
     'Vorheriges Modell wird nicht mehr unterstützt und wurde entfernt — Nachfolger unten herunterladen'
 }
 
+// Ein ausgemustertes Modell einer Pflichtgruppe wird gleich durch ein
+// installiertes ersetzt — dann gibt es nichts mehr herunterzuladen.
+const RETIRED_REPLACED_LABEL =
+  'Vorheriges Modell wird nicht mehr unterstützt und wurde entfernt — ein installiertes Modell wurde aktiviert'
+
+function reasonLabel(e: ReconcileEvent): string {
+  if (e.reason === 'model-retired' && e.toModelId !== null) return RETIRED_REPLACED_LABEL
+  return REASON_LABEL[e.reason]
+}
+
 function formatTimestamp(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
@@ -71,7 +81,7 @@ export default function ReconcileEventsBanner({ events, onDismiss }: Props): Rea
                   <dt>Jetzt aktiv:</dt>
                   <dd>{e.toLabel ?? e.toModelId ?? '— (kein Modell)'}</dd>
                   <dt>Grund:</dt>
-                  <dd>{REASON_LABEL[e.reason]}</dd>
+                  <dd>{reasonLabel(e)}</dd>
                   <dt>Geändert am:</dt>
                   <dd>{formatTimestamp(e.timestamp)}</dd>
                 </dl>

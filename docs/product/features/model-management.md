@@ -2,7 +2,7 @@
 
 Therascript relies on three ML models that are downloaded on first launch and kept up to date via an R2-hosted manifest. App updates are surfaced separately through a non-blocking hint.
 
-Since v0.5 the ASR model (transcription) is **user-selectable** from a catalog — the default is the multilingual Turbo model; a Swiss-German fine-tune can optionally be installed. See [ASR Model Catalog](#asr-model-catalog) below.
+Since v0.5 the ASR model (transcription) is **user-selectable** from a catalog — the default is the multilingual Turbo model; a High-German fine-tune can optionally be installed. A Swiss-German fine-tune was offered until v0.10.0 and retired for its non-commercial license (CC BY-NC 4.0, #185); Swiss German is transcribed by the default model, which normalizes it to High German (`-l de`). See [ASR Model Catalog](#asr-model-catalog) below.
 
 ## First Launch Flow
 
@@ -225,12 +225,14 @@ Since v0.5, the ASR model is user-selectable. `ModelDefinition` has two categori
 
 `checkModelsExist()` delegates to `checkRequiredAndActiveAsrExist(activeAsrId)`, which requires **only** the required models **plus** the active ASR model (`activeModels.transcription` in electron-store) to be present. Optional ASR alternatives are downloaded on demand via Settings → Models.
 
-### Available ASR Models (as of v0.5)
+### Available ASR Models
 
 | ID | Languages | Size | Use case |
 |---|---|---|---|
 | `whisper-large-v3-turbo` (default) | Multilingual | 574 MB | General-purpose — handles High German, English, and more. |
-| `whisper-large-v3-turbo-swiss` | Swiss German, High German | ~574 MB | Specialist model (base: Flurin17/whisper-large-v3-turbo-swiss-german). Noticeably better on strong Swiss-German dialects; not suitable for other languages. |
+| `whisper-large-v3-turbo-german` | High German | 574 MB | Fine-tune for standard German (base: primeline/whisper-large-v3-turbo-german, Apache 2.0). More precise on High German; not suitable for strong Swiss-German dialect or other languages. |
+
+**Retired:** `whisper-large-v3-turbo-swiss` (CC BY-NC 4.0, not usable in paid therapy practices). `retireObsoleteModels()` deletes the file on the first start of the new version and, because ASR is a required group, activates an installed successor directly (default first) — one `model-retired` notice instead of a removal plus a `default-promoted`. Without any installed ASR model the slot stays empty and the first-launch screen downloads the default (`getModelsToLoadOnFirstLaunch`).
 
 ### Settings → Models
 

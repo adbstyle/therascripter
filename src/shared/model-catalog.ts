@@ -75,23 +75,6 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
     hfRepo: 'primeline/whisper-large-v3-turbo-german'
   },
   {
-    id: 'whisper-large-v3-turbo-swiss',
-    label: 'Whisper Large V3 Turbo (Swiss-German)',
-    url: `${R2_CDN}/whisper-ggml-large-v3-turbo-swiss-q5_0.bin`,
-    relativePath: 'asr/ggml-large-v3-turbo-swiss-q5_0.bin',
-    checkPath: 'asr/ggml-large-v3-turbo-swiss-q5_0.bin',
-    sizeBytes: 574_041_195,
-    sha256: '2d56e773724a247360067b527417842b81d25ff891fed014341a6844f15ea612',
-    group: 'asr',
-    isRequired: false,
-    description:
-      'Spezialisiert auf starke Schweizerdeutsch-Dialekte (Basis: Flurin17/whisper-large-v3-turbo-swiss-german). Merklich präzisere Transkription bei ausgeprägter Mundart. Nicht geeignet für andere Sprachen.',
-    languages: ['de-CH', 'de'],
-    accuracyScore: 0.9,
-    speedScore: 0.85,
-    hfRepo: 'Flurin17/whisper-large-v3-turbo-swiss-german'
-  },
-  {
     id: 'pyannote-suite',
     label: 'Sprechererkennung (pyannote)',
     url: `${R2_CDN}/pyannote-suite.tar.gz`,
@@ -183,5 +166,14 @@ export const RETIRED_MODELS: RetiredModel[] = [
     label: 'Gemma 3 4B Instruct',
     group: 'summarization',
     relativePath: 'summarization/google_gemma-3-4b-it-Q4_K_M.gguf'
+  },
+  // Swiss-German-Fine-Tune (Flurin17) unter CC BY-NC 4.0 — keine kommerzielle
+  // Nutzung, also nicht für Therapiepraxen (#185). Ersatz: das Standardmodell,
+  // das Schweizerdeutsch mit `-l de` ins Hochdeutsche normalisiert.
+  {
+    id: 'whisper-large-v3-turbo-swiss',
+    label: 'Whisper Large V3 Turbo (Swiss-German)',
+    group: 'asr',
+    relativePath: 'asr/ggml-large-v3-turbo-swiss-q5_0.bin'
   }
 ]

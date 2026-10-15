@@ -143,7 +143,7 @@ export function getActiveModelPath(group: ModelGroup): string | null {
 
 /**
  * Modelle, die auf First-Launch heruntergeladen werden müssen, in Pipeline-Reihenfolge:
- *   1. aktives ASR-Modell (Transkription, User-wählbar)
+ *   1. aktives ASR-Modell (Transkription, User-wählbar; ohne gültiges aktives der Standard)
  *   2. alle isRequired-Modelle in Definition-Reihenfolge
  *      (derzeit: pyannote-suite für Sprechererkennung, flair für Anonymisierung)
  *
@@ -160,7 +160,11 @@ export function getModelsToLoadOnFirstLaunch(
   const seen = new Set<string>()
   const out: ModelDefinition[] = []
 
-  const activeAsr = activeAsrId ? getModelById(activeAsrId) : null
+  // Ohne gültiges aktives ASR-Modell (Slot leer oder ID nicht mehr im Katalog,
+  // z. B. nach dem Ausmustern des einzigen installierten Modells) den Standard
+  // laden — sonst hätte die App nach dem Ersteinrichtungs-Bildschirm gar keins.
+  const activeAsr =
+    (activeAsrId ? getModelById(activeAsrId) : null) ?? getModelById(REQUIRED_GROUP_DEFAULTS.asr)
   if (activeAsr && activeAsr.group === 'asr' && !seen.has(activeAsr.id)) {
     seen.add(activeAsr.id)
     out.push(activeAsr)
@@ -876,7 +880,8 @@ function newReconcileEvent(repair: ReconcileRepair): ReconcileEvent {
  * Datei samt Download-/Update-Resten (`removeModelArtifacts` — kennt sonst
  * niemand mehr), verwirft vorgemerkte Updates für die ID, löscht den
  * Installed-Version-Eintrag (No-op, wenn schon weg) und —
- * falls das Modell aktiv war — den Slot. Ein geleerter Slot wird als
+ * falls das Modell aktiv war — den Slot: in Pflichtgruppen auf ein installiertes
+ * Nachfolgemodell, sonst leer. Das wird als
  * `model-retired`-ReconcileEvent gemeldet (BottomNav-Dot → Banner in
  * Einstellungen → Modelle), damit der Nutzer den Nachfolger herunterlädt;
  * ungefragt geladen wird nichts.
@@ -902,12 +907,19 @@ export function retireObsoleteModels(): void {
 
     const slot = GROUP_TO_SETTINGS_KEY[retired.group]
     if (active[slot] !== retired.id) continue
-    active = { ...active, [slot]: null }
+    // Pflichtgruppe: gleich den Nachfolger setzen (Standard bevorzugt), damit
+    // der Reconciler nicht zusätzlich «Standard aktiviert» meldet — ein Event
+    // statt zwei. Ist keiner installiert, bleibt der Slot leer und der
+    // FirstLaunchScreen lädt den Standard (getModelsToLoadOnFirstLaunch).
+    const successor = OPTIONAL_GROUPS.has(retired.group)
+      ? null
+      : pickInstalledForGroup(retired.group)
+    active = { ...active, [slot]: successor }
     events.push(
       newReconcileEvent({
         group: retired.group,
         fromModelId: retired.id,
-        toModelId: null,
+        toModelId: successor,
         reason: 'model-retired'
       })
     )

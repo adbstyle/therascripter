@@ -8,8 +8,12 @@
 # Usage:
 #   scripts/convert-hf-whisper.sh <hf-repo> <output-basename>
 # Beispiel:
-#   scripts/convert-hf-whisper.sh Flurin17/whisper-large-v3-turbo-swiss-german \
-#     whisper-ggml-large-v3-turbo-swiss-q5_0
+#   scripts/convert-hf-whisper.sh primeline/whisper-large-v3-turbo-german \
+#     whisper-ggml-large-v3-turbo-german-q5_0
+#
+# Vor dem Aufnehmen in den Katalog die Lizenz des Modells prüfen: nicht-
+# kommerzielle Lizenzen (z. B. CC BY-NC) scheiden aus, TheraScript läuft in
+# Therapiepraxen (#185).
 #
 # Output: r2-upload/<output-basename>.bin (quantisiert, hochladebereit)
 
@@ -47,7 +51,7 @@ if [ ! -d "$WHISPER_CPP_DIR" ]; then
 fi
 
 # 1a-patch: convert-h5-to-ggml.py unterstützt BFloat16 nicht out-of-the-box.
-# Flurin17 und viele andere HF-Whisper-Fine-Tunes werden in bf16 gespeichert.
+# Viele HF-Whisper-Fine-Tunes werden in bf16 gespeichert.
 # Fix: .float()-Cast vor .numpy() einfügen. Idempotent via grep-Check.
 CONVERT_SCRIPT="$WHISPER_CPP_DIR/models/convert-h5-to-ggml.py"
 if ! grep -q 'squeeze()\.float()\.numpy()' "$CONVERT_SCRIPT"; then

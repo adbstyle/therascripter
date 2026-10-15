@@ -163,4 +163,66 @@ describe('retireObsoleteModels', () => {
     expect(repairs).toEqual([])
     expect(storeState.reconcileEvents.map((e) => e.reason)).toEqual(['model-retired'])
   })
+
+  // ─── Pflichtgruppe ASR: Swiss-German-Fine-Tune (CC BY-NC, #185) ──────────
+
+  const SWISS = '/tmp/therascript-test/models/asr/ggml-large-v3-turbo-swiss-q5_0.bin'
+  const DEFAULT_ASR = '/tmp/therascript-test/models/asr/ggml-large-v3-turbo-q5_0.bin'
+  const GERMAN_ASR = '/tmp/therascript-test/models/asr/ggml-large-v3-turbo-german-q5_0.bin'
+  const withSwissActive = (): FakeStoreState => {
+    const s = state(null)
+    return {
+      ...s,
+      activeModels: { ...s.activeModels, transcription: 'whisper-large-v3-turbo-swiss' }
+    }
+  }
+
+  it('replaces an active Swiss model by the installed default in one event', () => {
+    storeState = withSwissActive()
+    files.add(SWISS)
+
+    retireObsoleteModels()
+    const repairs = reconcileActiveModels()
+
+    expect(files.has(SWISS)).toBe(false)
+    expect(storeState.activeModels.transcription).toBe('whisper-large-v3-turbo')
+    expect(repairs).toEqual([])
+    expect(storeState.reconcileEvents).toEqual([
+      expect.objectContaining({
+        group: 'asr',
+        fromModelId: 'whisper-large-v3-turbo-swiss',
+        fromLabel: 'Whisper Large V3 Turbo (Swiss-German)',
+        toModelId: 'whisper-large-v3-turbo',
+        toLabel: 'Whisper Large V3 Turbo',
+        reason: 'model-retired'
+      })
+    ])
+  })
+
+  it('falls back to another installed ASR model when the default is missing', () => {
+    storeState = withSwissActive()
+    files.delete(DEFAULT_ASR)
+    files.add(SWISS)
+    files.add(GERMAN_ASR)
+
+    retireObsoleteModels()
+
+    expect(storeState.activeModels.transcription).toBe('whisper-large-v3-turbo-german')
+    expect(reconcileActiveModels()).toEqual([])
+  })
+
+  it('leaves the ASR slot empty when no other ASR model is installed', () => {
+    // Der FirstLaunchScreen lädt dann den Standard (getModelsToLoadOnFirstLaunch).
+    storeState = withSwissActive()
+    files.delete(DEFAULT_ASR)
+    files.add(SWISS)
+
+    retireObsoleteModels()
+
+    expect(storeState.activeModels.transcription).toBeNull()
+    expect(reconcileActiveModels()).toEqual([])
+    expect(storeState.reconcileEvents).toEqual([
+      expect.objectContaining({ toModelId: null, reason: 'model-retired' })
+    ])
+  })
 })
