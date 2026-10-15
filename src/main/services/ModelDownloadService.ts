@@ -143,7 +143,7 @@ export function getActiveModelPath(group: ModelGroup): string | null {
 
 /**
  * Modelle, die auf First-Launch heruntergeladen werden müssen, in Pipeline-Reihenfolge:
- *   1. aktives ASR-Modell (Transkription, User-wählbar)
+ *   1. aktives ASR-Modell (Transkription, User-wählbar; ohne gültiges aktives der Standard)
  *   2. alle isRequired-Modelle in Definition-Reihenfolge
  *      (derzeit: pyannote-suite für Sprechererkennung, flair für Anonymisierung)
  *
@@ -160,7 +160,11 @@ export function getModelsToLoadOnFirstLaunch(
   const seen = new Set<string>()
   const out: ModelDefinition[] = []
 
-  const activeAsr = activeAsrId ? getModelById(activeAsrId) : null
+  // Ohne gültiges aktives ASR-Modell (Slot leer oder ID nicht mehr im Katalog,
+  // z. B. nach dem Ausmustern des einzigen installierten Modells) den Standard
+  // laden — sonst hätte die App nach dem Ersteinrichtungs-Bildschirm gar keins.
+  const activeAsr =
+    (activeAsrId ? getModelById(activeAsrId) : null) ?? getModelById(REQUIRED_GROUP_DEFAULTS.asr)
   if (activeAsr && activeAsr.group === 'asr' && !seen.has(activeAsr.id)) {
     seen.add(activeAsr.id)
     out.push(activeAsr)
@@ -835,6 +839,28 @@ export function reconcileActiveModels(): ReadonlyArray<ReconcileRepair> {
         eventsChanged = true
         continue
       }
+      // Ein ausgemustertes Modell hat den Slot geleert (retireObsoleteModels),
+      // jetzt rückt ein Nachfolger nach — direkt beim Boot oder erst nach dem
+      // Ersteinrichtungs-Download. Eine Meldung «X ersetzt durch Y» statt
+      // «entfernt» plus «Standard aktiviert».
+      const retiredIdx = events.findIndex(
+        (e) =>
+          e.group === r.group &&
+          e.reason === 'model-retired' &&
+          e.toModelId === null &&
+          r.fromModelId === null
+      )
+      if (retiredIdx >= 0 && r.toModelId !== null) {
+        const folded = {
+          ...events[retiredIdx],
+          toModelId: r.toModelId,
+          toLabel: modelLabel(r.toModelId),
+          status: 'pending' as const
+        }
+        events = events.map((e, i) => (i === retiredIdx ? folded : e))
+        eventsChanged = true
+        continue
+      }
       events = [...events, newReconcileEvent(r)]
       eventsChanged = true
     }
@@ -874,12 +900,18 @@ function newReconcileEvent(repair: ReconcileRepair): ReconcileEvent {
 /**
  * Räumt aus dem Katalog entfernte Modelle (`RETIRED_MODELS`) auf: löscht die
  * Datei samt Download-/Update-Resten (`removeModelArtifacts` — kennt sonst
- * niemand mehr), verwirft vorgemerkte Updates für die ID, löscht den
- * Installed-Version-Eintrag (No-op, wenn schon weg) und —
- * falls das Modell aktiv war — den Slot. Ein geleerter Slot wird als
- * `model-retired`-ReconcileEvent gemeldet (BottomNav-Dot → Banner in
- * Einstellungen → Modelle), damit der Nutzer den Nachfolger herunterlädt;
- * ungefragt geladen wird nichts.
+ * niemand mehr), den Installed-Version-Eintrag (No-op, wenn schon weg) und —
+ * falls das Modell aktiv war — leert den Slot und meldet ein
+ * `model-retired`-ReconcileEvent (BottomNav-Dot → Banner in Einstellungen →
+ * Modelle). Vorgemerkte Updates für die ID verwirft das Update-System selbst
+ * (`selectBundle` überspringt ausgemusterte IDs).
+ *
+ * Einen Nachfolger setzt erst der Reconciler: in Pflichtgruppen ein
+ * installiertes Modell (Standard zuerst), sonst lädt der Ersteinrichtungs-
+ * Bildschirm den Standard (`getModelsToLoadOnFirstLaunch`) und der Reconciler
+ * danach aktiviert ihn. In beiden Fällen ergänzt er dieses Event um den
+ * Nachfolger statt ein zweites anzulegen. Optionale Gruppen bleiben leer — der
+ * Nutzer lädt den Nachfolger selbst.
  *
  * Muss VOR `reconcileActiveModels()` laufen: der sähe sonst eine unbekannte
  * ID im Slot und meldete "nicht mehr gefunden". Idempotent — nach dem ersten

@@ -122,17 +122,6 @@ export const MODEL_ACKNOWLEDGMENTS: Acknowledgment[] = [
     notice: APACHE_2_0
   },
   {
-    name: 'Whisper Large V3 Turbo Swiss German',
-    catalogIds: ['whisper-large-v3-turbo-swiss'],
-    description: 'Spracherkennung Schweizerdeutsch — Flurin17',
-    license: 'CC BY-NC 4.0',
-    notice: ccNotice(
-      'Flurin17/whisper-large-v3-turbo-swiss-german (Feinabstimmung von OpenAI Whisper Large V3 Turbo), https://huggingface.co/Flurin17/whisper-large-v3-turbo-swiss-german',
-      'Creative Commons Attribution-NonCommercial 4.0 International',
-      'https://creativecommons.org/licenses/by-nc/4.0/'
-    )
-  },
-  {
     name: 'pyannote segmentation-3.0',
     catalogIds: ['pyannote-suite'],
     description: 'Sprechererkennung — © CNRS',

@@ -89,9 +89,24 @@ describe('ModelDownloadService catalog helpers', () => {
     ])
   })
 
-  it('getModelsToLoadOnFirstLaunch falls back gracefully on unknown ASR id', () => {
-    const loaded = getModelsToLoadOnFirstLaunch('nonexistent')
-    expect(loaded.map((m) => m.id).sort()).toEqual(['flair-ner-german-large', 'pyannote-suite'])
+  it('getModelsToLoadOnFirstLaunch loads the default ASR for an unknown or retired id', () => {
+    // z. B. nachdem das einzige installierte ASR-Modell ausgemustert wurde —
+    // sonst endete der Ersteinrichtungs-Bildschirm ohne Transkriptions-Modell.
+    for (const id of ['nonexistent', 'whisper-large-v3-turbo-swiss']) {
+      expect(getModelsToLoadOnFirstLaunch(id).map((m) => m.id)).toEqual([
+        'whisper-large-v3-turbo',
+        'pyannote-suite',
+        'flair-ner-german-large'
+      ])
+    }
+  })
+
+  it('getModelsToLoadOnFirstLaunch loads the default ASR when no ASR slot is set', () => {
+    expect(getModelsToLoadOnFirstLaunch(null).map((m) => m.id)).toEqual([
+      'whisper-large-v3-turbo',
+      'pyannote-suite',
+      'flair-ner-german-large'
+    ])
   })
 })
 
@@ -163,7 +178,7 @@ describe('setActiveAsrModel', () => {
   })
 
   it('throws when model is not installed', () => {
-    // Swiss-German is in the catalog but not on disk (existsSync mocked to false)
-    expect(() => setActiveAsrModel('whisper-large-v3-turbo-swiss')).toThrow(/nicht installiert/i)
+    // German is in the catalog but not on disk (existsSync mocked to false)
+    expect(() => setActiveAsrModel('whisper-large-v3-turbo-german')).toThrow(/nicht installiert/i)
   })
 })

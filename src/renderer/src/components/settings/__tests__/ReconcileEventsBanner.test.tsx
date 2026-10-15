@@ -35,4 +35,25 @@ describe('ReconcileEventsBanner', () => {
 
     expect(screen.getByText('gemma-summarization')).toBeInTheDocument()
   })
+
+  it('says an installed successor was activated when a retired model was replaced', () => {
+    render(
+      <ReconcileEventsBanner
+        events={[
+          event({
+            group: 'asr',
+            fromModelId: 'whisper-large-v3-turbo-swiss',
+            fromLabel: 'Whisper Large V3 Turbo (Swiss-German)',
+            toModelId: 'whisper-large-v3-turbo',
+            toLabel: 'Whisper Large V3 Turbo'
+          })
+        ]}
+        onDismiss={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('Whisper Large V3 Turbo')).toBeInTheDocument()
+    expect(screen.getByText(/ein installiertes Modell wurde aktiviert/)).toBeInTheDocument()
+    expect(screen.queryByText(/Nachfolger unten herunterladen/)).not.toBeInTheDocument()
+  })
 })

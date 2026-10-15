@@ -35,8 +35,6 @@ function formatLanguage(code: string): string {
       return 'Multilingual'
     case 'de':
       return 'Hochdeutsch'
-    case 'de-CH':
-      return 'Schweizerdeutsch'
     default:
       return code
   }

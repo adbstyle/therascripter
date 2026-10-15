@@ -50,7 +50,12 @@ vi.mock('fs', () => {
   return { ...fsMock, default: fsMock }
 })
 
-import { retireObsoleteModels, reconcileActiveModels } from '../ModelDownloadService'
+import {
+  checkRequiredAndActiveExist,
+  getModelsToLoadOnFirstLaunch,
+  retireObsoleteModels,
+  reconcileActiveModels
+} from '../ModelDownloadService'
 
 const GEMMA3 = '/tmp/therascript-test/models/summarization/google_gemma-3-4b-it-Q4_K_M.gguf'
 const GEMMA4 = '/tmp/therascript-test/models/summarization/gemma-4-E2B_q4_0-it.gguf'
@@ -162,5 +167,97 @@ describe('retireObsoleteModels', () => {
 
     expect(repairs).toEqual([])
     expect(storeState.reconcileEvents.map((e) => e.reason)).toEqual(['model-retired'])
+  })
+
+  // ─── Pflichtgruppe ASR: Swiss-German-Fine-Tune (CC BY-NC, #185) ──────────
+
+  const SWISS = '/tmp/therascript-test/models/asr/ggml-large-v3-turbo-swiss-q5_0.bin'
+  const DEFAULT_ASR = '/tmp/therascript-test/models/asr/ggml-large-v3-turbo-q5_0.bin'
+  const GERMAN_ASR = '/tmp/therascript-test/models/asr/ggml-large-v3-turbo-german-q5_0.bin'
+  const withSwissActive = (): FakeStoreState => {
+    const s = state(null)
+    return {
+      ...s,
+      activeModels: { ...s.activeModels, transcription: 'whisper-large-v3-turbo-swiss' }
+    }
+  }
+
+  it('replaces an active Swiss model by the installed default in one event', () => {
+    storeState = withSwissActive()
+    files.add(SWISS)
+
+    retireObsoleteModels()
+    reconcileActiveModels()
+
+    expect(files.has(SWISS)).toBe(false)
+    expect(storeState.activeModels.transcription).toBe('whisper-large-v3-turbo')
+    // Der Reconciler ergänzt das Retire-Event um den Nachfolger statt ein
+    // zweites «Standard aktiviert» anzulegen.
+    expect(storeState.reconcileEvents).toEqual([
+      expect.objectContaining({
+        group: 'asr',
+        fromModelId: 'whisper-large-v3-turbo-swiss',
+        fromLabel: 'Whisper Large V3 Turbo (Swiss-German)',
+        toModelId: 'whisper-large-v3-turbo',
+        toLabel: 'Whisper Large V3 Turbo',
+        reason: 'model-retired'
+      })
+    ])
+  })
+
+  it('falls back to another installed ASR model when the default is missing', () => {
+    storeState = withSwissActive()
+    files.delete(DEFAULT_ASR)
+    files.add(SWISS)
+    files.add(GERMAN_ASR)
+
+    retireObsoleteModels()
+    reconcileActiveModels()
+
+    expect(storeState.activeModels.transcription).toBe('whisper-large-v3-turbo-german')
+    expect(storeState.reconcileEvents).toEqual([
+      expect.objectContaining({
+        toModelId: 'whisper-large-v3-turbo-german',
+        reason: 'model-retired'
+      })
+    ])
+  })
+
+  it('without another ASR model: first launch loads the default and the notice names it', () => {
+    storeState = withSwissActive()
+    files.delete(DEFAULT_ASR)
+    files.add(SWISS)
+
+    retireObsoleteModels()
+    reconcileActiveModels()
+
+    // Boot: kein ASR-Modell → Ersteinrichtung nötig, sie lädt den Standard.
+    expect(storeState.activeModels.transcription).toBeNull()
+    expect(checkRequiredAndActiveExist(null, 'pyannote-suite')).toBe(false)
+    expect(getModelsToLoadOnFirstLaunch(null).map((m) => m.id)).toContain('whisper-large-v3-turbo')
+
+    // Nach dem Download (startModelDownload ruft den Reconciler erneut):
+    files.add(DEFAULT_ASR)
+    reconcileActiveModels()
+
+    expect(storeState.activeModels.transcription).toBe('whisper-large-v3-turbo')
+    expect(storeState.reconcileEvents).toEqual([
+      expect.objectContaining({
+        fromModelId: 'whisper-large-v3-turbo-swiss',
+        toModelId: 'whisper-large-v3-turbo',
+        reason: 'model-retired',
+        status: 'pending'
+      })
+    ])
+  })
+
+  it('does not treat an unknown active ASR id as ready while the default is missing', () => {
+    files.delete(DEFAULT_ASR)
+    expect(checkRequiredAndActiveExist('whisper-large-v3-turbo-swiss', 'pyannote-suite')).toBe(
+      false
+    )
+
+    files.add(DEFAULT_ASR)
+    expect(checkRequiredAndActiveExist('whisper-large-v3-turbo-swiss', 'pyannote-suite')).toBe(true)
   })
 })
