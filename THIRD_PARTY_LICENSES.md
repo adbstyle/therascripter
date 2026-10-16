@@ -31,7 +31,7 @@ Die App lädt alle Modelle vom R2-CDN `https://pub-f6971d643e3a464ba6977c0816c43
 | --- | --- | --- | --- | --- | --- |
 | Whisper Large V3 Turbo | `whisper-ggml-large-v3-turbo-q5_0.bin` | MIT | zulässig unter Bedingungen | zulässig | v0.8.13, main |
 | Whisper Large V3 Turbo (German) | `whisper-ggml-large-v3-turbo-german-q5_0.bin` | Apache-2.0 | zulässig unter Bedingungen | zulässig | v0.8.13, main |
-| Whisper Large V3 Turbo (Swiss-German) | `whisper-ggml-large-v3-turbo-swiss-q5_0.bin` | **CC-BY-NC-4.0** | zulässig unter Bedingungen | **nicht zulässig** | bis v0.10.0, **entfernt** (#185) |
+| Whisper Large V3 Turbo (Swiss-German) | `whisper-ggml-large-v3-turbo-swiss-q5_0.bin` | **CC-BY-NC-4.0** | zulässig unter Bedingungen | **nicht zulässig** | bis v0.10.0, **entfernt** in v0.10.1 (#185) |
 | pyannote speaker-diarization-3.1 | `pyannote-suite.tar.gz` | MIT | zulässig unter Bedingungen | zulässig | v0.8.13, main |
 | pyannote speaker-diarization-community-1 | `pyannote-suite.tar.gz` | CC-BY-4.0 | zulässig unter Bedingungen | zulässig | v0.8.13, main |
 | pyannote segmentation-3.0 | `pyannote-suite.tar.gz` | MIT | zulässig unter Bedingungen | zulässig | v0.8.13, main |
@@ -81,7 +81,7 @@ Die App lädt alle Modelle vom R2-CDN `https://pub-f6971d643e3a464ba6977c0816c43
 - **Weitergabe über eigenes Hosting:** zulässig unter Bedingungen. TheraScript selbst verfolgt mit der kostenlosen Weitergabe keinen kommerziellen Zweck. Bedingungen: Namensnennung und Kennzeichnung der Konvertierung nach Abschnitt 3(a), keine zusätzlichen Einschränkungen nach Abschnitt 2(a)(5)(B). Die Namensnennung fehlt heute. Die Weitergabe richtet sich ausdrücklich an Therapiepraxen, deren Nutzung die Lizenz nicht deckt (siehe nächster Punkt).
 - **Einsatz in Therapiepraxen:** **nicht zulässig** (CC BY-NC 4.0 Abschnitt 2(a)(1) und 1(i)). Die Transkription von Sitzungen in einer entgeltlichen Praxis dient der Erbringung bezahlter Leistungen und ist damit nicht nicht-kommerziell. Ausgenommen wäre allenfalls ein Einsatz ohne Erwerbszweck. Die App bietet das Modell heute ohne Hinweis auf diese Einschränkung an.
 - **Ausgeliefert in:** v0.8.13 bis v0.10.0.
-- **Status:** **Entfernt** (#185). Die Folgeversion nimmt das Modell aus dem Katalog und löscht die Datei beim ersten Start; aktiv war es nur noch bis zu diesem Update. Die Datei auf R2 wird nach dem Release gelöscht.
+- **Status:** **Entfernt** (#185). v0.10.1 nimmt das Modell aus dem Katalog und löscht die Datei beim ersten Start; aktiv war es nur noch bis zu diesem Update. Die Datei auf R2 wurde nach dem Release v0.10.1 gelöscht (16. Oktober 2026).
 
 ### pyannote speaker-diarization-3.1
 
