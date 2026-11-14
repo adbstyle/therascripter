@@ -235,8 +235,10 @@
             nutzende Person ihn selbst löscht. Audioaufnahmen und Original-PDFs löscht die App 24
             Stunden nach erfolgreicher Verarbeitung; schlägt die Verarbeitung fehl, bleiben sie
             erhalten, bis die nutzende Person die Sitzung selbst löscht. Beim Löschen einer Sitzung
-            entfernt die App alle zugehörigen Daten aus ihren Dateien; Kopien in Backups des Geräts
-            entfernt sie nicht. Inhalte mit Aufbewahrungspflicht gehören weiterhin in die rechtlich
+            entfernt die App alle zugehörigen Daten aus ihren Dateien, auch ihre Einträge im
+            Suchindex; Kopien in Backups des Geräts entfernt sie nicht. Den Suchindex legt die App
+            nur lokal auf dem Gerät an (bis ~0.6 GB bei 2'000 Sitzungen); Suchanfragen und Inhalte
+            sendet sie nie weg. Inhalte mit Aufbewahrungspflicht gehören weiterhin in die rechtlich
             führende Praxissoftware.
           </p>
           <p>
@@ -257,7 +259,9 @@
               Hinzufügen eines Modells in den Einstellungen und mit Updates: neue Fassungen der
               installierten Modelle und Modelle, die eine neue Version braucht, automatisch
               zusammen mit dem Update; nach dem Ausschalten der automatischen Updates
-              (Einstellungen → Updates) nur auf Klick.
+              (Einstellungen → Updates) nur auf Klick. Fehlt das Suchmodell (z. B. nach dem Update
+              von einer Version ohne Suche), lädt die App es selbständig im Hintergrund nach und
+              versucht es bei einem Fehlschlag später erneut.
             </li>
             <li>
               <strong>Nach neuen Versionen suchen:</strong> beim Start der App, danach alle 4

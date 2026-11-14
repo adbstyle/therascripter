@@ -90,9 +90,15 @@ Before the review: exact queries 133–337 ms («und» 268, «Anna Beispiel» 33
 
 Not measured on an 8-GB Mac (#209 AK 14 is checked in PR S6). `search.performance.test.ts` guards the order of magnitude of queries, `search.blocking.test.ts` the slices of re-indexing and deleting a two-hour session (150 sessions, generous budget).
 
+## Search model availability (PR S2)
+
+The search model (EmbeddingGemma 2 text encoder, catalog id `embeddinggemma-2-text`) belongs to the basic equipment: first launch loads it, and an install without it (existing users after the update, a failed first-launch download) gets it from the `SearchModelProvisioner` in the background, with retries — the rest of the app stays fully usable (#210 AK 2/3). `search:open` reports its state, `search:availabilityChanged` pushes changes, `search:retryModel` is «Erneut versuchen». Until the artifact is on R2 the catalog entry is `published: false` and the state is `unpublished`. Details: [model-management.md](model-management.md#search-model-epic-192).
+
+Disk space for the search index: up to ~0.6 GB at 2'000 sessions (measured ~0.55 GB, see below); it lives only in the local database and a session's rows go with the session.
+
 ## IPC
 
-`search:query`, `search:recent:list`, `search:recent:remember`, `search:recent:clear` — see [ipc-api.md](../architecture/ipc-api.md) «Search Handlers». In the renderer: `window.api.search`. `semantic` in the answer is `'unavailable'` until PR S4.
+`search:open`, `search:retryModel`, `search:query`, `search:recent:list`, `search:recent:remember`, `search:recent:clear` — see [ipc-api.md](../architecture/ipc-api.md) «Search Handlers». In the renderer: `window.api.search`. `semantic` in the answer is `'unavailable'` until PR S4.
 
 ## Tests
 

@@ -100,7 +100,7 @@ All application data lives under `~/.therascript/`. Directories are created with
     └── ner/                    # flair/ner-german-large (~1.1 GB fp16; v1/v2 installs: 2.2 GB + 1.1 GB fp16 fast copy, 2.1 GB on the CPU path)
 ```
 
-Models persist across app updates. Total disk requirement: ~2.8 GB (app ~1 GB + models ~1.8 GB) (first launch checks for 5 GB free to cover download + extraction).
+Models persist across app updates. Total disk requirement: ~3.4 GB (app ~1 GB + models ~2.4 GB incl. the search model under `search/`), plus the search index in the database (up to ~0.6 GB at 2'000 sessions). First launch checks for 5 GB free to cover download + extraction (reasoning in `docs/product/features/model-management.md`, «Disk Space Check»).
 
 ---
 
