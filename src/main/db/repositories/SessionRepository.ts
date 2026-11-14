@@ -10,6 +10,10 @@ import type {
   TaskType,
   ProcessedModelsSnapshot
 } from '../../../shared/types'
+import {
+  parsePlaceholderSnapshot,
+  resolvePlaceholders
+} from '../../../shared/utils/resolvePlaceholders'
 
 interface SessionRow {
   id: string
@@ -37,6 +41,18 @@ interface SessionRow {
   retry_count: number
   pdf_has_scanned_pages: number | null
   processed_with_models: string | null
+  title_entity_snapshot: string | null
+  summary_entity_snapshot: string | null
+  /**
+   * Only in the list projection: entity_map of rows whose title or summary
+   * contains a token, used solely to resolve them for the Klartext view.
+   */
+  entity_map_for_plain?: string | null
+}
+
+/** Cheap pre-check: without a `[` no placeholder token can be in the text. */
+function mayHoldToken(text: string | null): boolean {
+  return text != null && text.includes('[')
 }
 
 function parseEntityMap(json: string | null, sessionId: string): EntityMap | null {
@@ -65,6 +81,25 @@ function parseProcessedModels(
 }
 
 function rowToSession(row: SessionRow): Session {
+  const entityMap = parseEntityMap(row.entity_map, row.id)
+  const titleEntitySnapshot = parsePlaceholderSnapshot(row.title_entity_snapshot)
+  const summaryEntitySnapshot = parsePlaceholderSnapshot(row.summary_entity_snapshot)
+
+  // Issue #203 — Klartext title/summary. The EntityMap is parsed only when a
+  // text can hold a token at all (list: SQL already nulls it otherwise).
+  let titlePlain = row.title
+  let summaryPlain = row.summary
+  if (mayHoldToken(row.title) || mayHoldToken(row.summary)) {
+    const mapForPlain =
+      entityMap ??
+      (row.entity_map_for_plain ? parseEntityMap(row.entity_map_for_plain, row.id) : null)
+    titlePlain = resolvePlaceholders(row.title, mapForPlain, titleEntitySnapshot)
+    summaryPlain =
+      row.summary == null
+        ? null
+        : resolvePlaceholders(row.summary, mapForPlain, summaryEntitySnapshot)
+  }
+
   return {
     id: row.id,
     title: row.title,
@@ -77,7 +112,7 @@ function rowToSession(row: SessionRow): Session {
     alignedTranscriptPath: row.aligned_transcript_path,
     pdfPath: row.pdf_path,
     extractedPath: row.extracted_path,
-    entityMap: parseEntityMap(row.entity_map, row.id),
+    entityMap,
     errorMessage: row.error_message,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -90,7 +125,11 @@ function rowToSession(row: SessionRow): Session {
     plannedSteps: row.planned_steps ? (JSON.parse(row.planned_steps) as TaskType[]) : null,
     retryCount: row.retry_count,
     pdfHasScannedPages: row.pdf_has_scanned_pages == null ? null : row.pdf_has_scanned_pages === 1,
-    processedWithModels: parseProcessedModels(row.processed_with_models, row.id)
+    processedWithModels: parseProcessedModels(row.processed_with_models, row.id),
+    titleEntitySnapshot,
+    summaryEntitySnapshot,
+    titlePlain,
+    summaryPlain
   }
 }
 
@@ -136,6 +175,10 @@ export class SessionRepository {
    * Blobs — der JSON-Parse pro Row und der IPC-Payload skalierten mit der
    * Library-Größe, und die Liste wird bei jedem Task-Event refetcht.
    * Detail-Reads (findById, z. B. via review:load) liefern sie weiterhin.
+   *
+   * Issue #203: Für die Klartext-Ansicht löst rowToSession Titel und
+   * Zusammenfassung auf; dafür liest die Liste entity_map nur bei Zeilen,
+   * deren Titel oder Zusammenfassung überhaupt ein `[` enthält.
    */
   findAll(): Session[] {
     const rows = this.db
@@ -146,7 +189,10 @@ export class SessionRepository {
                 created_at, updated_at, review_at, word_count,
                 anonymization_count, summary, summary_model_id, summarized_at,
                 planned_steps, retry_count, pdf_has_scanned_pages,
-                NULL AS processed_with_models
+                NULL AS processed_with_models,
+                title_entity_snapshot, summary_entity_snapshot,
+                CASE WHEN instr(title, '[') > 0 OR instr(COALESCE(summary, ''), '[') > 0
+                     THEN entity_map END AS entity_map_for_plain
          FROM sessions ORDER BY created_at DESC`
       )
       .all() as SessionRow[]
@@ -244,6 +290,15 @@ export class SessionRepository {
       values.push(
         input.processedWithModels === null ? null : JSON.stringify(input.processedWithModels)
       )
+    }
+
+    if (input.titleEntitySnapshot !== undefined) {
+      sets.push('title_entity_snapshot = ?')
+      values.push(input.titleEntitySnapshot ? JSON.stringify(input.titleEntitySnapshot) : null)
+    }
+    if (input.summaryEntitySnapshot !== undefined) {
+      sets.push('summary_entity_snapshot = ?')
+      values.push(input.summaryEntitySnapshot ? JSON.stringify(input.summaryEntitySnapshot) : null)
     }
 
     if (sets.length === 0) return this.findById(id)
