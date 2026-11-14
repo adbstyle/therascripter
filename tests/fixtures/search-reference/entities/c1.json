@@ -1,0 +1,55 @@
+{
+  "doc": "c1",
+  "entities": [
+    {
+      "text": "Kunz",
+      "type": "PERSON",
+      "canonical": "Leonie Kunz"
+    },
+    {
+      "text": "Basel",
+      "type": "ORT",
+      "canonical": "Basel"
+    },
+    {
+      "text": "Jana",
+      "type": "PERSON",
+      "canonical": "Jana"
+    },
+    {
+      "text": "Mira",
+      "type": "PERSON",
+      "canonical": "Mira"
+    },
+    {
+      "text": "Rhein",
+      "type": "ORT",
+      "canonical": "Rhein"
+    },
+    {
+      "text": "12. Januar",
+      "type": "DATUM",
+      "canonical": "12. Januar"
+    },
+    {
+      "text": "Leonie",
+      "type": "PERSON",
+      "canonical": "Leonie Kunz"
+    },
+    {
+      "text": "Instagram",
+      "type": "ORGANISATION",
+      "canonical": "Instagram"
+    },
+    {
+      "text": "Lissabon",
+      "type": "ORT",
+      "canonical": "Lissabon"
+    },
+    {
+      "text": "Huber",
+      "type": "PERSON",
+      "canonical": "Huber"
+    }
+  ]
+}

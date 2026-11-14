@@ -1,0 +1,45 @@
+{
+  "doc": "d2",
+  "entities": [
+    {
+      "text": "Yilmaz",
+      "type": "PERSON",
+      "canonical": "Fatma Yilmaz"
+    },
+    {
+      "text": "Elif",
+      "type": "PERSON",
+      "canonical": "Elif"
+    },
+    {
+      "text": "Deniz'",
+      "type": "PERSON",
+      "canonical": "Deniz"
+    },
+    {
+      "text": "Deniz",
+      "type": "PERSON",
+      "canonical": "Deniz"
+    },
+    {
+      "text": "Winterthur",
+      "type": "ORT",
+      "canonical": "Winterthur"
+    },
+    {
+      "text": "Seen",
+      "type": "ORT",
+      "canonical": "Seen"
+    },
+    {
+      "text": "Fatma",
+      "type": "PERSON",
+      "canonical": "Fatma Yilmaz"
+    },
+    {
+      "text": "Brunner",
+      "type": "PERSON",
+      "canonical": "Brunner"
+    }
+  ]
+}

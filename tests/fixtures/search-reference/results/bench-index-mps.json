@@ -1,0 +1,12 @@
+{
+ "device": "mps",
+ "threads": null,
+ "words": 7599,
+ "chunks": 37,
+ "baseline_gib": 0.021835796535015106,
+ "load_s": 5.971259166952223,
+ "load_peak_gib": 1.7620255574584007,
+ "index_s": 2.9343389169080183,
+ "index_peak_gib": 1.87065289914608,
+ "process_peak_gib": 1.87065289914608
+}

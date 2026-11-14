@@ -1,0 +1,90 @@
+{
+  "doc": "a3",
+  "entities": [
+    {
+      "text": "Meier",
+      "type": "PERSON",
+      "canonical": "Sandra Meier"
+    },
+    {
+      "text": "Tessin",
+      "type": "ORT",
+      "canonical": "Tessin"
+    },
+    {
+      "text": "Bern",
+      "type": "ORT",
+      "canonical": "Bern"
+    },
+    {
+      "text": "Mount Everest",
+      "type": "ORT",
+      "canonical": "Mount Everest"
+    },
+    {
+      "text": "Inselspital",
+      "type": "ORGANISATION",
+      "canonical": "Inselspital"
+    },
+    {
+      "text": "Altstetten",
+      "type": "ORT",
+      "canonical": "Altstetten"
+    },
+    {
+      "text": "Heitersberg",
+      "type": "ORT",
+      "canonical": "Heitersberg"
+    },
+    {
+      "text": "Reto",
+      "type": "PERSON",
+      "canonical": "Reto"
+    },
+    {
+      "text": "Demenz",
+      "type": "MEDIZINISCH",
+      "canonical": "Demenz"
+    },
+    {
+      "text": "Winterthur",
+      "type": "ORT",
+      "canonical": "Winterthur"
+    },
+    {
+      "text": "Pflegeheim Sonnenberg",
+      "type": "ORGANISATION",
+      "canonical": "Pflegeheim Sonnenberg"
+    },
+    {
+      "text": "ersten Mai",
+      "type": "DATUM",
+      "canonical": "ersten Mai"
+    },
+    {
+      "text": "Thomas",
+      "type": "PERSON",
+      "canonical": "Thomas"
+    },
+    {
+      "text": "Lausanne",
+      "type": "ORT",
+      "canonical": "Lausanne"
+    },
+    {
+      "text": "Sandra",
+      "type": "PERSON",
+      "canonical": "Sandra Meier"
+    },
+    {
+      "text": "Australien",
+      "type": "ORT",
+      "canonical": "Australien"
+    },
+    {
+      "text": "sechste Mai",
+      "type": "DATUM",
+      "canonical": "sechste Mai"
+    }
+  ]
+}

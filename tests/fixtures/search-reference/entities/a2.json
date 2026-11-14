@@ -1,0 +1,65 @@
+{
+  "doc": "a2",
+  "entities": [
+    {
+      "text": "Meier",
+      "type": "PERSON",
+      "canonical": "Sandra Meier"
+    },
+    {
+      "text": "Reto",
+      "type": "PERSON",
+      "canonical": "Reto"
+    },
+    {
+      "text": "Oerlikon",
+      "type": "ORT",
+      "canonical": "Oerlikon"
+    },
+    {
+      "text": "Retos",
+      "type": "PERSON",
+      "canonical": "Reto"
+    },
+    {
+      "text": "Coop",
+      "type": "ORGANISATION",
+      "canonical": "Coop"
+    },
+    {
+      "text": "Burnout",
+      "type": "MEDIZINISCH",
+      "canonical": "Burnout"
+    },
+    {
+      "text": "Sertralin",
+      "type": "MEDIZINISCH",
+      "canonical": "Sertralin"
+    },
+    {
+      "text": "Bern",
+      "type": "ORT",
+      "canonical": "Bern"
+    },
+    {
+      "text": "Mount Everest",
+      "type": "ORT",
+      "canonical": "Mount Everest"
+    },
+    {
+      "text": "Aareufer",
+      "type": "ORT",
+      "canonical": "Aareufer"
+    },
+    {
+      "text": "Tessin",
+      "type": "ORT",
+      "canonical": "Tessin"
+    },
+    {
+      "text": "fünfzehnten April",
+      "type": "DATUM",
+      "canonical": "fünfzehnten April"
+    }
+  ]
+}

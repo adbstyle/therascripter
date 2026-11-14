@@ -1,0 +1,23 @@
+{
+ "device": "cpu",
+ "threads": 4,
+ "chunks": 66110,
+ "index_mib": 193.681640625,
+ "first_search": {
+  "from_spawn_s": 4.810346675454639,
+  "from_process_start_s": 4.7469564999919385,
+  "python_imports_s": 0.04366029205266386,
+  "model_load_s": 4.408927874988876,
+  "index_load_s": 0.19098054093774408,
+  "search_s": 0.10338779201265424,
+  "groups": 871
+ },
+ "warm_search": {
+  "n": 30,
+  "median_s": 0.08600164548261091,
+  "p95_s": 0.10191041696816683,
+  "max_s": 0.11149816703982651
+ },
+ "process_peak_gib": 1.1187000200152397,
+ "after_search_gib": 0.8086721450090408
+}
