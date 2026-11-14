@@ -217,3 +217,39 @@ describe('useRememberOpenedRoute (#213)', () => {
     expect(window.api.recent.touch).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('RecentList — gleichnamige Dossiers (Sichtprüfung)', () => {
+  it('zeigt bei gleichem Namen ID bzw. Geburtsdatum, sonst nur den Namen', async () => {
+    const a = makeDossierRef({ id: 'd1', externalId: 'P-1001', birthDate: '1985-02-14' })
+    const b = makeDossierRef({ id: 'd2', externalId: null, birthDate: null })
+    const keller = makeDossierRef({ id: 'd3', firstName: 'Anna', lastName: 'Keller' })
+    window.api = createMockApi({
+      recent: {
+        list: vi.fn().mockResolvedValue([
+          { kind: 'dossier', dossier: a },
+          { kind: 'dossier', dossier: b },
+          { kind: 'dossier', dossier: keller }
+        ])
+      },
+      dossiers: {
+        list: vi.fn().mockResolvedValue([
+          { ...a, entryCount: 0, lastEntryDay: null },
+          { ...b, entryCount: 0, lastEntryDay: null },
+          { ...keller, entryCount: 0, lastEntryDay: null }
+        ])
+      }
+    })
+    render(
+      <NavigationProvider>
+        <RecentList />
+      </NavigationProvider>
+    )
+    expect(await screen.findByRole('button', { name: /Hofer, Lukas \(P-1001\)/ })).toHaveAttribute(
+      'title',
+      'Patientendossier: Hofer, Lukas (P-1001)'
+    )
+    expect(screen.getByText('Keller, Anna')).toBeInTheDocument()
+    // ohne ID und Geburtsdatum kein Zusatz
+    expect(screen.getByText('Hofer, Lukas')).toBeInTheDocument()
+  })
+})

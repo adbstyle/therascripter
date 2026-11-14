@@ -8,7 +8,8 @@ import { DossierMasterDataForm } from '../components/dossier/DossierMasterDataFo
 import { ConsentBanner } from '../components/ConsentBanner'
 import { useRecordingState } from '../contexts/recording'
 import { useRecordingDossierIds } from '../hooks/useRecordingDossierIds'
-import { dossierListName } from '../utils/dossierFormat'
+import { dossierLabel } from '../utils/dossierFormat'
+import { useAmbiguousDossierNames } from '../stores/dossierNames'
 import type { Dossier, DossierListItem } from '../../../shared/types/Dossier'
 
 interface DossierPageProps {
@@ -46,6 +47,7 @@ export default function DossierPage({ dossierId }: DossierPageProps): React.JSX.
   // wie auf die Sitzungsliste (#206)
   const recordingDossierIds = useRecordingDossierIds()
   const showsLiveCard = isRecording && recordingDossierIds.includes(dossierId)
+  const ambiguous = useAmbiguousDossierNames()
 
   if (dossier.loading && !dossier.data) {
     return (
@@ -74,7 +76,8 @@ export default function DossierPage({ dossierId }: DossierPageProps): React.JSX.
     )
   }
 
-  const dossierName = dossierListName(dossier.data)
+  // Name für Toasts und Hinweise — bei gleichnamigen Dossiers mit Zusatz
+  const dossierName = dossierLabel(dossier.data, ambiguous)
   return (
     <div className="mx-auto flex w-full max-w-[1240px] flex-col gap-5 px-6 pb-6 pt-5">
       <DossierHeader
@@ -83,9 +86,14 @@ export default function DossierPage({ dossierId }: DossierPageProps): React.JSX.
         actions={<DossierHeaderActions dossierId={dossierId} dossierName={dossierName} />}
       />
       {showsLiveCard && !consentDismissed && <ConsentBanner onDismiss={dismissConsent} />}
-      <div className="flex flex-wrap items-start gap-8">
-        <DossierTimeline dossierId={dossierId} dossierName={dossierName} />
-        {autosave && <DossierMasterDataForm autosave={autosave} />}
+      {/* Zweispaltig (Stammdaten max. 380 px neben dem Verlauf, Prototyp),
+          sobald der Inhaltsbereich es zulässt: Verlauf mind. 480 px + Stammdaten
+          mind. 300 px + Abstand = 51rem; darunter einspaltig, Stammdaten unten */}
+      <div className="@container">
+        <div className="grid grid-cols-1 items-start gap-8 @min-[51rem]:grid-cols-[minmax(480px,1fr)_minmax(300px,380px)]">
+          <DossierTimeline dossierId={dossierId} dossierName={dossierName} />
+          {autosave && <DossierMasterDataForm autosave={autosave} />}
+        </div>
       </div>
     </div>
   )

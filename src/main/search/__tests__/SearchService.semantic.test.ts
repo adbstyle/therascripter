@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import type Database from 'better-sqlite3'
 import { SearchService, type SemanticSearchDeps } from '../SearchService'
 import { SearchIndexService } from '../SearchIndexService'
-import { VectorStore } from '../VectorStore'
+import { VectorStore, quantizeVector, vectorToBlob } from '../VectorStore'
 import { SearchWorkerUnavailableError } from '../SearchWorker'
 import { addIndexedSession, createSearchTestDb, indexAll } from './helpers'
 import { TEST_MODEL, fakeEmbed } from './semanticHelpers'
@@ -172,9 +172,35 @@ describe('SearchService — Suche nach Bedeutung', () => {
     expect(ids(result)).not.toContain('arbeit')
   })
 
+  it('Titel nur exakt: ein Titelwort ergibt keinen Treffer nach Bedeutung im Titel', async () => {
+    // «Sitzung wort» steht nur im Titel der Sitzung «wort»
+    const result = await service.semantic(input('Sitzung wort'))
+    const titleHits = result.results.flatMap((d) => d.hits).filter((h) => h.field === 'title')
+    expect(titleHits.length).toBeGreaterThan(0)
+    expect(titleHits.every((h) => h.kind === 'exact')).toBe(true)
+  })
+
+  it('ein bestehender Index mit Titel-Vektoren bleibt ohne Neuaufbau korrekt', async () => {
+    // Vor der Änderung bekamen Titel einen Vektor: einen nachträglich setzen
+    const title = db
+      .prepare(`SELECT id, text FROM search_chunks WHERE session_id = 'ferien' AND field = 'title'`)
+      .get() as { id: number; text: string }
+    const { q, scale } = quantizeVector(fakeEmbed(title.text))
+    db.prepare('UPDATE search_chunks SET vec = ?, vec_scale = ? WHERE id = ?').run(
+      vectorToBlob(q),
+      scale,
+      title.id
+    )
+    await store.load('test-model')
+    const chunks = await service.rankChunks(title.text, { threshold: null })
+    expect(chunks.some((c) => c.chunkId === title.id)).toBe(false)
+  })
+
   it('exposes the internal chunk ranking before the threshold (for PR S6)', async () => {
     const chunks = await service.rankChunks('Nacht Schlaf', { threshold: null })
-    expect(chunks.length).toBeGreaterThanOrEqual(10)
+    expect(chunks.length).toBeGreaterThanOrEqual(5)
+    // Titel nehmen nicht an der Suche nach Bedeutung teil (nur exakt)
+    expect(chunks.some((c) => c.field === 'title')).toBe(false)
     for (let i = 1; i < chunks.length; i++) {
       expect(chunks[i - 1].cosine).toBeGreaterThanOrEqual(chunks[i].cosine)
     }

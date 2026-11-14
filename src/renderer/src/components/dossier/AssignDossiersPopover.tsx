@@ -2,9 +2,15 @@ import { useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'r
 import type { KeyboardEvent } from 'react'
 import { Search } from 'lucide-react'
 import { useLiveQuery } from '../../hooks/useLiveQuery'
+import { usePopoverPlacement } from '../../hooks/usePopoverPlacement'
 import { useToast } from '../../hooks/useToast'
 import { filterDossiers, prepareDossierFilter } from '../../utils/dossierFilter'
-import { dossierIdentification, dossierListName } from '../../utils/dossierFormat'
+import {
+  ambiguousDossierNames,
+  dossierIdentification,
+  dossierLabel,
+  dossierListName
+} from '../../utils/dossierFormat'
 import type { DossierListItem, DossierRef } from '../../../../shared/types/Dossier'
 
 /** Mehr Zeilen rendert die Auswahl nicht — die Suche grenzt ein (#205). */
@@ -48,6 +54,8 @@ export function AssignDossiersPopover({
   const [query, setQuery] = useState('')
   const deferredQuery = useDeferredValue(query)
   const [overrides, setOverrides] = useState<Map<string, Override>>(() => new Map())
+  // Ansage für Screenreader: was ein Häkchen bewirkt hat (Sichtprüfung)
+  const [announcement, setAnnouncement] = useState('')
   const pinnedRef = useRef<Set<string>>(new Set(assigned.map((d) => d.id)))
 
   const dossiers = useLiveQuery<DossierListItem[]>(
@@ -56,9 +64,16 @@ export function AssignDossiersPopover({
     []
   )
 
+  // Erst nach dem ersten Laden der Liste sichtbar: vorher wäre das Popover
+  // niedrig, öffnete unten und spränge nach dem Laden nach oben (Review #231).
+  // Die Seite wird im selben Layout-Durchgang gemessen, in dem es erscheint.
+  const ready = !(dossiers.loading && dossiers.data.length === 0)
+
+  // Fokus in die Suche, sobald das Popover sichtbar ist (verborgene Elemente
+  // nehmen keinen Fokus)
   useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
+    if (ready) inputRef.current?.focus()
+  }, [ready])
 
   const assignedIds = useMemo(() => new Set(assigned.map((d) => d.id)), [assigned])
 
@@ -88,6 +103,15 @@ export function AssignDossiersPopover({
   }, [prepared, deferredQuery])
   const rendered = visible.slice(0, MAX_RENDERED_DOSSIERS)
 
+  // Am unteren Fensterrand nach oben klappen, horizontal im Fenster bleiben (Sichtprüfung)
+  const popoverRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const placement = usePopoverPlacement(
+    popoverRef,
+    listRef,
+    `${dossiers.loading}:${dossiers.data.length}:${rendered.length}`
+  )
+
   function isChecked(id: string): boolean {
     return overrides.get(id)?.checked ?? assignedIds.has(id)
   }
@@ -106,8 +130,11 @@ export function AssignDossiersPopover({
     } catch {
       ok = false
     }
+    // Die Liste kennt alle Dossiers: gleichnamige mit Zusatz nennen
+    const name = dossierLabel(dossier, ambiguousDossierNames(dossiers.data))
     if (ok) {
       setOverrides((prev) => new Map(prev).set(id, { checked: next, pending: false }))
+      setAnnouncement(next ? `«${name}» zugeordnet.` : `Zuordnung zu «${name}» gelöst.`)
       return
     }
     setOverrides((prev) => {
@@ -115,7 +142,11 @@ export function AssignDossiersPopover({
       map.delete(id)
       return map
     })
-    const name = dossierListName(dossier)
+    setAnnouncement(
+      next
+        ? `«${name}» konnte nicht zugeordnet werden.`
+        : `Zuordnung zu «${name}» konnte nicht gelöst werden.`
+    )
     toast.error(
       next
         ? `«${sessionLabel}» konnte dem Patientendossier «${name}» nicht zugeordnet werden.`
@@ -135,15 +166,27 @@ export function AssignDossiersPopover({
 
   return (
     <div
+      ref={popoverRef}
       role="dialog"
       aria-labelledby={headingId}
       onKeyDown={onKeyDown}
-      className="pointer-events-auto absolute left-0 top-full z-30 mt-1 flex w-[min(380px,calc(100vw-2rem))] flex-col gap-1 rounded-lg border border-border bg-surface-0 p-2 text-left shadow-lg"
+      data-placement={placement.side}
+      style={{
+        left: placement.offsetX,
+        maxHeight: placement.maxHeight,
+        visibility: ready ? undefined : 'hidden'
+      }}
+      className={`pointer-events-auto absolute z-30 flex w-[min(380px,calc(100vw-2rem))] flex-col gap-1 rounded-lg border border-border bg-surface-0 p-2 text-left shadow-lg ${
+        placement.side === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
+      }`}
     >
       <p id={headingId} className="sr-only">
         Patientendossiers für «{sessionLabel}» zuordnen
       </p>
-      <label className="flex items-center gap-2 rounded-md border border-border-strong px-2 py-1 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30">
+      <p role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
+      <label className="flex shrink-0 items-center gap-2 rounded-md border border-border-strong px-2 py-1 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30">
         <Search className="h-3.5 w-3.5 shrink-0 text-text-tertiary" strokeWidth={2} aria-hidden />
         <span className="sr-only">Patientendossier suchen</span>
         <input
@@ -156,7 +199,7 @@ export function AssignDossiersPopover({
         />
       </label>
 
-      <div className="max-h-64 overflow-y-auto">
+      <div ref={listRef} className="max-h-64 min-h-0 overflow-y-auto">
         {dossiers.loading && dossiers.data.length === 0 ? (
           <p className="px-2 py-2 text-xs text-text-tertiary">Wird geladen …</p>
         ) : dossiers.data.length === 0 ? (
@@ -180,6 +223,12 @@ export function AssignDossiersPopover({
                   >
                     <input
                       type="checkbox"
+                      // Eindeutiger Name: «Meier, Anna (PD-0412 · 11.06.1969)»
+                      aria-label={
+                        identification
+                          ? `${dossierListName(dossier)} (${identification})`
+                          : dossierListName(dossier)
+                      }
                       checked={isChecked(dossier.id)}
                       // aria-disabled statt disabled: ein deaktiviertes Element
                       // verlöre den Tastaturfokus; toggle() ignoriert Klicks solange
@@ -213,7 +262,7 @@ export function AssignDossiersPopover({
         )}
       </div>
 
-      <div className="flex justify-end border-t border-border pt-1.5">
+      <div className="flex shrink-0 justify-end border-t border-border pt-1.5">
         <button
           type="button"
           onClick={onClose}

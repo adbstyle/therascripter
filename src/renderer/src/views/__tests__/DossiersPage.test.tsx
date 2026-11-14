@@ -71,6 +71,20 @@ describe('DossiersPage (#204 AK 12–15)', () => {
     expect(screen.queryByText(/Diagnose/)).not.toBeInTheDocument()
   })
 
+  it('alle Zeilen teilen ein festes Spaltenraster ohne auto-Spalte (Sichtprüfung)', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Patientendossiers' })
+    const rows = within(screen.getByRole('list', { name: 'Patientendossiers' })).getAllByRole(
+      'button'
+    )
+    const templates = rows.map(
+      (r) => r.className.split(' ').find((c) => c.startsWith('grid-cols-')) ?? ''
+    )
+    expect(new Set(templates).size).toBe(1)
+    expect(templates[0]).not.toMatch(/auto/)
+    expect(templates[0]).toMatch(/_\d+(\.\d+)?rem_\d+(\.\d+)?rem\]$/)
+  })
+
   it('erklärt in der leeren Übersicht, wie man ein Dossier anlegt (AK 13)', async () => {
     const user = userEvent.setup()
     renderPage([])

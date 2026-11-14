@@ -5,7 +5,8 @@ import { useRecordingState } from './recording'
 import { useToast } from '../hooks/useToast'
 import { NewDossierDialog } from '../components/dossier/NewDossierDialog'
 import type { Dossier } from '../../../shared/types/Dossier'
-import { dossierListName } from '../utils/dossierFormat'
+import { dossierLabel } from '../utils/dossierFormat'
+import { getAmbiguousDossierNames } from '../stores/dossierNames'
 import { cancelLiveCardFocus, requestLiveCardFocus } from '../stores/liveCardFocus'
 import {
   PDF_IMPORT_FAILED,
@@ -42,7 +43,7 @@ export function WorkspaceActionsProvider({ children }: { children: ReactNode }):
       if (known) return known
       try {
         const dossier = await window.api.dossiers.get(dossierId)
-        return dossier ? dossierListName(dossier) : null
+        return dossier ? dossierLabel(dossier, getAmbiguousDossierNames()) : null
       } catch {
         return null
       }

@@ -53,7 +53,22 @@ describe('DossierPage (#204 AK 3/4/9–11)', () => {
     expect(screen.getByLabelText('Diagnosen').tagName).toBe('TEXTAREA')
     expect(screen.getByLabelText('Medikation').tagName).toBe('TEXTAREA')
     expect(screen.getByLabelText('Notiz').tagName).toBe('TEXTAREA')
-    expect(status()).toHaveTextContent('Gespeichert')
+    // Unverändert: noch kein «Gespeichert» (Sichtprüfung)
+    expect(status()).not.toBeVisible()
+  })
+
+  it('legt Verlauf und Stammdaten in ein Raster, das ab 51rem Inhaltsbreite zweispaltig ist', async () => {
+    renderPage()
+    const timeline = await screen.findByRole('region', { name: 'Verlauf' })
+    const masterData = await screen.findByRole('complementary', { name: 'Stammdaten' })
+    const grid = timeline.parentElement!
+    expect(masterData.parentElement).toBe(grid)
+    expect(grid.className).toContain(
+      '@min-[51rem]:grid-cols-[minmax(480px,1fr)_minmax(300px,380px)]'
+    )
+    expect(grid.parentElement!.className).toContain('@container')
+    // Kopf-Aktion behält ihren Namen, auch wenn schmal nur das Symbol steht
+    expect(screen.getByRole('button', { name: 'Im Dossier suchen' })).toBeInTheDocument()
   })
 
   it('speichert Änderungen laufend ohne Speichern-Knopf (AK 10)', async () => {
@@ -67,6 +82,7 @@ describe('DossierPage (#204 AK 3/4/9–11)', () => {
       })
     )
     await waitFor(() => expect(status()).toHaveTextContent('Gespeichert'))
+    expect(status()).toBeVisible()
     expect(screen.queryByRole('button', { name: /Speichern/ })).not.toBeInTheDocument()
   })
 

@@ -3,6 +3,7 @@ import { DialogShell } from '../DialogShell'
 import { useLiveQuery } from '../../hooks/useLiveQuery'
 import { useRecordingState } from '../../contexts/recording'
 import { summarizeDeletion } from '../../utils/dossierDeletion'
+import { useAmbiguousDossierNames } from '../../stores/dossierNames'
 import type { DossierDeletePreview } from '../../../../shared/types/Dossier'
 
 interface DeleteDossierDialogProps {
@@ -40,6 +41,7 @@ export function DeleteDossierDialog({
   onDeleted
 }: DeleteDossierDialogProps): React.JSX.Element {
   const { isRecording, stopRecording } = useRecordingState()
+  const ambiguous = useAmbiguousDossierNames()
   const preview = useLiveQuery<DossierDeletePreview | null>(
     () => window.api.dossiers.deletePreview(dossierId),
     [
@@ -110,7 +112,7 @@ export function DeleteDossierDialog({
     }
   }
 
-  const summary = data ? summarizeDeletion(data) : null
+  const summary = data ? summarizeDeletion(data, ambiguous) : null
   const ariaLabel =
     view === 'blocked'
       ? 'Patientendossier kann gerade nicht gelöscht werden'

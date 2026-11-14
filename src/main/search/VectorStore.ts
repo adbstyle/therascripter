@@ -1,5 +1,8 @@
 import type Database from 'better-sqlite3'
-import { SEARCH_VISIBLE_SESSION } from '../db/repositories/SearchIndexRepository'
+import {
+  SEARCH_VISIBLE_SESSION,
+  SEMANTIC_FIELD_FILTER
+} from '../db/repositories/SearchIndexRepository'
 import { SEARCH_COSINE_SLICE_MS } from '../../shared/search-config'
 import type { SearchField } from '../../shared/types/Search'
 
@@ -238,6 +241,7 @@ export class VectorStore {
          JOIN search_index_state st ON st.session_id = c.session_id AND st.vec_gen = c.gen
          JOIN sessions s ON s.id = c.session_id
          WHERE c.session_id = ? AND st.model_id = ? AND c.vec IS NOT NULL
+           AND c.${SEMANTIC_FIELD_FILTER}
            AND ${SEARCH_VISIBLE_SESSION}
          ORDER BY c.id`
       )

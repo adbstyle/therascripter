@@ -1,8 +1,17 @@
-import { dossierListName, pluralize } from './dossierFormat'
+import { dossierIdentification, dossierListName, dossierNameKey, pluralize } from './dossierFormat'
 import type { DossierDeletePreview, DossierRef } from '../../../shared/types/Dossier'
 
 /** Höchstens so viele andere Dossiers werden mit Namen genannt. */
 const MAX_NAMED_DOSSIERS = 3
+
+/**
+ * Name eines anderen Dossiers; gleichnamige mit «ID · Geburtsdatum» in
+ * Klammern (wie im Löschdialog einer Sitzung).
+ */
+function otherName(ref: DossierRef, ambiguous: ReadonlySet<string>): string {
+  const identification = ambiguous.has(dossierNameKey(ref)) ? dossierIdentification(ref) : ''
+  return identification ? `${dossierListName(ref)} (${identification})` : dossierListName(ref)
+}
 
 /** «6 Sitzungen und 2 PDF-Dokumente», «1 PDF-Dokument». */
 function describeContents({ sessions, pdfs }: { sessions: number; pdfs: number }): string {
@@ -16,10 +25,10 @@ function describeContents({ sessions, pdfs }: { sessions: number; pdfs: number }
  * «im Dossier Hofer, Maria», «in den Dossiers Hofer, Maria; Keller, Nina und
  * 2 weiteren» — Semikolon, weil die Namen selbst ein Komma tragen.
  */
-function describeOtherDossiers(others: DossierRef[]): string {
+function describeOtherDossiers(others: DossierRef[], ambiguous: ReadonlySet<string>): string {
   if (others.length === 0) return 'in anderen Dossiers'
-  if (others.length === 1) return `im Dossier ${dossierListName(others[0])}`
-  const named = others.slice(0, MAX_NAMED_DOSSIERS).map(dossierListName)
+  if (others.length === 1) return `im Dossier ${otherName(others[0], ambiguous)}`
+  const named = others.slice(0, MAX_NAMED_DOSSIERS).map((ref) => otherName(ref, ambiguous))
   const rest = others.length - named.length
   if (rest > 0) return `in den Dossiers ${named.join('; ')} und ${rest} weiteren`
   return `in den Dossiers ${named.slice(0, -1).join('; ')} und ${named[named.length - 1]}`
@@ -33,10 +42,33 @@ export interface DeleteDossierSummary {
 }
 
 /**
+ * Relativsatz zu den geteilten Inhalten mit passendem Genus und Numerus:
+ * «1 Sitzung, die … liegt», «1 PDF-Dokument, das … liegt», sonst (mehrere
+ * oder gemischt) «…, die … liegen».
+ */
+function sharedClause(
+  shared: DossierDeletePreview['shared'],
+  ambiguous: ReadonlySet<string>
+): string {
+  const count = shared.sessions + shared.pdfs
+  const pronoun = count === 1 && shared.pdfs === 1 ? 'das' : 'die'
+  const verb = count === 1 ? 'liegt' : 'liegen'
+  return `${describeContents(shared)}, ${pronoun} auch ${describeOtherDossiers(
+    shared.otherDossiers,
+    ambiguous
+  )} ${verb}`
+}
+
+/**
  * Was der Dialog nach aktuellem Stand nennt (#204 AK 17, #207 AK 1): was
  * gelöscht wird und was in anderen Dossiers erhalten bleibt — mit Zahlen.
+ * `ambiguous`: mehrfach vergebene Namen (`stores/dossierNames`) — solche
+ * Dossiers nennt der Dialog mit «ID · Geburtsdatum».
  */
-export function summarizeDeletion(preview: DossierDeletePreview): DeleteDossierSummary {
+export function summarizeDeletion(
+  preview: DossierDeletePreview,
+  ambiguous: ReadonlySet<string> = new Set()
+): DeleteDossierSummary {
   const exclusiveCount = preview.exclusive.sessions + preview.exclusive.pdfs
   const sharedCount = preview.shared.sessions + preview.shared.pdfs
   const deleted: string[] = []
@@ -59,11 +91,7 @@ export function summarizeDeletion(preview: DossierDeletePreview): DeleteDossierS
 
   const kept: string[] = []
   if (sharedCount > 0) {
-    kept.push(
-      `${describeContents(preview.shared)}, die auch ${describeOtherDossiers(
-        preview.shared.otherDossiers
-      )} ${sharedCount === 1 ? 'liegt' : 'liegen'}`
-    )
+    kept.push(sharedClause(preview.shared, ambiguous))
   }
   if (exclusiveCount > 0 || sharedCount > 0) kept.push('Einträge in der Sperrliste')
 

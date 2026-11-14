@@ -29,15 +29,20 @@ export function DossierHeader({
     .filter(Boolean)
     .join(' · ')
 
+  // Container-Query: breit Name links, Aktionen rechts; schmal (z. B.
+  // 800-px-Fenster) die Aktionen in EINER Zeile unter dem Namen statt eines
+  // zweizeiligen Blocks rechts (Sichtprüfung)
   return (
-    <header className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <h1 className="break-words text-[22px] font-semibold leading-7 text-text-primary">
-          {dossierDisplayName(dossier)}
-        </h1>
-        {subline && <span className="text-xs text-text-secondary">{subline}</span>}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">{actions}</div>
-    </header>
+    <div className="@container">
+      <header className="flex flex-col gap-3 @min-[56rem]:flex-row @min-[56rem]:items-center @min-[56rem]:justify-between">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <h1 className="break-words text-[22px] font-semibold leading-7 text-text-primary">
+            {dossierDisplayName(dossier)}
+          </h1>
+          {subline && <span className="text-xs text-text-secondary">{subline}</span>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 @min-[35rem]:flex-nowrap">{actions}</div>
+      </header>
+    </div>
   )
 }

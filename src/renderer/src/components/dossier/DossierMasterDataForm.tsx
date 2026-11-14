@@ -28,6 +28,13 @@ interface DossierMasterDataFormProps {
 export function DossierMasterDataForm({ autosave }: DossierMasterDataFormProps): React.JSX.Element {
   const { state, change, commit, retry } = autosave
   const announcement = useSaveAnnouncement(state.status)
+  // Ein neues bzw. unverändertes Dossier zeigt keinen Status — «Gespeichert»
+  // erst nach der ersten Änderung (Sichtprüfung); Fehler immer
+  const [edited, setEdited] = useState(false)
+  useEffect(() => {
+    if (state.status !== 'saved') setEdited(true)
+  }, [state.status])
+  const showStatus = edited || state.status !== 'saved'
   const field = (
     key: DossierField
   ): {
@@ -40,7 +47,10 @@ export function DossierMasterDataForm({ autosave }: DossierMasterDataFormProps):
     value: state.values[key],
     error: state.errors[key],
     maxLength: dossierMaxLength(key),
-    onChange: (value) => change(key, value),
+    onChange: (value) => {
+      setEdited(true)
+      change(key, value)
+    },
     onBlur: () => commit(key)
   })
 
@@ -55,6 +65,7 @@ export function DossierMasterDataForm({ autosave }: DossierMasterDataFormProps):
             gespeichert …» bei jedem Tastendruck anzusagen, störte beim Tippen */}
         <span
           data-save-status={state.status}
+          hidden={!showStatus}
           className={`inline-flex items-center gap-1 text-xs ${
             state.status === 'error' ? 'text-error-text' : 'text-text-secondary'
           }`}

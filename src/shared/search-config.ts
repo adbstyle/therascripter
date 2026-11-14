@@ -60,6 +60,27 @@ export const SEARCH_ANCHOR_CHARS = 60
  */
 export const SEARCH_SEMANTIC_THRESHOLD = 0.71
 
+/**
+ * Felder, die an der Suche nach Bedeutung teilnehmen (bekommen Vektoren und
+ * sind semantische Kandidaten). Titel nicht: kurze Titel («Sitzung 1»,
+ * «Aufnahme 12.11.2026 16:30») erreichen hohe Kosinuswerte und verdrängten im
+ * Abnahmetest Text-Treffer (nDCG@10 0.461 statt 0.568); erfundene Begriffe
+ * lieferten in der Sichtprüfung nur Titel fremder Sitzungen. Titel werden
+ * weiterhin EXAKT gefunden (#209 AK 5). Zusammenfassungen bleiben drin.
+ */
+export const SEARCH_SEMANTIC_FIELDS = ['summary', 'body'] as const
+
+/**
+ * Vektorphase nach einer Bearbeitung (#212 AK 2): Eine neue Textgeneration
+ * hebt die Wartezeit eines früheren Fehlers auf (sofortiger Neuversuch), die
+ * Zahl der Fehler bleibt aber stehen — der nächste Fehler wartet länger;
+ * zurück auf 0 erst nach einer ERFOLGREICHEN Vektorgeneration. Ab so vielen
+ * Fehlern in Folge löst eine Bearbeitung keinen sofortigen Neuversuch mehr
+ * aus (eine Sitzung, die den Suchprozess immer abstürzen lässt, startet ihn
+ * sonst bei jeder Bearbeitungspause neu).
+ */
+export const SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES = 3
+
 /** Textphase der Aufbereitung (#212): ruhiges Fenster und Takt. */
 export const SEARCH_QUIET_WINDOW_MS = 10_000
 export const SEARCH_TICK_MS = 5_000

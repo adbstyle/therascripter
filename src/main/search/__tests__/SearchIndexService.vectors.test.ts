@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import { SearchIndexService, type VectorPhaseDeps } from '../SearchIndexService'
 import { SearchWorkerUnavailableError } from '../SearchWorker'
-import { addIndexedSession, createSearchTestDb, indexAll } from './helpers'
+import { addIndexedSession, createSearchTestDb, indexAll, makeDoc } from './helpers'
 import { TEST_MODEL, fakeEmbed } from './semanticHelpers'
+import { SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES } from '../../../shared/search-config'
 import type { SearchModelInfo } from '../searchModel'
 
 // Vektorphase der Aufbereitung (PR S4): Batches zu 2, Commit pro Batch,
@@ -81,7 +82,8 @@ function pendingVectors(db: Database.Database, id: string, gen: number): number 
   return (
     db
       .prepare(
-        'SELECT COUNT(*) AS n FROM search_chunks WHERE session_id = ? AND gen = ? AND vec IS NULL'
+        `SELECT COUNT(*) AS n FROM search_chunks
+         WHERE session_id = ? AND gen = ? AND vec IS NULL AND field <> 'title'`
       )
       .get(id, gen) as { n: number }
   ).n
@@ -108,9 +110,12 @@ describe('SearchIndexService — Vektorphase', () => {
     )
     indexAll(h.service)
     const textGen = state(h.db, 's1').text_gen
+    // Titel-Abschnitte bekommen keinen Vektor (nur exakte Suche); Zusammenfassung schon
     const chunks = (
       h.db
-        .prepare('SELECT COUNT(*) AS n FROM search_chunks WHERE session_id = ? AND gen = ?')
+        .prepare(
+          `SELECT COUNT(*) AS n FROM search_chunks WHERE session_id = ? AND gen = ? AND field <> 'title'`
+        )
         .get('s1', textGen) as { n: number }
     ).n
     expect(chunks).toBeGreaterThan(3)
@@ -122,6 +127,12 @@ describe('SearchIndexService — Vektorphase', () => {
     expect(lengths).toEqual([...lengths].sort((a, b) => b - a))
     // Der Text für das Modell ist der Abschnittstext MIT Sprecher-Präfix (wie im Spike)
     expect(h.calls.flat().some((t) => t.startsWith('Sprecher 1: Schlaf'))).toBe(true)
+    expect(h.calls.flat()).toContain('Kurz.')
+    expect(h.calls.flat()).not.toContain('Erstgespräch')
+    const title = h.db
+      .prepare(`SELECT vec FROM search_chunks WHERE session_id = ? AND gen = ? AND field = 'title'`)
+      .get('s1', textGen) as { vec: Buffer | null }
+    expect(title.vec).toBeNull()
 
     expect(state(h.db, 's1')).toMatchObject({
       vec_gen: textGen,
@@ -130,7 +141,10 @@ describe('SearchIndexService — Vektorphase', () => {
     })
     expect(pendingVectors(h.db, 's1', textGen)).toBe(0)
     const row = h.db
-      .prepare('SELECT vec, vec_scale FROM search_chunks WHERE session_id = ? AND gen = ? LIMIT 1')
+      .prepare(
+        `SELECT vec, vec_scale FROM search_chunks
+         WHERE session_id = ? AND gen = ? AND field = 'body' LIMIT 1`
+      )
       .get('s1', textGen) as { vec: Buffer; vec_scale: number }
     expect(row.vec.length).toBe(768)
     expect(row.vec_scale).toBeGreaterThan(0)
@@ -436,5 +450,137 @@ describe('SearchIndexService — Vektorphase', () => {
     expect(state(h.db, 's1').vec_gen).toBe(third)
     expect(h.changed).toEqual(['s1'])
     expect(first).toBeLessThan(second)
+  })
+})
+
+// #212 AK 2 für die Vektoren: Nach einer Bearbeitung ausserhalb von Aufnahme
+// und Verarbeitung sind binnen einer Minute auch die Vektoren nachgezogen —
+// über den echten Takt (setInterval/setTimeout), nicht über runVectorPhaseToEnd.
+describe('SearchIndexService — Vektoren nach einer Bearbeitung binnen einer Minute (#212 AK 2)', () => {
+  let db: Database.Database
+  let service: SearchIndexService
+
+  afterEach(() => {
+    service?.stop()
+    db?.close()
+    vi.useRealTimers()
+  })
+
+  async function editedSessionAfterOneMinute(
+    prepare?: (db: Database.Database) => void
+  ): Promise<{ calls: string[][]; before: number }> {
+    db = createSearchTestDb()
+    const docs = new Map<string, unknown>()
+    const calls: string[][] = []
+    service = new SearchIndexService(db, {
+      now: () => Date.now(),
+      readDocument: (path) => docs.get(path),
+      vectors: {
+        resolveModel: () => TEST_MODEL,
+        isProcessingActive: () => false,
+        embedDocuments: async (texts) => {
+          calls.push(texts)
+          return texts.map((t) => fakeEmbed(t))
+        }
+      }
+    })
+    addIndexedSession(db, docs, { id: 's1' }, longParagraphs(6, 'Angst'))
+    addIndexedSession(db, docs, { id: 'stock' }, longParagraphs(6, 'Bestand'))
+    indexAll(service)
+    await service.runVectorPhaseToEnd()
+    const before = state(db, 's1').text_gen
+    // Erst jetzt Fake-Timer: die Vorbereitung oben treibt die Phase selbst
+    vi.useFakeTimers({ now: NOW })
+    prepare?.(db)
+    calls.length = 0
+
+    // Bearbeitung jetzt (review:save → search_rev + 1, updated_at = jetzt)
+    docs.set('/docs/s1.json', makeDoc(longParagraphs(6, 'Freude')))
+    db.prepare('UPDATE sessions SET search_rev = search_rev + 1, updated_at = ? WHERE id = ?').run(
+      new Date(Date.now()).toISOString(),
+      's1'
+    )
+    service.start()
+    await vi.advanceTimersByTimeAsync(60_000)
+    return { calls, before }
+  }
+
+  it('zieht Text UND Vektoren der bearbeiteten Sitzung binnen 60 s nach', async () => {
+    const { calls, before } = await editedSessionAfterOneMinute()
+    const after = state(db, 's1')
+    expect(after.text_gen).toBeGreaterThan(before)
+    expect(after.vec_gen).toBe(after.text_gen)
+    expect(pendingVectors(db, 's1', after.text_gen)).toBe(0)
+    expect(calls.flat().some((t) => t.includes('Freude'))).toBe(true)
+  })
+
+  it('ein früherer einmaliger Fehler hält die neue Fassung nicht auf', async () => {
+    const { calls } = await editedSessionAfterOneMinute((d) =>
+      d
+        .prepare(
+          `UPDATE search_index_state SET attempts = 1, last_error = 'kaputt',
+             next_attempt_at = ? WHERE session_id = 's1'`
+        )
+        .run(new Date(NOW + 6 * 3600_000).toISOString())
+    )
+    const after = state(db, 's1')
+    expect(after.vec_gen).toBe(after.text_gen)
+    // erst der Erfolg setzt die Fehlerzahl zurück
+    expect(after.attempts).toBe(0)
+    expect(after.next_attempt_at).toBeNull()
+    expect(calls.flat().some((t) => t.includes('Freude'))).toBe(true)
+  })
+
+  it(`ab ${SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES} Fehlern in Folge löst eine Bearbeitung keinen sofortigen Neuversuch aus`, async () => {
+    const backoff = new Date(NOW + 6 * 3600_000).toISOString()
+    const { calls } = await editedSessionAfterOneMinute((d) =>
+      d
+        .prepare(
+          `UPDATE search_index_state SET attempts = ?, last_error = 'kaputt',
+             next_attempt_at = ? WHERE session_id = 's1'`
+        )
+        .run(SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES, backoff)
+    )
+    const after = state(db, 's1')
+    expect(after.text_gen).toBeGreaterThan(after.vec_gen ?? 0)
+    expect(after.next_attempt_at).toBe(backoff)
+    expect(calls.flat().some((t) => t.includes('Freude'))).toBe(false)
+  })
+
+  it('ein Abschnitt, der den Suchprozess immer abstürzen lässt: wiederholte Bearbeitungen ergeben begrenzt viele Versuche', async () => {
+    db = createSearchTestDb()
+    const docs = new Map<string, unknown>()
+    let poisoned = 0
+    service = new SearchIndexService(db, {
+      now: () => Date.now(),
+      readDocument: (path) => docs.get(path),
+      vectors: {
+        resolveModel: () => TEST_MODEL,
+        isProcessingActive: () => false,
+        embedDocuments: async (texts) => {
+          if (texts.some((t) => t.includes('Gift'))) {
+            poisoned++
+            throw new Error('Suchdienst: Prozess abgestürzt')
+          }
+          return texts.map((t) => fakeEmbed(t))
+        }
+      }
+    })
+    addIndexedSession(db, docs, { id: 's1' }, longParagraphs(4, 'Gift'))
+    vi.useFakeTimers({ now: NOW })
+    service.start()
+    // Fünf Bearbeitungen in 100 s, jede mit dem giftigen Abschnitt
+    for (let i = 0; i < 5; i++) {
+      docs.set('/docs/s1.json', makeDoc(longParagraphs(4 + i, 'Gift')))
+      db.prepare(
+        'UPDATE sessions SET search_rev = search_rev + 1, updated_at = ? WHERE id = ?'
+      ).run(new Date(Date.now()).toISOString(), 's1')
+      await vi.advanceTimersByTimeAsync(20_000)
+    }
+    await vi.advanceTimersByTimeAsync(20_000)
+    // Erster Versuch plus höchstens bis zur Obergrenze sofortige Neuversuche
+    expect(poisoned).toBe(SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES)
+    expect(state(db, 's1').attempts).toBe(SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES)
+    expect(state(db, 's1').next_attempt_at).not.toBeNull()
   })
 })

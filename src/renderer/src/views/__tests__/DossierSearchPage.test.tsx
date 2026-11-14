@@ -225,5 +225,15 @@ describe('Suche im Patientendossier (#211)', () => {
     expect(
       await screen.findByText(/Im Patientendossier Hofer, Lukas passt keine Stelle/)
     ).toHaveTextContent('Für alle Inhalte suchen Sie mit ⌘K.')
+    // Kopfzeile wie bei Treffern, mit der Anzahl 0
+    expect(screen.getByText('0 Dokumente · Ausschnitte im Klartext')).toBeTruthy()
+  })
+
+  it('zeigt vor der ersten Suche nur den Hinweis zu den Ausschnitten', async () => {
+    renderWithProviders(<DossierSearchPage dossierId="d1" />, {
+      route: { kind: 'dossierSearch', dossierId: 'd1' }
+    })
+    expect(await screen.findByText('Ausschnitte im Klartext')).toBeTruthy()
+    expect(screen.queryByText(/Dokumente? ·/)).toBeNull()
   })
 })

@@ -102,6 +102,18 @@ describe('Suchfenster öffnen und schliessen', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it('Suchfeld: zugänglicher Name ohne Tastaturhinweis, Bereich «Alle Inhalte» bleibt sichtbar (#211 AK 2)', async () => {
+    renderHost()
+    await openModal()
+    const input = screen.getByRole('combobox', { name: 'In allen Inhalten suchen' })
+    expect(input).toHaveAccessibleName('In allen Inhalten suchen')
+    expect(screen.getByTestId('search-scope')).toHaveTextContent('Alle Inhalte')
+    await typeQuery('Hofer')
+    await screen.findAllByText('Hofer, Lukas')
+    expect(screen.getByTestId('search-scope')).toBeVisible()
+    expect(screen.getByTestId('search-scope')).toHaveTextContent('Alle Inhalte')
+  })
+
   it('Esc schliesst nur das Fenster und erreicht keine Esc-Handler darunter', async () => {
     renderHost()
     // Wie der Editor: ein Esc-Handler am window, der vorbehandelte Esc auslässt

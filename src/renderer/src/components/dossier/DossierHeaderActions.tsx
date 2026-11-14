@@ -71,20 +71,24 @@ export function DossierHeaderActions({
 
   return (
     <>
-      {/* Suche nur in diesem Dossier (#211) */}
+      {/* Suche nur in diesem Dossier (#211). In schmalem Kopf (Container
+          < 35rem, z. B. 800-px-Fenster) nur das Symbol, damit alle Aktionen in
+          eine Zeile passen; Name und Tooltip bleiben */}
       <button
         type="button"
         onClick={() => navigate({ kind: 'dossierSearch', dossierId })}
-        className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface-0 px-3 py-1.5 text-sm font-medium text-text-primary transition-colors hover:bg-surface-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        aria-label="Im Dossier suchen"
+        title="Im Dossier suchen"
+        className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border-strong bg-surface-0 px-2.5 py-1.5 text-sm font-medium text-text-primary transition-colors hover:bg-surface-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary @min-[35rem]:px-3"
       >
         <Search className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-        Im Dossier suchen
+        <span className="hidden @min-[35rem]:inline">Im Dossier suchen</span>
       </button>
       <button
         type="button"
         onClick={() => void importPdfs(undefined, { dossierId, dossierName })}
         disabled={isImporting}
-        className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface-0 px-3 py-1.5 text-sm font-medium text-text-primary transition-colors hover:bg-surface-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50"
+        className="flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border-strong bg-surface-0 px-3 py-1.5 text-sm font-medium text-text-primary transition-colors hover:bg-surface-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50"
       >
         <FileUp className="h-4 w-4" strokeWidth={1.75} aria-hidden />
         PDF importieren
@@ -93,7 +97,7 @@ export function DossierHeaderActions({
         <button
           type="button"
           onClick={() => void startRecording({ dossierId, dossierName })}
-          className="flex items-center gap-1.5 rounded-lg bg-recording-solid px-3.5 py-[7px] text-sm font-medium text-white transition-colors hover:bg-recording-solid-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className="flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-recording-solid px-3.5 py-[7px] text-sm font-medium text-white transition-colors hover:bg-recording-solid-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
           <Mic className="h-4 w-4" strokeWidth={2} aria-hidden />
           Aufnahme starten

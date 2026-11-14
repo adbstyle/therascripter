@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DossierBadges } from '../DossierBadges'
@@ -89,6 +89,12 @@ describe('DossierBadges (#205 AK 5)', () => {
     expect(screen.queryByRole('button', { name: 'Dossier zuordnen' })).not.toBeInTheDocument()
   })
 
+  it('shows ID or birth date on badges of same-named dossiers (Sichtprüfung)', async () => {
+    setup({ assigned: [ref(MEIER_A), ref(HOFER)] })
+    expect(await screen.findByText('Meier, Anna (PD-0412)')).toBeInTheDocument()
+    expect(screen.getByText('Hofer, Lukas')).toBeInTheDocument()
+  })
+
   it('shows only the other dossiers as «Auch in» in the timeline (AK 7)', () => {
     const { container, unmount } = setup({ variant: 'timeline', assigned: [ref(HOFER)] })
     expect(container).toBeEmptyDOMElement()
@@ -132,11 +138,32 @@ describe('AssignDossiersPopover (#205 AK 1–3, 24)', () => {
     const { user } = setup()
     await user.click(screen.getByRole('button', { name: 'Dossier zuordnen' }))
     expect(
-      await screen.findByRole('checkbox', { name: /Meier, Anna\s*PD-0412 · 11\.06\.1969/ })
+      await screen.findByRole('checkbox', { name: 'Meier, Anna (PD-0412 · 11.06.1969)' })
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('checkbox', { name: /Meier, Anna\s*PD-1201 · 02\.12\.1994/ })
+      screen.getByRole('checkbox', { name: 'Meier, Anna (PD-1201 · 02.12.1994)' })
     ).toBeInTheDocument()
+    // Ohne ID und Geburtsdatum nur der Name
+    expect(screen.getByRole('checkbox', { name: 'Meisser, Jonas' })).toBeInTheDocument()
+  })
+
+  it('announces assigned, unassigned and failures in a live region', async () => {
+    const assign = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ ok: false, reason: 'not-found' })
+    const { user } = setup({ assigned: [ref(MEISSER)], assign })
+    await user.click(screen.getByRole('button', { name: /Zugeordnet: Meisser/ }))
+    const dialog = await screen.findByRole('dialog')
+    const live = within(dialog).getByRole('status')
+    await user.click(await screen.findByRole('checkbox', { name: /Hofer/ }))
+    await waitFor(() => expect(live).toHaveTextContent('«Hofer, Lukas» zugeordnet.'))
+    await user.click(screen.getByRole('checkbox', { name: /Meisser/ }))
+    await waitFor(() => expect(live).toHaveTextContent('Zuordnung zu «Meisser, Jonas» gelöst.'))
+    await user.click(screen.getByRole('checkbox', { name: /PD-0412/ }))
+    await waitFor(() =>
+      expect(live).toHaveTextContent('«Meier, Anna (PD-0412)» konnte nicht zugeordnet werden.')
+    )
   })
 
   it('filters by parts of first and last name', async () => {
@@ -311,5 +338,109 @@ describe('DossierBadges — focus after the trigger was replaced (Review #223)',
     // versehentliches Häkchen rückgängig machen
     await user.click(screen.getByRole('checkbox', { name: /Meisser/ }))
     expect(window.api.dossiers.assign).toHaveBeenCalledWith('s1', 'd4')
+  })
+})
+
+describe('AssignDossiersPopover — Platz im Fenster (Sichtprüfung)', () => {
+  // jsdom misst nichts: das Popover ist 340 px hoch und 380 px breit
+  let sizes: Array<{ mockRestore: () => void }> = []
+  beforeEach(() => {
+    const dialogSize = (value: number) =>
+      function (this: HTMLElement) {
+        return this.getAttribute('role') === 'dialog' ? value : 0
+      }
+    sizes = [
+      vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(dialogSize(340)),
+      vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(dialogSize(380))
+    ]
+  })
+  afterEach(() => {
+    for (const s of sizes) s.mockRestore()
+  })
+
+  function rect(top: number, left: number, height = 20): DOMRect {
+    return {
+      top,
+      bottom: top + height,
+      left,
+      right: left + 200,
+      width: 200,
+      height,
+      x: left,
+      y: top,
+      toJSON: () => ({})
+    } as DOMRect
+  }
+
+  it('klappt am unteren Fensterrand nach oben und begrenzt die Höhe', async () => {
+    const { user } = setup()
+    const group = screen.getByRole('group', { name: 'Patientendossiers' })
+    group.getBoundingClientRect = () => rect(window.innerHeight - 40, 300)
+    await user.click(screen.getByRole('button', { name: 'Dossier zuordnen' }))
+    const dialog = await screen.findByRole('dialog')
+    await waitFor(() => expect(dialog).toHaveAttribute('data-placement', 'top'))
+    expect(dialog.className).toContain('bottom-full')
+    expect(dialog.style.maxHeight).toBe(`${window.innerHeight - 40 - 12}px`)
+    // «Fertig» bleibt Teil des begrenzten Popovers (kein eigener Scrollbereich)
+    expect(within(dialog).getByRole('button', { name: 'Fertig' })).toBeInTheDocument()
+  })
+
+  it('öffnet oben im Fenster nach unten und folgt einem Resize', async () => {
+    const { user } = setup()
+    const group = screen.getByRole('group', { name: 'Patientendossiers' })
+    let top = 100
+    group.getBoundingClientRect = () => rect(top, 300)
+    await user.click(screen.getByRole('button', { name: 'Dossier zuordnen' }))
+    const dialog = await screen.findByRole('dialog')
+    await waitFor(() => expect(dialog).toHaveAttribute('data-placement', 'bottom'))
+    top = window.innerHeight - 30
+    act(() => {
+      window.dispatchEvent(new Event('resize'))
+    })
+    await waitFor(() => expect(dialog).toHaveAttribute('data-placement', 'top'))
+  })
+
+  it('erscheint erst nach dem Laden der Liste — gleich auf der richtigen Seite, ohne Sprung', async () => {
+    let resolveList: (list: DossierListItem[]) => void = () => {}
+    window.api = createMockApi({
+      dossiers: {
+        list: vi.fn(() => new Promise<DossierListItem[]>((r) => (resolveList = r))),
+        assign: vi.fn(),
+        unassign: vi.fn()
+      }
+    })
+    // Während «Wird geladen …» ist das Popover nur 60 px hoch, danach 340 px
+    for (const s of sizes) s.mockRestore()
+    sizes = [
+      vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
+        this: HTMLElement
+      ) {
+        if (this.getAttribute('role') !== 'dialog') return 0
+        return this.textContent?.includes('Wird geladen') ? 60 : 340
+      })
+    ]
+    const user = userEvent.setup()
+    renderWithProviders(
+      <DossierBadges sessionId="s1" sessionLabel="X" dossiers={[]} variant="list" />
+    )
+    const group = screen.getByRole('group', { name: 'Patientendossiers' })
+    group.getBoundingClientRect = () => rect(window.innerHeight - 120, 300)
+    await user.click(screen.getByRole('button', { name: 'Dossier zuordnen' }))
+    const hidden = screen.getByRole('dialog', { hidden: true })
+    expect(hidden.style.visibility).toBe('hidden')
+    await act(async () => resolveList([HOFER, MEIER_A]))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog.style.visibility).toBe('')
+    expect(dialog).toHaveAttribute('data-placement', 'top')
+    expect(within(dialog).getByRole('textbox')).toHaveFocus()
+  })
+
+  it('verschiebt das Popover nach links, wenn es rechts aus dem Fenster ragte', async () => {
+    const { user } = setup()
+    const group = screen.getByRole('group', { name: 'Patientendossiers' })
+    group.getBoundingClientRect = () => rect(100, window.innerWidth - 50)
+    await user.click(screen.getByRole('button', { name: 'Dossier zuordnen' }))
+    const dialog = await screen.findByRole('dialog')
+    await waitFor(() => expect(dialog.style.left).toBe(`${-(380 - 50 + 8)}px`))
   })
 })

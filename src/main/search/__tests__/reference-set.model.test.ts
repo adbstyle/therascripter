@@ -199,7 +199,10 @@ async function runPipeline(label: string): Promise<PipelineResult> {
       const scored = await service.rankChunks(q.text, { threshold: null })
       const cosines = new Array<number>(sections.length).fill(Number.NEGATIVE_INFINITY)
       for (const c of scored) cosines[position.get(c.chunkId)!] = c.cosine
-      expect(cosines.every(Number.isFinite), q.id).toBe(true)
+      // Text und Zusammenfassung haben einen Kosinus, Titel keinen (nur exakte Suche)
+      sections.forEach((s, i) =>
+        expect(Number.isFinite(cosines[i]), `${q.id} ${s.field}`).toBe(s.field !== 'title')
+      )
       const exact = findExactCandidates(db, parseQuery(q.text)).candidates.map((c) => ({
         chunkId: c.chunkId,
         bm25: c.exact!.bm25
@@ -263,7 +266,6 @@ function describeReport(report: QualityReport): string[] {
     `je Anfrageart: ${Object.entries(s.byType)
       .map(([t, v]) => `${t} ${f2(v.ndcg10)} (${v.n})`)
       .join(' · ')}`,
-    `mit Titel-Abschnitten (Diagnose): ${f2(report.semanticWithTitles.ndcg10)}`,
     `exakte zuerst, ungruppiert, vor der Schwelle: ${f2(report.exactFirstUngrouped.ndcg10)} (95 %-CI ${ci(report.exactFirstUngrouped.ci95)})`,
     `Produktiv-Rangfolge (exakte zuerst, Schwelle ${p.threshold.toFixed(2)}, gruppiert, Fundstellen): nDCG@10 ${f2(p.ndcg10)} (95 %-CI ${ci(p.ci95)}), Hit@5 ${f2(p.hit5)} (95 %-CI ${ci(p.hit5Ci95)})`,
     `  je Anfrageart: ${Object.entries(p.byType)

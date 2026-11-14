@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { buildUnits } from '../chunker'
 import { filterAndLimit, rankDocuments, type ChunkCandidate } from '../ranking'
-import { SEARCH_MAX_DOCUMENT_RESULTS } from '../../../shared/search-config'
+import { SEARCH_MAX_DOCUMENT_RESULTS, SEARCH_SEMANTIC_FIELDS } from '../../../shared/search-config'
 import type { SearchField } from '../../../shared/types/Search'
 
 /**
@@ -321,17 +321,17 @@ export function sectionGrades(run: ReferenceRun, rels: Map<string, number>): Map
 
 /**
  * Rein semantische Rangfolge VOR der Schwelle, nur Text-Abschnitte — so ist
- * der Zielwert definiert (148 Abschnitte, Spike). `includeAll` nimmt Titel
- * und Zusammenfassung dazu (Diagnose).
+ * der Zielwert definiert (148 Abschnitte, Spike). Titel nehmen seit der
+ * Sichtprüfung ohnehin nicht an der Suche nach Bedeutung teil
+ * (SEARCH_SEMANTIC_FIELDS; ihr Kosinus ist -Infinity).
  */
 export function semanticRanking(
   run: ReferenceRun,
-  query: ReferenceQueryRun,
-  includeAll = false
+  query: ReferenceQueryRun
 ): Array<{ chunkId: number; cosine: number }> {
   return run.sections
     .map((s, i) => ({ s, cosine: query.cosines[i] }))
-    .filter(({ s }) => includeAll || s.field === 'body')
+    .filter(({ s }) => s.field === 'body')
     .sort((a, b) => b.cosine - a.cosine || a.s.chunkId - b.s.chunkId)
     .map(({ s, cosine }) => ({ chunkId: s.chunkId, cosine }))
 }
@@ -361,8 +361,11 @@ export function productionDocuments(
     ...base(byId.get(e.chunkId)!),
     exact: { bm25: e.bm25 }
   }))
+  const semanticFields: readonly SearchField[] = SEARCH_SEMANTIC_FIELDS
   run.sections.forEach((s, i) => {
     const cosine = query.cosines[i]
+    // Wie VectorStore: nur Felder der Suche nach Bedeutung (keine Titel)
+    if (!semanticFields.includes(s.field) || !Number.isFinite(cosine)) return
     if (threshold === null || cosine >= threshold) {
       candidates.push({ ...base(s), semantic: { cosine } })
     }
@@ -385,8 +388,6 @@ export function productionHits(
 export interface QualityReport {
   /** AK 13: rein semantisch, vor der Schwelle, nur Text-Abschnitte. */
   semantic: QualitySummary & { negAuc: number | null; unitRecall10: number }
-  /** Diagnose: wie oben, mit Titel-Abschnitten. */
-  semanticWithTitles: { ndcg10: number }
   /** Produktiv-Rangfolge (exakte zuerst, gruppiert) bei Schwelle `threshold`. */
   production: QualitySummary & { threshold: number }
   /** Exakte zuerst, ungruppiert, vor der Schwelle (Messung des Architekten: 0.636). */
@@ -401,7 +402,6 @@ export function evaluateRun(
   const unitsOf = new Map(run.sections.map((s) => [s.chunkId, s.units]))
   const units = (id: number): string[] => unitsOf.get(id) ?? []
   const sem: QueryOutcome[] = []
-  const semAll: number[] = []
   const prod: QueryOutcome[] = []
   const exactFirst: number[] = []
   const pos: number[] = []
@@ -418,14 +418,6 @@ export function evaluateRun(
     const grades = sectionGrades(run, rels)
     const ids = ranking.map((r) => r.chunkId)
     sem.push({ id: q.id, type: q.type, ...queryMetrics(ids, grades, rels, units) })
-    semAll.push(
-      queryMetrics(
-        semanticRanking(run, q, true).map((r) => r.chunkId),
-        grades,
-        rels,
-        units
-      ).ndcg10
-    )
     const hits = productionHits(run, q, threshold).map((h) => h.chunkId)
     prod.push({ id: q.id, type: q.type, ...queryMetrics(hits, grades, rels, units) })
     const exactIds = new Set(q.exact.map((e) => e.chunkId))
@@ -441,7 +433,6 @@ export function evaluateRun(
       negAuc: auc(pos, neg),
       unitRecall10: fmean(sem.map((o) => o.unitRecall10))
     },
-    semanticWithTitles: { ndcg10: fmean(semAll) },
     production: { ...summarizeQuality(prod), threshold },
     exactFirstUngrouped: { ndcg10: fmean(exactFirst), ci95: bootstrapCi(exactFirst) }
   }

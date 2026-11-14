@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FocusEvent } from 'react'
 import { Plus } from 'lucide-react'
 import { useClickOutside } from '../../hooks/useClickOutside'
-import { dossierIdentification, dossierListName } from '../../utils/dossierFormat'
+import { dossierIdentification, dossierLabel, dossierListName } from '../../utils/dossierFormat'
+import { useAmbiguousDossierNames } from '../../stores/dossierNames'
 import { AssignDossiersPopover } from './AssignDossiersPopover'
 import type { DossierRef } from '../../../../shared/types/Dossier'
 
@@ -53,6 +54,7 @@ export function DossierBadges({
   onOpenChange
 }: DossierBadgesProps): React.JSX.Element | null {
   const [open, setOpen] = useState(false)
+  const ambiguous = useAmbiguousDossierNames()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
 
@@ -116,7 +118,7 @@ export function DossierBadges({
             aria-label={`Patientendossier ${described(dossier)} öffnen`}
             title={described(dossier)}
           >
-            <span className="truncate">{dossierListName(dossier)}</span>
+            <span className="truncate">{dossierLabel(dossier, ambiguous)}</span>
           </button>
         ) : (
           <button
@@ -131,8 +133,8 @@ export function DossierBadges({
           >
             <span className="truncate">
               {variant === 'timeline'
-                ? `Auch in: ${dossierListName(dossier)}`
-                : dossierListName(dossier)}
+                ? `Auch in: ${dossierLabel(dossier, ambiguous)}`
+                : dossierLabel(dossier, ambiguous)}
             </span>
           </button>
         )

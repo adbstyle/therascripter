@@ -2,6 +2,10 @@ import type Database from 'better-sqlite3'
 import type { SessionType } from '../../../shared/types'
 import type { SearchField } from '../../../shared/types/Search'
 import { normalizeSearchText } from '../../../shared/utils/search-normalize'
+import {
+  SEARCH_SEMANTIC_FIELDS,
+  SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES
+} from '../../../shared/search-config'
 import { sectionIndexText, type ChunkUnitRef, type SearchSection } from '../../search/chunker'
 
 /**
@@ -17,6 +21,14 @@ import { sectionIndexText, type ChunkUnitRef, type SearchSection } from '../../s
  * (#209 PC 1, #212 PC 1). Alias `s` für sessions.
  */
 export const SEARCH_VISIBLE_SESSION = `s.status = 'review' AND s.deleting_at IS NULL`
+
+/**
+ * Nur Felder der Suche nach Bedeutung (Alias-frei, `field` von search_chunks).
+ * Bestehende Indizes bleiben ohne Neuaufbau korrekt: früher berechnete
+ * Titel-Vektoren liest der VectorStore nicht mehr, und eine Generation gilt
+ * als vollständig, sobald alle Abschnitte DIESER Felder einen Vektor haben.
+ */
+export const SEMANTIC_FIELD_FILTER = `field IN (${SEARCH_SEMANTIC_FIELDS.map((f) => `'${f}'`).join(', ')})`
 
 /** Tag im Verlauf, wie Dossier-Übersicht und Verlauf ihn rechnen (#205). */
 export const SEARCH_SORT_DAY = `CASE WHEN s.type = 'pdf'
@@ -218,7 +230,11 @@ export class SearchIndexRepository {
              text_gen = excluded.text_gen,
              text_rev = excluded.text_rev,
              last_error = excluded.last_error,
-             doc_stat = excluded.doc_stat`
+             doc_stat = excluded.doc_stat,
+             next_attempt_at = CASE
+               WHEN search_index_state.attempts < ${SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES} THEN NULL
+               ELSE search_index_state.next_attempt_at
+             END`
         )
         .run(sessionId, gen, readRev, error, docStat)
       return gen
@@ -411,12 +427,16 @@ export class SearchIndexRepository {
     })()
   }
 
-  /** Abschnitte einer Generation ohne Vektor (über den Teilindex idx_search_chunks_pending). */
+  /**
+   * Abschnitte einer Generation ohne Vektor (über den Teilindex
+   * idx_search_chunks_pending). Titel-Abschnitte bekommen keinen: sie nehmen
+   * nur an der exakten Suche teil (SEARCH_SEMANTIC_FIELDS).
+   */
   findPendingVectorChunks(sessionId: string, gen: number): Array<{ id: number; text: string }> {
     return this.db
       .prepare(
         `SELECT id, text FROM search_chunks
-         WHERE session_id = ? AND gen = ? AND vec IS NULL
+         WHERE session_id = ? AND gen = ? AND vec IS NULL AND ${SEMANTIC_FIELD_FILTER}
          ORDER BY id`
       )
       .all(sessionId, gen) as Array<{ id: number; text: string }>
@@ -456,7 +476,10 @@ export class SearchIndexRepository {
         | undefined
       if (!state || state.text_gen !== gen || state.model_id !== modelId) return undefined
       const open = this.db
-        .prepare('SELECT 1 FROM search_chunks WHERE session_id = ? AND gen = ? AND vec IS NULL')
+        .prepare(
+          `SELECT 1 FROM search_chunks
+           WHERE session_id = ? AND gen = ? AND vec IS NULL AND ${SEMANTIC_FIELD_FILTER}`
+        )
         .get(sessionId, gen)
       if (open) return undefined
       this.db

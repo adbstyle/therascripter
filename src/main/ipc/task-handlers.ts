@@ -1,11 +1,16 @@
 import { ipcMain } from 'electron'
 import { getTaskQueue } from '../services/TaskQueueService'
 import { GetSessionTasksSchema } from '../../shared/validation/task-schemas'
+import { stripAbsolutePaths } from '../utils/userFacingError'
 
 export function registerTaskHandlers(): void {
   ipcMain.handle('task:getSessionTasks', (_event, args: unknown) => {
     const { sessionId } = GetSessionTasksSchema.parse(args)
-    return getTaskQueue().getSessionTasks(sessionId)
+    // Task.error enthält die vollständige Meldung (Log); der Renderer bekommt
+    // sie ohne absolute Pfade wie die Sitzungskarte
+    return getTaskQueue()
+      .getSessionTasks(sessionId)
+      .map((task) => (task.error ? { ...task, error: stripAbsolutePaths(task.error) } : task))
   })
 
   ipcMain.handle('task:isProcessing', () => {

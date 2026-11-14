@@ -223,15 +223,32 @@
   pointer-events: none;
 }
 
-/* Fundstelle der Suche (#209 AK 11, Prototyp «Fundstelle»): der Absatz ist als
-   Ganzes hinterlegt, exakte Begriffe darin unterstrichen, ein Chip mit einem
-   Treffer umrandet. Nur Klassen — nie Text, title oder aria: in der
+/* Fundstelle der Suche (#209 AK 11, Prototyp «Fundstelle»): bei exakten
+   Treffern sind nur die Absätze mit einem Begriff hinterlegt, die Begriffe
+   unterstrichen, ein Chip mit einem Treffer umrandet (in beiden Ansichten).
+   Treffer nur nach Bedeutung: schmaler Randbalken links über den Abschnitt. Nur Klassen — nie Text, title oder aria: in der
    pseudonymisierten Ansicht wird so kein Klarname sichtbar. */
 .ProseMirror p.search-hit-paragraph {
   background: var(--color-primary-light);
   border-radius: 6px;
   margin-inline: -10px;
   padding: 6px 10px;
+}
+
+.ProseMirror p.search-hit-paragraph-semantic {
+  position: relative;
+}
+
+.ProseMirror p.search-hit-paragraph-semantic::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--color-primary);
+  pointer-events: none;
 }
 
 .search-hit-term {

@@ -30,7 +30,7 @@ describe('Einstiege in die Suche', () => {
         <SearchHost />
       </>
     )
-    const entry = screen.getByRole('button', { name: /Suchen/ })
+    const entry = screen.getByRole('button', { name: 'Suchen' })
     expect(entry).toHaveTextContent('⌘K')
     await userEvent.click(entry)
     expect(

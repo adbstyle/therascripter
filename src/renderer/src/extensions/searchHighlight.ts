@@ -15,9 +15,12 @@ import type { SessionFocus } from '../navigation/routes'
 /**
  * Fundstelle der Suche im Editor (#209 AK 11): reine Decorations — keine
  * Textauswahl, kein Dokument-Update, also weder Autosave noch eine neue
- * Aufbereitung für die Suche. Die Absätze der Fundstelle sind hinterlegt,
- * exakte Begriffe darin markiert; liegt ein Begriff (auch nur teilweise) in
- * einem Chip, ist der ganze Chip markiert. Das gilt in beiden Ansichten und
+ * Aufbereitung für die Suche. Bei einem EXAKTEN Treffer sind nur die Absätze
+ * hinterlegt, die einen markierten Begriff enthalten, die Begriffe darin
+ * markiert; liegt ein Begriff (auch nur teilweise) in einem Chip, ist der
+ * ganze Chip markiert. Bei einem Treffer nur nach Bedeutung (keine Bereiche)
+ * trägt der Abschnitt nur einen schmalen Randbalken links — ein ganzer
+ * Abschnitt vollflächig hinterlegt war zu breit (Sichtprüfung). Das gilt in beiden Ansichten und
  * macht in der pseudonymisierten keinen Klarnamen sichtbar: die Markierung
  * setzt nur eine Klasse, nie Text, `title` oder `aria-*`.
  *
@@ -41,8 +44,13 @@ export interface HighlightPiece {
 }
 
 export interface SearchHighlightSpec {
-  /** Absätze als ganze hinterlegen: Positionen [from, to) der Absatz-Knoten. */
+  /** Absätze der Fundstelle: Positionen [from, to) der Absatz-Knoten. */
   paragraphs: Array<{ from: number; to: number }>
+  /**
+   * `exact`: Absätze hinterlegt (nur die mit einem markierten Begriff);
+   * `semantic`: dezenter Randbalken über den Abschnitt (Treffer nach Bedeutung).
+   */
+  style: 'exact' | 'semantic'
   marks: HighlightPiece[]
 }
 
@@ -145,7 +153,7 @@ export type ResolvedFocus =
       scrollPos: number
       /** Position des Absatz-Knotens, der `scrollPos` enthält — er wird in die Mitte gescrollt. */
       scrollParagraphPos: number
-      /** Index des ersten hinterlegten Absatzes (für die Ansage). */
+      /** Index des Absatzes, zu dem gescrollt wird (für die Ansage). */
       paragraphIndex: number
       paragraphCount: number
       /** Die Stelle wurde nach einer Bearbeitung wiedergefunden. */
@@ -153,32 +161,48 @@ export type ResolvedFocus =
     }
   | { kind: 'missing' }
 
+/**
+ * `indices`: Absätze der Fundstelle (aufsteigend). Mit Markierungen gelten
+ * genau die Absätze, die eine Markierung enthalten (exakter Treffer, auch
+ * ausserhalb von `indices`) — hinterlegt
+ * und gescrollt wird zum ersten davon; ohne Markierungen (Treffer nach
+ * Bedeutung) alle mit dezentem Randbalken, gescrollt zum ersten Absatz.
+ */
 function bodyResult(
   paragraphs: ParagraphInfo[],
-  from: number,
-  to: number,
+  indices: number[],
   marks: HighlightPiece[],
   relocated: boolean,
   total: number
 ): ResolvedFocus {
-  const covered = paragraphs.slice(from, to + 1)
+  const contains = (p: ParagraphInfo, pos: number): boolean =>
+    p.pos <= pos && pos < p.pos + p.node.nodeSize
+  // Exakt: genau die Absätze mit einer Markierung — auch solche ausserhalb des
+  // gelieferten Bereichs (Regel «Absätze mit Begriff», Review #231)
+  const covered =
+    marks.length > 0
+      ? paragraphs.filter((p) => marks.some((m) => contains(p, m.from)))
+      : indices.map((i) => paragraphs[i])
   const spec: SearchHighlightSpec = {
     paragraphs: covered.map((p) => ({ from: p.pos, to: p.pos + p.node.nodeSize })),
+    style: marks.length > 0 ? 'exact' : 'semantic',
     marks
   }
   const first = marks.length > 0 ? Math.min(...marks.map((m) => m.from)) : covered[0].pos
-  const holder =
-    paragraphs.find((p) => p.pos <= first && first < p.pos + p.node.nodeSize) ?? covered[0]
+  const holder = paragraphs.find((p) => contains(p, first)) ?? covered[0]
   return {
     kind: 'body',
     spec,
     scrollPos: first,
     scrollParagraphPos: holder.pos,
-    paragraphIndex: from,
+    paragraphIndex: holder.index,
     paragraphCount: total,
     relocated
   }
 }
+
+const range = (from: number, to: number): number[] =>
+  Array.from({ length: to - from + 1 }, (_, k) => from + k)
 
 /**
  * Löst eine Fundstelle gegen das AKTUELLE Dokument auf (Bauplan 4, «robust
@@ -198,7 +222,7 @@ export function resolveSearchFocus(doc: PMNode, focus: SessionFocus): ResolvedFo
 
   if (focus.kind === 'paragraph') {
     if (focus.index < 0 || focus.index >= total) return { kind: 'missing' }
-    return bodyResult(paragraphs, focus.index, focus.index, [], false, total)
+    return bodyResult(paragraphs, [focus.index], [], false, total)
   }
 
   const maps = new Map<number, ParagraphTextMap>()
@@ -239,7 +263,7 @@ export function resolveSearchFocus(doc: PMNode, focus: SessionFocus): ResolvedFo
     }
     if (valid) {
       const marks = ranges.flatMap((r) => mapTextRange(mapOf(r.p), r.s, r.e))
-      return bodyResult(paragraphs, focus.paraFrom, focus.paraTo, marks, false, total)
+      return bodyResult(paragraphs, range(focus.paraFrom, focus.paraTo), marks, false, total)
     }
   }
 
@@ -256,16 +280,18 @@ export function resolveSearchFocus(doc: PMNode, focus: SessionFocus): ResolvedFo
     // Exakte Treffer markieren das Wort wieder; Treffer nach Bedeutung nur den Absatz
     const marks =
       focus.ranges && focus.ranges.length > 0 ? mapTextRange(map, found[0].start, found[0].end) : []
-    return bodyResult(paragraphs, i, i, marks, true, total)
+    return bodyResult(paragraphs, [i], marks, true, total)
   }
   return { kind: 'missing' }
 }
 
 function buildDecorations(doc: PMNode, spec: SearchHighlightSpec): DecorationSet {
   const decorations: Decoration[] = []
+  const paragraphClass =
+    spec.style === 'semantic' ? 'search-hit-paragraph-semantic' : 'search-hit-paragraph'
   for (const p of spec.paragraphs) {
     decorations.push(
-      Decoration.node(p.from, p.to, { class: 'search-hit-paragraph', 'data-search-hit': 'true' })
+      Decoration.node(p.from, p.to, { class: paragraphClass, 'data-search-hit': 'true' })
     )
   }
   for (const m of spec.marks) {
