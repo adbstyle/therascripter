@@ -17,6 +17,7 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { SearchIndexService } from '../src/main/search/SearchIndexService'
 import { SearchService } from '../src/main/search/SearchService'
+import { SEARCH_SLICE_PAUSE_MS } from '../src/shared/search-config'
 
 function arg(name: string, fallback: string): string {
   const i = process.argv.indexOf(`--${name}`)
@@ -136,6 +137,10 @@ function main(): void {
     `INSERT INTO sessions (id, title, type, status, anonymized_path, summary, created_at, updated_at, search_rev)
      VALUES (?, ?, ?, 'review', ?, ?, ?, '2026-01-01T00:00:00.000Z', 1)`
   )
+  const insertBig = db.prepare(
+    `INSERT INTO sessions (id, title, type, status, anonymized_path, created_at, updated_at, search_rev)
+     VALUES ('big', 'Lange Sitzung', 'audio', 'review', '/bench/big.json', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 1)`
+  )
   db.transaction(() => {
     for (let i = 0; i < SESSIONS; i++) {
       const pdf = i % 10 === 9
@@ -156,16 +161,35 @@ function main(): void {
 
   const indexer = new SearchIndexService(db, {
     now: () => Date.parse('2026-06-01'),
-    readDocument: (path) => docs.get(path)
+    readDocument: (path) => docs.get(path),
+    statDocument: () => null,
+    finishDeletion: (id) => {
+      db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
+      db.pragma('wal_checkpoint(TRUNCATE)')
+    }
   })
-  const perSession: number[] = []
-  const started = performance.now()
-  for (;;) {
-    const t = performance.now()
-    const { indexed, more } = indexer.runTextPhase(1)
-    if (indexed > 0) perSession.push(performance.now() - t)
-    if (!more) break
+
+  /** Schleife wie in der App bis zum Ende: Scheiben + echte Pause dazwischen. */
+  function drain(label: string): void {
+    const slices: number[] = []
+    for (;;) {
+      const t = performance.now()
+      const { more } = indexer.runSlice()
+      slices.push(performance.now() - t)
+      if (!more) break
+    }
+    const busy = slices.reduce((a, b) => a + b, 0)
+    const wall = busy + (slices.length - 1) * SEARCH_SLICE_PAUSE_MS
+    const over = slices.filter((ms) => ms > 100).length
+    console.log(
+      `${label}: ${slices.length} Scheiben, längste ${Math.max(...slices).toFixed(1)} ms, ` +
+        `Median ${median(slices).toFixed(1)} ms, > 100 ms: ${over}, ` +
+        `beschäftigt ${(busy / 1000).toFixed(1)} s, Dauer mit Pausen ${(wall / 1000).toFixed(1)} s`
+    )
   }
+
+  const started = performance.now()
+  drain('Startbestand')
   const indexSeconds = (performance.now() - started) / 1000
   db.pragma('wal_checkpoint(TRUNCATE)')
   const chunks = (db.prepare('SELECT COUNT(*) AS n FROM search_chunks').get() as { n: number }).n
@@ -178,9 +202,7 @@ function main(): void {
 
   console.log(`Sitzungen: ${SESSIONS}, Abschnitte: ${chunks}`)
   console.log(
-    `Textphase: gesamt ${indexSeconds.toFixed(1)} s, pro Sitzung Median ${median(perSession).toFixed(1)} ms, ` +
-      `p95 ${[...perSession].sort((a, b) => a - b)[Math.floor(perSession.length * 0.95)].toFixed(1)} ms, ` +
-      `max ${Math.max(...perSession).toFixed(1)} ms`
+    `Textphase: ${indexSeconds.toFixed(1)} s ohne Pausen, pro Sitzung ${((indexSeconds * 1000) / SESSIONS).toFixed(1)} ms`
   )
   console.log(
     `DB-Datei: ${(dbBytes / 1e6).toFixed(0)} MB (Abschnittstext ${(textBytes / 1e6).toFixed(0)} MB)`
@@ -197,19 +219,61 @@ function main(): void {
     'ab',
     'xq'
   ]
-  for (const query of queries) {
-    const times: number[] = []
-    let hits = 0
-    for (let r = 0; r < 5; r++) {
-      const t = performance.now()
-      const result = search.query({ requestId: r, query, scope: { kind: 'all' } })
-      times.push(performance.now() - t)
-      hits = result.results.length
+  const dossierSessions = db
+    .prepare(`SELECT id FROM sessions ORDER BY created_at LIMIT 50`)
+    .pluck()
+    .all() as string[]
+  db.prepare(
+    `INSERT INTO dossiers (id, first_name, last_name, first_name_norm, last_name_norm, created_at, updated_at)
+     VALUES ('bench', 'Anna', 'Beispiel', 'anna', 'beispiel', 'x', 'x')`
+  ).run()
+  const assign = db.prepare(
+    `INSERT INTO session_dossiers (session_id, dossier_id, assigned_at) VALUES (?, 'bench', 'x')`
+  )
+  for (const id of dossierSessions) assign.run(id)
+  for (const [label, scope] of [
+    ['alle', { kind: 'all' as const }],
+    ['Dossier mit 50 Sitzungen', { kind: 'dossier' as const, dossierId: 'bench' }]
+  ] as const) {
+    for (const query of queries) {
+      const times: number[] = []
+      let hits = 0
+      for (let r = 0; r < 5; r++) {
+        const t = performance.now()
+        const result = search.query({ requestId: r, query, scope })
+        times.push(performance.now() - t)
+        hits = result.results.length
+      }
+      console.log(
+        `Suche (${label}) «${query}»: Median ${median(times).toFixed(0)} ms, max ${Math.max(...times).toFixed(0)} ms, ${hits} Dokumente`
+      )
     }
-    console.log(
-      `Suche «${query}»: Median ${median(times).toFixed(0)} ms, max ${Math.max(...times).toFixed(0)} ms, ${hits} Dokumente`
-    )
   }
+
+  // Neuindexierung einer 2-Stunden-Sitzung nach einer Bearbeitung
+  insertBig.run()
+  docs.set('/bench/big.json', makeDocument(words, 120 * 151, false, random))
+  drain('Erstindexierung 2-h-Sitzung')
+  docs.set('/bench/big.json', makeDocument(words, 120 * 151, false, random))
+  db.prepare(`UPDATE sessions SET search_rev = search_rev + 1 WHERE id = 'big'`).run()
+  drain('Neuindexierung 2-h-Sitzung')
+
+  // Löschen: eine 50-Minuten-Sitzung, ein Dossier mit 10 Sitzungen (gestaffelt)
+  const mark = db.prepare(`UPDATE sessions SET deleting_at = 'x', title = '' WHERE id = ?`)
+  mark.run('s00100')
+  indexer.schedulePurge('s00100', true)
+  drain('Löschen 50-min-Sitzung')
+  const ten = db
+    .prepare(
+      `SELECT id FROM sessions WHERE type = 'audio' AND deleting_at IS NULL LIMIT 10 OFFSET 200`
+    )
+    .pluck()
+    .all() as string[]
+  for (const id of ten) {
+    mark.run(id)
+    indexer.schedulePurge(id, true)
+  }
+  drain('Löschen Dossier mit 10 Sitzungen')
   db.close()
 }
 
