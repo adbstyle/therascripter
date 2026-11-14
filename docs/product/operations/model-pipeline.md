@@ -60,7 +60,7 @@ What it does:
 3. **Installs ML dependencies** from `python_sidecar/requirements.txt` and `python_sidecar/requirements-ner.txt` via `uv pip install`. This includes torch, pyannote.audio, flair, soundfile, and all transitive dependencies.
 4. **Installs the torchcodec shim** by writing a `sitecustomize.py` into the standalone Python's site-packages (see section below).
 5. **Ad-hoc codesigns all native binaries** -- finds every `.dylib` and `.so` file in the standalone directory and signs them with `codesign --sign - --force --no-strict`. The Python binary itself is also signed. This is required because macOS on Apple Silicon kills unsigned native code. Failures during signing are non-critical (some files may not need signing).
-6. **Verifies the build** by importing torch, pyannote.audio, flair, and soundfile, and running `--help` on `diarize.py` and `ner_service.py`.
+6. **Verifies the build** by importing torch, pyannote.audio, flair, soundfile, tokenizers, safetensors and numpy, and running `--help` on `diarize.py`, `ner_service.py` and `search_service.py`.
 
 Options:
 - `scripts/build-sidecar.sh --clean` removes the existing standalone directory before rebuilding.
@@ -83,6 +83,29 @@ mkdir -p /tmp/ner-v3 && tar -xzf r2-upload/flair-ner-german-large-v3.tar.gz -C /
 scripts/smoke-packaged.sh --staging --ner-model-dir /tmp/ner-v3
 python3 scripts/ner-parity.py ~/.therascript/models/ner /tmp/ner-v3
 ```
+
+### Search model artifact (`scripts/package-models.sh search`)
+
+The text encoder of EmbeddingGemma 2 (Epic #192, ADR-010) is not part of `all`. It is built from a Hugging Face snapshot in two steps:
+
+```bash
+# 1. Extract the text part (413 tensors language_model.*, bf16) — any Python with torch + safetensors
+HF_HOME=<hf-cache> PYTHONDONTWRITEBYTECODE=1 python_sidecar/standalone/bin/python3 \
+  scripts/export-search-model.py <hf-cache>/hub/models--google--embeddinggemma-2/snapshots/<rev> /tmp/eg2-export
+# 2. Pack reproducibly (fixed file order, READY last, ustar without macOS metadata, gzip -n)
+scripts/package-models.sh search /tmp/eg2-export
+```
+
+`PACKAGE_OUTPUT_DIR=<dir>` writes somewhere else than `r2-upload/`. Two runs over the same snapshot produce the same sha256 (verified: revision `f9972ac…`, `embeddinggemma-2-text-v1.tar.gz`, 430'211'881 bytes, sha256 `49e225895475004c699f08390f822e92a1fa8be4882e03e50d44c50f3badf4f8`). The archive is extracted into `search/embeddinggemma-2-text-v1/`; `READY` is the catalog's `checkPath`.
+
+Verify before uploading:
+
+```bash
+mkdir -p /tmp/eg2 && tar -xzf r2-upload/embeddinggemma-2-text-v1.tar.gz -C /tmp/eg2
+scripts/smoke-packaged.sh --staging --search-model-dir /tmp/eg2
+```
+
+Golden vectors (`tests/fixtures/search-golden/golden.json`) are only regenerated when the model changes: `scripts/make-search-golden.py` (separate venv with sentence-transformers ≥ 6.1, see its header). Upload only by the product owner (`scripts/upload-r2.sh r2-upload/embeddinggemma-2-text-v1.tar.gz`), then copy the values of the **uploaded** object into the catalog.
 
 ### Step 3: Upload to R2 (`npm run sidecar:upload`)
 

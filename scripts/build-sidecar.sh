@@ -257,6 +257,15 @@ import soundfile as sf
 print(f'  soundfile {sf.__version__} (libsndfile {sf.__libsndfile_version__})')
 " || VERIFY_FAILED=true
 
+# Suchdienst: braucht nur torch + tokenizers + safetensors + numpy (Encoder in
+# reinem torch, ADR-010). Die Prune-Liste betrifft keines davon; der echte
+# Modell-Lauf (selftest gegen die Goldvektoren) steckt im Smoke-Check
+# `search parity` (scripts/smoke-packaged.sh --search-model-dir).
+"$PYTHON_BIN" -c "
+import numpy, safetensors, tokenizers
+print(f'  tokenizers {tokenizers.__version__}, safetensors {safetensors.__version__}, numpy {numpy.__version__}')
+" || VERIFY_FAILED=true
+
 # Test that scripts can at least parse args
 "$PYTHON_BIN" "$SIDECAR_DIR/diarize.py" --help > /dev/null 2>&1 \
   && echo "  diarize.py: OK" \
@@ -265,6 +274,10 @@ print(f'  soundfile {sf.__version__} (libsndfile {sf.__libsndfile_version__})')
 "$PYTHON_BIN" "$SIDECAR_DIR/ner_service.py" --help > /dev/null 2>&1 \
   && echo "  ner_service.py: OK" \
   || { echo "  ner_service.py: FAILED"; VERIFY_FAILED=true; }
+
+"$PYTHON_BIN" "$SIDECAR_DIR/search_service.py" --help > /dev/null 2>&1 \
+  && echo "  search_service.py: OK" \
+  || { echo "  search_service.py: FAILED"; VERIFY_FAILED=true; }
 
 if [ "$VERIFY_FAILED" = true ]; then
   echo ""
