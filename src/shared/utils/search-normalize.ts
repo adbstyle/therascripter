@@ -40,6 +40,8 @@ const CLUSTER = /\P{M}\p{M}*|\p{M}+/gu
  * zusammengesetzten Zeichen beginnen.
  */
 export function normalizeWithMap(text: string): NormalizedSearchText {
+  const fast = normalizeWithMapFast(text)
+  if (fast) return fast
   const parts: string[] = []
   const toOriginal: number[] = []
   for (const match of text.matchAll(CLUSTER)) {
@@ -47,6 +49,38 @@ export function normalizeWithMap(text: string): NormalizedSearchText {
     const out = normalizeSearchText(match[0])
     for (let i = 0; i < out.length; i++) toOriginal.push(start)
     parts.push(out)
+  }
+  toOriginal.push(text.length)
+  return { normalized: parts.join(''), toOriginal }
+}
+
+const UMLAUT_EXPANSION: Record<string, string> = { ä: 'ae', ö: 'oe', ü: 'ue', ß: 'ss' }
+// Kombinierende Zeichen und unsichtbare Zeichen → Cluster-Weg
+const NEEDS_CLUSTERS =
+  // eslint-disable-next-line no-misleading-character-class
+  /[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f\u200B-\u200D\uFEFF]/
+
+/**
+ * Schneller Weg für den Normalfall (bereits zusammengesetzter Text ohne
+ * unsichtbare Zeichen, Kleinschreibung ändert die Länge nicht): Zeichen für
+ * Zeichen, nur Umlaute verlängern. Sonst null → Cluster-Weg.
+ */
+function normalizeWithMapFast(text: string): NormalizedSearchText | null {
+  if (NEEDS_CLUSTERS.test(text)) return null
+  const lower = text.toLocaleLowerCase('de-CH')
+  if (lower.length !== text.length) return null
+  const parts: string[] = []
+  const toOriginal: number[] = []
+  for (let i = 0; i < lower.length; i++) {
+    const ch = lower[i]
+    const out = UMLAUT_EXPANSION[ch]
+    if (out) {
+      parts.push(out)
+      toOriginal.push(i, i)
+    } else {
+      parts.push(ch)
+      toOriginal.push(i)
+    }
   }
   toOriginal.push(text.length)
   return { normalized: parts.join(''), toOriginal }

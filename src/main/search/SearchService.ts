@@ -27,6 +27,8 @@ import type {
 export interface SearchServiceDeps {
   /** Stand der Suche nach Bedeutung; bis PR S4 immer 'unavailable'. */
   semanticStatus?: () => SemanticSearchStatus
+  /** Obergrenze der Treffer-Abschnitte (Tests); Default SEARCH_MAX_CANDIDATE_CHUNKS. */
+  maxCandidates?: number
 }
 
 interface DossierRow {
@@ -58,6 +60,7 @@ export class SearchService {
   private index: SearchIndexRepository
   private recent: SearchRecentRepository
   private semanticStatus: () => SemanticSearchStatus
+  private maxCandidates: number | undefined
 
   constructor(
     private db: Database.Database,
@@ -66,6 +69,7 @@ export class SearchService {
     this.index = new SearchIndexRepository(db)
     this.recent = new SearchRecentRepository(db)
     this.semanticStatus = deps.semanticStatus ?? ((): SemanticSearchStatus => 'unavailable')
+    this.maxCandidates = deps.maxCandidates
   }
 
   query(input: SearchQueryInput): SearchQueryResult {
@@ -82,28 +86,26 @@ export class SearchService {
   }
 
   /**
-   * Exakte Treffer, gerankt und erst DANACH auf das Dossier gefiltert und
-   * geschnitten (#211 AK 3). Öffentlich für PR S4 (Mischung mit Treffern nach
-   * Bedeutung) und den Abnahmetest.
+   * Exakte Treffer, gerankt und auf SEARCH_MAX_DOCUMENT_RESULTS geschnitten.
+   * Bei einer Dossier-Suche filtert schon die Abfrage auf die Sitzungen, die
+   * dem Dossier JETZT zugeordnet sind (#211 AK 1) — vor den Obergrenzen.
+   * Reihenfolge: dieselbe Vergleichsfunktion wie über alle Inhalte; solange
+   * keine Grenze greift, sind es genau die Treffer der Gesamtsuche aus diesem
+   * Dossier in derselben Reihenfolge (#211 AK 3). Öffentlich für PR S4 und den
+   * Abnahmetest.
    */
   rankExact(
     query: string,
     scope: SearchScope
   ): { documents: RankedDocument[]; truncated: boolean; terms: string[] } {
     const parsed = parseQuery(query)
-    const exact = findExactCandidates(this.db, parsed)
+    const exact = findExactCandidates(this.db, parsed, {
+      dossierId: scope.kind === 'dossier' ? scope.dossierId : undefined,
+      maxCandidates: this.maxCandidates
+    })
     const ranked = rankDocuments(exact.candidates, (id) => exact.sortDays.get(id) ?? '')
-    const allowed = scope.kind === 'dossier' ? this.sessionsOfDossier(scope.dossierId) : null
-    const { documents, truncated } = filterAndLimit(ranked, allowed, SEARCH_MAX_DOCUMENT_RESULTS)
+    const { documents, truncated } = filterAndLimit(ranked, null, SEARCH_MAX_DOCUMENT_RESULTS)
     return { documents, truncated: truncated || exact.capped, terms: parsed.terms }
-  }
-
-  /** Sitzungen, die dem Dossier JETZT zugeordnet sind (#211 AK 1). */
-  private sessionsOfDossier(dossierId: string): Set<string> {
-    const rows = this.db
-      .prepare('SELECT session_id FROM session_dossiers WHERE dossier_id = ?')
-      .all(dossierId) as Array<{ session_id: string }>
-    return new Set(rows.map((r) => r.session_id))
   }
 
   /**

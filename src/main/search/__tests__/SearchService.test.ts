@@ -260,3 +260,82 @@ describe('SearchService — dossiers (#209 AK 23–25)', () => {
     ])
   })
 })
+
+describe('SearchService — bounded candidates and dossier filter before the limit (#211 AK 3)', () => {
+  let db: Database.Database
+  let docs: Map<string, unknown>
+
+  beforeEach(() => {
+    db = createSearchTestDb()
+    docs = new Map()
+    db.prepare(
+      `INSERT INTO dossiers (id, first_name, last_name, first_name_norm, last_name_norm, created_at, updated_at)
+       VALUES ('d1', 'Lea', 'Muster', 'lea', 'muster', 'x', 'x')`
+    ).run()
+  })
+
+  afterEach(() => db.close())
+
+  const assign = (ids: string[]): void => {
+    const insert = db.prepare(
+      `INSERT INTO session_dossiers (session_id, dossier_id, assigned_at) VALUES (?, 'd1', 'x')`
+    )
+    for (const id of ids) insert.run(id)
+  }
+
+  it('gives a dossier the same order as the filtered search over everything, also beyond the limit', () => {
+    // 30 Sitzungen, «Angst» unterschiedlich oft → unterschiedliches bm25
+    for (let i = 0; i < 30; i++) {
+      addIndexedSession(
+        db,
+        docs,
+        {
+          id: `s${String(i).padStart(2, '0')}`,
+          createdAt: `2026-01-${String(i + 1).padStart(2, '0')}T08:00:00.000Z`
+        },
+        [{ speaker: 'A', text: `${'Angst '.repeat((i % 7) + 1)}und noch ${i} Wörter zum Füllen.` }]
+      )
+    }
+    indexAll(createIndexService(db, docs))
+    const inDossier = ['s03', 's11', 's17', 's22', 's29']
+    assign(inDossier)
+    const ids = (service: SearchService, scope: SearchScope): string[] =>
+      service.query({ requestId: 1, query: 'angst', scope }).results.map((r) => r.sessionId)
+
+    const unlimited = new SearchService(db)
+    const limited = new SearchService(db, { maxCandidates: 10 })
+    const expected = ids(unlimited, { kind: 'all' }).filter((id) => inDossier.includes(id))
+    expect(expected).toHaveLength(5)
+    // Unterhalb der Grenze (5 Abschnitte im Dossier ≤ 10): genau die gefilterte Gesamtsuche
+    expect(ids(limited, { kind: 'dossier', dossierId: 'd1' })).toEqual(expected)
+    // Die Gesamtsuche greift an der Grenze ab und meldet das
+    const global = limited.query({ requestId: 1, query: 'angst', scope: { kind: 'all' } })
+    expect(global.truncated).toBe(true)
+    expect(global.results).toHaveLength(10)
+    // Was die begrenzte Gesamtsuche aus dem Dossier zeigt, steht in derselben Reihenfolge
+    const common = global.results.map((r) => r.sessionId).filter((id) => inDossier.includes(id))
+    expect(expected.filter((id) => common.includes(id))).toEqual(common)
+  })
+
+  it('finds short queries in a dossier even if its sessions are older than the scan window (review #222)', () => {
+    for (let i = 0; i < 600; i++) {
+      insertSession(db, {
+        id: `x${String(i).padStart(3, '0')}`,
+        title: `Titel ab ${i}`,
+        createdAt: new Date(Date.UTC(2024, 0, 1) + i * 3_600_000).toISOString()
+      })
+    }
+    indexAll(createIndexService(db, docs))
+    assign(['x000', 'x001', 'x002'])
+    const service = new SearchService(db)
+    const scoped = service.query({
+      requestId: 1,
+      query: 'ab',
+      scope: { kind: 'dossier', dossierId: 'd1' }
+    })
+    expect(scoped.results.map((r) => r.sessionId).sort()).toEqual(['x000', 'x001', 'x002'])
+    expect(scoped.truncated).toBe(false)
+    const global = service.query({ requestId: 1, query: 'ab', scope: { kind: 'all' } })
+    expect(global.truncated).toBe(true)
+  })
+})

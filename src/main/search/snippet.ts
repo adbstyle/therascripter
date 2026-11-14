@@ -1,4 +1,8 @@
-import { findNormalizedRanges, normalizeWithMap } from '../../shared/utils/search-normalize'
+import {
+  findNormalizedRanges,
+  normalizeSearchText,
+  normalizeWithMap
+} from '../../shared/utils/search-normalize'
 import {
   SEARCH_ANCHOR_CHARS,
   SEARCH_SNIPPET_LEAD_CHARS,
@@ -36,6 +40,10 @@ interface UnitWithText {
 function unitsWithMatches(chunk: StoredChunk, terms: string[]): UnitWithText[] {
   return unitTextSpans(chunk).map(({ start, end, unit }) => {
     const text = chunk.text.slice(start, end)
+    // Offset-Tabelle nur für Units, die einen Begriff enthalten
+    if (terms.length === 0 || !terms.some((t) => normalizeSearchText(text).includes(t))) {
+      return { unit, text, matches: [] }
+    }
     const normalized = normalizeWithMap(text)
     const matches = terms
       .flatMap((term) => findNormalizedRanges(normalized, term))
