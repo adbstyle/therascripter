@@ -240,6 +240,48 @@ describe('resolveSearchFocus — robust gegen Bearbeitung', () => {
     })
     expect(resolved.kind === 'body' && resolved.spec.paragraphs.length).toBe(2)
     expect(resolved.kind === 'body' && resolved.spec.marks).toEqual([])
+    expect(resolved.kind === 'body' && resolved.spec.style).toBe('semantic')
+    // gescrollt wird zum ersten Absatz des Abschnitts
+    expect(resolved.kind === 'body' && resolved.scrollParagraphPos).toBe(paragraphPos(h, 0))
+    expect(resolved.kind === 'body' && resolved.paragraphIndex).toBe(0)
+  })
+
+  it('exakter Treffer über mehrere Absätze: nur Absätze mit einem markierten Begriff', () => {
+    const h = editorWith()
+    const inner = hitFocus(h, 1, 'Bern')
+    const resolved = resolveSearchFocus(h.editor.state.doc, {
+      ...inner,
+      paraFrom: 0,
+      paraTo: 2
+    })
+    expect(resolved.kind).toBe('body')
+    if (resolved.kind !== 'body') return
+    expect(resolved.spec.style).toBe('exact')
+    expect(resolved.spec.paragraphs).toEqual([
+      { from: paragraphPos(h, 1), to: paragraphPos(h, 2) }
+    ])
+    expect(resolved.paragraphIndex).toBe(1)
+    expect(resolved.scrollParagraphPos).toBe(paragraphPos(h, 1))
+  })
+
+  it('exakte Begriffe in zwei Absätzen: beide hinterlegt, gescrollt zum ersten', () => {
+    const h = editorWith()
+    const a = hitFocus(h, 0, 'Guten')
+    const b = hitFocus(h, 2, 'Ende')
+    const resolved = resolveSearchFocus(h.editor.state.doc, {
+      kind: 'hit',
+      paraFrom: 0,
+      paraTo: 2,
+      ranges: [...a.ranges!, ...b.ranges!],
+      anchor: 'Guten'
+    })
+    expect(resolved.kind).toBe('body')
+    if (resolved.kind !== 'body') return
+    expect(resolved.spec.paragraphs.map((p) => p.from)).toEqual([
+      paragraphPos(h, 0),
+      paragraphPos(h, 2)
+    ])
+    expect(resolved.scrollParagraphPos).toBe(paragraphPos(h, 0))
   })
 
   it('vergleicht den Anker ohne Rücksicht auf Gross-/Kleinschreibung und Umlaut-Schreibweise', () => {
@@ -295,6 +337,21 @@ describe('Plugin: nur Decorations', () => {
     }
     expect(paragraph!.getAttribute('title')).toBeNull()
     expect(paragraph!.getAttribute('aria-label')).toBeNull()
+  })
+
+  it('Treffer nach Bedeutung: nur Randbalken-Klasse, keine vollflächige Hinterlegung', () => {
+    const h = editorWith()
+    const resolved = resolveSearchFocus(h.editor.state.doc, {
+      kind: 'hit',
+      paraFrom: 0,
+      paraTo: 1,
+      anchor: 'Guten Tag'
+    })
+    if (resolved.kind !== 'body') throw new Error('keine Fundstelle')
+    h.editor.view.dispatch(setSearchHighlight(h.editor.state, resolved.spec))
+    const dom = h.editor.view.dom
+    expect(dom.querySelectorAll('p.search-hit-paragraph-semantic')).toHaveLength(2)
+    expect(dom.querySelector('p.search-hit-paragraph')).toBeNull()
   })
 
   it('markiert exakte Begriffe als Inline-Decoration', () => {

@@ -844,7 +844,7 @@ function ReviewEditor({
     scroll()
     followLayoutRef.current = { scroll, until: Date.now() + FOLLOW_LAYOUT_MS }
     setHitAnnouncement(
-      `Fundstelle in Absatz ${resolved.paragraphIndex + 1} von ${resolved.paragraphCount} hervorgehoben${
+      `Fundstelle ${resolved.spec.style === 'semantic' ? 'ab' : 'in'} Absatz ${resolved.paragraphIndex + 1} von ${resolved.paragraphCount} hervorgehoben${
         resolved.relocated ? ', nach einer Bearbeitung wiedergefunden' : ''
       }.`
     )

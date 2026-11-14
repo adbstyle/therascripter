@@ -166,6 +166,25 @@ describe('Fundstelle im Editor (#209 AK 11)', () => {
     expect(document.activeElement).toBe(screen.getByTestId('editor-scroll'))
   })
 
+  it('exakter Treffer über zwei Absätze: nur der Absatz mit dem Begriff ist hinterlegt', async () => {
+    await openEditor({ ...SCHLAFE, paraFrom: 0, paraTo: 1 } as SessionFocus)
+    await waitFor(() => expect(document.querySelectorAll('p.search-hit-paragraph')).toHaveLength(1))
+    expect(document.querySelector('p.search-hit-paragraph')?.textContent).toContain('schlafe')
+    expect(screen.getByText('Fundstelle in Absatz 2 von 2 hervorgehoben.')).toBeTruthy()
+  })
+
+  it('Treffer nach Bedeutung: dezenter Randbalken über den Abschnitt, Scroll zum ersten Absatz', async () => {
+    await openEditor({ kind: 'hit', paraFrom: 0, paraTo: 1, anchor: 'Wie geht es' })
+    await waitFor(() =>
+      expect(document.querySelectorAll('p.search-hit-paragraph-semantic')).toHaveLength(2)
+    )
+    expect(document.querySelector('p.search-hit-paragraph')).toBeNull()
+    const first = document.querySelectorAll('p.search-hit-paragraph-semantic')[0]
+    expect(first.textContent).toContain('Wie geht es')
+    expect(scrollIntoView.mock.contexts.at(-1)).toBe(first)
+    expect(screen.getByText('Fundstelle ab Absatz 1 von 2 hervorgehoben.')).toBeTruthy()
+  })
+
   it('speichert durch das Hervorheben nichts', async () => {
     const { unmount } = await openEditor(SCHLAFE)
     await waitFor(() => expect(document.querySelector('.search-hit-term')).not.toBeNull())
@@ -199,6 +218,12 @@ describe('Fundstelle im Editor (#209 AK 11)', () => {
         expect(document.querySelector('p.search-hit-paragraph')?.textContent).not.toContain(
           'Fässler'
         )
+        // Der markierte Chip zeigt sichtbar den Platzhalter, nie den Klarnamen
+        expect(marked.textContent).toContain('Person 1')
+        expect(marked.textContent).not.toContain('Fässler')
+        expect(marked.outerHTML).not.toContain('Fässler')
+      } else {
+        expect(marked.textContent).toContain('Reto Fässler')
       }
     }
   )
@@ -286,7 +311,9 @@ describe('Fundstelle im Editor (#209 AK 11)', () => {
       </ToastProvider>
     )
     await waitFor(() =>
-      expect(document.querySelector('p.search-hit-paragraph')?.textContent).toContain('Wie geht es')
+      expect(
+        document.querySelector('p.search-hit-paragraph-semantic')?.textContent
+      ).toContain('Wie geht es')
     )
     expect(document.querySelector('.search-hit-term')).toBeNull()
     expect(api.review.load).toHaveBeenCalledTimes(1)
