@@ -3,6 +3,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { chmodSync, existsSync, mkdirSync } from 'fs'
 import { migrations } from './migrations'
+import { runStartupMaintenance } from './maintenance'
 
 let db: Database.Database | null = null
 
@@ -60,6 +61,7 @@ export function initDatabase(dbPath?: string): Database.Database {
     db.pragma('secure_delete = ON')
 
     runMigrations(db)
+    runStartupMaintenance(db)
   } catch (error) {
     db.close()
     db = null

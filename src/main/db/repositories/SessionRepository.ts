@@ -10,6 +10,7 @@ import type {
   TaskType,
   ProcessedModelsSnapshot
 } from '../../../shared/types'
+import { walCheckpointTruncate } from '../maintenance'
 
 interface SessionRow {
   id: string
@@ -300,6 +301,13 @@ export class SessionRepository {
       .run(id)
   }
 
+  isMarkedForDeletion(id: string): boolean {
+    const row = this.db.prepare('SELECT deleting_at FROM sessions WHERE id = ?').get(id) as
+      | { deleting_at: string | null }
+      | undefined
+    return row?.deleting_at != null
+  }
+
   findMarkedForDeletion(): Session[] {
     const rows = this.db
       .prepare('SELECT * FROM sessions WHERE deleting_at IS NOT NULL ORDER BY deleting_at ASC')
@@ -316,10 +324,11 @@ export class SessionRepository {
   /**
    * Moves the WAL content into the database file and truncates the WAL.
    * Together with PRAGMA secure_delete (initDatabase) this leaves no copy of
-   * a deleted row in either file (Issue #202, Postcondition 1).
+   * a deleted row in either file (Issue #202, Postcondition 1). Returns false
+   * if the checkpoint was blocked (busy) and did not complete.
    */
-  checkpoint(): void {
-    this.db.pragma('wal_checkpoint(TRUNCATE)')
+  checkpoint(): boolean {
+    return walCheckpointTruncate(this.db)
   }
 
   findReadyForSourceFileDeletion(): Session[] {

@@ -116,13 +116,41 @@ export class SessionService {
     return finished
   }
 
+  /**
+   * Called by the task queue after every executor run (#202): if the session
+   * was deleted meanwhile, an executor that ignored the abort may have written
+   * files after the deletion removed them. Removes them again with the same
+   * code as the deletion; a still-marked row is finished. No-op for an
+   * existing, unmarked session. Returns true if the session was deleted.
+   */
+  removeFilesIfDeleted(id: string): boolean {
+    const row = this.repository.findByIdIncludingDeleting(id)
+    if (row && !this.repository.isMarkedForDeletion(id)) return false
+    if (row) {
+      this.completeDeletion(row)
+    } else if (!this.removeSessionFiles(id, [])) {
+      console.error(
+        `[SessionService] Nachträglich geschriebene Dateien der gelöschten Sitzung ${id} konnten nicht alle entfernt werden — der Start-Sweep holt das nach`
+      )
+    }
+    return true
+  }
+
   /** IDs of every session row, including rows still marked for deletion. */
   getAllSessionIds(): string[] {
     return this.repository.findAllIds()
   }
 
   private completeDeletion(session: Session): boolean {
-    const filesGone = this.removeSessionFiles(session)
+    const filesGone = this.removeSessionFiles(session.id, [
+      session.audioPath,
+      session.transcriptPath,
+      session.anonymizedPath,
+      session.diarizationPath,
+      session.alignedTranscriptPath,
+      session.pdfPath,
+      session.extractedPath
+    ])
     if (filesGone) {
       this.repository.delete(session.id)
     } else {
@@ -131,8 +159,14 @@ export class SessionService {
         `[SessionService] Dateien der Sitzung ${session.id} konnten nicht alle entfernt werden — Löschen wird beim nächsten Start abgeschlossen`
       )
     }
+    // Ein blockierter Checkpoint (busy) wird beim nächsten Löschen und beim
+    // nächsten Start nachgeholt (initDatabase checkpointet immer).
     try {
-      this.repository.checkpoint()
+      if (!this.repository.checkpoint()) {
+        console.error(
+          '[SessionService] WAL-Checkpoint nach dem Löschen blockiert — wird beim nächsten Löschen bzw. Start nachgeholt'
+        )
+      }
     } catch (error) {
       console.error('[SessionService] WAL-Checkpoint nach dem Löschen fehlgeschlagen:', error)
     }
@@ -159,18 +193,11 @@ export class SessionService {
    * before the path was written to the row). Returns false if any file still
    * exists afterwards.
    */
-  private removeSessionFiles(session: Session): boolean {
+  private removeSessionFiles(id: string, storedPaths: (string | null)[]): boolean {
     const dataDir = getDataDir()
-    const id = session.id
     const filePaths = new Set(
       [
-        session.audioPath,
-        session.transcriptPath,
-        session.anonymizedPath,
-        session.diarizationPath,
-        session.alignedTranscriptPath,
-        session.pdfPath,
-        session.extractedPath,
+        ...storedPaths,
         join(dataDir, 'audio', `${id}.wav`),
         join(dataDir, 'transcripts', `${id}.json`),
         join(dataDir, 'transcripts', `${id}-aligned.json`),
