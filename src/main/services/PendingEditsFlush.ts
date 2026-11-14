@@ -77,6 +77,8 @@ export function requestRendererFlush(deps: FlushDeps): Promise<FlushOutcome> {
 export interface QuitCleanupSteps {
   flushRendererEdits: () => Promise<unknown>
   cleanupRecording: () => void
+  /** Epic #192: Aufbereitung für die Suche anhalten — nach dem Flush, vor der DB. */
+  stopSearchIndex: () => void
   stopSourceFileCleanup: () => void
   shutdownTaskQueue: () => Promise<void>
   destroyTray: () => void
@@ -86,7 +88,8 @@ export interface QuitCleanupSteps {
 /**
  * Reihenfolge des Aufräumens beim Beenden (vorher inline in `before-quit`):
  * zuerst speichert der Renderer ausstehende Änderungen — solange die
- * Datenbank offen ist —, dann Aufnahme, Aufräumdienst, Warteschlange, Tray,
+ * Datenbank offen ist —, dann Aufnahme, Aufbereitung für die Suche,
+ * Aufräumdienst, Warteschlange, Tray,
  * zuletzt die Datenbank. Kein Schritt hält die folgenden auf.
  */
 export async function runQuitCleanup(steps: QuitCleanupSteps): Promise<void> {
@@ -103,6 +106,7 @@ export async function runQuitCleanup(steps: QuitCleanupSteps): Promise<void> {
     }
   }
   run(steps.cleanupRecording)
+  run(steps.stopSearchIndex)
   run(steps.stopSourceFileCleanup)
   try {
     await steps.shutdownTaskQueue()

@@ -172,6 +172,18 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
       delete: vi.fn(),
       onChanged: on('dossiers.onChanged')
     },
+    search: {
+      query: vi.fn().mockImplementation(async (input: { requestId: number }) => ({
+        requestId: input.requestId,
+        dossiers: [],
+        results: [],
+        truncated: false,
+        semantic: 'unavailable'
+      })),
+      recentList: vi.fn().mockResolvedValue([]),
+      recentRemember: vi.fn().mockResolvedValue(undefined),
+      recentClear: vi.fn().mockResolvedValue(undefined)
+    },
     pendingEdits: {
       onFlushRequest: on('pendingEdits.onFlushRequest')
     },

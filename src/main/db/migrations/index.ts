@@ -18,6 +18,7 @@ import sessionDeletingAt from './017-session-deleting-at.sql?raw'
 import appMaintenance from './018-app-maintenance.sql?raw'
 import placeholderSnapshots from './019-placeholder-snapshots.sql?raw'
 import patientDossiers from './020-patient-dossiers.sql?raw'
+import searchIndex from './021-search-index.sql?raw'
 
 // REGEL für Table-Rebuild-Migrationen (CREATE new → DROP old → RENAME):
 // Der Migration-Runner läuft mit PRAGMA foreign_keys = ON. Ein
@@ -69,5 +70,6 @@ export const migrations: Migration[] = [
   { version: 17, sql: sessionDeletingAt },
   { version: 18, sql: appMaintenance },
   { version: 19, sql: placeholderSnapshots },
-  { version: 20, sql: patientDossiers }
+  { version: 20, sql: patientDossiers },
+  { version: 21, sql: searchIndex }
 ]
