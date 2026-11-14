@@ -93,7 +93,9 @@ export function EditableSessionTitle({
     return (
       <h2
         key="read-only"
-        className={`session-title h-9 truncate rounded-lg border border-transparent px-4 leading-9 ${className ?? ''}`}
+        // no-drag: the header is a window drag region — without it the
+        // Klartext title could not be selected and copied
+        className={`titlebar-no-drag session-title h-9 truncate rounded-lg border border-transparent px-4 leading-9 ${className ?? ''}`}
         title={empty ? undefined : readOnlyText}
       >
         {empty ? <span className="text-text-tertiary">{fallback}</span> : readOnlyText}
