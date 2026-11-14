@@ -400,6 +400,41 @@ describe('AssignDossiersPopover — Platz im Fenster (Sichtprüfung)', () => {
     await waitFor(() => expect(dialog).toHaveAttribute('data-placement', 'top'))
   })
 
+  it('erscheint erst nach dem Laden der Liste — gleich auf der richtigen Seite, ohne Sprung', async () => {
+    let resolveList: (list: DossierListItem[]) => void = () => {}
+    window.api = createMockApi({
+      dossiers: {
+        list: vi.fn(() => new Promise<DossierListItem[]>((r) => (resolveList = r))),
+        assign: vi.fn(),
+        unassign: vi.fn()
+      }
+    })
+    // Während «Wird geladen …» ist das Popover nur 60 px hoch, danach 340 px
+    for (const s of sizes) s.mockRestore()
+    sizes = [
+      vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
+        this: HTMLElement
+      ) {
+        if (this.getAttribute('role') !== 'dialog') return 0
+        return this.textContent?.includes('Wird geladen') ? 60 : 340
+      })
+    ]
+    const user = userEvent.setup()
+    renderWithProviders(
+      <DossierBadges sessionId="s1" sessionLabel="X" dossiers={[]} variant="list" />
+    )
+    const group = screen.getByRole('group', { name: 'Patientendossiers' })
+    group.getBoundingClientRect = () => rect(window.innerHeight - 120, 300)
+    await user.click(screen.getByRole('button', { name: 'Dossier zuordnen' }))
+    const hidden = screen.getByRole('dialog', { hidden: true })
+    expect(hidden.style.visibility).toBe('hidden')
+    await act(async () => resolveList([HOFER, MEIER_A]))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog.style.visibility).toBe('')
+    expect(dialog).toHaveAttribute('data-placement', 'top')
+    expect(within(dialog).getByRole('textbox')).toHaveFocus()
+  })
+
   it('verschiebt das Popover nach links, wenn es rechts aus dem Fenster ragte', async () => {
     const { user } = setup()
     const group = screen.getByRole('group', { name: 'Patientendossiers' })

@@ -64,9 +64,16 @@ export function AssignDossiersPopover({
     []
   )
 
+  // Erst nach dem ersten Laden der Liste sichtbar: vorher wäre das Popover
+  // niedrig, öffnete unten und spränge nach dem Laden nach oben (Review #231).
+  // Die Seite wird im selben Layout-Durchgang gemessen, in dem es erscheint.
+  const ready = !(dossiers.loading && dossiers.data.length === 0)
+
+  // Fokus in die Suche, sobald das Popover sichtbar ist (verborgene Elemente
+  // nehmen keinen Fokus)
   useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
+    if (ready) inputRef.current?.focus()
+  }, [ready])
 
   const assignedIds = useMemo(() => new Set(assigned.map((d) => d.id)), [assigned])
 
@@ -164,7 +171,11 @@ export function AssignDossiersPopover({
       aria-labelledby={headingId}
       onKeyDown={onKeyDown}
       data-placement={placement.side}
-      style={{ left: placement.offsetX, maxHeight: placement.maxHeight }}
+      style={{
+        left: placement.offsetX,
+        maxHeight: placement.maxHeight,
+        visibility: ready ? undefined : 'hidden'
+      }}
       className={`pointer-events-auto absolute z-30 flex w-[min(380px,calc(100vw-2rem))] flex-col gap-1 rounded-lg border border-border bg-surface-0 p-2 text-left shadow-lg ${
         placement.side === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
       }`}
