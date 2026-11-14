@@ -52,16 +52,21 @@ function reasonOf(value: string | null | undefined): UnavailableReason | null {
  * Der aktuelle Stand (`availability`, live) geht vor dem Stand der letzten
  * Antwort (`status`): so verschwindet der Hinweis, sobald die Suche nach
  * Bedeutung wieder geht, und erscheint, sobald eine Verarbeitung beginnt.
+ * Abbruch (`error`) und Blockade der letzten Antwort bleiben sichtbar.
  */
 export function semanticNotice(
   availability: SearchAvailability | null,
   status: SemanticSearchStatus | null
 ): SemanticNotice | null {
   const live = availability ? reasonOf(availability.semantic) : null
+  // Verarbeitung bzw. fehlendes Modell sagt der Live-Stand zuverlässiger; ist
+  // er wieder «bereit», holt die Suche die Bedeutung ohnehin nach. Ein Abbruch
+  // oder eine Blockade betrifft dagegen genau diese Antwort.
+  const answerReason = reasonOf(status)
   const fromAnswer =
-    availability && (availability.semantic === 'ready' || availability.semantic === 'loading')
+    availability && (answerReason === 'unavailable-processing' || answerReason === 'model-missing')
       ? null
-      : reasonOf(status)
+      : answerReason
   const reason = live ?? fromAnswer
   if (!reason) return null
 
