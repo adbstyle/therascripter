@@ -227,6 +227,16 @@ export function useSearch(scope: SearchScope, active = true): UseSearchResult {
     }
   }, [active])
 
+  // Beim Öffnen: wurde zuletzt getippt, aber nicht mehr gesucht (Fenster
+  // innerhalb der Entprellung geschlossen), jetzt nachholen — sonst passen
+  // Feld und Treffer nicht zusammen
+  useEffect(() => {
+    if (!active) return
+    const current = getSearchEntry(key)
+    if (normalizeQueryInput(current.query) !== current.submitted) void run(current.query)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, key])
+
   // Wird die Suche nach Bedeutung wieder möglich (Verarbeitung fertig, Modell
   // geladen), holt die angezeigte Anfrage sie nach
   const semanticReady = availability?.semantic === 'ready'

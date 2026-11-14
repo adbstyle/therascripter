@@ -116,6 +116,21 @@ describe('Suchfenster öffnen und schliessen', () => {
     window.removeEventListener('keydown', windowHandler)
   })
 
+  it('holt eine getippte, aber noch nicht gesuchte Anfrage beim nächsten Öffnen nach', async () => {
+    renderHost()
+    await openModal()
+    await typeQuery('Hofer')
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' })
+    expect(window.api.search.query).not.toHaveBeenCalled()
+    await openModal()
+    expect(screen.getByRole('combobox')).toHaveValue('Hofer')
+    await waitFor(() =>
+      expect(window.api.search.query).toHaveBeenCalledWith(
+        expect.objectContaining({ query: 'Hofer' })
+      )
+    )
+  })
+
   it('öffnet sich nicht über einem anderen Dialog', async () => {
     renderHost()
     const other = document.createElement('div')

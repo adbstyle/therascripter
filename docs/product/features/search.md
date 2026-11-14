@@ -2,7 +2,7 @@
 
 Stories #209 (search), #210 (stock before the update), #211 (search within a patient dossier) and #212 (edits become searchable soon), Epic #192.
 
-This page describes the main-process side: the search index, the **text phase** of the preparation (Node only, no model), the **exact search** including clear names, dossier hits and the recent searches (PR S3), and the **search process**, the **vector phase**, the **vector store** and the **search by meaning** (PR S4). The model provisioning (PR S2), the user interface (PR S5) and the acceptance test with the reference set plus threshold calibration (PR S6) follow.
+This page describes the main-process side: the search index, the **text phase** of the preparation (Node only, no model), the **exact search** including clear names, dossier hits and the recent searches (PR S3), and the **search process**, the **vector phase**, the **vector store** and the **search by meaning** (PR S4), plus the **user interface** (PR S5, section «User interface» below). The model provisioning is PR S2; the acceptance test with the reference set plus threshold calibration (PR S6) follows.
 
 Nothing leaves the Mac: index, queries and recent searches live only in `~/.therascript/data/therascript.db` (#209 AK 20).
 
@@ -160,6 +160,34 @@ Disk space for the search index: up to ~0.6 GB at 2'000 sessions (measured ~0.55
 | Cosine over 66'000 × 768 int8 in Node | ~30–50 ms in total, longest synchronous stretch ~20–25 ms, 50 MiB (`VectorStore.test.ts`) |
 
 The cold start is just above 5 s on this machine; preloading when the search opens (#209 AK 16) hides most of it. Not measured on an 8-GB Mac (PR S6, #209 AK 14/15/19).
+
+## User interface (PR S5)
+
+Two fixed places, as in the approved prototype («Globale Suche als Modal», «Suche mit Treffern»): ⌘K searches everything, «Im Dossier suchen» only that dossier. Neither can be switched to the other (#211 OOS 2).
+
+### Search window (⌘K)
+
+`components/search/SearchModal.tsx`, carried by `SearchHost` in the app shell (no search during first launch). Opens from the menu «Gehe zu → Suchen …» (⌘K, `nav:command 'search'`, works with the focus in the editor; ⌘K again closes it) and from «Suchen ⌘K» at the top of the sidebar; never on top of another dialog. Opening calls `search:open` (preload, #209 AK 16).
+
+- **Query:** debounced 200 ms (`useSearch`); every request carries a `requestId` from one counter per window, answers to overtaken requests are dropped. `search:query` shows dossiers and exact hits at once; with `semantic: 'pending'` `search:semantic` follows, with a loading line only for that part («Treffer nach Bedeutung werden gesucht …»). An answer `superseded` while the request is still current is re-sent once. If the user has already worked with the list (arrow keys, mouse, scrolling, opened a hit), the hits by meaning are appended below and the shown documents keep their place — nothing jumps under the pointer or the selection; otherwise the ranked order of the second answer applies.
+- **List** (`SearchResultsList`, a `listbox` with `group`s): dossiers first and separate with «ID · Geburtsdatum» (AK 24/25), then «Sitzungen und PDF-Dokumente · N Treffer»; per session/PDF one group with a header option (icon, title in the chosen view, date, assigned dossiers; opens the document at the top) and up to three hit options (place on the left: «Titel», «Zusammenfassung», «Person B · 00:14:32»; PDFs «Textstelle» — no page label, decision of the orchestrator). Snippets are **always plain text** (footer «Ausschnitte im Klartext · Treffer öffnen die Fundstelle»); exact places are `<mark>`ed, hits by meaning dotted-underlined. `truncated` adds «Es gibt weitere Treffer …».
+- **States:** empty → «Letzte Suchen» (five, from `search:recent:list`; clicking re-runs and remembers it; «Verlauf löschen» → `search:recent:clear`) or, without recent searches, a sentence on what the search finds; no hits → «Keine Treffer für «…»» (only once the search by meaning has finished or is unavailable); a note box (`SemanticNoticeBox`, texts in `utils/searchNotice.ts`, model texts shared with the status card via `utils/searchModelStatus.ts`) when the search by meaning cannot run: during processing (#209 AK 18: «… verfügbar, sobald die Verarbeitung abgeschlossen ist. Genaue Begriffe, Klarnamen und Patientendossiers finden Sie schon jetzt.»), model missing/downloading with progress/waiting (#210 AK 4), loading failed with reason and «Erneut versuchen» (`search:retryModel`, #210 AK 5), tool blocked, search process aborted («Erneut versuchen» repeats the search by meaning). The live `search:availabilityChanged` state wins over the last answer; when it turns `ready`, the shown query fetches the search by meaning by itself.
+- **Keyboard and a11y:** the input is a `combobox` (`aria-controls`, `aria-activedescendant`), focus stays in it; no preselection; ↑/↓ through all options (recent searches, dossiers, document headers, hits), ↵ opens the selected one or searches at once; Esc closes only the window (`preventDefault` + `stopPropagation`; the editor's Esc handler skips prevented events), Tab is trapped (`utils/focusTrap.ts`, shared with `DialogShell`). A polite live region announces «2 Patientendossiers, 5 Sitzungen und PDF-Dokumente» or «Keine Treffer für «…»».
+- **Recent searches** are remembered on ↵ and when opening a hit or dossier — only here, never from the dossier search (#211 OOS 3). Queries are shown as typed, clear names included (Epic OOS 16), and never logged.
+
+### Opening a hit and coming back (#209 AK 11/12)
+
+A hit navigates to `{kind:'session', sessionId, focus}` (the `SearchFocus` of the hit; header → no focus; dossier → `{kind:'dossier'}`) with `reopenOverlay: 'search'` on the entry it came from. ‹ / Esc / ⌘[ back to that entry reopens the window (`SearchHost`, consumed once per return) with the same query, the same hits, the same selection and scroll position — all kept in `stores/searchSession.ts` (renderer memory only) until the next search or restart. A tipped but not yet searched query is searched when the window opens again. Deleted sessions and dossiers leave the remembered hits (`sessions:changed`/`dossiers:changed` with `deletedIds`), also while the window is closed.
+
+How the editor shows the place: [review-editor.md](review-editor.md#jump-to-a-search-hit-209).
+
+### Search in a patient dossier (#211)
+
+`views/DossierSearchPage.tsx`, route `{kind:'dossierSearch', dossierId}`, reached from «Im Dossier suchen» in the dossier header. Same list component and states, without dossier hits; scope `{kind:'dossier', dossierId}` (filtered after ranking in the main process, #211 AK 1/3). The header always reads «Suche im Patientendossier [Hofer, Lukas]» (the name opens the dossier) plus «N Dokumente · Ausschnitte im Klartext» (AK 2). State per dossier in the same store (`dossier:<id>`): query and hits stay until the next search, the dossier's deletion (entry dropped, the route leaves the history like the dossier page) or a restart (AK 4). Opening a hit sets `anchorId` so ‹ highlights it again; nothing is remembered as a recent search. No hits: «Im Patientendossier … passt keine Stelle zu dieser Anfrage. Für alle Inhalte suchen Sie mit ⌘K.»
+
+### Tests (renderer)
+
+`components/search/__tests__/SearchModal.test.tsx` (open/toggle/Esc, recent searches, two-stage answer, overtaken answers, debounce, append without jumps, superseded, views, no hits, truncated, keyboard and ARIA, return with `reopenOverlay`, deleted hits, all availability notes), `SearchEntryPoints.test.tsx`, `views/__tests__/DossierSearchPage.test.tsx`, `views/__tests__/ReviewEditor.searchFocus.test.tsx`, `extensions/__tests__/searchHighlight.test.ts`, `stores/__tests__/searchSession.test.ts`, `navigation/__tests__/navReducer.test.ts` («Suche»).
 
 ## Tests
 
