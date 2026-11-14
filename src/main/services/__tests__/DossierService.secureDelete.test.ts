@@ -18,6 +18,7 @@ vi.mock('electron', () => ({
 import { initDatabase, getDatabase, closeDatabase } from '../../db/connection'
 import { DossierService } from '../DossierService'
 import { SessionService } from '../SessionService'
+import { normalizeDossierKey } from '../../../shared/utils/dossier-normalize'
 
 const MARKER = 'ZQX-Dossier-Geheimnis-4417'
 
@@ -75,6 +76,66 @@ describe('DossierService.deleteDossier — nothing recoverable on disk', () => {
 
     return { dossierId, sessionId: session.id, audioPath }
   }
+
+  // Review #217: ein Dossier OHNE Sitzungen — dann läuft kein Sitzungs-Löschen
+  // und damit auch dessen Checkpoint nicht; der Checkpoint in deleteDossier
+  // muss die Bytes allein entfernen. Marker in jedem Feld, auch in seiner
+  // normalisierten Form (die *_norm-Spalten und ihre Indexe).
+  it('leaves no trace of a dossier without sessions, in any field or its normalized form', () => {
+    const service = new DossierService(getDatabase())
+    const markers = {
+      firstName: 'VorQX-Ä-7781',
+      lastName: 'NachQX-Ö-7782',
+      externalId: 'IDQX-Ü-7783',
+      diagnoses: 'DiagQX-7784',
+      medication: 'MediQX-7785',
+      note: 'NotizQX-7786'
+    }
+    // Normalisiert gespeichert werden nur Namen und Dossier-ID (*_norm-Spalten)
+    const needles = [
+      ...Object.values(markers),
+      ...[markers.firstName, markers.lastName, markers.externalId].map(normalizeDossierKey)
+    ]
+
+    const result = service.create({
+      firstName: markers.firstName,
+      lastName: markers.lastName,
+      externalId: markers.externalId
+    })
+    if (!result.ok) throw new Error('create failed')
+    const id = result.dossier.id
+    service.update(id, {
+      diagnoses: `Diagnose ${markers.diagnoses}`,
+      medication: `Medikation ${markers.medication}`,
+      note: `Notiz ${markers.note} `.repeat(300)
+    })
+    // Inhalt in der Datenbankdatei UND ältere Fassungen im WAL
+    getDatabase().pragma('wal_checkpoint(TRUNCATE)')
+    service.update(id, {
+      firstName: `${markers.firstName}b`,
+      lastName: `${markers.lastName}b`,
+      externalId: `${markers.externalId}b`,
+      diagnoses: `Neu ${markers.diagnoses}`,
+      medication: `Neu ${markers.medication}`,
+      note: `Neu ${markers.note}`
+    })
+    const anyFile = (n: string): boolean =>
+      fileContains(dbPath, n) || fileContains(`${dbPath}-wal`, n)
+    for (const needle of needles) expect(anyFile(needle), needle).toBe(true)
+
+    const { fingerprint } = service.deletePreview(id)!
+    expect(service.deleteDossier(id, fingerprint)).toEqual({
+      ok: true,
+      deletedSessionIds: [],
+      incomplete: false
+    })
+
+    // Vor closeDatabase prüfen: das Schliessen checkpointet selbst
+    for (const needle of needles) {
+      expect(fileContains(dbPath, needle), `.db: ${needle}`).toBe(false)
+      expect(fileContains(`${dbPath}-wal`, needle), `-wal: ${needle}`).toBe(false)
+    }
+  })
 
   it('leaves no trace of the dossier or its exclusive session in .db, -wal or the data dir', () => {
     const service = new DossierService(getDatabase())
