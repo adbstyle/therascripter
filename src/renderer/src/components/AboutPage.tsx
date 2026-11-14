@@ -145,6 +145,19 @@ export default function AboutPage(): React.JSX.Element {
           )}
         </div>
 
+        {/* Kopieren — Issue #203 */}
+        <div className="rounded-lg border border-border bg-surface-1 p-4">
+          <h4 className="mb-1 text-sm font-medium text-text-secondary">Kopieren</h4>
+          <p className="text-sm text-text-secondary">
+            Kopiert wird immer die gewählte Ansicht: «Pseudonymisiert» mit Platzhaltern wie [PERSON
+            1], «Klartext» mit den Originalnamen.
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
+            Kopierter Text verlässt Therascript über die Zwischenablage Ihres Macs. Andere Apps
+            können ihn dort lesen, und macOS kann ihn an Ihre anderen Apple-Geräte weitergeben.
+          </p>
+        </div>
+
         {/* Daten info box */}
         <div className="rounded-lg border border-border bg-surface-1 p-4">
           <h4 className="mb-1 text-sm font-medium text-text-secondary">Daten</h4>

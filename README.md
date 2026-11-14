@@ -13,6 +13,7 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 - **Sperrliste** — Persönliche Blocklist für wiederkehrende Begriffe mit bidirektionaler Umlaut-Normalisierung
 - **PDF-Import** — Import und Anonymisierung von PDFs inkl. gescannter Dokumente via OCR
 - **Review-Editor** — TipTap-basierter Editor zur Nachbearbeitung mit Clipboard-Export und Quick-Add zur Sperrliste
+- **Klartext-Ansicht** — Sitzungen, Titel und Zusammenfassungen wahlweise pseudonymisiert oder mit den Originalnamen lesen und kopieren; Umschalter in der Titelleiste, die Wahl gilt für alle Sitzungen und bleibt nach einem Neustart erhalten
 - **Modell-Management** — Austauschbare ML-Modelle pro Pipeline-Schritt, verwaltbar im Einstellungen-Bereich
 - **Updates in der App** — signierte Update-Beschreibung (Ed25519) auf Cloudflare R2; neue App-Versionen und neue Fassungen der Sprachmodelle kommen als **ein** Update: im Hintergrund geladen, geprüft und beim Beenden, nach 10 min Leerlauf oder auf Klick gemeinsam installiert, mit einem Neustart (abschaltbar; scheitert ein Teil, bleibt alles beim bisherigen Stand)
 - **Datenschutz** — keine Übermittlung von Sitzungsinhalten; Renderer ohne Netzwerkzugriff (CSP `connect-src 'none'`), Netzwerk nur im Main-Prozess für Modelle und Versionsprüfung, Electron Fuses gehärtet, FileVault-Prüfung
@@ -51,6 +52,8 @@ Aufnahmen, Transkripte, PDFs und Zusammenfassungen übermittelt Therascript nie;
 - **Sprachmodelle herunterladen:** bei der Ersteinrichtung, beim Hinzufügen eines Modells in den Einstellungen und mit Updates: neue Fassungen der installierten Modelle und Modelle, die eine neue Version braucht, lädt Therascript automatisch zusammen mit dem Update; nach dem Ausschalten der automatischen Updates (Einstellungen → Updates) nur auf Klick.
 - **Nach neuen Versionen suchen:** beim Start, danach alle 4 Stunden und auf Klick unter Einstellungen → Updates.
 - **Neue Versionen herunterladen:** automatisch, sobald eine erscheint; nach dem Ausschalten der automatischen Updates (Einstellungen → Updates) nur auf Klick.
+
+**Kopieren und Zwischenablage:** Kopiert wird immer die gewählte Ansicht (Umschalter «Pseudonymisiert | Klartext» oben rechts) — gleich ob über den Kopieren-Knopf im Editor, mit `⌘ C`/`⌘ X`, durch Ziehen von Text oder aus Titel und Zusammenfassung. In der pseudonymisierten Ansicht enthält die Zwischenablage nur Platzhalter wie `[PERSON 1]`, in der Klartext-Ansicht die Originalnamen. Kopierter Text verlässt Therascript über die Zwischenablage des Macs: Andere Apps können ihn dort lesen, und macOS kann ihn über die «Universelle Zwischenablage» an Ihre anderen Apple-Geräte weitergeben. Therascript leert die Zwischenablage nicht.
 
 Modelle und Versionsliste kommen von Cloudflare R2 (Cloudflare, Inc., USA; Speicherort Osteuropa, Auslieferung über das weltweite Cloudflare-Netz), das Installationspaket neuer Versionen von GitHub (GitHub Inc., USA). Beide sehen dabei IP-Adresse, Zeitpunkt und abgerufene Datei. Die App sendet kein Konto, keine Kennung und keine Nutzungsdaten. Links zu GitHub oder Hugging Face öffnen sich nur auf Klick im Browser. Nach der Ersteinrichtung funktioniert Therascript auch ohne Internet. Die vollständigen Angaben stehen in der [Datenschutzerklärung](https://adbstyle.github.io/therascripter/impressum.html#app-datenschutz).
 

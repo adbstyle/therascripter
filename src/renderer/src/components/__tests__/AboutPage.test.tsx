@@ -35,4 +35,14 @@ describe('AboutPage', () => {
 
     expect(screen.getByText(/The ggml authors/)).toBeInTheDocument()
   })
+
+  it('says what copying puts on the clipboard in which view, and that it leaves the app (#203)', () => {
+    render(<AboutPage />)
+    expect(screen.getByText(/Kopiert wird immer die gewählte Ansicht/)).toHaveTextContent(
+      '«Pseudonymisiert» mit Platzhaltern wie [PERSON 1], «Klartext» mit den Originalnamen'
+    )
+    expect(
+      screen.getByText(/verlässt Therascript über die Zwischenablage Ihres Macs/)
+    ).toBeInTheDocument()
+  })
 })
