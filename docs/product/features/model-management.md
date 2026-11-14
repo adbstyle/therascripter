@@ -223,7 +223,7 @@ Setting `autoUpdate` (default `true`, also for existing installations via electr
 
 | Channel | Direction | Purpose |
 |---------|-----------|---------|
-| `search:open` | handle | Returns `SearchAvailability` (`{ model: SearchModelState }`; PR S4 adds processing/worker fields) |
+| `search:open` | handle | Returns `SearchAvailability` (`{ model: SearchModelState, semantic }`; `semantic` = processing/search process, PR S4) and starts preloading the search model |
 | `search:retryModel` | handle | «Erneut versuchen»: waits for the attempt, returns `SearchAvailability` |
 | `search:availabilityChanged` | send | Pushes every change of `SearchAvailability` |
 

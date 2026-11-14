@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { filterAndLimit, pickHits, rankDocuments, type ChunkCandidate } from '../ranking'
+import {
+  compareChunks,
+  compareDocuments,
+  filterAndLimit,
+  pickHits,
+  rankDocuments,
+  type ChunkCandidate,
+  type RankedDocument
+} from '../ranking'
 
 function chunk(
   chunkId: number,
@@ -91,5 +99,70 @@ describe('search ranking', () => {
     )
     expect(scoped).toEqual(all.filter((id) => id === 'b' || id === 'd'))
     expect(filterAndLimit(ranked, null, 2)).toMatchObject({ truncated: true })
+  })
+})
+
+describe('compareDocuments / compareChunks — total order (Review PR #226)', () => {
+  const doc = (
+    sessionId: string,
+    bestBm25: number | null,
+    maxCosine: number | null,
+    hasExact = bestBm25 !== null,
+    sortDay = '2026-01-01'
+  ): RankedDocument => ({ sessionId, sortDay, hasExact, maxCosine, bestBm25, hits: [] })
+
+  it('orders the minimal example A(bm25 −1, cos 0.9), B(bm25 −2), C(bm25 −3, cos 0.75) as A, C, B', () => {
+    const a = doc('A', -1, 0.9)
+    const b = doc('B', -2, null)
+    const c = doc('C', -3, 0.75)
+    for (const input of [
+      [a, b, c],
+      [b, c, a],
+      [c, a, b],
+      [c, b, a]
+    ]) {
+      expect([...input].sort(compareDocuments).map((d) => d.sessionId)).toEqual(['A', 'C', 'B'])
+    }
+  })
+
+  it('is antisymmetric and transitive on random documents and chunks', () => {
+    let seed = 42
+    const rnd = (): number => {
+      seed = (seed * 1103515245 + 12345) >>> 0
+      return seed / 0xffffffff
+    }
+    const pick = <T>(values: T[]): T => values[Math.floor(rnd() * values.length)]
+    const docs = Array.from({ length: 60 }, (_, i) => {
+      const hasExact = rnd() < 0.5
+      return doc(
+        `s${i}`,
+        hasExact ? pick([-1, -2, -3]) : null,
+        rnd() < 0.6 ? pick([0.7, 0.75, 0.8]) : null,
+        hasExact,
+        pick(['2026-01-01', '2026-02-01'])
+      )
+    })
+    const chunks = Array.from({ length: 60 }, (_, i) => ({
+      chunkId: i,
+      sessionId: 's',
+      field: pick(['title', 'summary', 'body'] as const),
+      ord: pick([0, 1]),
+      paraFrom: 0,
+      paraTo: 0,
+      exact: rnd() < 0.5 ? { bm25: pick([-1, -2]) } : undefined,
+      semantic: rnd() < 0.6 ? { cosine: pick([0.7, 0.8]) } : undefined
+    }))
+    const check = <T>(items: T[], cmp: (a: T, b: T) => number): void => {
+      for (const a of items) {
+        for (const b of items) {
+          expect(Math.sign(cmp(a, b))).toBe(-Math.sign(cmp(b, a)) || 0)
+          for (const c of items.slice(0, 20)) {
+            if (cmp(a, b) <= 0 && cmp(b, c) <= 0) expect(cmp(a, c)).toBeLessThanOrEqual(0)
+          }
+        }
+      }
+    }
+    check(docs, compareDocuments)
+    check(chunks, compareChunks)
   })
 })

@@ -80,6 +80,14 @@ export interface SearchHit {
   label: { speaker?: string; timestamp?: string }
   snippet: SearchSnippet
   focus: SearchFocus
+  /**
+   * true: der Treffer stammt aus einem früheren Stand der Sitzung (Vektoren
+   * der Fassung vor einer Bearbeitung, bis die neuen fertig sind — #212 AK 1).
+   * `paraFrom`/`paraTo`/`ranges` beziehen sich dann auf die alte
+   * Absatzstruktur: die Oberfläche sucht die Stelle über `anchor` im aktuellen
+   * Dokument und meldet sonst, dass es sie nicht mehr gibt.
+   */
+  fromEarlierVersion?: boolean
 }
 
 /** Eine Sitzung bzw. ein PDF-Dokument mit Treffern (#209 AK 7, AK 9). */
@@ -101,14 +109,40 @@ export interface SearchDocumentResult {
 export type SearchDossierResult = DossierRef
 
 /**
- * Stand der Suche nach Bedeutung in einer Antwort. PR S3 liefert immer
- * 'unavailable'; PR S4 ersetzt das durch den echten Stand.
+ * Warum die Suche nach Bedeutung gerade nicht geht (PR S4):
+ * - processing: eine Verarbeitung läuft oder steht an (#209 AK 18)
+ * - model-missing: das Suchmodell ist (noch) nicht installiert
+ * - tool-blocked: macOS hat das Python-Werkzeug blockiert (#168)
+ * - error: der Suchprozess ist abgestürzt bzw. liess sich nicht starten;
+ *   ein neuer Versuch folgt nach kurzer Pause von selbst
+ */
+export type SearchUnavailableReason = 'processing' | 'model-missing' | 'tool-blocked' | 'error'
+
+/**
+ * Stand der Suche nach Bedeutung in einer Antwort.
+ * - pending (`search:query`): sie folgt — der Renderer ruft `search:semantic`
+ * - complete (`search:semantic`): `results` enthält exakte und Treffer nach Bedeutung
+ * - superseded (`search:semantic`): eine neuere Anfrage desselben Fensters hat
+ *   diese abgelöst; die Antwort enthält nur die exakten Treffer
+ * - sonst: nicht verfügbar, `results` enthält nur die exakten Treffer
  */
 export type SemanticSearchStatus =
-  | 'unavailable'
   | 'pending'
+  | 'complete'
+  | 'superseded'
   | 'unavailable-processing'
   | 'model-missing'
+  | 'tool-blocked'
+  | 'error'
+
+/** Zustand des Suchprozesses (Worker, Main-Prozess); nach aussen als `SearchAvailability.semantic`. */
+export type SearchProcessPhase = 'stopped' | 'starting' | 'ready' | 'busy' | 'stopping'
+
+export interface SearchProcessState {
+  phase: SearchProcessPhase
+  /** null = die Suche nach Bedeutung ist möglich (der Prozess startet bei Bedarf). */
+  reason: SearchUnavailableReason | null
+}
 
 export interface SearchQueryResult {
   requestId: number
@@ -174,11 +208,33 @@ export type SearchModelState =
 
 /**
  * Antwort von `search:open` und Inhalt von `search:availabilityChanged`.
- * Bewusst ein Objekt mit einem Feld pro Teil: PR S4 ergänzt «Verarbeitung
- * läuft» und den Zustand des Suchprozesses als weitere Felder, ohne dass
- * bestehende Aufrufer brechen.
+ * Ein Objekt mit einem Feld pro Teil: `model` (PR S2) und `semantic`
+ * (Verarbeitung und Suchprozess, PR S4).
  */
 export interface SearchAvailability {
   /** Ohne Modell keine Suche nach Bedeutung; die exakte Suche geht immer. */
   model: SearchModelState
+  /** Suche nach Bedeutung gerade möglich? (PR S4: Verarbeitung und Suchprozess) */
+  semantic: SemanticAvailability
+  /** Verständlicher Grund zu `semantic` 'error' bzw. 'tool-blocked' (Sie-Form). */
+  semanticMessage?: string
 }
+
+/**
+ * Stand der Suche nach Bedeutung in `SearchAvailability` (PR S4):
+ * - ready: möglich; der Suchprozess läuft oder startet bei der nächsten Anfrage
+ * - loading: der Suchprozess lädt gerade das Modell (nach `search:open`)
+ * - unavailable-processing: eine Verarbeitung läuft oder steht an (#209 AK 18)
+ * - model-missing: das Suchmodell ist nicht (vollständig) installiert — den
+ *   Grund sagt `model`
+ * - tool-blocked: macOS hat das Python-Werkzeug blockiert (#168)
+ * - error: der Suchprozess ist abgestürzt bzw. startete nicht; ein neuer
+ *   Versuch folgt nach kurzer Pause von selbst
+ */
+export type SemanticAvailability =
+  | 'ready'
+  | 'loading'
+  | 'unavailable-processing'
+  | 'model-missing'
+  | 'tool-blocked'
+  | 'error'

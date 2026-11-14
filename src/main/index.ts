@@ -80,9 +80,13 @@ import { registerRecentHandlers } from './ipc/recent-handlers'
 import {
   getSearchAvailability,
   getSearchModelProvisioner,
-  initSearchModelProvisioner
+  initSearchModelProvisioner,
+  openSearch,
+  sendSearchAvailability
 } from './services/search-model-provisioner-deps'
 import { initSearchIndexService, getSearchIndexService } from './search/SearchIndexService'
+import { createBeforeTaskHook, getSearchRuntime, initSearchRuntime } from './search/searchRuntime'
+import { onSessionsDeleted } from './services/ChangeEvents'
 import { getActiveSessionId } from './ipc/recording-handlers'
 
 // Set in before-quit so the close-handler can distinguish "user closed window"
@@ -316,7 +320,9 @@ app.whenReady().then(() => {
   // ~600 Programmdateien); die Oberfläche wartet nicht, nur die Verarbeitung —
   // sonst scheiterte die erste Aufgabe an einem Werkzeug, das gleich repariert
   // wird. Höchstens 10 s, danach läuft die Verarbeitung trotzdem an.
-  startToolCheck(initToolHealth(), taskQueue)
+  // Epic #192: der Suchprozess wartet auf dieselbe Prüfung (kein Python-Start
+  // mitten in die Quarantäne-Reparatur nach einem Update)
+  const toolCheckGate = startToolCheck(initToolHealth(), taskQueue)
 
   // Register real ML executors (replacing stubs)
   taskQueue.registerExecutor('transcription', new WhisperService())
@@ -380,6 +386,7 @@ app.whenReady().then(() => {
   registerDossierAssignmentHandlers()
   registerSearchHandlers({
     get: getSearchAvailability,
+    open: openSearch,
     retryModel: async () => {
       await searchModel.retryNow()
       return getSearchAvailability()
@@ -453,12 +460,27 @@ app.whenReady().then(() => {
   // Epic #192 (#209/#210/#212) — Textphase der Aufbereitung für die Suche:
   // nach Recovery und Löschabschluss, holt Ausstehendes (auch den Bestand vor
   // dem Update) im Hintergrund nach; pausiert während einer Aufnahme.
+  // PR S4: Suchprozess (Worker) und Vektorspeicher. Nie gleichzeitig mit
+  // NER/whisper/llama: der Hook vor jedem Task beendet den Prozess und bricht
+  // die Vektorphase ab, BEVOR der Task beginnt (#209 AK 17).
+  const searchRuntime = initSearchRuntime(getDatabase(), {
+    isProcessingActive: () => taskQueue.hasActiveWork(),
+    // Ein Event für Modell und Suchprozess (search:availabilityChanged)
+    onStateChange: () => sendSearchAvailability(),
+    startGate: () => toolCheckGate
+  })
   const searchIndex = initSearchIndexService(getDatabase(), {
     // Gestaffeltes Löschen: sind die Indexzeilen weg, schliesst die Sitzung ab
     finishDeletion: (id) => {
       new SessionService(getDatabase()).finishDeletion(id)
-    }
+    },
+    vectors: searchRuntime.vectorPhaseDeps
   })
+  taskQueue.setBeforeTaskHook(createBeforeTaskHook(searchRuntime, searchIndex))
+  // Verarbeitung beginnt/endet: sofort melden, nicht erst im nächsten Takt
+  taskQueue.setActivityListener(() => searchRuntime.worker.refreshState())
+  // Gelöscht: kein Klartext der Sitzung mehr an den Suchprozess (#209 PC 1)
+  onSessionsDeleted((ids) => searchIndex.noteSessionsDeleted(ids))
   searchIndex.setRecordingPause(getActiveSessionId() !== null)
   searchIndex.start()
 
@@ -544,7 +566,14 @@ app.on('before-quit', (event) => {
           : Promise.resolve(),
       cleanupRecording: cleanupRecordingOnQuit,
       // Epic #192 — keine Aufbereitung für die Suche mehr (nach dem Renderer-Flush)
-      stopSearchIndex: () => getSearchIndexService()?.stop(),
+      // … und ausstehendes gestaffeltes Löschen noch abschliessen (höchstens
+      // 2 s, der Rest beim nächsten Start; Review S3)
+      stopSearchIndex: () => {
+        const index = getSearchIndexService()
+        index?.finishPurgesForQuit()
+        index?.stop()
+      },
+      stopSearchWorker: () => getSearchRuntime()?.worker.shutdown(3_000) ?? Promise.resolve(),
       // Hintergrund-Download des Suchmodells abbrechen — zählt nicht als
       // Arbeit, ein Update wartet nicht darauf (#210 AK 7)
       stopSearchModelProvisioner: () => getSearchModelProvisioner()?.stop(),

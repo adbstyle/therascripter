@@ -336,3 +336,15 @@ export function sectionIndexText(section: Pick<SearchSection, 'units' | 'text'>)
     .map(({ start, end }) => section.text.slice(start, end))
     .join('\n')
 }
+
+/**
+ * Was das Suchmodell sieht: der ganze Abschnittstext MIT «Sprecher N: …»
+ * bzw. «Bericht: …» je Unit — genau so wurde der Zielwert der
+ * Trefferqualität im Spike gemessen (`build_chunks` in search-spike.py:
+ * `"\n".join(f"{speaker}: {text}")`, eingebettet mit dem Dokument-Prompt).
+ * Anders als der Trigramm-Index (`sectionIndexText`), der die Präfixe
+ * weglässt. Den Dokument-Prompt setzt der Suchdienst davor.
+ */
+export function sectionEmbeddingText(section: Pick<SearchSection, 'text'>): string {
+  return section.text
+}

@@ -1,11 +1,19 @@
 import type Database from 'better-sqlite3'
 import { SearchIndexRepository, type StoredChunk } from '../db/repositories/SearchIndexRepository'
 import { SearchRecentRepository } from '../db/repositories/SearchRecentRepository'
-import { findExactCandidates, parseQuery, queryWords } from './exactSearch'
-import { filterAndLimit, rankDocuments, type RankedDocument } from './ranking'
+import { SEARCH_SORT_DAY, SEARCH_VISIBLE_SESSION } from '../db/repositories/SearchIndexRepository'
+import { findExactCandidates, parseQuery, queryWords, type ExactSearchResult } from './exactSearch'
+import { filterAndLimit, rankDocuments, type ChunkCandidate, type RankedDocument } from './ranking'
 import { buildHit } from './snippet'
+import { SearchWorkerUnavailableError, type SearchWorkerFailure } from './SearchWorker'
+import { VectorStoreCancelledError, type ScoredChunk, type VectorStore } from './VectorStore'
+import type { SearchModelInfo } from './searchModel'
 import { normalizeSearchText } from '../../shared/utils/search-normalize'
-import { SEARCH_MAX_DOCUMENT_RESULTS, SEARCH_MAX_DOSSIER_RESULTS } from '../../shared/search-config'
+import {
+  SEARCH_MAX_DOCUMENT_RESULTS,
+  SEARCH_MAX_DOSSIER_RESULTS,
+  SEARCH_SEMANTIC_THRESHOLD
+} from '../../shared/search-config'
 import type { DossierRef } from '../../shared/types/Dossier'
 import type { SessionType } from '../../shared/types'
 import type {
@@ -14,21 +22,67 @@ import type {
   SearchDossierResult,
   SearchQueryInput,
   SearchQueryResult,
+  SearchProcessState,
   SearchScope,
   SemanticSearchStatus
 } from '../../shared/types/Search'
 
 /**
- * Suche im Main-Prozess (Epic #192 — #209, #211): Patientendossiers und
- * exakte Treffer in einer synchronen Antwort. PR S4 ergänzt die Suche nach
- * Bedeutung über `search:semantic` und ersetzt den Grundwert von `semantic`.
+ * Suche im Main-Prozess (Epic #192 — #209, #211; Bauplan Abschnitt 6).
+ *
+ * Zwei Stufen:
+ * 1. `query` (synchron): Patientendossiers und exakte Treffer; `semantic`
+ *    sagt, ob die Suche nach Bedeutung folgt ('pending') oder warum nicht.
+ * 2. `semantic` (asynchron): Anfrage einbetten, Kosinus gegen alle
+ *    Abschnitte im Vektorspeicher, alle ≥ SEARCH_SEMANTIC_THRESHOLD (kein
+ *    globaler Top-K-Schnitt), zusammen mit den exakten Treffern gerankt —
+ *    exakte zuerst, innerhalb nach Kosinus (`ranking.ts`). Der Filter auf ein
+ *    Patientendossier kommt NACH dem Ranking (#211 AK 3).
  */
 
+/** Was die Suche nach Bedeutung braucht — der Suchprozess und der Vektorspeicher. */
+export interface SemanticSearchDeps {
+  embedQuery: (text: string) => Promise<Float32Array>
+  getState: () => SearchProcessState
+  /**
+   * Grund aus Sicht einer USER-Suche (SearchWorker.getUserReason): ohne die
+   * angehaltenen Starts der Aufbereitung. Default: getState().reason.
+   */
+  getUserReason?: () => SearchProcessState['reason']
+  store: VectorStore
+  resolveModel: () => SearchModelInfo | null
+  /** Default SEARCH_SEMANTIC_THRESHOLD. */
+  threshold?: number
+}
+
 export interface SearchServiceDeps {
-  /** Stand der Suche nach Bedeutung; bis PR S4 immer 'unavailable'. */
-  semanticStatus?: () => SemanticSearchStatus
+  /** Suche nach Bedeutung; ohne: `semantic` meldet 'model-missing'. */
+  semantic?: SemanticSearchDeps
   /** Obergrenze der Treffer-Abschnitte (Tests); Default SEARCH_MAX_CANDIDATE_CHUNKS. */
   maxCandidates?: number
+}
+
+export interface SemanticQueryOptions {
+  /** true, sobald eine neuere Anfrage desselben Fensters diese abgelöst hat. */
+  isSuperseded?: () => boolean
+}
+
+/** Grund aus dem Prozesszustand → Stand in der Antwort. */
+export function semanticStatusOf(
+  reason: SearchProcessState['reason'] | SearchWorkerFailure
+): SemanticSearchStatus {
+  switch (reason) {
+    case null:
+      return 'pending'
+    case 'processing':
+      return 'unavailable-processing'
+    case 'model-missing':
+      return 'model-missing'
+    case 'tool-blocked':
+      return 'tool-blocked'
+    default:
+      return 'error'
+  }
 }
 
 interface DossierRow {
@@ -59,7 +113,7 @@ interface SessionMetaRow {
 export class SearchService {
   private index: SearchIndexRepository
   private recent: SearchRecentRepository
-  private semanticStatus: () => SemanticSearchStatus
+  private semanticDeps: SemanticSearchDeps | null
   private maxCandidates: number | undefined
 
   constructor(
@@ -68,8 +122,19 @@ export class SearchService {
   ) {
     this.index = new SearchIndexRepository(db)
     this.recent = new SearchRecentRepository(db)
-    this.semanticStatus = deps.semanticStatus ?? ((): SemanticSearchStatus => 'unavailable')
+    this.semanticDeps = deps.semantic ?? null
     this.maxCandidates = deps.maxCandidates
+  }
+
+  /** Stand der Suche nach Bedeutung, wie `search:query` ihn meldet. */
+  semanticStatus(): SemanticSearchStatus {
+    if (!this.semanticDeps) return 'model-missing'
+    return semanticStatusOf(this.userReason())
+  }
+
+  private userReason(): SearchProcessState['reason'] {
+    const deps = this.semanticDeps!
+    return deps.getUserReason ? deps.getUserReason() : deps.getState().reason
   }
 
   query(input: SearchQueryInput): SearchQueryResult {
@@ -98,14 +163,149 @@ export class SearchService {
     query: string,
     scope: SearchScope
   ): { documents: RankedDocument[]; truncated: boolean; terms: string[] } {
+    const { exact, terms } = this.exactCandidates(query, scope)
+    const ranked = rankDocuments(exact.candidates, (id) => exact.sortDays.get(id) ?? '')
+    const { documents, truncated } = filterAndLimit(ranked, null, SEARCH_MAX_DOCUMENT_RESULTS)
+    return { documents, truncated: truncated || exact.capped, terms }
+  }
+
+  private exactCandidates(
+    query: string,
+    scope: SearchScope
+  ): { exact: ExactSearchResult; terms: string[] } {
     const parsed = parseQuery(query)
     const exact = findExactCandidates(this.db, parsed, {
       dossierId: scope.kind === 'dossier' ? scope.dossierId : undefined,
       maxCandidates: this.maxCandidates
     })
-    const ranked = rankDocuments(exact.candidates, (id) => exact.sortDays.get(id) ?? '')
-    const { documents, truncated } = filterAndLimit(ranked, null, SEARCH_MAX_DOCUMENT_RESULTS)
-    return { documents, truncated: truncated || exact.capped, terms: parsed.terms }
+    return { exact, terms: parsed.terms }
+  }
+
+  /**
+   * Interne Abschnitts-Rangfolge der Suche nach Bedeutung (für den
+   * Abnahmetest in PR S6): Kosinus der Anfrage gegen alle Abschnitte im
+   * Vektorspeicher, absteigend; `threshold` null = vor der Schwelle (so ist
+   * der Zielwert von #209 AK 13 definiert).
+   */
+  async rankChunks(
+    query: string,
+    options: { threshold?: number | null; isCancelled?: () => boolean } = {}
+  ): Promise<ScoredChunk[]> {
+    const deps = this.semanticDeps
+    if (!deps) throw new SearchWorkerUnavailableError('model-missing')
+    const model = deps.resolveModel()
+    if (!model) throw new SearchWorkerUnavailableError('model-missing')
+    // Modellstart und Laden der Vektoren laufen parallel (Bauplan 5b)
+    const [vector] = await Promise.all([deps.embedQuery(query), deps.store.load(model.modelId)])
+    return deps.store.score(vector, {
+      threshold:
+        options.threshold === undefined
+          ? (deps.threshold ?? SEARCH_SEMANTIC_THRESHOLD)
+          : options.threshold,
+      isCancelled: options.isCancelled
+    })
+  }
+
+  /**
+   * Suche nach Bedeutung samt exakten Treffern (`search:semantic`). Ist sie
+   * nicht verfügbar (Verarbeitung, Modell fehlt, …), liefert sie die exakten
+   * Treffer mit dem Grund in `semantic` — der Renderer kann die Antwort immer
+   * übernehmen. Eine abgelöste Anfrage endet am nächsten Haltepunkt mit
+   * 'superseded', ohne den Suchprozess weiter zu beschäftigen.
+   */
+  async semantic(
+    input: SearchQueryInput,
+    options: SemanticQueryOptions = {}
+  ): Promise<SearchQueryResult> {
+    const { exact, terms } = this.exactCandidates(input.query, input.scope)
+    const exactOnly = (semantic: SemanticSearchStatus): SearchQueryResult => {
+      const ranked = rankDocuments(exact.candidates, (id) => exact.sortDays.get(id) ?? '')
+      const { documents, truncated } = filterAndLimit(ranked, null, SEARCH_MAX_DOCUMENT_RESULTS)
+      return {
+        requestId: input.requestId,
+        dossiers: input.scope.kind === 'all' ? this.findDossiers(input.query) : [],
+        results: this.buildResults(documents, terms),
+        truncated: truncated || exact.capped,
+        semantic
+      }
+    }
+    // Nur Verarbeitung und fehlendes Modell schliessen einen Versuch aus; nach
+    // einem Fehler versucht die Anfrage (nach der Pause) einen Neustart
+    const status = this.semanticStatus()
+    if (status === 'unavailable-processing' || status === 'model-missing') return exactOnly(status)
+    const isSuperseded = options.isSuperseded ?? ((): boolean => false)
+    if (isSuperseded()) return exactOnly('superseded')
+
+    let scored: ScoredChunk[]
+    try {
+      scored = await this.rankChunks(input.query, { isCancelled: isSuperseded })
+    } catch (error) {
+      if (error instanceof VectorStoreCancelledError) return exactOnly('superseded')
+      if (error instanceof SearchWorkerUnavailableError) {
+        const reason = error.reason === 'stopped' ? this.userReason() : error.reason
+        return exactOnly(reason === null ? 'error' : semanticStatusOf(reason))
+      }
+      console.error('[Search] Suche nach Bedeutung fehlgeschlagen:', error)
+      return exactOnly('error')
+    }
+    if (isSuperseded()) return exactOnly('superseded')
+
+    // Nur sichtbare Sitzungen (fertig verarbeitet, nicht im Löschen) — der
+    // Vektorspeicher wird synchron nachgeführt, das hier ist die zweite Sicherung
+    const sortDays = new Map(exact.sortDays)
+    const missing = [...new Set(scored.map((c) => c.sessionId))].filter((id) => !sortDays.has(id))
+    for (const [id, day] of this.visibleSortDays(missing)) sortDays.set(id, day)
+    const semanticCandidates: ChunkCandidate[] = scored
+      .filter((c) => sortDays.has(c.sessionId))
+      .map((c) => ({
+        chunkId: c.chunkId,
+        sessionId: c.sessionId,
+        field: c.field,
+        ord: c.ord,
+        paraFrom: c.paraFrom,
+        paraTo: c.paraTo,
+        semantic: { cosine: c.cosine }
+      }))
+    const ranked = rankDocuments(
+      [...exact.candidates, ...semanticCandidates],
+      (id) => sortDays.get(id) ?? ''
+    )
+    const allowed =
+      input.scope.kind === 'dossier' ? this.sessionsOfDossier(input.scope.dossierId) : null
+    const { documents, truncated } = filterAndLimit(ranked, allowed, SEARCH_MAX_DOCUMENT_RESULTS)
+    return {
+      requestId: input.requestId,
+      dossiers: input.scope.kind === 'all' ? this.findDossiers(input.query) : [],
+      results: this.buildResults(documents, terms),
+      truncated: truncated || exact.capped,
+      semantic: 'complete'
+    }
+  }
+
+  /** Tag im Verlauf der sichtbaren unter den Sitzungen. */
+  private visibleSortDays(ids: string[]): Map<string, string> {
+    const map = new Map<string, string>()
+    for (let i = 0; i < ids.length; i += 500) {
+      const part = ids.slice(i, i + 500)
+      const rows = this.db
+        .prepare(
+          `SELECT s.id, ${SEARCH_SORT_DAY} AS sort_day FROM sessions s
+           WHERE ${SEARCH_VISIBLE_SESSION} AND s.id IN (${part.map(() => '?').join(',')})`
+        )
+        .all(...part) as Array<{ id: string; sort_day: string }>
+      for (const row of rows) map.set(row.id, row.sort_day)
+    }
+    return map
+  }
+
+  /** Sitzungen, die dem Patientendossier JETZT zugeordnet sind (#211 AK 1). */
+  private sessionsOfDossier(dossierId: string): Set<string> {
+    return new Set(
+      this.db
+        .prepare('SELECT session_id FROM session_dossiers WHERE dossier_id = ?')
+        .pluck()
+        .all(dossierId) as string[]
+    )
   }
 
   /**
@@ -148,6 +348,7 @@ export class SearchService {
       this.index.findChunksByIds(chunkIds).map((c) => [c.id, c])
     )
     const ids = documents.map((d) => d.sessionId)
+    const textGens = this.index.findTextGens(ids)
     const meta = this.sessionMeta(ids)
     const dossiers = this.dossiersOfSessions(ids)
 
@@ -156,7 +357,15 @@ export class SearchService {
       const session = meta.get(doc.sessionId)
       if (!session) continue
       const hits = doc.hits
-        .map((hit) => buildHit(hit, chunks, terms))
+        .map((hit) => {
+          const built = buildHit(hit, chunks, terms)
+          const gen = chunks.get(hit.primary.chunkId)?.gen
+          const current = textGens.get(doc.sessionId)
+          if (built && gen !== undefined && current !== undefined && gen !== current) {
+            built.fromEarlierVersion = true
+          }
+          return built
+        })
         .filter((h): h is NonNullable<typeof h> => h !== null)
       results.push({
         sessionId: doc.sessionId,

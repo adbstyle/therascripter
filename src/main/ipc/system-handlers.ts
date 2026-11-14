@@ -5,6 +5,7 @@ import { join } from 'path'
 import { release, totalmem } from 'os'
 import { getDatabase, getDataDir, closeDatabase } from '../db/connection'
 import { getSearchIndexService } from '../search/SearchIndexService'
+import { getSearchRuntime } from '../search/searchRuntime'
 import { OpenInFinderSchema } from '../../shared/validation/system-schemas'
 import type { AboutInfo } from '../../shared/types'
 
@@ -126,6 +127,7 @@ export function registerSystemHandlers(): void {
 
     // Epic #192 — keine Aufbereitung für die Suche mehr auf die gelöschte DB
     getSearchIndexService()?.stop()
+    void getSearchRuntime()?.worker.stop('quit')
     closeDatabase()
 
     const errors: string[] = []

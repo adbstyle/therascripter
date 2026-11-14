@@ -69,7 +69,29 @@ function enqueue(channel: Channel, deletedIds: readonly string[]): void {
  * sie damit auch aus dem Verlauf der besuchten Seiten (#213 PC 3).
  */
 export function notifySessionsChanged(deletedIds: readonly string[] = []): void {
+  // Synchron vor dem gebündelten Event: was gelöschte Sitzungen im Speicher
+  // hält (Vektoren der Suche), lässt sie sofort los (#209 PC 1)
+  if (deletedIds.length > 0) {
+    for (const listener of deletionListeners) {
+      try {
+        listener(deletedIds)
+      } catch (error) {
+        console.error('[ChangeEvents] Beobachter gelöschter Sitzungen fehlgeschlagen:', error)
+      }
+    }
+  }
   enqueue('sessions:changed', deletedIds)
+}
+
+const deletionListeners = new Set<(deletedIds: readonly string[]) => void>()
+
+/**
+ * Main-seitig, synchron: gelöschte bzw. zum Löschen markierte Sitzungen
+ * (Epic #192 — Vektorspeicher der Suche). Gibt die Abmeldung zurück.
+ */
+export function onSessionsDeleted(listener: (deletedIds: readonly string[]) => void): () => void {
+  deletionListeners.add(listener)
+  return () => deletionListeners.delete(listener)
 }
 
 /** Patientendossiers haben sich geändert; `deletedIds` nennt gelöschte. */

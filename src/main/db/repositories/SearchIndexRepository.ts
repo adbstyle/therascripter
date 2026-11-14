@@ -45,6 +45,14 @@ interface PendingRow {
   search_rev: number
 }
 
+export interface PendingVectorSession {
+  sessionId: string
+  textGen: number
+  vecGen: number | null
+  modelId: string | null
+  attempts: number
+}
+
 export interface StoredChunk {
   id: number
   sessionId: string
@@ -54,6 +62,8 @@ export interface StoredChunk {
   paraTo: number | null
   units: ChunkUnitRef[]
   text: string
+  /** Generation des Abschnitts (fehlt bei Abfragen, die sie nicht lesen). */
+  gen?: number
 }
 
 interface ChunkRow {
@@ -65,6 +75,7 @@ interface ChunkRow {
   para_to: number | null
   units: string
   text: string
+  gen?: number
 }
 
 function parseUnits(json: string): ChunkUnitRef[] {
@@ -85,7 +96,8 @@ export function rowToChunk(row: ChunkRow): StoredChunk {
     paraFrom: row.para_from,
     paraTo: row.para_to,
     units: parseUnits(row.units),
-    text: row.text
+    text: row.text,
+    ...(row.gen !== undefined ? { gen: row.gen } : {})
   }
 }
 
@@ -317,13 +329,172 @@ export class SearchIndexRepository {
       rows.push(
         ...(this.db
           .prepare(
-            `SELECT id, session_id, field, ord, para_from, para_to, units, text
+            `SELECT id, session_id, field, ord, para_from, para_to, units, text, gen
              FROM search_chunks WHERE id IN (${part.map(() => '?').join(',')})`
           )
           .all(...part) as ChunkRow[])
       )
     }
     return rows.map(rowToChunk)
+  }
+
+  // ── Vektorphase (PR S4) ──────────────────────────────────────────────
+
+  /**
+   * Nächste Sitzung für die Vektorphase: Text aktuell (text_rev = search_rev),
+   * aber keine vollständige Vektorgeneration des aktuellen Modells für die
+   * aktive Textgeneration, und kein laufender Backoff. Geänderte und neue
+   * Sitzungen (search_rev > 0) vor dem Bestand, jeweils die neuesten zuerst
+   * (#210 AK 6; neue Aufnahmen und Importe haben ohnehin Vorrang, weil die
+   * Vektorphase nur bei leerer Warteschlange läuft).
+   */
+  findPendingVectorSession(modelId: string, now: string): PendingVectorSession | null {
+    const row = this.db
+      .prepare(
+        `SELECT st.session_id, st.text_gen, st.vec_gen, st.model_id, st.attempts
+         FROM search_index_state st
+         JOIN sessions s ON s.id = st.session_id
+         WHERE ${SEARCH_VISIBLE_SESSION}
+           AND st.text_rev = s.search_rev
+           AND (st.vec_gen IS NULL OR st.vec_gen <> st.text_gen OR st.model_id IS NOT ?)
+           AND (st.next_attempt_at IS NULL OR st.next_attempt_at <= ?)
+         ORDER BY (s.search_rev > 0) DESC, s.updated_at DESC, s.id
+         LIMIT 1`
+      )
+      .get(modelId, now) as
+      | {
+          session_id: string
+          text_gen: number
+          vec_gen: number | null
+          model_id: string | null
+          attempts: number
+        }
+      | undefined
+    if (!row) return null
+    return {
+      sessionId: row.session_id,
+      textGen: row.text_gen,
+      vecGen: row.vec_gen,
+      modelId: row.model_id,
+      attempts: row.attempts
+    }
+  }
+
+  /** true, solange eine Sitzung (ohne Backoff) auf ihre Vektoren wartet. */
+  hasPendingVectors(modelId: string, now: string): boolean {
+    return this.findPendingVectorSession(modelId, now) !== null
+  }
+
+  /**
+   * Vor der Arbeit an einer Sitzung: Stammen ihre Vektoren von einem anderen
+   * Modell (oder hat sie noch keins), gelten alle als veraltet (NFR-9/10) —
+   * Vektoren leeren, `vec_gen` zurücksetzen, `model_id` auf das aktuelle
+   * Modell. `model_id` nennt danach das Modell der aktiven Vektorgeneration
+   * UND bereits berechneter Vektoren der Textgeneration (Fortschritt
+   * übersteht einen Neustart, #210 PC 2). true = zurückgesetzt.
+   */
+  beginVectorGeneration(sessionId: string, modelId: string): boolean {
+    return this.db.transaction((): boolean => {
+      const state = this.db
+        .prepare('SELECT model_id, vec_gen FROM search_index_state WHERE session_id = ?')
+        .get(sessionId) as { model_id: string | null; vec_gen: number | null } | undefined
+      if (!state || state.model_id === modelId) return false
+      this.db
+        .prepare(
+          'UPDATE search_chunks SET vec = NULL, vec_scale = NULL WHERE session_id = ? AND vec IS NOT NULL'
+        )
+        .run(sessionId)
+      this.db
+        .prepare('UPDATE search_index_state SET vec_gen = NULL, model_id = ? WHERE session_id = ?')
+        .run(modelId, sessionId)
+      return state.vec_gen !== null
+    })()
+  }
+
+  /** Abschnitte einer Generation ohne Vektor (über den Teilindex idx_search_chunks_pending). */
+  findPendingVectorChunks(sessionId: string, gen: number): Array<{ id: number; text: string }> {
+    return this.db
+      .prepare(
+        `SELECT id, text FROM search_chunks
+         WHERE session_id = ? AND gen = ? AND vec IS NULL
+         ORDER BY id`
+      )
+      .all(sessionId, gen) as Array<{ id: number; text: string }>
+  }
+
+  /** Vektoren eines Batches in EINER Transaktion (Commit pro Batch, #210 PC 2, #212 AK 4). */
+  writeVectors(rows: Array<{ id: number; vec: Buffer; scale: number }>): void {
+    const update = this.db.prepare(
+      'UPDATE search_chunks SET vec = ?, vec_scale = ? WHERE id = ? AND vec IS NULL'
+    )
+    this.db.transaction(() => {
+      for (const row of rows) update.run(row.vec, row.scale, row.id)
+    })()
+  }
+
+  /**
+   * Schliesst die Vektorgeneration ab, wenn alle Abschnitte der aktiven
+   * Textgeneration einen Vektor des Modells haben: `vec_gen = text_gen`.
+   * Danach ist die vorige Vektorgeneration veraltet (Aufräumen in Scheiben).
+   * Gibt die vorige `vec_gen` zurück bzw. undefined, wenn nicht abgeschlossen
+   * (Text inzwischen neu, Modell gewechselt, Abschnitte offen, Sitzung weg).
+   */
+  completeVectorGeneration(
+    sessionId: string,
+    gen: number,
+    modelId: string
+  ): { previous: number | null } | undefined {
+    return this.db.transaction((): { previous: number | null } | undefined => {
+      const state = this.db
+        .prepare(
+          `SELECT st.text_gen, st.vec_gen, st.model_id FROM search_index_state st
+           JOIN sessions s ON s.id = st.session_id
+           WHERE st.session_id = ? AND ${SEARCH_VISIBLE_SESSION}`
+        )
+        .get(sessionId) as
+        | { text_gen: number; vec_gen: number | null; model_id: string | null }
+        | undefined
+      if (!state || state.text_gen !== gen || state.model_id !== modelId) return undefined
+      const open = this.db
+        .prepare('SELECT 1 FROM search_chunks WHERE session_id = ? AND gen = ? AND vec IS NULL')
+        .get(sessionId, gen)
+      if (open) return undefined
+      this.db
+        .prepare(
+          `UPDATE search_index_state
+           SET vec_gen = ?, attempts = 0, last_error = NULL, next_attempt_at = NULL
+           WHERE session_id = ?`
+        )
+        .run(gen, sessionId)
+      return { previous: state.vec_gen }
+    })()
+  }
+
+  /** Fehler der Vektorphase: Versuch zählen, nächsten Versuch nach dem Backoff. */
+  recordVectorFailure(sessionId: string, error: string, nextAttemptAt: string): void {
+    this.db
+      .prepare(
+        `UPDATE search_index_state
+         SET attempts = attempts + 1, last_error = ?, next_attempt_at = ?
+         WHERE session_id = ?`
+      )
+      .run(error.slice(0, 500), nextAttemptAt, sessionId)
+  }
+
+  /** Aktive Textgeneration je Sitzung (für Treffer aus einer älteren Vektorgeneration). */
+  findTextGens(sessionIds: string[]): Map<string, number> {
+    const map = new Map<string, number>()
+    for (let i = 0; i < sessionIds.length; i += 500) {
+      const part = sessionIds.slice(i, i + 500)
+      const rows = this.db
+        .prepare(
+          `SELECT session_id, text_gen FROM search_index_state
+           WHERE session_id IN (${part.map(() => '?').join(',')})`
+        )
+        .all(...part) as Array<{ session_id: string; text_gen: number }>
+      for (const row of rows) map.set(row.session_id, row.text_gen)
+    }
+    return map
   }
 
   /** Aktive Textgeneration einer Sitzung (Tests, Diagnose). */

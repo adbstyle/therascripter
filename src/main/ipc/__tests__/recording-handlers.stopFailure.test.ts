@@ -71,7 +71,11 @@ describe('recording:stop bei fehlschlagendem finalizeWavFile', () => {
   // vi.resetModules() pro Test: recording-handlers hält Modul-State
   // (activeSessionId) und TaskQueueService einen Prozess-Singleton — beides
   // muss pro Test frisch sein, sonst leakt die geschlossene DB von Test 1.
-  let queue: { stop(): void; registerExecutor(t: string, e: TaskExecutor): void; enqueuePipeline(id: string, t: string): unknown }
+  let queue: {
+    stop(): void
+    registerExecutor(t: string, e: TaskExecutor): void
+    enqueuePipeline(id: string, t: string): unknown
+  }
   let recordingHandlers: typeof import('../recording-handlers')
   let AudioFileServiceClass: typeof import('../../services/AudioFileService').AudioFileService
 
@@ -110,9 +114,7 @@ describe('recording:stop bei fehlschlagendem finalizeWavFile', () => {
     const start = invokeHandlers.get('recording:start')!
     const { sessionId } = (await start()) as { sessionId: string }
     expect(getActiveSessionId()).toBe(sessionId)
-    expect(
-      (queue as unknown as { pausedForRecording: boolean }).pausedForRecording
-    ).toBe(true)
+    expect((queue as unknown as { pausedForRecording: boolean }).pausedForRecording).toBe(true)
 
     // finalizeWavFile wirft (ENOSPC-Szenario)
     vi.spyOn(AudioFileServiceClass.prototype, 'finalizeWavFile').mockImplementation(() => {
@@ -127,9 +129,7 @@ describe('recording:stop bei fehlschlagendem finalizeWavFile', () => {
 
     // … aber die App muss benutzbar bleiben:
     // 1. Queue nicht mehr pausiert
-    expect(
-      (queue as unknown as { pausedForRecording: boolean }).pausedForRecording
-    ).toBe(false)
+    expect((queue as unknown as { pausedForRecording: boolean }).pausedForRecording).toBe(false)
     // 2. Keine "laufende Aufnahme" mehr — neue Aufnahme möglich
     expect(getActiveSessionId()).toBeNull()
   })

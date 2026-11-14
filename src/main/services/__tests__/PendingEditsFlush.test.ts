@@ -109,6 +109,37 @@ describe('runQuitCleanup', () => {
     ])
   })
 
+  it('beendet den Suchprozess nach der Aufbereitung und vor der Datenbank (Epic #192)', async () => {
+    const order: string[] = []
+    await runQuitCleanup({
+      flushRendererEdits: async () => order.push('flush'),
+      cleanupRecording: () => order.push('recording'),
+      stopSearchIndex: () => order.push('search'),
+      stopSearchWorker: async () => {
+        await Promise.resolve()
+        order.push('worker')
+      },
+      stopSearchModelProvisioner: () => order.push('provisioner'),
+      stopSourceFileCleanup: () => order.push('cleanup'),
+      shutdownTaskQueue: async () => {
+        order.push('queue')
+      },
+      destroyTray: () => order.push('tray'),
+      closeDatabase: () => order.push('db')
+    })
+    expect(order).toEqual([
+      'flush',
+      'recording',
+      'search',
+      'worker',
+      'provisioner',
+      'cleanup',
+      'queue',
+      'tray',
+      'db'
+    ])
+  })
+
   it('schliesst die Datenbank auch, wenn das Speichern im Renderer scheitert', async () => {
     const closeDatabase = vi.fn()
     await runQuitCleanup({

@@ -183,19 +183,26 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
       onChanged: on('dossiers.onChanged')
     },
     search: {
-      open: vi.fn().mockResolvedValue({ model: { status: 'ready' } }),
-      retryModel: vi.fn().mockResolvedValue({ model: { status: 'ready' } }),
+      open: vi.fn().mockResolvedValue({ model: { status: 'ready' }, semantic: 'ready' }),
+      retryModel: vi.fn().mockResolvedValue({ model: { status: 'ready' }, semantic: 'ready' }),
       onAvailabilityChanged: on('search.onAvailabilityChanged'),
       query: vi.fn().mockImplementation(async (input: { requestId: number }) => ({
         requestId: input.requestId,
         dossiers: [],
         results: [],
         truncated: false,
-        semantic: 'unavailable'
+        semantic: 'model-missing'
       })),
       recentList: vi.fn().mockResolvedValue([]),
       recentRemember: vi.fn().mockResolvedValue(undefined),
-      recentClear: vi.fn().mockResolvedValue(undefined)
+      recentClear: vi.fn().mockResolvedValue(undefined),
+      semantic: vi.fn().mockImplementation(async (input: { requestId: number }) => ({
+        requestId: input.requestId,
+        dossiers: [],
+        results: [],
+        truncated: false,
+        semantic: 'model-missing'
+      }))
     },
     recent: {
       list: vi.fn().mockResolvedValue([]),
