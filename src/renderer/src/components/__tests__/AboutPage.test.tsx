@@ -68,4 +68,10 @@ describe('AboutPage', () => {
       screen.getByText('Alle Patientendossiers (Stammdaten, Diagnosen, Medikation, Notizen)')
     ).toBeInTheDocument()
   })
+
+  it('nennt vor dem vollständigen Entfernen auch Suchindex und letzte Suchanfragen (#209 PC 3)', () => {
+    render(<AboutPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'TheraScript vollständig entfernen' }))
+    expect(screen.getByText('Suchindex und letzte Suchanfragen')).toBeInTheDocument()
+  })
 })

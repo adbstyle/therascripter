@@ -217,6 +217,7 @@ export default function AboutPage(): React.JSX.Element {
             'ML-Modelle (mehrere GB)',
             'Alle Transkriptionen und Audiodateien',
             'Alle Patientendossiers (Stammdaten, Diagnosen, Medikation, Notizen)',
+            'Suchindex und letzte Suchanfragen',
             'Sperrliste',
             'Einstellungen'
           ]}
