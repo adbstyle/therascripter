@@ -59,6 +59,9 @@ import {
 import { registerSummaryHandlers } from './ipc/summary-handlers'
 import { startToolCheck } from './services/ToolHealthService'
 import { registerDossierHandlers } from './ipc/dossier-handlers'
+import { registerSearchHandlers } from './ipc/search-handlers'
+import { initSearchIndexService, getSearchIndexService } from './search/SearchIndexService'
+import { getActiveSessionId } from './ipc/recording-handlers'
 
 // Set in before-quit so the close-handler can distinguish "user closed window"
 // (hide) from "app is shutting down" (allow destroy).
@@ -347,6 +350,7 @@ app.whenReady().then(() => {
   registerMicrophoneHandlers()
   registerToolHealthHandlers()
   registerDossierHandlers()
+  registerSearchHandlers()
   registerSummaryHandlers({
     sessionService,
     summaries: {
@@ -411,6 +415,13 @@ app.whenReady().then(() => {
   // Start + alle 6 h). Sitzungen selbst bleiben bis zum manuellen Löschen (#202).
   startSourceFileCleanup()
 
+  // Epic #192 (#209/#210/#212) — Textphase der Aufbereitung für die Suche:
+  // nach Recovery und Löschabschluss, holt Ausstehendes (auch den Bestand vor
+  // dem Update) im Hintergrund nach; pausiert während einer Aufnahme.
+  const searchIndex = initSearchIndexService(getDatabase())
+  searchIndex.setRecordingPause(getActiveSessionId() !== null)
+  searchIndex.start()
+
   // Non-blocking: check for model + app updates on startup
   checkForUpdates().catch(() => {
     /* already handled inside */
@@ -473,6 +484,8 @@ app.on('before-quit', (event) => {
   void (async () => {
     cleanupRecordingOnQuit()
     stopSourceFileCleanup()
+    // Vor dem Schliessen der DB: keine Textphase mehr (Epic #192)
+    getSearchIndexService()?.stop()
     try {
       await getTaskQueue().shutdown(8_000)
     } catch {
