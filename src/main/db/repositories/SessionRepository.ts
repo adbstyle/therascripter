@@ -13,6 +13,7 @@ import type {
 import { parsePlaceholderSnapshot } from '../../../shared/utils/resolvePlaceholders'
 import { walCheckpointTruncate } from '../maintenance'
 import { refreshPlainTexts } from '../plainTexts'
+import { stripAbsolutePaths } from '../../utils/userFacingError'
 
 export interface SessionRow {
   id: string
@@ -110,7 +111,9 @@ export function rowToSession(row: SessionRow): Session {
     pdfPath: row.pdf_path,
     extractedPath: row.extracted_path,
     entityMap,
-    errorMessage: row.error_message,
+    // Auch Meldungen aus der Zeit vor dem Filter beim Schreiben: nie ein Pfad
+    // zum Renderer (Benutzername), idempotent
+    errorMessage: row.error_message === null ? null : stripAbsolutePaths(row.error_message),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     reviewAt: row.review_at,
