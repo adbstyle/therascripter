@@ -1,17 +1,17 @@
 # Therascript
 
-Lokale Therapiesitzungs-Transkription, Anonymisierung und Zusammenfassung für macOS.
+Lokale Therapiesitzungs-Transkription, Pseudonymisierung und Zusammenfassung für macOS.
 
-Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufnimmt, automatisch transkribiert, Sprecher erkennt, personenbezogene Daten anonymisiert und optional eine Zusammenfassung erstellt. Die gesamte Verarbeitung erfolgt lokal auf dem Mac, die App übermittelt keine Inhalte aus Sitzungen. Mit dem Internet verbindet sich die App nur für Modell-Downloads und die Suche nach neuen Versionen (siehe [Datenschutz](#datenschutz-und-internetverbindung)).
+Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufnimmt, automatisch transkribiert, Sprecher erkennt, personenbezogene Daten pseudonymisiert und optional eine Zusammenfassung erstellt. Die gesamte Verarbeitung erfolgt lokal auf dem Mac, die App übermittelt keine Inhalte aus Sitzungen. Mit dem Internet verbindet sich die App nur für Modell-Downloads und die Suche nach neuen Versionen (siehe [Datenschutz](#datenschutz-und-internetverbindung)).
 
 ## Features
 
 - **Aufnahme & Transkription** — Live-Aufnahme mit automatischer Transkription (Hochdeutsch + Schweizerdeutsch)
 - **Sprechererkennung** — Automatische Unterscheidung von bis zu 4 Sprechern (Einzel- und Paartherapie)
-- **Anonymisierung** — Automatische Erkennung und Ersetzung von Personen, Orten, Kontaktdaten, medizinischen Identifikatoren und Geburtsdaten durch Platzhalter
-- **Zusammenfassung** — Optionale lokale Zusammenfassung anonymisierter Sitzungen via llama.cpp
+- **Pseudonymisierung** — Automatische Erkennung und Ersetzung von Personen, Orten, Kontaktdaten, medizinischen Identifikatoren und Geburtsdaten durch Platzhalter
+- **Zusammenfassung** — Optionale lokale Zusammenfassung pseudonymisierter Sitzungen via llama.cpp
 - **Sperrliste** — Persönliche Blocklist für wiederkehrende Begriffe mit bidirektionaler Umlaut-Normalisierung
-- **PDF-Import** — Import und Anonymisierung von PDFs inkl. gescannter Dokumente via OCR
+- **PDF-Import** — Import und Pseudonymisierung von PDFs inkl. gescannter Dokumente via OCR
 - **Review-Editor** — TipTap-basierter Editor zur Nachbearbeitung mit Clipboard-Export und Quick-Add zur Sperrliste
 - **Patientendossiers** — Pro Person ein Patientendossier mit Vor- und Nachnamen, optional Dossier-ID, Geburtsdatum, Diagnosen, Medikation und Notiz; Übersicht «Alle Patientendossiers» mit Filter nach Namen, Änderungen werden laufend gespeichert. Die Angaben liegen nur lokal auf dem Mac und bleiben erhalten, bis Sie das Dossier löschen oder Therascript mit «TheraScript vollständig entfernen» vom Mac entfernen (die App nur in den Papierkorb zu legen, löscht sie nicht)
 - **Klartext-Ansicht** — Sitzungen, Titel und Zusammenfassungen wahlweise pseudonymisiert oder mit den Klarnamen lesen und kopieren; Umschalter in der Titelleiste, die Wahl gilt für alle Sitzungen und bleibt nach einem Neustart erhalten

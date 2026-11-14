@@ -181,7 +181,7 @@ Both events go through `src/main/services/ChangeEvents.ts` (`notifyDossiersChang
 
 ### Search Handlers (Epic #192)
 
-Source: `src/main/ipc/search-handlers.ts`, service `src/main/search/SearchService.ts`, types `src/shared/types/Search.ts` and `src/shared/types/ipc/SearchApi.ts`, schemas `src/shared/validation/search-schemas.ts` (all `.strict()`). Feature description: `docs/product/features/search.md`. PR S2 added `search:open`, `search:retryModel` and the event `search:availabilityChanged` (search model availability); PR S4 added `search:semantic`, the field `semantic` of `SearchAvailability` (processing and search process) and the preloading in `search:open`.
+Source: `src/main/ipc/search-handlers.ts`, service `src/main/search/SearchService.ts`, types `src/shared/types/Search.ts` and `src/shared/types/ipc/SearchApi.ts`, schemas `src/shared/validation/search-schemas.ts` (all `.strict()`). Feature description: `docs/product/features/search.md`. `search:open`, `search:retryModel` and the event `search:availabilityChanged` carry the search model availability; `search:semantic` runs the search by meaning, the field `semantic` of `SearchAvailability` reports processing and the search process, and `search:open` also starts preloading the model.
 
 | Channel | Direction | Input Schema | Return Type | Description |
 |---|---|---|---|---|
