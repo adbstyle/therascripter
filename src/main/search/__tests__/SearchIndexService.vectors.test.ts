@@ -81,7 +81,8 @@ function pendingVectors(db: Database.Database, id: string, gen: number): number 
   return (
     db
       .prepare(
-        'SELECT COUNT(*) AS n FROM search_chunks WHERE session_id = ? AND gen = ? AND vec IS NULL'
+        `SELECT COUNT(*) AS n FROM search_chunks
+         WHERE session_id = ? AND gen = ? AND vec IS NULL AND field <> 'title'`
       )
       .get(id, gen) as { n: number }
   ).n
@@ -108,9 +109,12 @@ describe('SearchIndexService — Vektorphase', () => {
     )
     indexAll(h.service)
     const textGen = state(h.db, 's1').text_gen
+    // Titel-Abschnitte bekommen keinen Vektor (nur exakte Suche); Zusammenfassung schon
     const chunks = (
       h.db
-        .prepare('SELECT COUNT(*) AS n FROM search_chunks WHERE session_id = ? AND gen = ?')
+        .prepare(
+          `SELECT COUNT(*) AS n FROM search_chunks WHERE session_id = ? AND gen = ? AND field <> 'title'`
+        )
         .get('s1', textGen) as { n: number }
     ).n
     expect(chunks).toBeGreaterThan(3)
@@ -122,6 +126,12 @@ describe('SearchIndexService — Vektorphase', () => {
     expect(lengths).toEqual([...lengths].sort((a, b) => b - a))
     // Der Text für das Modell ist der Abschnittstext MIT Sprecher-Präfix (wie im Spike)
     expect(h.calls.flat().some((t) => t.startsWith('Sprecher 1: Schlaf'))).toBe(true)
+    expect(h.calls.flat()).toContain('Kurz.')
+    expect(h.calls.flat()).not.toContain('Erstgespräch')
+    const title = h.db
+      .prepare(`SELECT vec FROM search_chunks WHERE session_id = ? AND gen = ? AND field = 'title'`)
+      .get('s1', textGen) as { vec: Buffer | null }
+    expect(title.vec).toBeNull()
 
     expect(state(h.db, 's1')).toMatchObject({
       vec_gen: textGen,
@@ -130,7 +140,10 @@ describe('SearchIndexService — Vektorphase', () => {
     })
     expect(pendingVectors(h.db, 's1', textGen)).toBe(0)
     const row = h.db
-      .prepare('SELECT vec, vec_scale FROM search_chunks WHERE session_id = ? AND gen = ? LIMIT 1')
+      .prepare(
+        `SELECT vec, vec_scale FROM search_chunks
+         WHERE session_id = ? AND gen = ? AND field = 'body' LIMIT 1`
+      )
       .get('s1', textGen) as { vec: Buffer; vec_scale: number }
     expect(row.vec.length).toBe(768)
     expect(row.vec_scale).toBeGreaterThan(0)

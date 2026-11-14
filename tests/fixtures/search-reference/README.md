@@ -142,18 +142,21 @@ allein 0.573); die grössten Abweichungen einzelner Anfragen liegen bei ±0.15 (
 Zusätzlich gemessen (nicht Teil des Zielwerts):
 
 - **Produktiv-Rangfolge** (exakte Treffer zuerst, Schwelle, je Dokument einmal mit bis zu drei
-  Fundstellen; nDCG@10 über die angezeigten Fundstellen): 0.380 (0.332–0.428), Hit@5 0.62 bei der
-  Schwelle 0.71; 0.398 bei 0.70; 0.498 ohne Schwelle. Tiefer als der Zielwert, weil die Schwelle
+  Fundstellen; nDCG@10 über die angezeigten Fundstellen): 0.382 (0.334–0.431), Hit@5 0.62 bei der
+  Schwelle 0.71; 0.402 bei 0.70; 0.540 ohne Schwelle — gemessen, nachdem Titel nicht mehr an der
+  Suche nach Bedeutung teilnehmen (siehe unten); vorher 0.380 (0.332–0.428) / 0.398 / 0.498. Tiefer als der Zielwert, weil die Schwelle
   Treffer weglässt und die Gruppierung (#209 AK 7) pro Dokument höchstens drei Abschnitte zeigt.
 - **Exakte zuerst, ungruppiert, vor der Schwelle:** 0.626 (0.579–0.670) — die Messung des Bauplans
   (0.636 mit sentence-transformers-Vektoren).
 - **Titel-Abschnitte:** Mit den Titeln aus den Kopfzeilen («Sitzung 1», «Zuweisungsschreiben
-  Hausarzt») als eigene Abschnitte fiele der Wert auf 0.461: kurze, allgemeine Titel erreichen
-  hohe Kosinuswerte (Median des besten Titels 0.68) und schlagen bei 37 von 136 Anfragen (36 davon mit Urteilen) jeden
-  Text-Abschnitt. Der Zielwert ist auf den 148 Text-Abschnitten definiert; in der Produktiv-Rangfolge
-  ändern die Titel bei 0.71 kaum etwas (0.380 gegenüber 0.382 ohne Titel-Abschnitte; ohne Schwelle 0.498 gegenüber 0.540), weil die Schwelle die
-  meisten wegfiltert. Echte Titel stammen von der Zusammenfassung und sind inhaltlich — mit diesem
-  Set nicht messbar.
+  Hausarzt») als Abschnitte der Suche nach Bedeutung fiel der Wert auf 0.461: kurze, allgemeine
+  Titel erreichen hohe Kosinuswerte (Median des besten Titels 0.68) und schlugen bei 37 von 136
+  Anfragen (36 davon mit Urteilen) jeden Text-Abschnitt; ohne Schwelle sank auch die
+  Produktiv-Rangfolge (0.498 statt 0.540). Seit der zweiten Sichtprüfung werden Titel deshalb nur
+  noch EXAKT gefunden: Titel-Abschnitte bekommen keinen Vektor und sind keine Kandidaten der Suche
+  nach Bedeutung (`SEARCH_SEMANTIC_FIELDS`); Zusammenfassungen bleiben drin. Der Zielwert (148
+  Text-Abschnitte) ändert sich dadurch nicht: 0.568 vorher und nachher; der Abnahmetest prüft, dass
+  Titel keinen Kosinus haben.
 
 Die Kalibriertabelle der Schwelle steht in `docs/product/features/search.md` («Threshold»).
 
