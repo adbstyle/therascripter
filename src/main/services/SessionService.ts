@@ -3,7 +3,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { SessionRepository } from '../db/repositories/SessionRepository'
 import { getDataDir } from '../db/connection'
-import { removeFile } from '../utils/file-ops'
+import { removeFile, removeFileReporting } from '../utils/file-ops'
 import { tiptapToPlainText } from '../ml/tiptap-plain-text'
 import type { Session, SessionStatus, UpdateSessionInput } from '../../shared/types'
 import type { SummaryRecord } from '../../shared/types/IpcApi'
@@ -71,9 +71,24 @@ export class SessionService {
     return this.repository.update(id, { title })
   }
 
+  /**
+   * Deletes a session with everything derived from it (Issue #202).
+   *
+   * Two phases, so an interrupted deletion is finished at the next start:
+   * 1. mark the row (deleting_at) — durable, from now on every read that
+   *    reaches the user treats the session as gone;
+   * 2. abort its tasks, remove its files, delete the row, checkpoint the WAL.
+   * If a file cannot be removed, the mark stays and finishPendingDeletions()
+   * retries at the next start; the row's text content is scrubbed right away.
+   *
+   * Returns true once the deletion is confirmed (also when phase 2 has to be
+   * finished later), false only if the session does not exist.
+   */
   deleteSession(id: string): boolean {
-    const session = this.repository.findById(id)
+    const session = this.repository.findByIdIncludingDeleting(id)
     if (!session) return false
+
+    this.repository.markDeleting(id)
 
     // Issue #80 DR-6: abort any running pipeline + cancel pending tasks BEFORE
     // file cleanup, so the executor's writes don't race the unlink calls.
@@ -84,18 +99,44 @@ export class SessionService {
       // TaskQueue not initialised (e.g. during isolated SessionService tests) — skip
     }
 
-    this.cleanupSessionFiles(session)
-    return this.repository.delete(id)
+    this.completeDeletion(session)
+    return true
   }
 
-  cleanupOldSessions(): number {
-    const expired = this.repository.findOlderThan(30)
-    let deleted = 0
-    for (const session of expired) {
-      this.cleanupSessionFiles(session)
-      if (this.repository.delete(session.id)) deleted++
+  /**
+   * Startup step (before the task queue runs): finishes every deletion that
+   * was interrupted or could not remove all files. Returns the number of
+   * sessions that are now completely gone.
+   */
+  finishPendingDeletions(): number {
+    let finished = 0
+    for (const session of this.repository.findMarkedForDeletion()) {
+      if (this.completeDeletion(session)) finished++
     }
-    return deleted
+    return finished
+  }
+
+  /** IDs of every session row, including rows still marked for deletion. */
+  getAllSessionIds(): string[] {
+    return this.repository.findAllIds()
+  }
+
+  private completeDeletion(session: Session): boolean {
+    const filesGone = this.removeSessionFiles(session)
+    if (filesGone) {
+      this.repository.delete(session.id)
+    } else {
+      this.repository.scrubMarkedContent(session.id)
+      console.error(
+        `[SessionService] Dateien der Sitzung ${session.id} konnten nicht alle entfernt werden — Löschen wird beim nächsten Start abgeschlossen`
+      )
+    }
+    try {
+      this.repository.checkpoint()
+    } catch (error) {
+      console.error('[SessionService] WAL-Checkpoint nach dem Löschen fehlgeschlagen:', error)
+    }
+    return filesGone
   }
 
   cleanupSourceFiles(): number {
@@ -112,25 +153,40 @@ export class SessionService {
     return cleaned
   }
 
-  private cleanupSessionFiles(session: Session): void {
+  /**
+   * Removes every file a session can have: the stored paths plus the
+   * convention paths (a deletion during import or mid-pipeline may happen
+   * before the path was written to the row). Returns false if any file still
+   * exists afterwards.
+   */
+  private removeSessionFiles(session: Session): boolean {
     const dataDir = getDataDir()
-    const filePaths = [
-      session.audioPath,
-      session.transcriptPath,
-      session.anonymizedPath,
-      session.diarizationPath,
-      session.alignedTranscriptPath,
-      session.pdfPath,
-      session.extractedPath ??
-        (session.type === 'pdf' ? join(dataDir, 'extracted', `${session.id}.json`) : null),
-      join(dataDir, 'recovery', `${session.id}.pcm`)
-    ]
+    const id = session.id
+    const filePaths = new Set(
+      [
+        session.audioPath,
+        session.transcriptPath,
+        session.anonymizedPath,
+        session.diarizationPath,
+        session.alignedTranscriptPath,
+        session.pdfPath,
+        session.extractedPath,
+        join(dataDir, 'audio', `${id}.wav`),
+        join(dataDir, 'transcripts', `${id}.json`),
+        join(dataDir, 'transcripts', `${id}-aligned.json`),
+        join(dataDir, 'diarization', `${id}.json`),
+        join(dataDir, 'anonymized', `${id}.json`),
+        join(dataDir, 'pdf', `${id}.pdf`),
+        join(dataDir, 'extracted', `${id}.json`),
+        join(dataDir, 'recovery', `${id}.pcm`)
+      ].filter((p): p is string => typeof p === 'string' && p.length > 0)
+    )
 
+    let allGone = true
     for (const filePath of filePaths) {
-      if (filePath) {
-        removeFile(filePath)
-      }
+      if (!removeFileReporting(filePath)) allGone = false
     }
+    return allGone
   }
 
   private deleteSourceFile(session: Session): void {

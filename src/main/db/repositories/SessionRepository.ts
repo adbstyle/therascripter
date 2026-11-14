@@ -121,7 +121,19 @@ export class SessionRepository {
     return this.findById(id)!
   }
 
+  /**
+   * Sessions marked for deletion (deleting_at, Issue #202) count as gone:
+   * neither the UI nor a still-running executor may read or update them.
+   * Only the deletion itself reads them via findByIdIncludingDeleting.
+   */
   findById(id: string): Session | null {
+    const row = this.db
+      .prepare('SELECT * FROM sessions WHERE id = ? AND deleting_at IS NULL')
+      .get(id) as SessionRow | undefined
+    return row ? rowToSession(row) : null
+  }
+
+  findByIdIncludingDeleting(id: string): Session | null {
     const row = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as
       | SessionRow
       | undefined
@@ -147,7 +159,7 @@ export class SessionRepository {
                 anonymization_count, summary, summary_model_id, summarized_at,
                 planned_steps, retry_count, pdf_has_scanned_pages,
                 NULL AS processed_with_models
-         FROM sessions ORDER BY created_at DESC`
+         FROM sessions WHERE deleting_at IS NULL ORDER BY created_at DESC`
       )
       .all() as SessionRow[]
     return rows.map(rowToSession)
@@ -262,14 +274,52 @@ export class SessionRepository {
     return result.changes > 0
   }
 
-  findOlderThan(days: number): Session[] {
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - days)
+  /**
+   * Phase 1 of a restart-proof deletion (Issue #202): durable before any file
+   * is touched. Keeps an existing mark (a repeated delete does not reset it).
+   */
+  markDeleting(id: string): boolean {
+    const result = this.db
+      .prepare('UPDATE sessions SET deleting_at = COALESCE(deleting_at, ?) WHERE id = ?')
+      .run(new Date().toISOString(), id)
+    return result.changes > 0
+  }
 
+  /**
+   * Removes the content of a marked row while its files could not be removed
+   * yet: the paths stay (the next start needs them), title, summary, entity
+   * map (originals of every placeholder) and error message go immediately.
+   */
+  scrubMarkedContent(id: string): void {
+    this.db
+      .prepare(
+        `UPDATE sessions
+         SET title = '', summary = NULL, entity_map = NULL, error_message = NULL
+         WHERE id = ? AND deleting_at IS NOT NULL`
+      )
+      .run(id)
+  }
+
+  findMarkedForDeletion(): Session[] {
     const rows = this.db
-      .prepare('SELECT * FROM sessions WHERE created_at < ? ORDER BY created_at ASC')
-      .all(cutoff.toISOString()) as SessionRow[]
+      .prepare('SELECT * FROM sessions WHERE deleting_at IS NOT NULL ORDER BY deleting_at ASC')
+      .all() as SessionRow[]
     return rows.map(rowToSession)
+  }
+
+  /** IDs of every row, including rows marked for deletion. */
+  findAllIds(): string[] {
+    const rows = this.db.prepare('SELECT id FROM sessions').all() as { id: string }[]
+    return rows.map((r) => r.id)
+  }
+
+  /**
+   * Moves the WAL content into the database file and truncates the WAL.
+   * Together with PRAGMA secure_delete (initDatabase) this leaves no copy of
+   * a deleted row in either file (Issue #202, Postcondition 1).
+   */
+  checkpoint(): void {
+    this.db.pragma('wal_checkpoint(TRUNCATE)')
   }
 
   findReadyForSourceFileDeletion(): Session[] {
@@ -280,6 +330,7 @@ export class SessionRepository {
       .prepare(
         `SELECT * FROM sessions
          WHERE status = 'review'
+           AND deleting_at IS NULL
            AND review_at < ?
            AND (audio_path IS NOT NULL OR pdf_path IS NOT NULL)
          ORDER BY review_at ASC`

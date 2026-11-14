@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, nativeTheme, Notification, session, shell } from 'electron'
 import { join } from 'path'
-import { initDatabase, getDatabase, closeDatabase } from './db/connection'
+import { initDatabase, getDatabase, closeDatabase, getDataDir } from './db/connection'
 import { initSettings, getSettings } from './services/SettingsService'
 import { initTaskQueue, getTaskQueue } from './services/TaskQueueService'
 import { registerSessionHandlers } from './ipc/session-handlers'
@@ -25,11 +25,7 @@ import { registerPipelineHandlers } from './ipc/pipeline-handlers'
 import { initTray, getTray } from './services/TrayService'
 import { initAppMenu } from './services/AppMenuService'
 import { sendToRenderer } from './utils/ipc-helpers'
-import {
-  startAutoDeletion,
-  stopAutoDeletion,
-  ensureSpotlightExclusion
-} from './services/AutoDeletionService'
+import { startSourceFileCleanup, stopSourceFileCleanup } from './services/SourceFileCleanupService'
 import { checkFileVaultOnStartup } from './services/FileVaultService'
 import { backfillAnonymizationCounts } from './services/AnonymizationCountBackfillService'
 import { registerAppUpdateHandlers } from './ipc/app-update-handlers'
@@ -39,7 +35,11 @@ import {
   migrateInstalledVersions,
   checkForUpdates
 } from './services/UpdateCheckService'
-import { sweepStaleArtifactsAtStartup } from './services/StartupCleanupService'
+import {
+  ensureSpotlightExclusion,
+  sweepOrphanedSessionFiles,
+  sweepStaleArtifactsAtStartup
+} from './services/StartupCleanupService'
 import { WhisperService } from './ml/WhisperService'
 import { PyannoteSidecar } from './ml/PyannoteSidecar'
 import { AlignmentService } from './ml/AlignmentService'
@@ -248,6 +248,27 @@ app.whenReady().then(() => {
   // reconcileActiveModels().
   reconcileActiveModels()
 
+  // Issue #202 — ein bestätigtes Löschen, das ein Absturz unterbrochen hat oder
+  // das nicht alle Dateien entfernen konnte, hier abschliessen; danach Dateien
+  // entfernen, deren Sitzung es nicht mehr gibt. Vor der Task-Queue und vor den
+  // IPC-Handlern: keine laufende Verarbeitung, keine gerade angelegte Sitzung.
+  try {
+    const startupSessions = new SessionService(getDatabase())
+    const finished = startupSessions.finishPendingDeletions()
+    if (finished > 0) {
+      console.log(`Session deletion: ${finished} interrupted deletion(s) completed`)
+    }
+    const swept = sweepOrphanedSessionFiles(
+      getDataDir(),
+      new Set(startupSessions.getAllSessionIds())
+    )
+    if (swept > 0) {
+      console.log(`Session deletion: ${swept} file(s) of deleted sessions removed`)
+    }
+  } catch (error) {
+    console.error('Completing interrupted session deletions failed:', error)
+  }
+
   // Initialize task queue + crash recovery (before IPC handlers that may enqueue tasks)
   const taskQueue = initTaskQueue(getDatabase())
   const recovered = taskQueue.recoverStuckTasks()
@@ -382,8 +403,9 @@ app.whenReady().then(() => {
   // Start task queue processing
   taskQueue.start()
 
-  // Start auto-deletion (30-day cleanup at startup + every 6h)
-  startAutoDeletion()
+  // Audio/Original-PDF 24 h nach erfolgreicher Verarbeitung löschen (beim
+  // Start + alle 6 h). Sitzungen selbst bleiben bis zum manuellen Löschen (#202).
+  startSourceFileCleanup()
 
   // Non-blocking: check for model + app updates on startup
   checkForUpdates().catch(() => {
@@ -446,7 +468,7 @@ app.on('before-quit', (event) => {
   const installPlan = getAppUpdateService()?.prepareQuitInstall() ?? null
   void (async () => {
     cleanupRecordingOnQuit()
-    stopAutoDeletion()
+    stopSourceFileCleanup()
     try {
       await getTaskQueue().shutdown(8_000)
     } catch {

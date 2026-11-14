@@ -21,6 +21,20 @@ export function removeFile(filePath: string): void {
   }
 }
 
+/**
+ * Removes a file and reports whether it is gone afterwards. A file that does
+ * not exist counts as removed; any other failure (permissions, I/O) returns
+ * false so the caller can retry later (Issue #202, restart-proof deletion).
+ */
+export function removeFileReporting(filePath: string): boolean {
+  try {
+    unlinkSync(filePath)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT'
+  }
+}
+
 export function fileExists(filePath: string): boolean {
   return existsSync(filePath)
 }

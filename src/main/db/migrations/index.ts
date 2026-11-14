@@ -14,6 +14,7 @@ import pdfHasScannedPages from './013-pdf-has-scanned-pages.sql?raw'
 import processedWithModels from './014-processed-with-models.sql?raw'
 import addAnonymizationCount from './015-add-anonymization-count.sql?raw'
 import taskAttempts from './016-task-attempts.sql?raw'
+import sessionDeletingAt from './017-session-deleting-at.sql?raw'
 
 // REGEL für Table-Rebuild-Migrationen (CREATE new → DROP old → RENAME):
 // Der Migration-Runner läuft mit PRAGMA foreign_keys = ON. Ein
@@ -45,5 +46,6 @@ export const migrations: Migration[] = [
   { version: 13, sql: pdfHasScannedPages },
   { version: 14, sql: processedWithModels },
   { version: 15, sql: addAnonymizationCount },
-  { version: 16, sql: taskAttempts }
+  { version: 16, sql: taskAttempts },
+  { version: 17, sql: sessionDeletingAt }
 ]

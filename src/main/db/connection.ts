@@ -52,6 +52,12 @@ export function initDatabase(dbPath?: string): Database.Database {
     db.pragma('foreign_keys = ON')
     db.pragma('synchronous = NORMAL')
     db.pragma('temp_store = MEMORY')
+    // Issue #202: gelöschte Inhalte (Sitzungen, Pseudonymisierung samt
+    // Originaltexten) werden in der Datei mit Nullen überschrieben statt als
+    // freie Seiten liegen zu bleiben. Gilt pro Verbindung, nicht persistent —
+    // deshalb bei jedem Öffnen. Zusammen mit dem WAL-Checkpoint nach jedem
+    // Löschen (SessionService) bleibt keine Kopie in .db oder -wal zurück.
+    db.pragma('secure_delete = ON')
 
     runMigrations(db)
   } catch (error) {

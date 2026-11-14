@@ -358,28 +358,88 @@ describe('SessionRepository', () => {
     })
   })
 
-  describe('findOlderThan', () => {
-    it('finds sessions older than the specified number of days', () => {
-      const oldDate = new Date()
-      oldDate.setDate(oldDate.getDate() - 31)
+  describe('deletion mark (Issue #202)', () => {
+    it('hides a marked session from findById, findAll and source-file cleanup', () => {
+      const oldReviewAt = new Date()
+      oldReviewAt.setHours(oldReviewAt.getHours() - 25)
+      db.prepare(
+        `INSERT INTO sessions (id, title, type, status, audio_path, review_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        'marked',
+        'Marked',
+        'audio',
+        'review',
+        '/audio/marked.wav',
+        oldReviewAt.toISOString(),
+        oldReviewAt.toISOString(),
+        oldReviewAt.toISOString()
+      )
+      const kept = repo.create({ title: 'Kept', type: 'audio' })
 
+      expect(repo.markDeleting('marked')).toBe(true)
+
+      expect(repo.findById('marked')).toBeNull()
+      expect(repo.findAll().map((s) => s.id)).toEqual([kept.id])
+      expect(repo.findReadyForSourceFileDeletion()).toEqual([])
+      expect(repo.update('marked', { title: 'Executor write' })).toBeNull()
+      expect(repo.findByIdIncludingDeleting('marked')?.title).toBe('Marked')
+      expect(repo.findMarkedForDeletion().map((s) => s.id)).toEqual(['marked'])
+      expect(repo.findAllIds().sort()).toEqual(['marked', kept.id].sort())
+    })
+
+    it('keeps the first mark when a deletion is repeated', () => {
+      const session = repo.create({ title: 'Twice', type: 'audio' })
+      repo.markDeleting(session.id)
+      const first = db.prepare('SELECT deleting_at FROM sessions WHERE id = ?').get(session.id) as {
+        deleting_at: string
+      }
+      repo.markDeleting(session.id)
+      const second = db
+        .prepare('SELECT deleting_at FROM sessions WHERE id = ?')
+        .get(session.id) as { deleting_at: string }
+      expect(second.deleting_at).toBe(first.deleting_at)
+    })
+
+    it('scrubs title, summary, entity map and error of a marked row only', () => {
+      const marked = repo.create({ title: 'Hans Muster', type: 'audio' })
+      const other = repo.create({ title: 'Andere', type: 'audio' })
+      for (const id of [marked.id, other.id]) {
+        repo.update(id, {
+          summary: 'Zusammenfassung',
+          entityMap: {
+            'e-1': { original: 'Hans', placeholder: '[PERSON 1]', type: 'PERSON', source: 'ner' }
+          } as EntityMap,
+          errorMessage: 'Fehler',
+          audioPath: `/audio/${id}.wav`
+        })
+      }
+      repo.markDeleting(marked.id)
+
+      repo.scrubMarkedContent(marked.id)
+      repo.scrubMarkedContent(other.id)
+
+      const scrubbed = repo.findByIdIncludingDeleting(marked.id)!
+      expect(scrubbed.title).toBe('')
+      expect(scrubbed.summary).toBeNull()
+      expect(scrubbed.entityMap).toBeNull()
+      expect(scrubbed.errorMessage).toBeNull()
+      // Paths stay: the next start needs them to remove the files
+      expect(scrubbed.audioPath).toBe(`/audio/${marked.id}.wav`)
+      expect(repo.findById(other.id)?.title).toBe('Andere')
+      expect(repo.findById(other.id)?.summary).toBe('Zusammenfassung')
+    })
+
+    it('keeps sessions of any age — there is no age-based query any more', () => {
+      const oldDate = new Date()
+      oldDate.setDate(oldDate.getDate() - 400)
       db.prepare(
         `INSERT INTO sessions (id, title, type, status, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)`
-      ).run('old-session', 'Old', 'audio', 'review', oldDate.toISOString(), oldDate.toISOString())
+      ).run('ancient', 'Alt', 'pdf', 'error', oldDate.toISOString(), oldDate.toISOString())
 
-      repo.create({ title: 'New', type: 'audio' })
-
-      const old = repo.findOlderThan(30)
-
-      expect(old).toHaveLength(1)
-      expect(old[0].id).toBe('old-session')
-    })
-
-    it('returns empty array when no old sessions exist', () => {
-      repo.create({ title: 'Recent', type: 'audio' })
-
-      expect(repo.findOlderThan(30)).toEqual([])
+      expect(repo.findAll().map((s) => s.id)).toContain('ancient')
+      expect(repo.findById('ancient')).not.toBeNull()
     })
   })
 })
