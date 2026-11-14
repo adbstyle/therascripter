@@ -44,6 +44,14 @@ export function NavigationProvider({
     (entryId: number) => dispatch({ type: 'consumeAnchor', entryId }),
     []
   )
+  const consumeOverlay = useCallback(
+    (entryId: number) => dispatch({ type: 'consumeOverlay', entryId }),
+    []
+  )
+  const consumeFocus = useCallback(
+    (entryId: number) => dispatch({ type: 'consumeFocus', entryId }),
+    []
+  )
 
   useEffect(
     () =>
@@ -83,7 +91,9 @@ export function NavigationProvider({
         const deleted = new Set(deletedIds)
         dispatch({
           type: 'purge',
-          predicate: (route) => route.kind === 'dossier' && deleted.has(route.dossierId)
+          predicate: (route) =>
+            (route.kind === 'dossier' || route.kind === 'dossierSearch') &&
+            deleted.has(route.dossierId)
         })
       }),
     []
@@ -94,15 +104,18 @@ export function NavigationProvider({
       route: state.current.route,
       entryId: state.current.id,
       anchorId: state.current.anchorId,
+      reopenOverlay: state.current.reopenOverlay,
       canBack: state.back.length > 0,
       canForward: state.forward.length > 0,
       entryIds: [...state.back, state.current, ...state.forward].map((e) => e.id),
       navigate,
       back,
       forward,
-      consumeAnchor
+      consumeAnchor,
+      consumeOverlay,
+      consumeFocus
     }),
-    [state, navigate, back, forward, consumeAnchor]
+    [state, navigate, back, forward, consumeAnchor, consumeOverlay, consumeFocus]
   )
 
   return <NavigationContext.Provider value={value}>{children}</NavigationContext.Provider>

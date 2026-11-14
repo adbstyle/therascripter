@@ -54,7 +54,8 @@ export const SEARCH_ANCHOR_CHARS = 60
  * auf dem Referenz-Set zeigen bei 0.71 noch 75 % der Anfragen mit Treffern
  * einen relevanten Treffer (Produktiv-Rangfolge, nach Bedeutung allein 60 %),
  * und 8 von 10 Anfragen ohne Treffer zeigen nichts (bei 0.70: 77 % / 63 %,
- * 4 von 10). Kleines Set (148 Abschnitte, 10 Anfragen ohne Treffer) — die
+ * 4 von 10); der Recall der Abschnitte mit Note 2 sinkt dabei von 44 auf
+ * 36 % (nach Bedeutung) bzw. von 44 auf 40 % (sichtbare Reihenfolge). Kleines Set (148 Abschnitte, 10 Anfragen ohne Treffer) — die
  * endgültige Wahl trifft der Product Owner.
  */
 export const SEARCH_SEMANTIC_THRESHOLD = 0.71

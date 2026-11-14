@@ -26,5 +26,5 @@ export const DossiersChangedSchema = ChangedIdsSchema
 export const RecentChangedSchema = ChangedIdsSchema
 
 /** Push `nav:command` aus den Menüs «Gehe zu» und «Darstellung» (#209 ergänzt 'search'). */
-export const NavCommandSchema = z.enum(['back', 'forward', 'toggleSidebar'])
+export const NavCommandSchema = z.enum(['back', 'forward', 'toggleSidebar', 'search'])
 export type NavCommand = z.infer<typeof NavCommandSchema>

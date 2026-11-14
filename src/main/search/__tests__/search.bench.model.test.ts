@@ -21,7 +21,8 @@ import { DEFAULT_REFERENCE_DIR, loadQueries } from './referenceSet'
 
 // Leistungs- und Speichermessung der ECHTEN Suche (#209 AK 14/15, PR S6) auf
 // einem Bestand von 2'000 Einträgen — nur mit echtem Modell UND
-// THERASCRIPT_SEARCH_BENCH=1 (`npm run bench:search`), dauert einige Minuten.
+// THERASCRIPT_SEARCH_BENCH=1 (`npm run bench:search`), dauert ~3–5 min. Über das
+// npm-Skript ohne Modell oder Python: rot mit Meldung statt «übersprungen».
 //
 // Bestand: jede zehnte ein PDF-Bericht (1'500 Wörter), sonst 50-Minuten-
 // Sitzungen (7'550 Wörter, 151 Wörter/min aus ADR-008), zusammengesetzt aus
@@ -45,7 +46,8 @@ vi.mock('../../services/SettingsService', () => ({ getSettings: () => ({ get: ()
 
 const MODEL_DIR = process.env.THERASCRIPT_SEARCH_MODEL_DIR
 const PYTHON = process.env.THERASCRIPT_SEARCH_PYTHON
-const ENABLED = !!MODEL_DIR && !!PYTHON && process.env.THERASCRIPT_SEARCH_BENCH === '1'
+const REQUESTED = process.env.THERASCRIPT_SEARCH_BENCH === '1'
+const ENABLED = REQUESTED && !!MODEL_DIR && !!PYTHON
 const REFERENCE_DIR = process.env.THERASCRIPT_SEARCH_REFERENCE_DIR ?? DEFAULT_REFERENCE_DIR
 const SCRIPT = join(__dirname, '..', '..', '..', '..', 'python_sidecar', 'search_service.py')
 
@@ -120,17 +122,29 @@ function stats(values: number[]): { median: number; p95: number; max: number } {
 
 const ms = (x: number): string => `${x.toFixed(0)} ms`
 
+describe.runIf(REQUESTED && !ENABLED)('search benchmark (requested without model)', () => {
+  it('needs THERASCRIPT_SEARCH_MODEL_DIR and THERASCRIPT_SEARCH_PYTHON', () => {
+    const missing = [
+      !MODEL_DIR && 'THERASCRIPT_SEARCH_MODEL_DIR',
+      !PYTHON && 'THERASCRIPT_SEARCH_PYTHON'
+    ].filter(Boolean)
+    throw new Error(`Messung angefordert, aber es fehlt: ${missing.join(', ')}`)
+  })
+})
+
 describe.skipIf(!ENABLED)('search benchmark with 2,000 documents (real model)', () => {
   const report: string[] = []
-  const dir = mkdtempSync(join(tmpdir(), 'therascript-search-bench-'))
+  // Erst im Test anlegen: der describe-Körper läuft auch, wenn er übersprungen wird
+  let dir: string | null = null
   afterAll(() => {
-    rmSync(dir, { recursive: true, force: true })
+    if (dir) rmSync(dir, { recursive: true, force: true })
     console.log(
       `\n[Messung Suche, ${DOCS} Einträge — M5 Pro, nicht auf 8 GB gemessen]\n${report.join('\n')}\n`
     )
   })
 
   it('measures preparation, answer times and memory', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'therascript-search-bench-'))
     const dbPath = join(dir, 'therascript.db')
     const db = new Database(dbPath)
     db.pragma('journal_mode = WAL')

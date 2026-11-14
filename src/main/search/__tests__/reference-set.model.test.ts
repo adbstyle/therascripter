@@ -49,9 +49,10 @@ import {
 //   THERASCRIPT_SEARCH_MODEL_DIR=<entpacktes Artefakt>
 //   THERASCRIPT_SEARCH_PYTHON=<python3 mit torch, tokenizers, safetensors>
 // und nur über `npm run test:search-quality` (setzt THERASCRIPT_SEARCH_QUALITY=1);
-// sonst skip. Nicht Teil von `npm test` und der CI.
+// in `npm test` skip, nie in der CI. Über das npm-Skript ohne Modell oder
+// Python: rot mit Meldung (kein falsches Grün durch «übersprungen»).
 // Optional THERASCRIPT_SEARCH_QUALITY_OUT=<datei.json>: Messdaten für
-// scripts/search-calibrate.ts (Default: im temporären Ordner, Pfad in der Ausgabe).
+// scripts/search-calibrate.ts; ohne bleibt nichts liegen (temporäre DBs werden gelöscht).
 
 vi.mock('electron', () => ({ app: { isPackaged: false, getPath: () => '/tmp' } }))
 vi.mock('../../utils/ipc-helpers', () => ({ sendToRenderer: vi.fn() }))
@@ -316,11 +317,20 @@ function compareWithSpike(run: ReferenceRun, qrels: Map<string, Map<string, numb
 
 if (!ENABLED) {
   describe('search acceptance test against the reference set', () => {
-    const why = !REQUESTED
-      ? 'nur über npm run test:search-quality'
-      : 'THERASCRIPT_SEARCH_MODEL_DIR und THERASCRIPT_SEARCH_PYTHON setzen'
-    if (REQUESTED) console.warn(`[Abnahme Referenz-Set] übersprungen: ${why}`)
-    it.skip(`übersprungen — ${why} (tests/fixtures/search-reference/README.md, «Abnahme der Implementierung»)`, () => {})
+    if (!REQUESTED) {
+      it.skip('übersprungen — nur über npm run test:search-quality', () => {})
+    } else {
+      it('needs the search model and Python (tests/fixtures/search-reference/README.md)', () => {
+        const missing = [
+          !MODEL_DIR && 'THERASCRIPT_SEARCH_MODEL_DIR',
+          !PYTHON && 'THERASCRIPT_SEARCH_PYTHON',
+          !existsSync(join(REFERENCE_DIR, 'queries.jsonl')) && `Referenz-Set unter ${REFERENCE_DIR}`
+        ].filter(Boolean)
+        throw new Error(
+          `Abnahmetest angefordert, aber es fehlt: ${missing.join(', ')} — siehe README des Referenz-Sets, «Abnahme der Implementierung»`
+        )
+      })
+    }
   })
 } else {
   describe('search acceptance test against the reference set (real model)', () => {
@@ -378,11 +388,15 @@ if (!ENABLED) {
         `Kalibrierung (aktuell SEARCH_SEMANTIC_THRESHOLD = ${SEARCH_SEMANTIC_THRESHOLD}):`,
         calibrationTable(rows)
       )
-      const file =
-        process.env.THERASCRIPT_SEARCH_QUALITY_OUT ??
-        join(mkdtempSync(join(tmpdir(), 'therascript-search-quality-')), 'reference-run.json')
-      writeFileSync(file, JSON.stringify(first.run))
-      out.push(`Messdaten: ${file} (npx tsx scripts/search-calibrate.ts ${file})`)
+      const file = process.env.THERASCRIPT_SEARCH_QUALITY_OUT
+      if (file) {
+        writeFileSync(file, JSON.stringify(first.run))
+        out.push(`Messdaten: ${file} (npx tsx scripts/search-calibrate.ts ${file})`)
+      } else {
+        out.push(
+          'Messdaten für scripts/search-calibrate.ts: THERASCRIPT_SEARCH_QUALITY_OUT=<datei.json> setzen'
+        )
+      }
       expect(rows.length).toBeGreaterThan(0)
     })
   })

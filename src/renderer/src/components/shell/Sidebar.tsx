@@ -1,14 +1,15 @@
-import { BookUser, FileUp, Files, Mic, Plus } from 'lucide-react'
+import { BookUser, FileUp, Files, Mic, Plus, Search } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useNavigation } from '../../navigation/navigation'
 import { useRecordingState } from '../../contexts/recording'
 import { useWorkspaceActions } from '../../contexts/workspaceActions'
 import SidebarFooter from './SidebarFooter'
 import RecentList from './RecentList'
+import { openSearchModal } from '../../stores/searchSession'
 
 /**
  * Seitenleiste der App (Epic #192, ersetzt die frühere untere Leiste).
- * Reihenfolge wie im abgenommenen Prototyp: (Suchen, ab #209) —
+ * Reihenfolge wie im abgenommenen Prototyp: Suchen ⌘K (#209) —
  * Transkriptionen mit PDF-Import und Aufnahme — Alle Patientendossiers mit
  * «Neues Patientendossier» (#204) — Zuletzt geöffnet (#213) — unten
  * Einstellungen, Update, Feedback.
@@ -19,14 +20,25 @@ export default function Sidebar(): React.JSX.Element {
   const { startRecording, importPdfs, isImporting, openNewDossier } = useWorkspaceActions()
   const sessionsActive = route.kind === 'sessions'
   // Die Dossier-Seite gehört zum Bereich «Alle Patientendossiers»
-  const dossiersActive = route.kind === 'dossiers' || route.kind === 'dossier'
+  const dossiersActive =
+    route.kind === 'dossiers' || route.kind === 'dossier' || route.kind === 'dossierSearch'
 
   return (
     <nav
       aria-label="Seitenleiste"
       className="flex w-[248px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-border bg-surface-1 px-2 py-3"
     >
-      {/* Platz für «Suchen ⌘K» (#209) */}
+      {/* Suchfenster über alle Inhalte (#209); dasselbe wie ⌘K */}
+      <button
+        type="button"
+        onClick={openSearchModal}
+        aria-keyshortcuts="Meta+K"
+        className="mb-1 flex items-center gap-2 rounded-md border border-border bg-surface-0 px-2.5 py-1.5 text-left text-[13px] font-medium leading-[18px] text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <Search className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+        <span className="flex-1">Suchen</span>
+        <kbd className="font-sans text-[11px] text-text-tertiary">⌘K</kbd>
+      </button>
       <SidebarRow
         icon={Files}
         label="Transkriptionen"

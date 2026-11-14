@@ -7,6 +7,13 @@ import StarterKit from '@tiptap/starter-kit'
 import { PlaceholderChip } from '../extensions/placeholderChip'
 import { SpeakerLabel } from '../extensions/speakerLabel'
 import { Timestamp } from '../extensions/timestamp'
+import {
+  SearchHighlight,
+  hasSearchHighlight,
+  resolveSearchFocus,
+  setSearchHighlight
+} from '../extensions/searchHighlight'
+import type { SessionFocus } from '../navigation/routes'
 import { useAutoSave } from '../hooks/useAutoSave'
 import { registerPendingEditsFlusher } from '../services/pendingEdits'
 import { useSelectionToolbar } from '../hooks/useSelectionToolbar'
@@ -67,8 +74,18 @@ const EDITOR_EXTENSIONS = [
   }),
   PlaceholderChip,
   SpeakerLabel,
-  Timestamp
+  Timestamp,
+  SearchHighlight
 ]
+
+/** #209 AK 11 — Hinweis, wenn eine Fundstelle nach einer Bearbeitung fehlt. */
+export const SEARCH_HIT_GONE_TEXT = 'Die Fundstelle gibt es in der aktuellen Fassung nicht mehr.'
+
+/** Tasten, mit denen der USER selbst scrollt — sie beenden die Markierung der Fundstelle. */
+const SCROLL_KEYS = new Set(['PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown', ' '])
+
+/** So lange nach dem Sprung folgt die Stelle noch dem Nachladen der Zusammenfassung darüber. */
+const FOLLOW_LAYOUT_MS = 1500
 
 /**
  * Issue #203 — the Klartext view admits no changes (AK 8). The editor is
@@ -104,9 +121,19 @@ interface ReviewEditorProps {
   onBack: () => void
   /** #205 — Klick auf eine Dossier-Plakette im Kopf öffnet das Patientendossier. */
   onOpenDossier?: (dossierId: string) => void
+  /** #209 AK 11 — Fundstelle der Suche, zu der gesprungen und die hervorgehoben wird. */
+  focus?: SessionFocus
+  /** Die Fundstelle ist aufgelöst — die Route verwirft sie (keine zweite Meldung). */
+  onFocusConsumed?: () => void
 }
 
-function ReviewEditor({ sessionId, onBack, onOpenDossier }: ReviewEditorProps): React.JSX.Element {
+function ReviewEditor({
+  sessionId,
+  onBack,
+  onOpenDossier,
+  focus,
+  onFocusConsumed
+}: ReviewEditorProps): React.JSX.Element {
   const toast = useToast()
   const viewMode = useViewMode()
   const isPlain = viewMode === 'plain'
@@ -161,6 +188,14 @@ function ReviewEditor({ sessionId, onBack, onOpenDossier }: ReviewEditorProps): 
   const handleBatchRemoveRef = useRef<(entityId: string) => void>(() => {})
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(() => () => clearTimeout(scrollTimerRef.current), [])
+  // #209 AK 11 — hervorgehobenes Feld (Titel/Zusammenfassung) und Ansage der Fundstelle
+  const [fieldHit, setFieldHit] = useState<'title' | 'summary' | null>(null)
+  const [hitAnnouncement, setHitAnnouncement] = useState('')
+  const summaryWrapRef = useRef<HTMLDivElement | null>(null)
+  const panelShownRef = useRef(false)
+  const followLayoutRef = useRef<{ scroll: () => void; until: number } | null>(null)
+  const onFocusConsumedRef = useRef(onFocusConsumed)
+  onFocusConsumedRef.current = onFocusConsumed
 
   useEffect(() => {
     window.api.settings.get('reviewPanelOpen').then((val) => {
@@ -168,6 +203,8 @@ function ReviewEditor({ sessionId, onBack, onOpenDossier }: ReviewEditorProps): 
       if (typeof val === 'boolean' && !overlayRef.current) setPanelShown(val)
     })
   }, [])
+
+  panelShownRef.current = panelShown
 
   const togglePanel = useCallback(() => {
     const next = !panelShown
@@ -720,6 +757,8 @@ function ReviewEditor({ sessionId, onBack, onOpenDossier }: ReviewEditorProps): 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
+      // Ein Fenster darüber (Suche) hat Esc schon für sich genommen
+      if (e.defaultPrevented) return
       if (showDeleteDialog || blocklistConfirm || assignOpen || dateDialogOpen) return
       // Die Überlagerung schliesst zuerst; erst ein zweites Esc geht zurück.
       if (overlay && panelShown) {
@@ -740,6 +779,133 @@ function ReviewEditor({ sessionId, onBack, onOpenDossier }: ReviewEditorProps): 
     panelShown,
     closeOverlay
   ])
+
+  // #209 AK 11 — Sprung zur Fundstelle, sobald das Dokument geladen ist (und
+  // erneut, wenn eine andere Fundstelle derselben Sitzung geöffnet wird).
+  // Nur Decorations und Scrollen: weder Textauswahl noch Dokumentänderung,
+  // also kein Autosave und keine neue Aufbereitung für die Suche.
+  useEffect(() => {
+    if (!focus || loading || !editor || editor.isDestroyed) return
+    const scroller = editorScrollRef.current
+    const resolved = resolveSearchFocus(editor.state.doc, focus)
+    onFocusConsumedRef.current?.()
+    followLayoutRef.current = null
+    if (hasSearchHighlight(editor.state))
+      editor.view.dispatch(setSearchHighlight(editor.state, null))
+
+    const settleFocus = (): void => {
+      // Fokus in den Textbereich (ohne Auswahl): Pfeiltasten scrollen, Esc schliesst
+      scroller?.focus({ preventScroll: true })
+    }
+
+    if (resolved.kind === 'missing') {
+      setFieldHit(null)
+      if (scroller) scroller.scrollTop = 0
+      setHitAnnouncement(SEARCH_HIT_GONE_TEXT)
+      toast.info(SEARCH_HIT_GONE_TEXT, { durationMs: 6000 })
+      settleFocus()
+      return
+    }
+
+    if (resolved.kind === 'title') {
+      setFieldHit('title')
+      if (scroller) scroller.scrollTop = 0
+      setHitAnnouncement('Fundstelle im Titel hervorgehoben.')
+      settleFocus()
+      return
+    }
+
+    if (resolved.kind === 'summary') {
+      setFieldHit('summary')
+      const scroll = (): void => {
+        const el = summaryWrapRef.current
+        if (el && typeof el.scrollIntoView === 'function') {
+          el.scrollIntoView({ block: 'start', behavior: 'instant' })
+        }
+      }
+      scroll()
+      followLayoutRef.current = { scroll, until: Date.now() + FOLLOW_LAYOUT_MS }
+      setHitAnnouncement('Fundstelle in der Zusammenfassung hervorgehoben.')
+      settleFocus()
+      return
+    }
+
+    setFieldHit(null)
+    // Die Überlagerung der Übersicht würde die Stelle verdecken
+    if (overlayRef.current && panelShownRef.current) setPanelShown(false)
+    editor.view.dispatch(setSearchHighlight(editor.state, resolved.spec))
+    const scroll = (): void => {
+      if (editor.isDestroyed) return
+      const dom = editor.view.nodeDOM(resolved.scrollParagraphPos)
+      if (dom instanceof HTMLElement && typeof dom.scrollIntoView === 'function') {
+        dom.scrollIntoView({ block: 'center', behavior: 'instant' })
+      }
+    }
+    scroll()
+    followLayoutRef.current = { scroll, until: Date.now() + FOLLOW_LAYOUT_MS }
+    setHitAnnouncement(
+      `Fundstelle in Absatz ${resolved.paragraphIndex + 1} von ${resolved.paragraphCount} hervorgehoben${
+        resolved.relocated ? ', nach einer Bearbeitung wiedergefunden' : ''
+      }.`
+    )
+    settleFocus()
+    // toast ist stabil genug; der Sprung gilt pro Fundstelle (focus), nicht pro Render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus, loading, editor])
+
+  // Die Zusammenfassung über dem Text lädt nach und schiebt die Stelle nach
+  // unten: kurz nach dem Sprung folgt der Scroll ihr noch
+  useEffect(() => {
+    const el = summaryWrapRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => {
+      const follow = followLayoutRef.current
+      if (follow && Date.now() < follow.until) follow.scroll()
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [loading, loadError])
+
+  // Die Markierung bleibt, bis der USER scrollt oder bearbeitet (Prototyp
+  // «Fundstelle»); das Bearbeiten beendet sie im Plugin selbst
+  const clearSearchHit = useCallback(() => {
+    followLayoutRef.current = null
+    setFieldHit(null)
+    const current = editorRef.current
+    if (current && !current.isDestroyed && hasSearchHighlight(current.state)) {
+      current.view.dispatch(setSearchHighlight(current.state, null))
+    }
+  }, [])
+  useEffect(() => {
+    const el = editorScrollRef.current
+    if (!el) return
+    const onWheel = (): void => clearSearchHit()
+    const onPointerDown = (e: PointerEvent): void => {
+      // Klick auf die Scrollleiste selbst
+      if (e.target === el) clearSearchHit()
+    }
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (!SCROLL_KEYS.has(e.key)) return
+      const target = e.target as HTMLElement | null
+      if (target?.isContentEditable) return
+      clearSearchHit()
+    }
+    el.addEventListener('wheel', onWheel, { passive: true })
+    el.addEventListener('touchmove', onWheel, { passive: true })
+    el.addEventListener('pointerdown', onPointerDown)
+    el.addEventListener('keydown', onKeyDown)
+    return () => {
+      el.removeEventListener('wheel', onWheel)
+      el.removeEventListener('touchmove', onWheel)
+      el.removeEventListener('pointerdown', onPointerDown)
+      el.removeEventListener('keydown', onKeyDown)
+    }
+  }, [loading, loadError, clearSearchHit])
+
+  // Bearbeitung beendet auch die Hervorhebung von Titel bzw. Zusammenfassung
+  useEffect(() => {
+    if (updateCounter > 0) setFieldHit(null)
+  }, [updateCounter])
 
   // Direkt über den ProseMirror-Doc statt countWords(editor.getJSON()):
   // getJSON() serialisierte das GESAMTE Transkript pro Neuberechnung —
@@ -828,7 +994,12 @@ function ReviewEditor({ sessionId, onBack, onOpenDossier }: ReviewEditorProps): 
           nehmen dem Editor Breite, die Fensterbreite sagt darüber nichts). */}
       <div className="@container border-b border-border">
         <header className="flex items-center justify-between gap-4 px-6 py-4">
-          <div className="flex min-w-[14rem] flex-1 items-center gap-3">
+          <div
+            className={`flex min-w-[14rem] flex-1 items-center gap-3 ${
+              fieldHit === 'title' ? 'search-hit-field' : ''
+            }`}
+            data-search-hit={fieldHit === 'title' ? 'true' : undefined}
+          >
             {sessionType === 'audio' ? (
               <Mic className="h-5 w-5 shrink-0 text-text-tertiary" strokeWidth={1.75} aria-hidden />
             ) : (
@@ -917,7 +1088,9 @@ function ReviewEditor({ sessionId, onBack, onOpenDossier }: ReviewEditorProps): 
       <div ref={panelRowRef} className="relative flex min-h-0 flex-1">
         <div
           ref={editorScrollRef}
-          className="editor-scroll min-w-0 flex-1 overflow-y-auto"
+          tabIndex={-1}
+          data-testid="editor-scroll"
+          className="editor-scroll min-w-0 flex-1 overflow-y-auto focus:outline-none"
           onScroll={(e) => {
             const el = e.currentTarget
             el.classList.add('is-scrolling')
@@ -926,7 +1099,11 @@ function ReviewEditor({ sessionId, onBack, onOpenDossier }: ReviewEditorProps): 
           }}
         >
           {/* Optional LLM-generated summary scrolls with the transcript */}
-          <div className="px-6 pt-4 [&:empty]:p-0">
+          <div
+            ref={summaryWrapRef}
+            className={`px-6 pt-4 [&:empty]:p-0 ${fieldHit === 'summary' ? 'search-hit-field' : ''}`}
+            data-search-hit={fieldHit === 'summary' ? 'true' : undefined}
+          >
             <SummaryPanel sessionId={sessionId} entityMap={entityMap} />
           </div>
           <ChipActionsContext.Provider value={chipActions}>
@@ -986,6 +1163,11 @@ function ReviewEditor({ sessionId, onBack, onOpenDossier }: ReviewEditorProps): 
           onCancel={() => setDeleteTarget(null)}
         />
       )}
+
+      {/* #209 AK 11 — Ansage der Fundstelle (ohne Text daraus: keine Klarnamen) */}
+      <div role="status" aria-live="polite" className="sr-only">
+        {hitAnnouncement}
+      </div>
 
       {/* Footer status bar */}
       <footer className="flex items-center justify-between border-t border-border px-6 py-2">

@@ -2,8 +2,7 @@
  * Kalibrierung der Schwelle «ausreichend passend» der Suche nach Bedeutung
  * (#209 AK 6, PR S6) aus den Messdaten des Abnahmetests.
  *
- *   npm run test:search-quality   # schreibt die Messdaten, Pfad in der Ausgabe
- *                                 # (fester Pfad: THERASCRIPT_SEARCH_QUALITY_OUT)
+ *   THERASCRIPT_SEARCH_QUALITY_OUT=<reference-run.json> npm run test:search-quality
  *   npx tsx scripts/search-calibrate.ts <reference-run.json> [--from 0.60] [--to 0.80] [--step 0.01]
  *
  * Gibt für jede Schwelle T aus — für die Suche nach Bedeutung allein und für

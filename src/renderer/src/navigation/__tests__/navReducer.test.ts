@@ -266,3 +266,84 @@ describe('Dossier löschen: Übersicht steht nicht doppelt im Verlauf (Review #2
     expect(state.forward).toEqual([])
   })
 })
+
+describe('Suche (#209 AK 12, #211)', () => {
+  const hit: Route = {
+    kind: 'session',
+    sessionId: 'a',
+    focus: { kind: 'hit', paraFrom: 2, paraTo: 3, anchor: 'Angst' }
+  }
+
+  it('merkt reopenOverlay auf der Herkunft und verwirft es nach dem Wiederöffnen', () => {
+    let state = run(initialNavState(), {
+      type: 'navigate',
+      route: hit,
+      options: { reopenOverlay: 'search' }
+    })
+    expect(state.current.reopenOverlay).toBeUndefined()
+    expect(state.back[0].reopenOverlay).toBe('search')
+    state = navReducer(state, { type: 'back' })
+    expect(state.current.reopenOverlay).toBe('search')
+    expect(navReducer(state, { type: 'consumeOverlay', entryId: state.current.id + 9 })).toBe(state)
+    state = navReducer(state, { type: 'consumeOverlay', entryId: state.current.id })
+    expect(state.current.reopenOverlay).toBeUndefined()
+  })
+
+  it('Fundstelle in der offenen Sitzung: das Overlay geht beim Schliessen dort auf, wohin es führt', () => {
+    let state = run(initialNavState(), go(session('a')))
+    state = navReducer(state, {
+      type: 'navigate',
+      route: hit,
+      options: { reopenOverlay: 'search' }
+    })
+    expect(state.current.route).toEqual(hit)
+    expect(state.current.reopenOverlay).toBeUndefined()
+    expect(keys(state.back)).toEqual(['sessions'])
+    state = navReducer(state, { type: 'back' })
+    expect(state.current.route).toEqual(sessions)
+    expect(state.current.reopenOverlay).toBe('search')
+  })
+
+  it('verwirft reopenOverlay, sobald der USER von der Zielseite aus weiternavigiert', () => {
+    let state = run(initialNavState(), {
+      type: 'navigate',
+      route: hit,
+      options: { reopenOverlay: 'search' }
+    })
+    state = run(state, go(settings()), { type: 'back' }, { type: 'back' })
+    expect(state.current.route).toEqual(sessions)
+    expect(state.current.reopenOverlay).toBeUndefined()
+  })
+
+  it('verwirft reopenOverlay auch bei › (vorwärts) von der Zielseite aus', () => {
+    let state = run(initialNavState(), {
+      type: 'navigate',
+      route: hit,
+      options: { reopenOverlay: 'search' }
+    })
+    state = run(state, go(settings()), { type: 'back' })
+    // Zurück auf der Zielseite: vorwärts weiter, dann zweimal zurück
+    state = run(state, { type: 'forward' }, { type: 'back' }, { type: 'back' })
+    expect(state.current.route).toEqual(sessions)
+    expect(state.current.reopenOverlay).toBeUndefined()
+  })
+
+  it('verwirft die Fundstelle einer Sitzung, sobald sie aufgelöst ist (einmal melden)', () => {
+    let state = run(initialNavState(), go(hit))
+    expect(navReducer(state, { type: 'consumeFocus', entryId: state.current.id + 9 })).toBe(state)
+    state = navReducer(state, { type: 'consumeFocus', entryId: state.current.id })
+    expect(state.current.route).toEqual({ kind: 'session', sessionId: 'a' })
+  })
+
+  it('unterscheidet die Dossier-Suche vom Dossier und ersetzt sie nach dem Löschen durch die Übersicht', () => {
+    const search: Route = { kind: 'dossierSearch', dossierId: 'd1' }
+    expect(sameRoute(search, dossier('d1'))).toBe(false)
+    let state = run(initialNavState(), go(dossier('d1')), go(search))
+    state = navReducer(state, {
+      type: 'purge',
+      predicate: (r) => (r.kind === 'dossier' || r.kind === 'dossierSearch') && r.dossierId === 'd1'
+    })
+    expect(state.current.route).toEqual({ kind: 'dossiers' })
+    expect(keys(state.back)).toEqual(['sessions'])
+  })
+})

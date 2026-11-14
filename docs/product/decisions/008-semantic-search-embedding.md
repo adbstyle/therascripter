@@ -84,12 +84,11 @@ Der Prozess-Peak ist der absolute `phys_footprint` beim Indexieren mit Batch 4 u
 
 ## Nachtrag 2026-11 (Epic #192): EmbeddingGemma 2, Grundausstattung, Eigenbau
 
-Die Umsetzung in Epic #192 weicht in drei Punkten von der Entscheidung oben ab:
+Die Umsetzung in Epic #192 weicht in drei Punkten von der Entscheidung oben ab und ergänzt sie um die Schwelle:
 
 - **Modell:** `google/embeddinggemma-2` statt `embeddinggemma-300m`, und davon nur der Text-Encoder (271 Mio. Parameter, 768 Dimensionen, bf16, ~0.54 GB auf der Platte, ~0.43 GB Download). Lizenz Apache-2.0 statt Gemma Terms of Use: die Lizenz-Ausnahme und die Konsequenz «Gemma Terms of Use weitergeben» entfallen. Die Model Card verweist auf die Gemma Prohibited Use Policy (Bewertung in `THIRD_PARTY_LICENSES.md`). Prompts unverändert. Gemessen im Bauplan der Suche auf dem Referenz-Set (Spike #208): nDCG@10 0.570 mit sentence-transformers, 0.573 mit dem Nachbau in bf16. Abnahme der fertigen Implementierung (PR S6, Nachbau in bf16 auf MPS, int8-Vektoren, Abschnitte und Ranking der App): **0.568** (95-%-KI 0.519–0.615), Zielwert 0.52 erreicht; Details im README des Referenz-Sets.
 - **Auslieferung:** Grundausstattung statt optionales Modell. Es gehört zum Ersteinrichtungs-Download, sperrt Bestandsnutzer aber nicht aus (der Download lässt sich nachholen).
 - **Runtime:** nicht sentence-transformers, sondern ein eigener Nachbau des Text-Encoders in reinem torch im Python-Sidecar (`python_sidecar/search_service.py`), abgesichert durch Goldvektoren. Begründung und Alternativen: [ADR-010](010-search-encoder-pure-torch.md). sentence-transformers kommt nicht als Abhängigkeit hinzu.
-
 - **Schwelle «ausreichend passend»:** Treffer nach Bedeutung erscheinen nur ab Kosinus 0.71 (`SEARCH_SEMANTIC_THRESHOLD`, kalibriert in PR S6; Tabelle in `docs/product/features/search.md`). Die Trennung ist schwach (AUC 0.70 zwischen Anfragen mit und ohne Treffer); die endgültige Wahl trifft der Product Owner.
 
 Die Abschnitte «Konsequenzen → Download» und «→ Runtime» oben gelten damit nicht mehr. Index, Datenschutz und fp16-Verbot (bf16 auf MPS, fp32 auf der CPU) gelten weiter.

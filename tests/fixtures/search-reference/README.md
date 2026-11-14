@@ -149,9 +149,9 @@ Zusätzlich gemessen (nicht Teil des Zielwerts):
   (0.636 mit sentence-transformers-Vektoren).
 - **Titel-Abschnitte:** Mit den Titeln aus den Kopfzeilen («Sitzung 1», «Zuweisungsschreiben
   Hausarzt») als eigene Abschnitte fiele der Wert auf 0.461: kurze, allgemeine Titel erreichen
-  hohe Kosinuswerte (Median des besten Titels 0.68) und schlagen bei 37 von 136 Anfragen jeden
+  hohe Kosinuswerte (Median des besten Titels 0.68) und schlagen bei 37 von 136 Anfragen (36 davon mit Urteilen) jeden
   Text-Abschnitt. Der Zielwert ist auf den 148 Text-Abschnitten definiert; in der Produktiv-Rangfolge
-  ändern die Titel bei 0.71 kaum etwas (0.380 gegenüber 0.382 ohne Titel; ohne Schwelle 0.498 gegenüber 0.537), weil die Schwelle die
+  ändern die Titel bei 0.71 kaum etwas (0.380 gegenüber 0.382 ohne Titel-Abschnitte; ohne Schwelle 0.498 gegenüber 0.540), weil die Schwelle die
   meisten wegfiltert. Echte Titel stammen von der Zusammenfassung und sind inhaltlich — mit diesem
   Set nicht messbar.
 
@@ -162,8 +162,8 @@ safetensors, z. B. das gebündelte Standalone-Python des Haupt-Checkouts):
 
 ```bash
 export THERASCRIPT_SEARCH_MODEL_DIR=<entpacktes Artefakt> THERASCRIPT_SEARCH_PYTHON=<python3> PYTHONDONTWRITEBYTECODE=1
-npm run test:search-quality                           # ~2 min; ohne die Variablen: skip
-npx tsx scripts/search-calibrate.ts <Messdaten.json>  # Pfad steht in der Ausgabe
+THERASCRIPT_SEARCH_QUALITY_OUT=<Messdaten.json> npm run test:search-quality  # ~2 min; ohne Modell/Python: rot mit Meldung
+npx tsx scripts/search-calibrate.ts <Messdaten.json>
 npm run bench:search                                  # Antwortzeit und Speicher, 2'000 Einträge, ~3–5 min
 ```
 

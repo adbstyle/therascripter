@@ -101,7 +101,7 @@ All application data lives under `~/.therascript/`. Directories are created with
     └── ner/                    # flair/ner-german-large (~1.1 GB fp16; v1/v2 installs: 2.2 GB + 1.1 GB fp16 fast copy, 2.1 GB on the CPU path)
 ```
 
-Models persist across app updates. Total disk requirement: ~3.4 GB (app ~1 GB + models ~2.4 GB incl. the search model under `search-embeddinggemma-2-text-v1/`), plus the search index in the database (up to ~0.6 GB at 2'000 sessions). First launch checks for 5 GB free to cover download + extraction (reasoning in `docs/product/features/model-management.md`, «Disk Space Check»).
+Models persist across app updates. Total disk requirement: ~3.4 GB (app ~1 GB + models ~2.4 GB incl. the search model under `search-embeddinggemma-2-text-v1/`), plus the search index in the database (up to ~0.7 GB at 2'000 sessions). First launch checks for 5 GB free to cover download + extraction (reasoning in `docs/product/features/model-management.md`, «Disk Space Check»).
 
 ---
 
@@ -148,12 +148,13 @@ type Route =
   | { kind: 'sessions' }
   | { kind: 'dossiers' }                       // overview «Alle Patientendossiers» (#204)
   | { kind: 'dossier'; dossierId: string }     // page of one patient dossier (#204)
-  | { kind: 'session'; sessionId: string; focus?: SessionFocus }
+  | { kind: 'dossierSearch'; dossierId: string } // search in one patient dossier (#211)
+  | { kind: 'session'; sessionId: string; focus?: SessionFocus } // focus = a search hit (#209 AK 11)
   | { kind: 'settings'; subpage: SubPage | null }
 ```
 
-- `navReducer.ts` — pure history `{ back, current, forward }`, at most 50 entries, kept in memory only (#213 OOS 1). `navigate(route, { anchorId })` writes the anchor onto the entry being left, `{ targetAnchorId }` onto the new entry (#213: an unfinished «Zuletzt geöffnet» entry opens the sessions list with its card highlighted; on the same page it replaces the current entry with a fresh id so the page re-mounts and redeems the anchor); navigating to the same page creates no entry; `back`/`forward` skip invalid entries; `purge` removes entries of deleted objects and replaces the current one (dossier → overview, session → previous entry, otherwise the sessions list).
-- `NavigationContext.tsx` — `useNavigation()` with `route`, `entryId`, `anchorId`, `canBack`, `canForward`, `navigate`, `back`, `forward`. Subscribes to `nav:command` (menu «Gehe zu»), `nav:openSettings` (app menu ⌘, and tray, always the Settings overview), `sessions:changed` and `dossiers:changed` (`deletedIds` → `purge`, #213 PC 3).
+- `navReducer.ts` — pure history `{ back, current, forward }`, at most 50 entries, kept in memory only (#213 OOS 1). `navigate(route, { anchorId })` writes the anchor onto the entry being left, `{ targetAnchorId }` onto the new entry (#213: an unfinished «Zuletzt geöffnet» entry opens the sessions list with its card highlighted; on the same page it replaces the current entry with a fresh id so the page re-mounts and redeems the anchor); navigating to the same page creates no entry (a new `focus` replaces the current one, without `reopenOverlay`); `{ reopenOverlay: 'search' }` marks the entry being left, so going back to it reopens the search window (#209 AK 12, consumed once via `consumeOverlay`); `back`/`forward` skip invalid entries; `purge` removes entries of deleted objects and replaces the current one (dossier or dossier search → overview, session → previous entry, otherwise the sessions list).
+- `NavigationContext.tsx` — `useNavigation()` with `route`, `entryId`, `anchorId`, `reopenOverlay`, `canBack`, `canForward`, `navigate`, `back`, `forward`. Subscribes to `nav:command` (menu «Gehe zu»), `nav:openSettings` (app menu ⌘, and tray, always the Settings overview), `sessions:changed` and `dossiers:changed` (`deletedIds` → `purge`, #213 PC 3).
 - `useScrollRestoration(ready)` — `PageScroll` is the shell's only scroll container and is keyed by `entryId`; it stores `scrollTop` per entry. Once a page's data is loaded, the position is restored and the card of `anchorId` (`data-session-id`, or `data-anchor-id` for other rows such as dossiers) is highlighted (scrolled into view only if hidden) — e.g. after closing a session (#205 AK 16).
 - «Zuletzt geöffnet» (#213, `components/shell/RecentList.tsx`) sits below «Alle Patientendossiers» in the sidebar: at most eight dossiers, sessions and PDFs mixed, newest first, the running recording first with a pulsing dot. Each entry is a button with an icon whose accessible name is its kind («Patientendossier», «Sitzung», «PDF-Dokument») and the name — dossiers «Nachname, Vorname», sessions/PDFs their title in the chosen view (`sessionTitleIn`; no clear name in the pseudonymized view, also not in `title`/`aria-label`). A dossier or a processed session opens directly; anything else (recording, processing, error) navigates to the sessions list with `targetAnchorId`. `useRememberOpenedRoute()` in `AppShell` calls `recent:touch` on every dossier/session route — also with the sidebar hidden. The list reloads on `recent:changed`, `sessions:changed` and `dossiers:changed`; users cannot remove entries (OOS 2).
 - The sidebar entry «Alle Patientendossiers» stays highlighted on a dossier page (`aria-current` only on the overview); its «+» and the overview button call `useWorkspaceActions().openNewDossier()`, which renders `NewDossierDialog` and navigates to the new dossier. Details: [patient-dossiers.md](../features/patient-dossiers.md) «User interface».
@@ -169,7 +170,9 @@ type Route =
 | route `session` | `ReviewEditor` (own header, scrolls internally; no close button — Esc, ‹ or ⌘[ go back) |
 | route `settings` | `Settings` with the sub-page from the route |
 | route `dossiers` | `DossiersPage` (heading with count and «Neues Patientendossier», name filter, list sorted by last name; empty state with instructions) |
-| route `dossier` | `DossierPage` (`DossierHeader` + `DossierHeaderActions` with «PDF importieren» / «Aufnahme starten» into this dossier (#206) and the menu «…», `ConsentBanner` while its timeline shows the recording, `DossierTimeline` on the left (drop PDFs to import them into the dossier), `DossierMasterDataForm` with autosave on the right; wraps below ~800 px) |
+| route `dossierSearch` | `DossierSearchPage` (search limited to the dossier, scope always named; [search.md](../features/search.md) «Search in a patient dossier») |
+| always in the shell | `SearchHost` → `SearchModal` (⌘K / «Suchen» in the sidebar / back to an entry with `reopenOverlay`) |
+| route `dossier` | `DossierPage` (`DossierHeader` + `DossierHeaderActions` with «Im Dossier suchen» (#211), «PDF importieren» / «Aufnahme starten» into this dossier (#206) and the menu «…», `ConsentBanner` while its timeline shows the recording, `DossierTimeline` on the left (drop PDFs to import them into the dossier), `DossierMasterDataForm` with autosave on the right; wraps below ~800 px) |
 
 **Navigation constraints:**
 - The app stays fully navigable during recording; the sessions list and the page of every dossier the recording is assigned to show the live `RecordingSessionCard`, every other route the `RecordingBar`. Starting a recording navigates to the sessions list — except from a dossier page, which stays (#206).

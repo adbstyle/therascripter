@@ -329,15 +329,20 @@ export class SearchService {
     params.push(whole)
     const rows = this.db
       .prepare(
-        `SELECT d.id, d.first_name, d.last_name, d.external_id, d.birth_date
+        `SELECT d.id, d.first_name, d.last_name, d.external_id, d.birth_date,
+                (SELECT COUNT(*) FROM session_dossiers sd
+                   JOIN sessions s ON s.id = sd.session_id AND s.deleting_at IS NULL
+                  WHERE sd.dossier_id = d.id) AS entry_count
          FROM dossiers d
          WHERE (${nameClause})
             OR (? <> '' AND instr(COALESCE(d.external_id_norm, ''), ?) > 0)
          ORDER BY d.last_name_norm, d.first_name_norm, d.id
          LIMIT ?`
       )
-      .all(...params, whole, SEARCH_MAX_DOSSIER_RESULTS) as DossierRow[]
-    return rows.map(rowToRef)
+      .all(...params, whole, SEARCH_MAX_DOSSIER_RESULTS) as Array<
+      DossierRow & { entry_count: number }
+    >
+    return rows.map((row) => ({ ...rowToRef(row), entryCount: row.entry_count }))
   }
 
   /** Ausschnitte, Fundstellen, Titel, Datum und Dossiers der getroffenen Dokumente. */
