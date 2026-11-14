@@ -199,7 +199,7 @@ export class SessionRepository {
    * Listen-Projektion: entity_map und processed_with_models werden bewusst
    * NICHT selektiert (und bleiben null im Ergebnis). Kein Consumer der Liste
    * (Dashboard via session:list, broadcastQueuePositions,
-   * recoverOrphanedSessions, checkForRecovery, Auto-Deletion) liest diese
+   * recoverOrphanedSessions, checkForRecovery, Quelldatei-Bereinigung) liest diese
    * Blobs — der JSON-Parse pro Row und der IPC-Payload skalierten mit der
    * Library-Größe, und die Liste wird bei jedem Task-Event refetcht.
    * Detail-Reads (findById, z. B. via review:load) liefern sie weiterhin.

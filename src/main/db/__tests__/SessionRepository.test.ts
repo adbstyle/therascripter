@@ -116,7 +116,7 @@ describe('SessionRepository', () => {
 
     it('is a list projection — entityMap and processedWithModels stay null', () => {
       // Kein Consumer der Liste (Dashboard, Queue-Positionen, Recovery,
-      // Auto-Deletion) liest diese Blobs; der JSON-Parse pro Row + der
+      // Quelldatei-Bereinigung) liest diese Blobs; der JSON-Parse pro Row + der
       // IPC-Payload skalierten mit der Library-Größe. Detail-Reads
       // (findById via review:load) liefern sie weiterhin.
       const session = repo.create({ title: 'T', type: 'audio' })

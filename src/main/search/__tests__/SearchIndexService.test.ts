@@ -127,7 +127,7 @@ describe('SearchIndexService — text phase', () => {
     addIndexedSession(db, docs, { id: 's1' }, [{ speaker: 'A', text: 'Erster Stand.' }])
     const service = createIndexService(db, docs)
     indexAll(service)
-    // PR S4 wird vec_gen setzen; hier von Hand
+    // vec_gen setzt sonst die Vektorphase; hier von Hand
     db.prepare('UPDATE search_index_state SET vec_gen = 1 WHERE session_id = ?').run('s1')
     db.prepare('UPDATE sessions SET search_rev = search_rev + 1 WHERE id = ?').run('s1')
     indexAll(service)

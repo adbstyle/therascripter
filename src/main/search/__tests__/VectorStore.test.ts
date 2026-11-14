@@ -11,6 +11,7 @@ import { TEST_MODEL, fakeEmbed } from './semanticHelpers'
 import { SearchIndexService } from '../SearchIndexService'
 import { SessionService } from '../../services/SessionService'
 import { createSearchRuntime, type SearchRuntime } from '../searchRuntime'
+import { SEARCH_COSINE_SLICE_MS } from '../../../shared/search-config'
 
 vi.mock('electron', () => ({
   app: { isPackaged: false, getPath: () => '/tmp/therascript-test', getAppPath: () => '/tmp' },
@@ -130,10 +131,15 @@ describe('VectorStore', () => {
     await expect(cancelled).rejects.toBeInstanceOf(VectorStoreCancelledError)
   })
 
-  it('measures cosine over 66,000 × 768 int8 vectors without blocking the main process for long', async () => {
+  /** 2'000 Sitzungen à 33 Abschnitte = 66'000 × 768 int8 (Bestand von NFR 2). */
+  function fullStore(): VectorStore {
     const store = new VectorStore(null)
     const r = rng(3)
-    const vec = (): Int8Array => Int8Array.from({ length: DIM }, () => Math.round(r() * 254 - 127))
+    // Ein Vorrat verschiedener Vektoren statt 50 Mio. Zufallszahlen — der
+    // Aufbau dauerte unter CPU-Last länger als das Testzeitlimit.
+    const pool = Array.from({ length: 257 }, () =>
+      Int8Array.from({ length: DIM }, () => Math.round(r() * 254 - 127))
+    )
     for (let s = 0; s < 2000; s++) {
       store.putSession(
         `s${s}`,
@@ -143,33 +149,79 @@ describe('VectorStore', () => {
           ord: i,
           paraFrom: i,
           paraTo: i,
-          vec: vec()
+          vec: pool[(s * 33 + i) % pool.length]
         }))
       )
     }
     expect(store.chunkCount).toBe(66_000)
-    const q = clustered(1, 5)[0]
-    // Längste synchrone Strecke messen: ein Ticker läuft zwischen den Scheiben
+    return store
+  }
+
+  /** Zählt, wie oft der Event-Loop während `run` zum Zug kommt, und die längste Strecke dazwischen. */
+  async function measureLoop(run: () => Promise<unknown>): Promise<{
+    ticks: number
+    maxGap: number
+    total: number
+  }> {
     let last = performance.now()
     let maxGap = 0
+    let ticks = 0
     let ticking = true
     const tick = (): void => {
       const now = performance.now()
       maxGap = Math.max(maxGap, now - last)
       last = now
+      ticks++
       if (ticking) setImmediate(tick)
     }
     setImmediate(tick)
     const started = performance.now()
-    const scored = await store.score(q, { threshold: 0.99 })
+    await run()
     const total = performance.now() - started
     ticking = false
+    return { ticks, maxGap, total }
+  }
+
+  // Strukturell und lastunabhängig: mit einer Uhr, die pro Abfrage genau 1 ms
+  // weiterläuft, muss score() nach jeder überschrittenen Scheibe den Event-Loop
+  // freigeben — bei 2'000 Sitzungen also rund 2'000 / (SEARCH_COSINE_SLICE_MS + 1) Mal.
+  it('yields to the event loop after every slice, independent of machine speed (fake clock)', async () => {
+    const store = fullStore()
+    let clock = 0
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => ++clock)
+    let ticks = 0
+    let ticking = true
+    const tick = (): void => {
+      ticks++
+      if (ticking) setImmediate(tick)
+    }
+    setImmediate(tick)
+    try {
+      await store.score(clustered(1, 5)[0], { threshold: 0.99 })
+    } finally {
+      ticking = false
+      now.mockRestore()
+    }
+    const expected = Math.floor(2000 / (SEARCH_COSINE_SLICE_MS + 1))
+    expect(ticks).toBeGreaterThanOrEqual(expected - 2)
+  }, 60_000)
+
+  // Echte Messung über 66'000 Vektoren: geloggt; die Grenze ist relativ zur
+  // Gesamtdauer, damit CPU-Last (die beides gleich streckt) sie nicht reisst.
+  // Ohne Scheiben wäre die längste Strecke die ganze Rechnung.
+  it('measures cosine over 66,000 × 768 int8 vectors without blocking the main process for long', async () => {
+    const store = fullStore()
+    const q = clustered(1, 5)[0]
+    let scored: unknown[] = []
+    const { maxGap, total, ticks } = await measureLoop(async () => {
+      scored = await store.score(q, { threshold: 0.99 })
+    })
     console.log(
-      `[VectorStore] 66'000 × 768 int8: ${total.toFixed(1)} ms gesamt, längste Strecke ${maxGap.toFixed(1)} ms, ${(store.bytes / 1024 ** 2).toFixed(1)} MiB`
+      `[VectorStore] 66'000 × 768 int8: ${total.toFixed(1)} ms gesamt, längste Strecke ${maxGap.toFixed(1)} ms, ${ticks} Pausen, ${(store.bytes / 1024 ** 2).toFixed(1)} MiB`
     )
     expect(scored.length).toBe(0)
-    expect(maxGap).toBeLessThan(50)
-  })
+    expect(maxGap).toBeLessThan(Math.max(total / 2, 4 * SEARCH_COSINE_SLICE_MS))
+  }, 60_000)
 })
 
 describe('VectorStore with the database', () => {

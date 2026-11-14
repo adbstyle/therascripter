@@ -61,7 +61,7 @@ Sessions and PDF documents can be assigned to one or more dossiers and unassigne
 | Sessions being deleted (`deleting_at`) appear in no timeline and no list | every query filters `s.deleting_at IS NULL` |
 | The session list gets its badges from a second query over all assignments (`listForSessions`, one JSON parameter, no `GROUP_CONCAT`), merged in the main process; `session:list` returns `SessionListItem` (= `Session & {dossiers: DossierRef[]}`) | `SessionDossierService.listSessions` |
 | Document date (AK 18–22): only for PDFs, a complete valid calendar day from 1900 on (typo guard, also for the birth date: «Bitte ein Datum ab 1900 eingeben.», `MIN_CALENDAR_YEAR` in `calendar-date.ts`) and not after today (local time); it can be changed but never reset to `NULL` (OOS 3); one value per PDF, the same in every dossier; it does not change the order or grouping of the session list (OOS 4) | `SessionService.setDocumentDate`, `SessionDocumentDateSchema`, `sessions.document_date` |
-| Performance (AK 25, NFR 3): 2 000 sessions with badges and a 300-entry timeline | `SessionDossierService.test.ts` (main-process budget 300 ms / 100 ms), `DossierTimeline.test.tsx` (300 entries rendered in jsdom under 1 s) |
+| Performance (AK 25, NFR 3): 2 000 sessions with badges and a 300-entry timeline | `SessionDossierService.test.ts` (main-process budget 300 ms / 100 ms), `DossierTimeline.test.tsx` (300 entries rendered in jsdom at most linearly compared with 30 entries, independent of CPU load; ~0.2 s on the development Mac). Not measured on an 8-GB Mac or in Electron with real IPC |
 
 | Where | What |
 |---|---|
@@ -104,7 +104,7 @@ Tests: `recording-handlers.dossier.test.ts`, `pdf-handlers.dossier.test.ts` (mai
 
 ## Search in a dossier (#211)
 
-«Im Dossier suchen» in the dossier header opens the page `views/DossierSearchPage.tsx` (route `{kind:'dossierSearch', dossierId}`; the sidebar keeps «Alle Patientendossiers» highlighted). It searches only the sessions and PDFs assigned to the dossier at the time of the search (scope `{kind:'dossier'}`, filtered after ranking: the same hits in the same order as the search over everything, AK 1/3), shows the scope «Suche im Patientendossier Hofer, Lukas» with every search (AK 2), has no dossier hits and never adds to the recent searches (OOS 3). Query and hits stay per dossier in renderer memory until the next search, the dossier's deletion or a restart (AK 4); a search over everything cannot be narrowed afterwards (OOS 2). Details: [search.md](search.md#search-in-a-patient-dossier-211).
+«Im Dossier suchen» in the dossier header opens the page `views/DossierSearchPage.tsx` (route `{kind:'dossierSearch', dossierId}`; the sidebar keeps «Alle Patientendossiers» highlighted). It searches only the sessions and PDFs assigned to the dossier at the time of the search (scope `{kind:'dossier'}`, filtered after ranking: the same hits in the same order as the search over everything as long as no search limit applies, AK 1/3; beyond a limit see search.md «Exact search»), shows the scope «Suche im Patientendossier Hofer, Lukas» with every search (AK 2), has no dossier hits and never adds to the recent searches (OOS 3). Query and hits stay per dossier in renderer memory until the next search, the dossier's deletion or a restart (AK 4); a search over everything cannot be narrowed afterwards (OOS 2). Details: [search.md](search.md#search-in-a-patient-dossier-211).
 
 ## Same-named dossiers
 

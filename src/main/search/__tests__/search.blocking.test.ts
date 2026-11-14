@@ -24,6 +24,9 @@ import type { SearchIndexService } from '../SearchIndexService'
 import { readFixtureDocs } from './chunker-fixture-docs'
 import { insertSession } from './helpers'
 
+// Längste Scheibe bzw. Aufruf: die Scheiben sind auf ≤ 40 ms ausgelegt, das
+// Budget lässt das Zehnfache für CPU-Last; das Testzeitlimit ist grosszügig,
+// weil das Durchlaufen aller Scheiben unter Last länger als 5 s dauern kann.
 const BUDGET_MS = 400
 const SESSIONS = 150
 
@@ -104,7 +107,7 @@ describe('search index — no long synchronous blocks (review #222)', () => {
     })
     indexer.start()
     drainMax()
-  })
+  }, 120_000)
 
   afterAll(() => {
     resetSearchIndexServiceForTests()
@@ -128,7 +131,7 @@ describe('search index — no long synchronous blocks (review #222)', () => {
     expect(max).toBeLessThan(BUDGET_MS)
     const gens = db.prepare(`SELECT DISTINCT gen FROM search_chunks WHERE session_id = 'big'`).all()
     expect(gens).toEqual([{ gen: 2 }])
-  })
+  }, 60_000)
 
   it('deletes a large session without blocking the IPC call and completes on its own', () => {
     const sessions = new SessionService(db)
@@ -145,5 +148,5 @@ describe('search index — no long synchronous blocks (review #222)', () => {
     expect(
       db.prepare(`SELECT COUNT(*) AS n FROM search_chunks WHERE session_id = 'big'`).get()
     ).toEqual({ n: 0 })
-  })
+  }, 60_000)
 })

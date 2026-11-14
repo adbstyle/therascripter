@@ -74,12 +74,12 @@ export default function AboutPage(): React.JSX.Element {
           </p>
           <p className="mb-2 text-sm text-text-secondary">
             DSGVO-rechtlich heisst das <span className="font-medium">Pseudonymisierung</span> — die
-            Originaldaten bleiben in Ihrem lokalen Backup vorhanden, sind aber im exportierten Text
-            nicht mehr enthalten.
+            Originaldaten bleiben lokal auf Ihrem Mac gespeichert; in der pseudonymisierten Ansicht
+            und im dort kopierten Text stehen an ihrer Stelle die Platzhalter.
           </p>
           <p className="text-sm text-text-secondary">
             Echte Anonymisierung wäre, die Originale zu löschen — das machen wir bewusst nicht,
-            damit Sie Korrekturen rückgängig machen können.
+            damit Sie Korrekturen rückgängig machen und Sitzungen im Klartext lesen können.
           </p>
         </section>
 

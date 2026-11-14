@@ -6,7 +6,7 @@ import { join, basename } from 'path'
  * je Zeile, `#`-Kopfzeile) in TipTap-Dokumente, wie die App sie speichert:
  * ein Absatz pro Beitrag, bei Sitzungen mit Sprecher- und Zeit-Knoten, Namen
  * aus `entities/<doc>.json` als Chips mit ihrem Original. Für den
- * Paritätstest des Chunkers und spätere Abnahmetests (PR S6).
+ * Paritätstest des Chunkers und Abnahmetests (Referenz-Set).
  */
 
 export interface FixtureDoc {
