@@ -149,10 +149,14 @@ export default function DossierSearchPage({
           >
             {name ?? '…'}
           </button>
-          {searched && docCount > 0 && (
-            <span>{pluralize(docCount, 'Dokument', 'Dokumente')} · Ausschnitte im Klartext</span>
-          )}
-          {(!searched || docCount === 0) && <span>Ausschnitte im Klartext</span>}
+          {/* Anzahl, sobald sie feststeht — auch «0 Dokumente» nach einer
+              Suche ohne Treffer; vorher und während der Suche nach Bedeutung
+              (noch keine Treffer) nur der Hinweis zu den Ausschnitten */}
+          <span>
+            {searched && (docCount > 0 || !semanticPending)
+              ? `${pluralize(docCount, 'Dokument', 'Dokumente')} · Ausschnitte im Klartext`
+              : 'Ausschnitte im Klartext'}
+          </span>
         </p>
       </div>
 
