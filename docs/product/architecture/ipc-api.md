@@ -91,7 +91,7 @@ Source: `src/main/ipc/recording-handlers.ts`
 
 | Channel | Direction | Input Schema | Return Type | Description |
 |---|---|---|---|---|
-| `recording:start` | invoke | `RecordingStartSchema` — none or `{ dossierId? }` (strict) | `RecordingStartResult` — `{ sessionId, assignment: 'none' \| 'assigned' \| 'failed' }` | Create a new audio session and begin recording. With `dossierId` the session is assigned to that dossier right after creation (#206 PC 1); a failed assignment does not stop the recording (`'failed'`, AK 2). Starts duration timer, power save blocker, 2h auto-stop timer, and tray indicator. Throws if a recording is already active. |
+| `recording:start` | invoke | `RecordingStartSchema` — none or `{ dossierId? }` (strict) | `RecordingStartResult` — `{ sessionId, assignment: 'none' \| 'assigned' \| 'failed', title, createdAt }` | Create a new audio session and begin recording. With `dossierId` the session is assigned to that dossier once the WAV file exists and the session is active — before any audio arrives (#206 PC 1); a failing `initWavFile` leaves neither an assignment nor a «Zuletzt» entry; a failed assignment does not stop the recording (`'failed'`, AK 2). Starts duration timer, power save blocker, 2h auto-stop timer, and tray indicator. Throws if a recording is already active. |
 | `recording:stop` | invoke | `RecordingStopSchema` — `{ sessionId: string }` | `{ durationSeconds: number }` | Stop the active recording, finalize WAV file, set session status to `transcribing`, and enqueue ML pipeline. Throws if sessionId does not match the active recording. |
 | `recording:data` | send (one-way) | `RecordingDataSchema` — `{ sessionId: string, samples: ArrayBuffer }` | _(none)_ | Stream raw audio samples from the renderer's MediaRecorder to the main process for WAV writing. Uses `ipcMain.on` (fire-and-forget). |
 
@@ -151,7 +151,7 @@ Source: `src/main/ipc/pdf-handlers.ts`
 
 | Channel | Direction | Input Schema | Return Type | Description |
 |---|---|---|---|---|
-| `import:pdf` | invoke | `ImportPDFSchema` — `{ filePaths: string[](1..20), dossierId? }` (strict) | `ImportPdfResult` — `{ sessions: Session[], unassigned: {sessionId, title}[] }` | Import one or more PDF files. Validates all files first, then copies each to `~/.therascript/pdf/`, creates a session, assigns it to `dossierId` (if given) BEFORE enqueuing the PDF processing pipeline (#206 PC 2); PDFs whose assignment failed are imported anyway and listed in `unassigned` (AK 2). Rolls back on copy failure. |
+| `import:pdf` | invoke | `ImportPDFSchema` — `{ filePaths: string[](1..20), dossierId? }` (strict) | `ImportPdfResult` — `{ sessions: Session[], unassigned: {sessionId, title}[], failed: {title, reason}[] }` | Import one or more PDF files, each in its own try/catch (missing file, copy failure → `failed`; a PDF deleted while its scanned-pages check runs is skipped silently). Copies each to `~/.therascript/pdf/`, creates a session, assigns it to `dossierId` (if given) BEFORE enqueuing the PDF processing pipeline (#206 PC 2); PDFs whose assignment failed are imported anyway and listed in `unassigned` (AK 2). Rolls back on copy failure. |
 | `import:showPDFDialog` | invoke | _(none)_ | `string[]` | Open a native file picker dialog for PDF selection. Returns selected file paths, or empty array if canceled. |
 
 ### Dossier Handlers

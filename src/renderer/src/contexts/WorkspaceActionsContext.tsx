@@ -6,7 +6,12 @@ import { useToast } from '../hooks/useToast'
 import { NewDossierDialog } from '../components/dossier/NewDossierDialog'
 import type { Dossier } from '../../../shared/types/Dossier'
 import { dossierListName } from '../utils/dossierFormat'
-import { pdfsNotAssignedNotice, recordingNotAssignedNotice } from '../utils/dossierAssignmentNotice'
+import { cancelLiveCardFocus, requestLiveCardFocus } from '../stores/liveCardFocus'
+import {
+  PDF_IMPORT_FAILED,
+  pdfImportNotice,
+  recordingNotAssignedNotice
+} from '../utils/dossierAssignmentNotice'
 import {
   WorkspaceActionsContext,
   type ImportPdfOptions,
@@ -49,10 +54,14 @@ export function WorkspaceActionsProvider({ children }: { children: ReactNode }):
     async (options: StartRecordingOptions = {}) => {
       const { dossierId, dossierName } = options
       navigateOnStart.current = dossierId === undefined
-      const startedAt = new Date()
+      // Fokus auf «Aufnahme stoppen», sobald die Live-Karte erscheint
+      requestLiveCardFocus()
       const result = dossierId ? await start({ dossierId }) : await start()
+      if (!result) cancelLiveCardFocus()
       // #206 AK 2 — die Aufnahme läuft, aber ohne Zuordnung: sagen, welche
+      // (Zeitpunkt der Sitzung aus dem Main-Prozess, wie in ihrem Titel)
       if (dossierId && result?.assignment === 'failed') {
+        const startedAt = new Date(result.createdAt)
         toast.error(recordingNotAssignedNotice(startedAt, await nameOf(dossierId, dossierName)), {
           durationMs: 10_000
         })
@@ -81,16 +90,20 @@ export function WorkspaceActionsProvider({ children }: { children: ReactNode }):
         const result = dossierId
           ? await window.api.import.pdf(paths, { dossierId })
           : await window.api.import.pdf(paths)
-        // #206 AK 2 — importiert, aber nicht zugeordnet: jedes PDF beim Titel nennen
-        if (dossierId && result.unassigned.length > 0) {
-          toast.error(
-            pdfsNotAssignedNotice(
-              result.unassigned.map((u) => u.title),
-              await nameOf(dossierId, dossierName)
-            ),
-            { durationMs: 10_000 }
-          )
-        }
+        // #206 AK 2, Review #225 — nicht zugeordnete PDFs beim Titel nennen,
+        // fehlgeschlagene samt Grund; ohne Dossier gibt es kein «nicht zugeordnet»
+        const unassignedTitles = dossierId ? result.unassigned.map((u) => u.title) : []
+        const notice = pdfImportNotice({
+          importedCount: result.sessions.length,
+          unassignedTitles,
+          failed: result.failed,
+          dossierName:
+            dossierId && unassignedTitles.length > 0 ? await nameOf(dossierId, dossierName) : null
+        })
+        if (notice) toast.error(notice, { durationMs: 10_000 })
+      } catch (error) {
+        console.error('[Import] PDF-Import fehlgeschlagen:', error)
+        toast.error(PDF_IMPORT_FAILED)
       } finally {
         importingRef.current = false
         setIsImporting(false)

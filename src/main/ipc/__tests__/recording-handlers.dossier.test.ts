@@ -139,6 +139,29 @@ describe('recording:start aus einem Patientendossier (#206)', () => {
     expect(list[0]).toMatchObject({ kind: 'session', recording: true })
   })
 
+  it('liefert Titel und Zeitpunkt der Sitzung zurück (Hinweis «nicht zugeordnet», AK 2)', async () => {
+    const result = (await start({ dossierId: 'geloescht' })) as unknown as {
+      sessionId: string
+      title: string
+      createdAt: string
+    }
+    const row = testDb
+      .prepare('SELECT title, created_at FROM sessions WHERE id = ?')
+      .get(result.sessionId) as { title: string; created_at: string }
+    expect(result.title).toBe(row.title)
+    expect(result.createdAt).toBe(row.created_at)
+  })
+
+  it('legt Zuordnung und «Zuletzt»-Eintrag erst nach der Audiodatei an (Review #225)', async () => {
+    vi.spyOn(AudioFileServiceClass.prototype, 'initWavFile').mockImplementation(() => {
+      throw new Error('EACCES')
+    })
+    await expect(start({ dossierId })).rejects.toThrow(/EACCES/)
+    expect(handlers.getActiveSessionId()).toBeNull()
+    expect(testDb.prepare('SELECT COUNT(*) AS n FROM session_dossiers').get()).toEqual({ n: 0 })
+    expect(testDb.prepare('SELECT COUNT(*) AS n FROM recent_items').get()).toEqual({ n: 0 })
+  })
+
   it('ohne Dossier: keine Zuordnung, Ergebnis «none» (OOS 1)', async () => {
     const { sessionId, assignment } = await start()
     expect(assignment).toBe('none')

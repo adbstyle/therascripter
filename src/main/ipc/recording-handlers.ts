@@ -182,7 +182,16 @@ export function registerRecordingHandlers(): void {
     const service = new SessionService(getDatabase())
     const title = generateTitle()
     const session = service.createSession(title, 'audio')
-    // Ab Beginn der Aufnahme zugeordnet — vor der ersten Audiodatei (#206 PC 1)
+
+    const wavPath = audioFileService.initWavFile(session.id)
+    service.updateSession(session.id, { audioPath: wavPath })
+
+    activeSessionId = session.id
+    recordingStartTime = Date.now()
+
+    // Ab Beginn der Aufnahme zugeordnet (#206 PC 1): vor dem ersten
+    // Audio-Chunk, aber erst nach dem Anlegen der Datei — scheitert dort
+    // etwas, bleiben keine Zuordnung und kein «Zuletzt»-Eintrag zurück
     const assignment = assignToDossier(session.id, options?.dossierId)
     // «Zuletzt geöffnet» (#213 AK 2): die gestartete Aufnahme gehört dazu
     try {
@@ -190,12 +199,6 @@ export function registerRecordingHandlers(): void {
     } catch (error) {
       console.error('[Recording] «Zuletzt geöffnet» nicht aktualisiert:', error)
     }
-
-    const wavPath = audioFileService.initWavFile(session.id)
-    service.updateSession(session.id, { audioPath: wavPath })
-
-    activeSessionId = session.id
-    recordingStartTime = Date.now()
 
     // Queue pausieren: keine neuen ML-Tasks während der Aufnahme.
     // Nach dem Point-of-no-Return, damit ein Throw bei der Session-
@@ -233,7 +236,9 @@ export function registerRecordingHandlers(): void {
       // Tray may not be initialized in tests
     }
 
-    return { sessionId: session.id, assignment }
+    // Titel und Zeitpunkt der Sitzung: der Hinweis «nicht zugeordnet» nennt
+    // genau diese, nicht die Zeit vor dem Mikrofondialog (#206 AK 2)
+    return { sessionId: session.id, assignment, title: session.title, createdAt: session.createdAt }
   })
 
   ipcMain.handle('recording:stop', (_event, args: unknown) => {

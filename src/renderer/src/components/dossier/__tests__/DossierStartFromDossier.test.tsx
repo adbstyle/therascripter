@@ -3,7 +3,7 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AppShell from '../../shell/AppShell'
 import { renderWithProviders } from '../../../test/renderWithProviders'
-import { createMockApi, emitApiEvent } from '../../../test/mockApi'
+import { createMockApi, emitApiEvent, makeSession } from '../../../test/mockApi'
 import { makeDossier, makeTimelineEntry } from '../../../test/dossierFixtures'
 import type { RecordingStartResult } from '../../../../../shared/types/IpcApi'
 
@@ -40,7 +40,12 @@ vi.mock('../../../hooks/useRecording', async () => {
     async (options?: { dossierId?: string }): Promise<RecordingStartResult> => {
       const assignment = options?.dossierId ? rec.nextAssignment : 'none'
       rec.set(true, assignment === 'assigned' ? (options?.dossierId ?? null) : null)
-      return { sessionId: 'rec-1', assignment }
+      return {
+        sessionId: 'rec-1',
+        assignment,
+        title: 'Aufnahme 14.11.2026 10:05',
+        createdAt: new Date(2026, 10, 14, 10, 5, 0).toISOString()
+      }
     }
   )
   const stopRecording = vi.fn(async () => rec.set(false))
@@ -136,6 +141,35 @@ describe('Aufnahme aus dem Patientendossier (#206 AK 1, PC 1)', () => {
     )
     // Consent-Hinweis wie auf der Sitzungsliste
     expect(screen.getByRole('button', { name: 'Hinweis schliessen' })).toBeInTheDocument()
+    // Fokus auf «Aufnahme stoppen» der Live-Karte (Review #225)
+    expect(within(timeline).getByRole('button', { name: 'Aufnahme stoppen' })).toHaveFocus()
+  })
+
+  it('setzt auch auf der Sitzungsliste den Fokus auf «Aufnahme stoppen» der Live-Karte (Review #225)', async () => {
+    window.api = createMockApi({
+      sessions: {
+        list: vi.fn(async () =>
+          rec.recording
+            ? [
+                {
+                  ...makeSession({ id: 'rec-1', title: 'Aufnahme', status: 'recording' }),
+                  dossiers: []
+                }
+              ]
+            : []
+        )
+      }
+    })
+    renderWithProviders(<AppShell />)
+    const user = userEvent.setup()
+    const heading = await screen.findByRole('heading', { name: 'Transkriptionen' })
+    const header = heading.closest('header') ?? heading.parentElement!.parentElement!
+    await user.click(
+      within(header as HTMLElement).getByRole('button', { name: 'Aufnahme starten' })
+    )
+    act(() => emitApiEvent(window.api, 'sessions.onChanged', { deletedIds: [] }))
+    const stop = await screen.findByRole('button', { name: 'Aufnahme stoppen' })
+    await waitFor(() => expect(stop).toHaveFocus())
   })
 
   it('blockiert eine zweite Aufnahme: «Aufnahme starten» fehlt im Kopf, in der Seitenleiste ist es gesperrt', async () => {
@@ -150,10 +184,12 @@ describe('Aufnahme aus dem Patientendossier (#206 AK 1, PC 1)', () => {
     expect(await startMock()).toHaveBeenCalledTimes(1)
   })
 
-  it('nennt Zeitpunkt und Dossier, wenn die Zuordnung scheitert — die Aufnahme läuft (AK 2)', async () => {
+  it('nennt Zeitpunkt der Sitzung und Dossier, wenn die Zuordnung scheitert — die Aufnahme läuft (AK 2)', async () => {
     rec.nextAssignment = 'failed'
     vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['Date'] })
-    vi.setSystemTime(new Date(2026, 10, 14, 10, 5, 30))
+    // Uhr steht später als die Sitzung (Mikrofondialog dauerte): massgeblich ist
+    // der Zeitpunkt der Sitzung aus dem Main-Prozess, wie in ihrem Titel
+    vi.setSystemTime(new Date(2026, 10, 14, 10, 7, 30))
     const user = setup({ assigned: false })
     await user.click(await headerButton('Aufnahme starten'))
 
@@ -188,7 +224,8 @@ describe('Import aus dem Patientendossier (#206 AK 1, PC 2)', () => {
       unassigned: [
         { sessionId: 'p1', title: 'Austrittsbericht' },
         { sessionId: 'p2', title: 'Zuweisung' }
-      ]
+      ],
+      failed: []
     })
     await user.click(await headerButton('PDF importieren'))
     expect(
@@ -196,6 +233,42 @@ describe('Import aus dem Patientendossier (#206 AK 1, PC 2)', () => {
         'Die PDF-Dokumente «Austrittsbericht», «Zuweisung» wurden importiert, konnten dem Patientendossier «Hofer, Lukas» aber nicht zugeordnet werden. Sie können das in der Liste «Transkriptionen» über «Dossier zuordnen» nachholen.'
       )
     ).toBeInTheDocument()
+  })
+
+  it('nennt importierte, nicht zugeordnete und fehlgeschlagene PDFs zutreffend (Review #225)', async () => {
+    const user = setup({ assigned: true })
+    window.api.import.showPDFDialog = vi
+      .fn()
+      .mockResolvedValue(['/tmp/a.pdf', '/tmp/b.pdf', '/tmp/c.pdf'])
+    window.api.import.pdf = vi.fn().mockResolvedValue({
+      sessions: [{ id: 'p1' }, { id: 'p2' }],
+      unassigned: [{ sessionId: 'p2', title: 'Zuweisung' }],
+      failed: [
+        {
+          title: 'Labor',
+          reason: 'Die Datei konnte nicht kopiert werden. Ist sie lokal verfügbar?'
+        }
+      ]
+    })
+    await user.click(await headerButton('PDF importieren'))
+    expect(
+      await screen.findByText(
+        '2 PDF-Dokumente wurden importiert. Nicht importiert: «Labor» (Die Datei konnte nicht kopiert werden. Ist sie lokal verfügbar?). Das PDF-Dokument «Zuweisung» wurde importiert, konnte dem Patientendossier «Hofer, Lukas» aber nicht zugeordnet werden. Sie können das in der Liste «Transkriptionen» über «Dossier zuordnen» nachholen.'
+      )
+    ).toBeInTheDocument()
+  })
+
+  it('meldet einen abgelehnten Import mit Fehler-Hinweis und gibt den Knopf wieder frei', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const user = setup({ assigned: true })
+    window.api.import.showPDFDialog = vi.fn().mockResolvedValue(['/tmp/a.pdf'])
+    window.api.import.pdf = vi.fn().mockRejectedValue(new Error('IPC kaputt'))
+    const button = await headerButton('PDF importieren')
+    await user.click(button)
+    expect(
+      await screen.findByText('Der Import ist fehlgeschlagen. Bitte versuchen Sie es erneut.')
+    ).toBeInTheDocument()
+    await waitFor(() => expect(button).toBeEnabled())
   })
 
   it('fragt ausserhalb eines Dossiers nach keinem Dossier (OOS 1)', async () => {

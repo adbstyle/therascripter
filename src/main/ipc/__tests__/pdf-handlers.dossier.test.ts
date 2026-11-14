@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import Database from 'better-sqlite3'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { applyTestSchema } from '../../db/__tests__/test-utils'
@@ -33,9 +33,18 @@ vi.mock('../../db/connection', () => ({
   getDatabase: () => testDb,
   getDataDir: () => TEST_DIR
 }))
-// Keine echte PDF-Analyse nötig: die Erkennung gescannter Seiten fällt auf null
+// Keine echte PDF-Analyse nötig: die Erkennung gescannter Seiten fällt auf
+// null. `duringDetect` läuft im await — dort löschen Tests Dossier oder PDF.
+const detect = vi.hoisted(() => ({
+  duringDetect: null as null | ((call: number) => void),
+  calls: 0
+}))
 vi.mock('../../utils/pdfjs-loader', () => ({
-  openPdfDocument: vi.fn().mockRejectedValue(new Error('kein PDF')),
+  openPdfDocument: vi.fn(async () => {
+    detect.calls++
+    detect.duringDetect?.(detect.calls)
+    throw new Error('kein PDF')
+  }),
   releasePdfDocument: vi.fn()
 }))
 // Die Queue hält fest, welche Zuordnungen beim Einreihen schon bestanden
@@ -65,6 +74,7 @@ describe('import:pdf aus einem Patientendossier (#206)', () => {
   async function importPdf(args: unknown): Promise<{
     sessions: Array<{ id: string; title: string }>
     unassigned: Array<{ sessionId: string; title: string }>
+    failed: Array<{ title: string; reason: string }>
   }> {
     return (await invokeHandlers.get('import:pdf')!({}, args)) as never
   }
@@ -73,6 +83,8 @@ describe('import:pdf aus einem Patientendossier (#206)', () => {
     vi.resetModules()
     invokeHandlers.clear()
     enqueued.length = 0
+    detect.duringDetect = null
+    detect.calls = 0
     testDb = new Database(':memory:')
     testDb.pragma('foreign_keys = ON')
     applyTestSchema(testDb)
@@ -130,15 +142,81 @@ describe('import:pdf aus einem Patientendossier (#206)', () => {
     expect(result.unassigned).toEqual([{ sessionId: result.sessions[0].id, title: 'Bericht' }])
   })
 
-  it('prüft alle Dateien vorab — eine ungültige legt kein PDF an', async () => {
-    await expect(
-      importPdf({
-        filePaths: [sourcePdf('Gut.pdf'), join(SOURCE_DIR, 'fehlt.pdf')],
-        dossierId
+  it('eine fehlende Datei bricht den Import nicht ab — sie wird mit Grund gemeldet', async () => {
+    const result = await importPdf({
+      filePaths: [sourcePdf('Gut.pdf'), join(SOURCE_DIR, 'fehlt.pdf')],
+      dossierId
+    })
+    expect(result.sessions.map((s) => s.title)).toEqual(['Gut'])
+    expect(result.failed).toEqual([{ title: 'fehlt.pdf', reason: 'Datei nicht gefunden' }])
+    expect(enqueued).toHaveLength(1)
+  })
+
+  it('Kopierfehler der dritten von drei Dateien: die ersten zwei bleiben importiert und gemeldet (Review #225)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const unreadable = sourcePdf('Gesperrt.pdf')
+    chmodSync(unreadable, 0o000)
+    try {
+      const result = await importPdf({
+        filePaths: [sourcePdf('Eins.pdf'), sourcePdf('Zwei.pdf'), unreadable],
+        dossierId: 'geloescht'
       })
-    ).rejects.toThrow(/Datei nicht gefunden/)
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM sessions').get()).toEqual({ n: 0 })
-    expect(enqueued).toEqual([])
+      expect(result.sessions.map((s) => s.title)).toEqual(['Eins', 'Zwei'])
+      // Frühere Meldungen gehen nicht verloren
+      expect(result.unassigned.map((u) => u.title)).toEqual(['Eins', 'Zwei'])
+      expect(result.failed).toEqual([
+        {
+          title: 'Gesperrt',
+          reason: 'Die Datei konnte nicht kopiert werden. Ist sie lokal verfügbar?'
+        }
+      ])
+      // Rollback: keine Sitzung für die dritte Datei
+      expect(testDb.prepare('SELECT COUNT(*) AS n FROM sessions').get()).toEqual({ n: 2 })
+      expect(enqueued).toHaveLength(2)
+    } finally {
+      chmodSync(unreadable, 0o644)
+    }
+  })
+
+  it('Dossier wird während des Imports gelöscht: die übrigen PDFs werden importiert (Review #225)', async () => {
+    const { DossierService } = await import('../../services/DossierService')
+    const dossiers = new DossierService(testDb)
+    // Während das ERSTE PDF analysiert wird, löscht der USER das Dossier samt
+    // diesem (bisher einzigen, exklusiven) PDF
+    detect.duringDetect = (call) => {
+      if (call !== 1) return
+      const preview = dossiers.deletePreview(dossierId)!
+      expect(dossiers.deleteDossier(dossierId, preview.fingerprint)).toMatchObject({ ok: true })
+    }
+    const result = await importPdf({
+      filePaths: [sourcePdf('Eins.pdf'), sourcePdf('Zwei.pdf'), sourcePdf('Drei.pdf')],
+      dossierId
+    })
+    // Das erste ist gewollt weg (kein Fehler), die anderen sind importiert,
+    // aber nicht mehr zuordenbar
+    expect(result.sessions.map((s) => s.title)).toEqual(['Zwei', 'Drei'])
+    expect(result.unassigned.map((u) => u.title)).toEqual(['Zwei', 'Drei'])
+    expect(result.failed).toEqual([])
+    expect(enqueued.map((e) => e.sessionId)).toEqual(result.sessions.map((s) => s.id))
+  })
+
+  it('PDF wird während des Imports gelöscht: still übersprungen, die übrigen importiert (Review #225)', async () => {
+    const { SessionService } = await import('../../services/SessionService')
+    detect.duringDetect = (call) => {
+      if (call !== 2) return
+      const row = testDb.prepare(`SELECT id FROM sessions WHERE title = 'Zwei'`).get() as {
+        id: string
+      }
+      new SessionService(testDb).deleteSession(row.id)
+    }
+    const result = await importPdf({
+      filePaths: [sourcePdf('Eins.pdf'), sourcePdf('Zwei.pdf'), sourcePdf('Drei.pdf')],
+      dossierId
+    })
+    expect(result.sessions.map((s) => s.title)).toEqual(['Eins', 'Drei'])
+    expect(result.unassigned).toEqual([])
+    expect(result.failed).toEqual([])
+    expect(enqueued).toHaveLength(2)
   })
 
   it('lehnt ungültige Argumente ab', async () => {

@@ -47,6 +47,10 @@ export interface RecordingStartOptions {
 export interface RecordingStartResult {
   sessionId: string
   assignment: DossierAssignmentOutcome
+  /** Titel der neuen Sitzung («Aufnahme 14.11.2026 10:05»). */
+  title: string
+  /** Zeitpunkt der Sitzung (ISO UTC); der Hinweis «nicht zugeordnet» nennt ihn (#206 AK 2). */
+  createdAt: string
 }
 
 export interface ImportPdfOptions {
@@ -58,6 +62,8 @@ export interface ImportPdfResult {
   sessions: Session[]
   /** #206 AK 2 — importiert, aber dem Patientendossier nicht zugeordnet. */
   unassigned: Array<{ sessionId: string; title: string }>
+  /** Nicht importiert (fehlende Datei, Kopierfehler, …), mit Grund für den USER. */
+  failed: Array<{ title: string; reason: string }>
 }
 
 export interface RecordingApi {

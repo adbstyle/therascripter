@@ -36,3 +36,37 @@ export function pdfsNotAssignedNotice(titles: string[], dossierName: string | nu
         dossierName
       )} aber nicht zugeordnet werden. ${LATER}`
 }
+
+export interface PdfImportOutcome {
+  importedCount: number
+  /** Titel importierter, aber nicht zugeordneter PDFs (nur bei Import aus einem Dossier). */
+  unassignedTitles: string[]
+  failed: Array<{ title: string; reason: string }>
+  dossierName: string | null
+}
+
+/**
+ * Hinweis nach einem Import, bei dem nicht alles gelang (Review #225): wie
+ * viele PDFs importiert wurden, welche nicht zugeordnet und welche nicht
+ * importiert werden konnten — mit Grund. null, wenn alles gelang.
+ */
+export function pdfImportNotice(outcome: PdfImportOutcome): string | null {
+  const { importedCount, unassignedTitles, failed, dossierName } = outcome
+  if (unassignedTitles.length === 0 && failed.length === 0) return null
+  const parts: string[] = []
+  if (failed.length > 0) {
+    if (importedCount > 0) {
+      parts.push(
+        importedCount === 1
+          ? '1 PDF-Dokument wurde importiert.'
+          : `${importedCount} PDF-Dokumente wurden importiert.`
+      )
+    }
+    const list = failed.map((f) => `«${f.title.trim() || 'Ohne Titel'}» (${f.reason})`).join(', ')
+    parts.push(`Nicht importiert: ${list}.`)
+  }
+  if (unassignedTitles.length > 0) parts.push(pdfsNotAssignedNotice(unassignedTitles, dossierName))
+  return parts.join(' ')
+}
+
+export const PDF_IMPORT_FAILED = 'Der Import ist fehlgeschlagen. Bitte versuchen Sie es erneut.'
