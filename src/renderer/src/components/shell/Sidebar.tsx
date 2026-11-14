@@ -37,7 +37,9 @@ export default function Sidebar(): React.JSX.Element {
       >
         <Search className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
         <span className="flex-1">Suchen</span>
-        <kbd className="font-sans text-[11px] text-text-tertiary">⌘K</kbd>
+        <kbd aria-hidden="true" className="font-sans text-[11px] text-text-tertiary">
+          ⌘K
+        </kbd>
       </button>
       <SidebarRow
         icon={Files}

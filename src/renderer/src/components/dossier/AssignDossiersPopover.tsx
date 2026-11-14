@@ -54,6 +54,8 @@ export function AssignDossiersPopover({
   const [query, setQuery] = useState('')
   const deferredQuery = useDeferredValue(query)
   const [overrides, setOverrides] = useState<Map<string, Override>>(() => new Map())
+  // Ansage für Screenreader: was ein Häkchen bewirkt hat (Sichtprüfung)
+  const [announcement, setAnnouncement] = useState('')
   const pinnedRef = useRef<Set<string>>(new Set(assigned.map((d) => d.id)))
 
   const dossiers = useLiveQuery<DossierListItem[]>(
@@ -121,8 +123,11 @@ export function AssignDossiersPopover({
     } catch {
       ok = false
     }
+    // Die Liste kennt alle Dossiers: gleichnamige mit Zusatz nennen
+    const name = dossierLabel(dossier, ambiguousDossierNames(dossiers.data))
     if (ok) {
       setOverrides((prev) => new Map(prev).set(id, { checked: next, pending: false }))
+      setAnnouncement(next ? `«${name}» zugeordnet.` : `Zuordnung zu «${name}» gelöst.`)
       return
     }
     setOverrides((prev) => {
@@ -130,8 +135,11 @@ export function AssignDossiersPopover({
       map.delete(id)
       return map
     })
-    // Die Liste kennt alle Dossiers: gleichnamige im Toast mit Zusatz
-    const name = dossierLabel(dossier, ambiguousDossierNames(dossiers.data))
+    setAnnouncement(
+      next
+        ? `«${name}» konnte nicht zugeordnet werden.`
+        : `Zuordnung zu «${name}» konnte nicht gelöst werden.`
+    )
     toast.error(
       next
         ? `«${sessionLabel}» konnte dem Patientendossier «${name}» nicht zugeordnet werden.`
@@ -163,6 +171,9 @@ export function AssignDossiersPopover({
     >
       <p id={headingId} className="sr-only">
         Patientendossiers für «{sessionLabel}» zuordnen
+      </p>
+      <p role="status" aria-live="polite" className="sr-only">
+        {announcement}
       </p>
       <label className="flex shrink-0 items-center gap-2 rounded-md border border-border-strong px-2 py-1 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30">
         <Search className="h-3.5 w-3.5 shrink-0 text-text-tertiary" strokeWidth={2} aria-hidden />
@@ -201,6 +212,12 @@ export function AssignDossiersPopover({
                   >
                     <input
                       type="checkbox"
+                      // Eindeutiger Name: «Meier, Anna (PD-0412 · 11.06.1969)»
+                      aria-label={
+                        identification
+                          ? `${dossierListName(dossier)} (${identification})`
+                          : dossierListName(dossier)
+                      }
                       checked={isChecked(dossier.id)}
                       // aria-disabled statt disabled: ein deaktiviertes Element
                       // verlöre den Tastaturfokus; toggle() ignoriert Klicks solange

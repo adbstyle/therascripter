@@ -138,11 +138,32 @@ describe('AssignDossiersPopover (#205 AK 1–3, 24)', () => {
     const { user } = setup()
     await user.click(screen.getByRole('button', { name: 'Dossier zuordnen' }))
     expect(
-      await screen.findByRole('checkbox', { name: /Meier, Anna\s*PD-0412 · 11\.06\.1969/ })
+      await screen.findByRole('checkbox', { name: 'Meier, Anna (PD-0412 · 11.06.1969)' })
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('checkbox', { name: /Meier, Anna\s*PD-1201 · 02\.12\.1994/ })
+      screen.getByRole('checkbox', { name: 'Meier, Anna (PD-1201 · 02.12.1994)' })
     ).toBeInTheDocument()
+    // Ohne ID und Geburtsdatum nur der Name
+    expect(screen.getByRole('checkbox', { name: 'Meisser, Jonas' })).toBeInTheDocument()
+  })
+
+  it('announces assigned, unassigned and failures in a live region', async () => {
+    const assign = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ ok: false, reason: 'not-found' })
+    const { user } = setup({ assigned: [ref(MEISSER)], assign })
+    await user.click(screen.getByRole('button', { name: /Zugeordnet: Meisser/ }))
+    const dialog = await screen.findByRole('dialog')
+    const live = within(dialog).getByRole('status')
+    await user.click(await screen.findByRole('checkbox', { name: /Hofer/ }))
+    await waitFor(() => expect(live).toHaveTextContent('«Hofer, Lukas» zugeordnet.'))
+    await user.click(screen.getByRole('checkbox', { name: /Meisser/ }))
+    await waitFor(() => expect(live).toHaveTextContent('Zuordnung zu «Meisser, Jonas» gelöst.'))
+    await user.click(screen.getByRole('checkbox', { name: /PD-0412/ }))
+    await waitFor(() =>
+      expect(live).toHaveTextContent('«Meier, Anna (PD-0412)» konnte nicht zugeordnet werden.')
+    )
   })
 
   it('filters by parts of first and last name', async () => {

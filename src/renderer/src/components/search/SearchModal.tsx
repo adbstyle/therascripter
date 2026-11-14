@@ -239,7 +239,20 @@ export function SearchModal({ onClose }: SearchModalProps): React.JSX.Element {
             placeholder="Patientendossiers, Sitzungen und PDF-Dokumente durchsuchen"
             className="min-w-0 flex-1 bg-transparent text-[15px] text-text-primary outline-none placeholder:text-text-tertiary [&::-webkit-search-cancel-button]:hidden"
           />
-          <kbd className="rounded border border-border px-1.5 py-0.5 font-sans text-[11px] text-text-tertiary">
+          {/* Bereich dauerhaft sichtbar, auch nach dem Tippen (#211 AK 2); der
+              zugängliche Name des Felds nennt ihn schon («In allen Inhalten
+              suchen»), Bereich und Tastaturhinweis sind deshalb aria-hidden */}
+          <span
+            aria-hidden="true"
+            data-testid="search-scope"
+            className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-text-secondary"
+          >
+            Alle Inhalte
+          </span>
+          <kbd
+            aria-hidden="true"
+            className="rounded border border-border px-1.5 py-0.5 font-sans text-[11px] text-text-tertiary"
+          >
             esc
           </kbd>
         </label>
