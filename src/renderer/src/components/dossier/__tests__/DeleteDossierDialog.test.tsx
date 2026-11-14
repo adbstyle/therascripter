@@ -145,6 +145,67 @@ describe('DeleteDossierDialog (#204 AK 16/17, #207 AK 1/2)', () => {
     expect(rec.stop).toHaveBeenCalled()
   })
 
+  it('«Aufnahme stoppen» stoppt wirklich, danach zeigt der Dialog den aktuellen Stand (#207 AK 2)', async () => {
+    rec.recording = true
+    const deletePreview = vi
+      .fn()
+      .mockResolvedValue(
+        makeDeletePreview({ blockedByRecording: true, exclusive: { sessions: 1, pdfs: 0 } })
+      )
+    // Wie im Main-Prozess: der Stopp setzt die Sitzung auf «wartet» und meldet
+    // sessions:changed — ab dann sperrt die Aufnahme nicht mehr
+    rec.stop.mockImplementation(async () => {
+      deletePreview.mockResolvedValue(
+        makeDeletePreview({ blockedByRecording: false, exclusive: { sessions: 1, pdfs: 0 } })
+      )
+      emitApiEvent(window.api, 'sessions.onChanged', { deletedIds: [] })
+    })
+    const { user } = setup({ deletePreview })
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Patientendossier kann gerade nicht gelöscht werden'
+    })
+    await user.click(within(dialog).getByRole('button', { name: 'Aufnahme stoppen' }))
+    expect(rec.stop).toHaveBeenCalledTimes(1)
+    expect(
+      await screen.findByRole('button', { name: 'Dossier und 1 Inhalt löschen' })
+    ).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toHaveAccessibleName('Patientendossier Lukas Hofer löschen?')
+    // Fokus wieder auf dem sicheren Knopf
+    expect(screen.getByRole('button', { name: 'Abbrechen' })).toHaveFocus()
+  })
+
+  it('nennt die Suchdaten nur, soweit es sie gibt (Epic EK 22)', async () => {
+    setup({
+      deletePreview: vi.fn().mockResolvedValue(
+        makeDeletePreview({
+          exclusive: { sessions: 2, pdfs: 0 },
+          search: { exclusiveSearchable: 1, recentQueries: 2 }
+        })
+      )
+    })
+    const dialog = await screen.findByRole('dialog')
+    const items = within(dialog)
+      .getAllByRole('listitem')
+      .map((li) => li.textContent)
+    expect(items).toEqual([
+      '2 Sitzungen samt Text und Zusammenfassung',
+      'Für die Suche aufbereitete Texte',
+      'Stammdaten, Diagnosen, Medikation und Notiz',
+      '2 letzte Suchanfragen mit Namen oder ID dieses Patientendossiers',
+      'Einträge in der Sperrliste'
+    ])
+  })
+
+  it('erwähnt keine Suchdaten, wenn nichts davon besteht', async () => {
+    setup({
+      deletePreview: vi
+        .fn()
+        .mockResolvedValue(makeDeletePreview({ exclusive: { sessions: 1, pdfs: 0 } }))
+    })
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByText(/Suche/)).not.toBeInTheDocument()
+  })
+
   it('wechselt bei der Antwort «blocked-recording» in die gesperrte Ansicht', async () => {
     const { user } = setup({
       // Die nachgeladene Vorschau bestätigt die Sperre (die Aufnahme lief schon)

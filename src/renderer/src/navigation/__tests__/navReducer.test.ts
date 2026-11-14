@@ -16,7 +16,10 @@ const dossier = (id: string): Route => ({ kind: 'dossier', dossierId: id })
 function run(state: NavState, ...actions: NavAction[]): NavState {
   return actions.reduce(navReducer, state)
 }
-const go = (route: Route, options?: { anchorId?: string; replace?: boolean }): NavAction => ({
+const go = (
+  route: Route,
+  options?: { anchorId?: string; replace?: boolean; targetAnchorId?: string }
+): NavAction => ({
   type: 'navigate',
   route,
   options
@@ -94,6 +97,20 @@ describe('navReducer', () => {
     expect(state.back.length + 1).toBe(MAX_HISTORY)
     expect(state.current.route).toEqual(session('s79'))
     expect(state.back[0].route).toEqual(session(`s${80 - MAX_HISTORY}`))
+  })
+
+  it('setzt targetAnchorId auf den NEUEN Eintrag (#213: Karte auf der Zielseite markieren)', () => {
+    const state = run(initialNavState(dossier('d1')), go(sessions, { targetAnchorId: 's9' }))
+    expect(state.current).toMatchObject({ route: sessions, anchorId: 's9' })
+    expect(state.back[0].anchorId).toBeUndefined()
+  })
+
+  it('baut mit targetAnchorId dieselbe Seite neu auf, ohne zweiten Eintrag', () => {
+    const start = run(initialNavState(), go(session('a')), go(sessions))
+    const state = run(start, go(sessions, { targetAnchorId: 's9' }))
+    expect(state.current.id).not.toBe(start.current.id)
+    expect(state.current.anchorId).toBe('s9')
+    expect(keys(state.back)).toEqual(keys(start.back))
   })
 
   it('schreibt anchorId auf den Herkunftseintrag', () => {

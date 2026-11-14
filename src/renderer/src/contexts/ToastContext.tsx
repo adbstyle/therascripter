@@ -1,16 +1,19 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Toast, type ToastData } from '../components/Toast'
-import { ToastContext, type ToastContextValue } from './toastTypes'
+import { ToastContext, type ToastContextValue, type ToastOptions } from './toastTypes'
 
 let nextId = 0
 
 export function ToastProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [toasts, setToasts] = useState<ToastData[]>([])
 
-  const addToast = useCallback((message: string, type: 'success' | 'error') => {
-    const id = nextId++
-    setToasts((prev) => [...prev, { id, message, type }])
-  }, [])
+  const addToast = useCallback(
+    (message: string, type: 'success' | 'error', options?: ToastOptions) => {
+      const id = nextId++
+      setToasts((prev) => [...prev, { id, message, type, durationMs: options?.durationMs }])
+    },
+    []
+  )
 
   const dismiss = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id))
@@ -20,8 +23,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
   // Effekte mit `toast` als Dependency (z. B. ModelsSettings) laufen erneut.
   const value = useMemo<ToastContextValue>(
     () => ({
-      success: (message: string) => addToast(message, 'success'),
-      error: (message: string) => addToast(message, 'error')
+      success: (message: string, options?: ToastOptions) => addToast(message, 'success', options),
+      error: (message: string, options?: ToastOptions) => addToast(message, 'error', options)
     }),
     [addToast]
   )

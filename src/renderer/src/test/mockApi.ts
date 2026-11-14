@@ -60,7 +60,12 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
       onChanged: on('sessions.onChanged')
     },
     recording: {
-      start: vi.fn().mockResolvedValue({ sessionId: 'rec-1' }),
+      start: vi.fn().mockResolvedValue({
+        sessionId: 'rec-1',
+        assignment: 'none',
+        title: 'Aufnahme 14.11.2026 10:05',
+        createdAt: '2026-11-14T09:05:00.000Z'
+      }),
       stop: vi.fn().mockResolvedValue({ durationSeconds: 0 }),
       sendData: vi.fn(),
       onDuration: on('recording.onDuration'),
@@ -88,7 +93,7 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
       delete: vi.fn().mockResolvedValue(true)
     },
     import: {
-      pdf: vi.fn().mockResolvedValue([]),
+      pdf: vi.fn().mockResolvedValue({ sessions: [], unassigned: [], failed: [] }),
       showPDFDialog: vi.fn().mockResolvedValue([]),
       getPathForFile: vi.fn().mockReturnValue('')
     },
@@ -191,6 +196,11 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
       recentList: vi.fn().mockResolvedValue([]),
       recentRemember: vi.fn().mockResolvedValue(undefined),
       recentClear: vi.fn().mockResolvedValue(undefined)
+    },
+    recent: {
+      list: vi.fn().mockResolvedValue([]),
+      touch: vi.fn().mockResolvedValue(undefined),
+      onChanged: on('recent.onChanged')
     },
     pendingEdits: {
       onFlushRequest: on('pendingEdits.onFlushRequest')

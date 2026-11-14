@@ -6,6 +6,7 @@ import { useLiveQuery } from '../../hooks/useLiveQuery'
 import { useStartOfToday } from '../../hooks/useStartOfToday'
 import { useAnyInPipeline } from '../../hooks/useAnyInPipeline'
 import { useRecordingState } from '../../contexts/recording'
+import { useWorkspaceActions } from '../../contexts/workspaceActions'
 import { groupTimelineByMonth } from '../../utils/groupTimelineByMonth'
 import { shareById } from '../../utils/shareById'
 import { RecordingSessionCard } from '../RecordingSessionCard'
@@ -14,6 +15,8 @@ import type { TimelineEntry } from '../../../../shared/types/Dossier'
 
 interface DossierTimelineProps {
   dossierId: string
+  /** «Nachname, Vorname» — für den Hinweis, falls die Zuordnung scheitert (#206 AK 2). */
+  dossierName?: string
 }
 
 /**
@@ -34,10 +37,18 @@ interface DossierTimelineProps {
  * dieser Seite, verschwindet der Eintrag erst nach dem Schliessen — sein
  * Häkchen bleibt bis dahin umkehrbar. Die Auswahl selbst zeigt den
  * bestätigten Stand jedes Häkchens.
+ *
+ * PDFs, die auf den Verlauf gezogen werden, importiert die App in dieses
+ * Dossier (#206) — wie «PDF importieren» im Kopf der Seite.
  */
-export function DossierTimeline({ dossierId }: DossierTimelineProps): React.JSX.Element {
+export function DossierTimeline({
+  dossierId,
+  dossierName
+}: DossierTimelineProps): React.JSX.Element {
   const { navigate } = useNavigation()
   const recording = useRecordingState()
+  const { importPdfs, isImporting } = useWorkspaceActions()
+  const [isDragOver, setIsDragOver] = useState(false)
   const today = useStartOfToday()
   const retryDisabled = useAnyInPipeline()
   const sharedRef = useRef<TimelineEntry[]>([])
@@ -93,6 +104,30 @@ export function DossierTimeline({ dossierId }: DossierTimelineProps): React.JSX.
     [refresh]
   )
 
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(true)
+  }, [])
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false)
+  }, [])
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault()
+      setIsDragOver(false)
+      if (isImporting) return
+      const pdfPaths = Array.from(e.dataTransfer.files)
+        .filter((f) => f.name.toLowerCase().endsWith('.pdf'))
+        .map((f) => window.api.import.getPathForFile(f))
+        .filter((p) => p.length > 0)
+      if (pdfPaths.length === 0) return
+      // Der Verlauf lädt über sessions:changed/dossiers:changed selbst nach
+      await importPdfs(pdfPaths, { dossierId, dossierName })
+    },
+    [importPdfs, isImporting, dossierId, dossierName]
+  )
+
   const { isRecording, sessionId: recordingId, duration, level, stopRecording } = recording
   const live = useMemo(
     () => (isRecording ? { duration, level, onStop: stopRecording } : null),
@@ -138,7 +173,19 @@ export function DossierTimeline({ dossierId }: DossierTimelineProps): React.JSX.
   })
 
   return (
-    <section aria-label="Verlauf" className="flex min-w-0 flex-[999_1_560px] flex-col gap-2">
+    <section
+      aria-label="Verlauf"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={(e) => void handleDrop(e)}
+      className={`relative flex min-w-0 flex-[999_1_560px] flex-col gap-2 rounded-lg transition-colors ${isDragOver ? 'bg-primary-light' : ''}`}
+    >
+      {isDragOver && (
+        <div className="pointer-events-none absolute inset-0 z-30 flex flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-primary bg-primary-light/80 text-center">
+          <p className="text-lg font-medium text-primary">PDF hier ablegen</p>
+          <p className="text-sm text-text-secondary">Es wird diesem Patientendossier zugeordnet.</p>
+        </div>
+      )}
       {timeline.loading && entries.length === 0 ? (
         <p className="text-sm text-text-tertiary">Verlauf wird geladen …</p>
       ) : timeline.error && entries.length === 0 ? (
@@ -151,8 +198,9 @@ export function DossierTimeline({ dossierId }: DossierTimelineProps): React.JSX.
             Noch keine Sitzungen oder PDF-Dokumente
           </p>
           <p className="max-w-md text-sm text-text-secondary">
-            Ordnen Sie bestehende Transkriptionen in der Liste «Transkriptionen» über «Dossier
-            zuordnen» diesem Patientendossier zu.
+            Starten Sie oben eine Aufnahme oder importieren Sie ein PDF – oder ziehen Sie ein PDF
+            hierher. Bestehende Transkriptionen ordnen Sie in der Liste «Transkriptionen» über
+            «Dossier zuordnen» zu.
           </p>
           <button
             type="button"

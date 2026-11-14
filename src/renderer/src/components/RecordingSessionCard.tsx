@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { Square } from 'lucide-react'
 import type { Session } from '../../../shared/types'
 import { AUTO_STOP_SECONDS } from '../../../shared/constants/recording'
@@ -9,6 +9,7 @@ import { useViewMode } from '../viewMode/useViewMode'
 import { sessionTitleIn } from '../viewMode/sessionText'
 import { DossierBadges } from './dossier/DossierBadges'
 import type { DossierRef } from '../../../shared/types/Dossier'
+import { consumeLiveCardFocus } from '../stores/liveCardFocus'
 
 export interface LiveRecording {
   /** Pegel und Dauer als Store statt Wert — siehe useRecording (Issue #140) */
@@ -38,6 +39,12 @@ export function RecordingSessionCard({
   const remaining = Math.max(0, AUTO_STOP_SECONDS - duration)
   const title = sessionTitleIn(session, useViewMode())
   const displayTitle = title.trim().length > 0 ? title : 'Unbenannte Transkription'
+  const stopRef = useRef<HTMLButtonElement>(null)
+
+  // Nach «Aufnahme starten» landet der Fokus hier (Review #225)
+  useEffect(() => {
+    if (consumeLiveCardFocus()) stopRef.current?.focus()
+  }, [])
 
   return (
     <div
@@ -69,8 +76,10 @@ export function RecordingSessionCard({
         </div>
 
         <button
+          ref={stopRef}
+          type="button"
           onClick={live.onStop}
-          className="flex shrink-0 items-center gap-1.5 rounded-md bg-recording-solid px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-recording-solid-hover"
+          className="flex shrink-0 items-center gap-1.5 rounded-md bg-recording-solid px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-recording-solid-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           aria-label="Aufnahme stoppen"
         >
           <Square className="h-3 w-3 fill-current" strokeWidth={2} aria-hidden />

@@ -22,6 +22,9 @@ export type SessionsChangedData = z.infer<typeof SessionsChangedSchema>
 /** Push `dossiers:changed`: gelöschte Patientendossiers, sonst leer. */
 export const DossiersChangedSchema = ChangedIdsSchema
 
+/** Push `recent:changed` (#213): «Zuletzt geöffnet» neu laden; `deletedIds` immer leer. */
+export const RecentChangedSchema = ChangedIdsSchema
+
 /** Push `nav:command` aus den Menüs «Gehe zu» und «Darstellung» (#209 ergänzt 'search'). */
 export const NavCommandSchema = z.enum(['back', 'forward', 'toggleSidebar'])
 export type NavCommand = z.infer<typeof NavCommandSchema>

@@ -368,6 +368,11 @@ export class SessionRepository {
     const result = this.db
       .prepare('UPDATE sessions SET deleting_at = COALESCE(deleting_at, ?) WHERE id = ?')
       .run(new Date().toISOString(), id)
+    if (result.changes > 0) {
+      // «Zuletzt geöffnet» (#213 PC 2): sofort und mit der Markierung, nicht
+      // erst mit der Zeile — die kann bis zum nächsten Start liegen bleiben
+      this.db.prepare('DELETE FROM recent_items WHERE session_id = ?').run(id)
+    }
     return result.changes > 0
   }
 
@@ -375,7 +380,8 @@ export class SessionRepository {
    * Removes the content of a marked row while its files could not be removed
    * yet: the paths stay (the next start needs them), title, summary, entity
    * map (originals of every placeholder) and error message go immediately —
-   * as do the document date and the dossier assignments (#205 PC 5/6).
+   * as do the document date, the dossier assignments (#205 PC 5/6) and the
+   * «recently opened» entry (#213 PC 2).
    */
   scrubMarkedContent(id: string): void {
     const marked = this.db
@@ -389,6 +395,8 @@ export class SessionRepository {
       .run(id)
     if (marked.changes > 0) {
       this.db.prepare('DELETE FROM session_dossiers WHERE session_id = ?').run(id)
+      // «Zuletzt geöffnet» (#213 PC 2): kein Verweis bleibt, bis die Zeile geht
+      this.db.prepare('DELETE FROM recent_items WHERE session_id = ?').run(id)
     }
   }
 

@@ -30,6 +30,13 @@ export interface NavigateOptions {
   replace?: boolean
   /** Wird auf den AKTUELLEN Eintrag geschrieben (Herkunft), bevor gewechselt wird. */
   anchorId?: string
+  /**
+   * Karte, die auf der ZIELSEITE sichtbar und hervorgehoben werden soll
+   * (#213: ein nicht fertiger «Zuletzt»-Eintrag führt zur Sitzungsliste und
+   * markiert dort seine Karte). Auf derselben Seite ersetzt das einen neuen
+   * Eintrag den aktuellen, damit die Seite den Anker einlöst.
+   */
+  targetAnchorId?: string
   reopenOverlay?: 'search'
 }
 
@@ -84,7 +91,13 @@ function navigate(state: NavState, route: Route, options: NavigateOptions): NavS
     ...(options.reopenOverlay !== undefined ? { reopenOverlay: options.reopenOverlay } : {})
   }
 
+  const target = options.targetAnchorId !== undefined ? { anchorId: options.targetAnchorId } : {}
+
   if (sameRoute(state.current.route, route)) {
+    if (options.targetAnchorId !== undefined) {
+      // Neue Eintrags-ID → die Seite wird neu aufgebaut und hebt die Karte hervor
+      return { ...state, current: { id: state.nextId, route, ...target }, nextId: state.nextId + 1 }
+    }
     // Dieselbe Seite: kein neuer Eintrag. Eine andere Stelle (focus) derselben
     // Sitzung übernimmt der aktuelle Eintrag.
     if (route === state.current.route) return state
@@ -95,7 +108,7 @@ function navigate(state: NavState, route: Route, options: NavigateOptions): NavS
     // Ersetzt die Seite und legt dabei gleiche Nachbarn zusammen — etwa nach
     // dem Löschen eines Dossiers, das aus der Übersicht geöffnet wurde: sonst
     // stünde die Übersicht zweimal hintereinander im Verlauf.
-    const current: Entry = { id: state.nextId, route }
+    const current: Entry = { id: state.nextId, route, ...target }
     return {
       back: dropAdjacent(state.back, current),
       current,
@@ -109,7 +122,7 @@ function navigate(state: NavState, route: Route, options: NavigateOptions): NavS
   const overflow = back.length + 1 - MAX_HISTORY
   return {
     back: overflow > 0 ? back.slice(overflow) : back,
-    current: { id: state.nextId, route },
+    current: { id: state.nextId, route, ...target },
     forward: [],
     nextId: state.nextId + 1
   }

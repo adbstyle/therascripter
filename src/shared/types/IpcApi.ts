@@ -19,6 +19,7 @@ import type { NavCommand, SessionsChangedData } from '../validation/change-event
 import type { DossierApi } from './ipc/DossierApi'
 import type { SessionListItem, SetDocumentDateResult } from './Dossier'
 import type { SearchApi } from './ipc/SearchApi'
+import type { RecentApi } from './ipc/RecentApi'
 
 export interface SessionApi {
   /** #205 — mit den Patientendossiers jeder Sitzung (Plaketten). */
@@ -31,8 +32,42 @@ export interface SessionApi {
   onChanged(callback: (data: SessionsChangedData) => void): () => void
 }
 
+/**
+ * #206 — Zuordnung einer aus einem Patientendossier heraus gestarteten
+ * Aufnahme bzw. importierten PDFs: 'none' ohne Dossier, 'failed', wenn die
+ * Zuordnung scheiterte (Aufnahme bzw. Import laufen trotzdem, PC 1/2).
+ */
+export type DossierAssignmentOutcome = 'none' | 'assigned' | 'failed'
+
+export interface RecordingStartOptions {
+  /** #206 — Patientendossier, dem die Sitzung ab Beginn zugeordnet wird. */
+  dossierId?: string
+}
+
+export interface RecordingStartResult {
+  sessionId: string
+  assignment: DossierAssignmentOutcome
+  /** Titel der neuen Sitzung («Aufnahme 14.11.2026 10:05»). */
+  title: string
+  /** Zeitpunkt der Sitzung (ISO UTC); der Hinweis «nicht zugeordnet» nennt ihn (#206 AK 2). */
+  createdAt: string
+}
+
+export interface ImportPdfOptions {
+  /** #206 — Patientendossier, dem jedes PDF vor seiner Verarbeitung zugeordnet wird. */
+  dossierId?: string
+}
+
+export interface ImportPdfResult {
+  sessions: Session[]
+  /** #206 AK 2 — importiert, aber dem Patientendossier nicht zugeordnet. */
+  unassigned: Array<{ sessionId: string; title: string }>
+  /** Nicht importiert (fehlende Datei, Kopierfehler, …), mit Grund für den USER. */
+  failed: Array<{ title: string; reason: string }>
+}
+
 export interface RecordingApi {
-  start(): Promise<{ sessionId: string }>
+  start(options?: RecordingStartOptions): Promise<RecordingStartResult>
   stop(sessionId: string): Promise<{ durationSeconds: number }>
   sendData(sessionId: string, samples: ArrayBuffer): void
   onDuration(callback: (data: { seconds: number }) => void): () => void
@@ -95,7 +130,7 @@ export interface BlocklistApi {
 }
 
 export interface ImportApi {
-  pdf(filePaths: string[]): Promise<Session[]>
+  pdf(filePaths: string[], options?: ImportPdfOptions): Promise<ImportPdfResult>
   showPDFDialog(): Promise<string[]>
   getPathForFile(file: File): string
 }
@@ -321,5 +356,6 @@ export interface IpcApi {
   viewMode: ViewModeApi
   dossiers: DossierApi
   search: SearchApi
+  recent: RecentApi
   pendingEdits: PendingEditsApi
 }

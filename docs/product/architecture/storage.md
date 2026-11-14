@@ -120,7 +120,7 @@ n:m assignment of sessions to dossiers (#205). `WITHOUT ROWID`, primary key `(se
 
 ### `recent_items`
 
-«Recently opened» (#213): `id` INTEGER PRIMARY KEY, exactly one of `dossier_id` / `session_id` (CHECK), each `ON DELETE CASCADE` and unique where not `NULL`, `opened_at` ISO UTC, index on `(opened_at DESC, id DESC)`.
+«Recently opened» (#213): `id` INTEGER PRIMARY KEY, exactly one of `dossier_id` / `session_id` (CHECK), each `ON DELETE CASCADE` and unique where not `NULL`, `opened_at` ISO UTC, index on `(opened_at DESC, id DESC)`. Written only by `RecentRepository.touch` (upsert, `opened_at` strictly increasing, then everything beyond the eight newest is deleted); survives restarts (PC 1). Deletion (PC 2): deleting a dossier removes its row via the cascade inside the delete transaction; marking a session for deletion (`SessionRepository.markDeleting`, also from the dossier delete) deletes its row **at once** — not only with the final `DELETE FROM sessions`, which may wait for the staged index purge or the next start — and `scrubMarkedContent` repeats it; the delete paths' `secure_delete` + `wal_checkpoint(TRUNCATE)` remove the bytes. `RecentRepository.list` additionally filters `deleting_at IS NULL`. `RecentService.test.ts` scans `.db` and `-wal` for the IDs after deleting a dossier, its exclusive session and a single session.
 
 ---
 
@@ -295,7 +295,7 @@ If a file cannot be removed (anything but «does not exist»), the row stays mar
 
 In the same transaction the five last searches lose every query containing the dossier's first name, last name or dossier ID (`SearchRecentRepository.forgetContaining`, #209 PC 4); the checkpoint of step 2 removes them from the files.
 
-Sessions shared with another dossier stay; they only lose this assignment. Tested in `DossierService.test.ts` and, on a real database file with a marker string, in `DossierService.secureDelete.test.ts` (including an interrupted deletion completed by a restart).
+Sessions shared with another dossier stay; they only lose this assignment. Processing of a deleted session ends at once: `finishDeletion` calls `TaskQueueService.abortRunningForSession`, which aborts the running executor's signal (the subprocess is killed via `runSubprocess`) and cancels its pending tasks; waiting sessions never start (#207 PC 2). Tested in `DossierService.test.ts`, `DossierService.cascadeDelete.test.ts` (only exclusive contents go, blocklist untouched, running and waiting processing ends — also when phase 2 stays incomplete —, deleted contents vanish at once from session list, other timelines, overview and search while their rows and index sections still exist, search data in the preview) and, on a real database file with a marker string, in `DossierService.secureDelete.test.ts` (including an interrupted deletion completed by a restart).
 
 ### Recent searches
 

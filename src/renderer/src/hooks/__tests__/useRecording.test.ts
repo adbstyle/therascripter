@@ -2,19 +2,24 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useRecording } from '../useRecording'
 import type { LevelCallback } from '../../services/AudioRecorder'
+import type { RecordingStartOptions, RecordingStartResult } from '../../../../shared/types/IpcApi'
 
 // AudioRecorder mocken: getUserMedia/AudioWorklet gibt es in jsdom nicht.
 // Der Test steuert die Worklet-Pegel über das gemerkte onLevel.
+const META = { title: 'Aufnahme 14.11.2026 10:05', createdAt: '2026-11-14T09:05:00.000Z' }
 let emitLevel: LevelCallback = () => {}
 let emitDuration: (data: { seconds: number }) => void = () => {}
-let recorderStart: (onLevel: LevelCallback) => Promise<string> = async (onLevel) => {
+let recorderStart: (
+  onLevel: LevelCallback,
+  options?: RecordingStartOptions
+) => Promise<RecordingStartResult> = async (onLevel) => {
   emitLevel = onLevel
-  return 'session-1'
+  return { sessionId: 'session-1', assignment: 'none', ...META }
 }
 vi.mock('../../services/AudioRecorder', () => ({
   AudioRecorder: class {
-    start(onLevel: LevelCallback): Promise<string> {
-      return recorderStart(onLevel)
+    start(onLevel: LevelCallback, options?: RecordingStartOptions): Promise<RecordingStartResult> {
+      return recorderStart(onLevel, options)
     }
     async stop(): Promise<void> {}
   }
@@ -27,7 +32,7 @@ beforeEach(() => {
   emitDuration = () => {}
   recorderStart = async (onLevel) => {
     emitLevel = onLevel
-    return 'session-1'
+    return { sessionId: 'session-1', assignment: 'none', ...META }
   }
   ensureAccess = vi.fn().mockResolvedValue('granted')
   window.api = {
@@ -170,5 +175,53 @@ describe('useRecording – Mikrofon-Berechtigung (Issue #161)', () => {
 
     expect(onMicrophoneStatus).toHaveBeenLastCalledWith('denied')
     expect(result.current.error).toBeNull()
+  })
+})
+
+describe('useRecording – Start aus einem Patientendossier (#206)', () => {
+  it('reicht das Dossier durch und merkt es sich bei gelungener Zuordnung', async () => {
+    const start = vi.fn(async () => ({
+      sessionId: 's-7',
+      assignment: 'assigned' as const,
+      ...META
+    }))
+    recorderStart = start
+    const { result } = renderHook(() => useRecording())
+
+    let returned: RecordingStartResult | null = null
+    await act(async () => {
+      returned = await result.current.startRecording({ dossierId: 'd1' })
+    })
+
+    expect(start).toHaveBeenCalledWith(expect.any(Function), { dossierId: 'd1' })
+    expect(returned).toMatchObject({ sessionId: 's-7', assignment: 'assigned' })
+    expect(result.current.sessionId).toBe('s-7')
+    expect(result.current.dossierId).toBe('d1')
+
+    await act(() => result.current.stopRecording())
+    expect(result.current.dossierId).toBeNull()
+  })
+
+  it('läuft bei gescheiterter Zuordnung trotzdem, ohne Dossier', async () => {
+    recorderStart = async () => ({ sessionId: 's-8', assignment: 'failed', ...META })
+    const { result } = renderHook(() => useRecording())
+    await act(() => result.current.startRecording({ dossierId: 'd1' }).then(() => undefined))
+    expect(result.current.isRecording).toBe(true)
+    expect(result.current.dossierId).toBeNull()
+  })
+
+  it('startet ohne Dossier ohne Optionen und lehnt eine zweite Aufnahme ab', async () => {
+    const start = vi.fn(async () => ({ sessionId: 's-9', assignment: 'none' as const, ...META }))
+    recorderStart = start
+    const { result } = renderHook(() => useRecording())
+    await act(() => result.current.startRecording().then(() => undefined))
+    expect(start).toHaveBeenCalledWith(expect.any(Function), undefined)
+
+    let second: RecordingStartResult | null = { sessionId: 'x', assignment: 'none', ...META }
+    await act(async () => {
+      second = await result.current.startRecording({ dossierId: 'd1' })
+    })
+    expect(second).toBeNull()
+    expect(start).toHaveBeenCalledTimes(1)
   })
 })
