@@ -16,15 +16,32 @@ import addAnonymizationCount from './015-add-anonymization-count.sql?raw'
 import taskAttempts from './016-task-attempts.sql?raw'
 import sessionDeletingAt from './017-session-deleting-at.sql?raw'
 import appMaintenance from './018-app-maintenance.sql?raw'
+import patientDossiers from './020-patient-dossiers.sql?raw'
 
 // REGEL für Table-Rebuild-Migrationen (CREATE new → DROP old → RENAME):
 // Der Migration-Runner läuft mit PRAGMA foreign_keys = ON. Ein
 // `DROP TABLE sessions` feuert dann ON DELETE CASCADE auf task_queue und
 // löscht ALLE Task-Zeilen — Migration 012 hat so die komplette Task-Historie
-// der Bestandsnutzer beim Upgrade gewiped. Table-Rebuilds MÜSSEN deshalb
-// `PRAGMA defer_foreign_keys = ON;` als erste Zeile enthalten (gilt bis zum
-// Ende der umgebenden Transaktion und unterdrückt die Cascade während des
-// Rebuilds). Einfache ALTER TABLE ADD COLUMN sind nicht betroffen.
+// der Bestandsnutzer beim Upgrade gewiped. Einfache ALTER TABLE ADD COLUMN
+// sind nicht betroffen.
+//
+// ACHTUNG (geprüft mit Migration 020, SQLite 3.51): `PRAGMA defer_foreign_keys
+// = ON` verhindert diese Cascade NICHT. Es verschiebt nur die PRÜFUNG von
+// Fremdschlüsseln ans Transaktionsende; das implizite DELETE FROM eines
+// DROP TABLE führt ON-DELETE-Aktionen (CASCADE, SET NULL) trotzdem sofort
+// aus. Schützen würde nur `PRAGMA foreign_keys = OFF` — das ist innerhalb
+// einer Transaktion wirkungslos, und der Runner (connection.ts) führt jede
+// Migration in einer Transaktion aus. Vor einem Rebuild einer Tabelle, auf die
+// andere per ON DELETE verweisen (sessions, dossiers), muss deshalb zuerst der
+// Runner erweitert werden: foreign_keys vor der Transaktion aus, danach
+// `PRAGMA foreign_key_check`, dann wieder an.
+//
+// Seit Migration 020 (Patientendossiers, Epic #192) hängen ausserdem
+// session_dossiers (Zuordnungen zu Patientendossiers) und recent_items
+// («Zuletzt geöffnet») per ON DELETE CASCADE an sessions: ein Rebuild von
+// sessions mit eingeschalteten Fremdschlüsseln — auch mit defer_foreign_keys —
+// löscht also auch ALLE Zuordnungen und «Zuletzt»-Einträge. Belegt durch den
+// Migrationstest 020-patient-dossiers.test.ts.
 
 export interface Migration {
   version: number
@@ -49,5 +66,6 @@ export const migrations: Migration[] = [
   { version: 15, sql: addAnonymizationCount },
   { version: 16, sql: taskAttempts },
   { version: 17, sql: sessionDeletingAt },
-  { version: 18, sql: appMaintenance }
+  { version: 18, sql: appMaintenance },
+  { version: 20, sql: patientDossiers }
 ]
