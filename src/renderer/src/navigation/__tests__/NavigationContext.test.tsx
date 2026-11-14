@@ -14,6 +14,7 @@ function Probe(): React.JSX.Element {
       <p data-testid="can">{`${nav.canBack}/${nav.canForward}`}</p>
       <button onClick={() => nav.navigate({ kind: 'session', sessionId: 'a' })}>A</button>
       <button onClick={() => nav.navigate({ kind: 'session', sessionId: 'b' })}>B</button>
+      <button onClick={() => nav.navigate({ kind: 'dossier', dossierId: 'd1' })}>D1</button>
     </div>
   )
 }
@@ -78,6 +79,27 @@ describe('NavigationProvider', () => {
     act(() => emitApiEvent(window.api, 'sessions.onChanged', { deletedIds: ['a'] }))
     expect(route()).toBe('sessions')
     expect(screen.getByTestId('can').textContent).toBe('false/false')
+  })
+
+  it('entfernt gelöschte Dossiers aus dem Verlauf, die aktuelle Seite wird die Übersicht (dossiers:changed)', async () => {
+    render(
+      <NavigationProvider>
+        <Probe />
+      </NavigationProvider>
+    )
+    await userEvent.click(screen.getByText('D1'))
+    await userEvent.click(screen.getByText('A'))
+    await userEvent.click(screen.getByText('D1'))
+    expect(route()).toBe('dossier:d1')
+
+    act(() => emitApiEvent(window.api, 'dossiers.onChanged', { deletedIds: ['d1'] }))
+    expect(route()).toBe('dossiers')
+    // Zurück führt nicht mehr ins gelöschte Dossier
+    act(() => emitApiEvent(window.api, 'nav.onCommand', 'back'))
+    expect(route()).toBe('session:a')
+    act(() => emitApiEvent(window.api, 'nav.onCommand', 'back'))
+    expect(route()).toBe('sessions')
+    expect(screen.getByTestId('can').textContent).toBe('false/true')
   })
 
   it('lässt den Verlauf bei Änderungen ohne Löschung unverändert', async () => {

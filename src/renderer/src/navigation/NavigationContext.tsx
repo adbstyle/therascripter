@@ -13,7 +13,7 @@ interface NavigationProviderProps {
  * Verlauf der besuchten Seiten (Epic #192, #213 AK 5). Abonniert die
  * Menübefehle «Gehe zu» (`nav:command`), «Einstellungen…» aus App-Menü und
  * Tray (`nav:openSettings`) und entfernt gelöschte Sitzungen aus dem Verlauf
- * (`sessions:changed`, #213 PC 3).
+ * (`sessions:changed`, `dossiers:changed`, #213 PC 3).
  */
 export function NavigationProvider({
   children,
@@ -57,6 +57,21 @@ export function NavigationProvider({
         dispatch({
           type: 'purge',
           predicate: (route) => route.kind === 'session' && deleted.has(route.sessionId)
+        })
+      }),
+    []
+  )
+
+  // Gelöschte Patientendossiers verlassen den Verlauf; zeigt die aktuelle
+  // Seite auf eines, ersetzt purge sie durch die Übersicht (#213 PC 3)
+  useEffect(
+    () =>
+      window.api.dossiers.onChanged(({ deletedIds }) => {
+        if (deletedIds.length === 0) return
+        const deleted = new Set(deletedIds)
+        dispatch({
+          type: 'purge',
+          predicate: (route) => route.kind === 'dossier' && deleted.has(route.dossierId)
         })
       }),
     []
