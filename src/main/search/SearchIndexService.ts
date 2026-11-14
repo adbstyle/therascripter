@@ -5,9 +5,15 @@ import {
   type PendingTextSession
 } from '../db/repositories/SearchIndexRepository'
 import { walCheckpointTruncate } from '../db/maintenance'
-import { buildSearchSections, type SearchSection } from './chunker'
+import { buildSearchSections, sectionEmbeddingText, type SearchSection } from './chunker'
+import { quantizeVector, vectorToBlob } from './VectorStore'
+import { SearchWorkerUnavailableError } from './SearchWorker'
+import type { SearchModelInfo } from './searchModel'
 import {
   SEARCH_DELETE_SLICE_MS,
+  SEARCH_QUIT_PURGE_BUDGET_MS,
+  SEARCH_VECTOR_BACKOFF_MS,
+  SEARCH_VECTOR_BATCH,
   SEARCH_QUIET_WINDOW_MS,
   SEARCH_SLICE_MS,
   SEARCH_SLICE_PAUSE_MS,
@@ -45,7 +51,19 @@ import {
  * Schritte 2–4 nie während einer Aufnahme (#209 AK 19, #212 AK 3): dieselben
  * Hook-Stellen wie die Pause der Warteschlange (recording-handlers). Was
  * aussteht, steht in der Datenbank und wird nach einem Neustart nachgeholt
- * (#212 AK 4, #210 PC 2). Die Vektorphase kommt mit PR S4.
+ * (#212 AK 4, #210 PC 2).
+ *
+ * 5. **Vektorphase** (PR S4, asynchron neben den Scheiben): Abschnitte der
+ *    aktiven Textgeneration ohne Vektor in Batches zu SEARCH_VECTOR_BATCH
+ *    (nach Länge sortiert) an den Suchprozess, Commit pro Batch — Fortschritt
+ *    übersteht einen Neustart (#210 PC 2, #212 AK 4). Sind alle Abschnitte
+ *    da, wird `vec_gen = text_gen`; bis dahin bleibt die vorige
+ *    Vektorgeneration aktiv (#212 AK 1), danach räumt Schritt 2 sie weg.
+ *    Nur ohne Aufnahme, bei leerer Warteschlange und mit Modell; bricht sofort
+ *    ab, wenn eine Verarbeitung oder Aufnahme beginnt (`abortVectorPhase`,
+ *    Hook vor jedem Task). Fehler → Backoff pro Sitzung (1 min, 5 min,
+ *    30 min, 6 h). Der Suchprozess bleibt dafür nicht künstlich wach: nach dem
+ *    letzten Batch läuft sein Leerlauf-Timer.
  */
 
 export interface SearchIndexServiceDeps {
@@ -58,7 +76,23 @@ export interface SearchIndexServiceDeps {
    * sind (SessionService.finishDeletion: Zeile löschen, WAL-Checkpoint).
    */
   finishDeletion?: (sessionId: string) => void
+  /** Vektorphase (PR S4); ohne: nur Text (Tests von S3, Start ohne Suchprozess). */
+  vectors?: VectorPhaseDeps
 }
+
+export interface VectorPhaseDeps {
+  resolveModel: () => SearchModelInfo | null
+  /** Läuft eine Verarbeitung oder steht eine an? (TaskQueueService.hasActiveWork) */
+  isProcessingActive: () => boolean
+  /** SearchWorker.embedDocuments */
+  embedDocuments: (texts: string[]) => Promise<Float32Array[]>
+  /** Nach einem Abschluss bzw. Zurücksetzen: Vektorspeicher nachführen. */
+  onSessionVectorsChanged?: (sessionId: string) => void
+  /** In jedem Takt (SearchWorker.refreshState). */
+  onTick?: () => void
+}
+
+export type VectorSessionOutcome = 'complete' | 'failed' | 'aborted' | 'superseded'
 
 export interface TextPhaseResult {
   /** Sitzungen mit neuer Textgeneration. */
@@ -96,6 +130,12 @@ export class SearchIndexService {
   private purgeQueue = new Map<string, boolean>()
   private staleSessions = new Set<string>()
   private docChecks: Array<{ id: string; path: string; docStat: string | null }> | null = null
+  private vectors: VectorPhaseDeps | null
+  private vectorRun: Promise<void> | null = null
+  /** Steigt mit jedem Abbruch — ein laufender Batch erkennt daran, dass er verworfen ist. */
+  private vectorEpoch = 0
+  /** stop() wurde aufgerufen (Beenden, Update) — anders als `stopped` nicht schon vor start(). */
+  private halted = false
 
   constructor(
     private db: Database.Database,
@@ -106,12 +146,14 @@ export class SearchIndexService {
     this.readDocument = deps.readDocument ?? defaultReadDocument
     this.statDocument = deps.statDocument ?? defaultStatDocument
     this.finishDeletion = deps.finishDeletion ?? null
+    this.vectors = deps.vectors ?? null
   }
 
   /** Startet den Takt (beim App-Start nach den Recovery-Schritten). Idempotent. */
   start(): void {
     if (!this.stopped) return
     this.stopped = false
+    this.halted = false
     this.interval = setInterval(() => this.tick(), SEARCH_TICK_MS)
     this.interval.unref?.()
     // Erster Lauf gleich: Nachholen nach Neustart (#212 AK 4)
@@ -132,22 +174,50 @@ export class SearchIndexService {
    */
   stop(): void {
     this.stopped = true
+    this.halted = true
+    this.vectorEpoch++
     if (this.interval) clearInterval(this.interval)
     if (this.continuation) clearTimeout(this.continuation)
     this.interval = null
     this.continuation = null
   }
 
-  /** Anhalten vor einem Update-Tausch — dieselbe Wirkung wie stop(). */
+  /**
+   * Anhalten vor einem Update-Tausch — dieselbe Wirkung wie stop(); erfüllt
+   * sich, wenn auch ein laufender Batch der Vektorphase beendet ist.
+   */
   stopForUpdate(): Promise<void> {
     this.stop()
-    return Promise.resolve()
+    return this.vectorRun ?? Promise.resolve()
+  }
+
+  /**
+   * Beim Beenden der App (Review S3): ausstehendes gestaffeltes Löschen
+   * gelöschter Sitzungen noch abschliessen, höchstens `budgetMs` am Stück —
+   * der Rest folgt beim nächsten Start (`seedOnce`). Synchron; danach stop().
+   * Gibt true zurück, wenn nichts mehr aussteht.
+   */
+  finishPurgesForQuit(budgetMs = SEARCH_QUIT_PURGE_BUDGET_MS): boolean {
+    if (this.running) return this.purgeQueue.size === 0
+    const deadline = performance.now() + budgetMs
+    this.running = true
+    try {
+      while (this.purgeQueue.size > 0 && performance.now() < deadline) {
+        this.purgeDeleted(() => performance.now() < deadline)
+      }
+    } catch (error) {
+      console.error('[Search] Löschen beim Beenden nicht abgeschlossen:', error)
+    } finally {
+      this.running = false
+    }
+    return this.purgeQueue.size === 0
   }
 
   /** Aufnahme läuft: keine Aufbereitung; danach holt der nächste Takt alles nach. */
   setRecordingPause(paused: boolean): void {
     this.recordingPaused = paused
-    if (!paused) this.scheduleContinuation(0)
+    if (paused) void this.abortVectorPhase()
+    else this.scheduleContinuation(0)
   }
 
   isRecordingPaused(): boolean {
@@ -185,6 +255,153 @@ export class SearchIndexService {
       )
     }
     if (more) this.scheduleContinuation(SEARCH_SLICE_PAUSE_MS)
+    try {
+      this.vectors?.onTick?.()
+    } catch {
+      // nur eine Zustandsmeldung
+    }
+    this.maybeStartVectorPhase()
+  }
+
+  // ── Vektorphase ─────────────────────────────────────────────────────────
+
+  /** Darf die Vektorphase jetzt laufen? */
+  private vectorPhaseAllowed(): boolean {
+    if (!this.vectors || this.halted || this.recordingPaused) return false
+    if (this.vectors.isProcessingActive()) return false
+    return this.vectors.resolveModel() !== null
+  }
+
+  /** true, solange ein Lauf der Vektorphase aktiv ist (Tests, Diagnose). */
+  isVectorPhaseRunning(): boolean {
+    return this.vectorRun !== null
+  }
+
+  /** Startet die Vektorphase, falls erlaubt und nicht schon aktiv. */
+  maybeStartVectorPhase(): void {
+    if (this.stopped || this.vectorRun || !this.vectorPhaseAllowed()) return
+    const epoch = this.vectorEpoch
+    this.vectorRun = this.runVectorPhase(epoch)
+      .catch((error) => console.error('[Search] Vektorphase fehlgeschlagen:', error))
+      .finally(() => {
+        this.vectorRun = null
+      })
+  }
+
+  /**
+   * Bricht die Vektorphase ab (Beginn einer Verarbeitung oder Aufnahme) und
+   * erfüllt sich, sobald der laufende Batch beendet ist. Ein Batch, dessen
+   * Antwort danach eintrifft, wird nicht mehr geschrieben.
+   */
+  abortVectorPhase(): Promise<void> {
+    this.vectorEpoch++
+    return this.vectorRun ?? Promise.resolve()
+  }
+
+  /** Vektorphase bis zum Ende treiben (Tests, Messungen); gibt die Zahl der Sitzungen zurück. */
+  async runVectorPhaseToEnd(): Promise<number> {
+    if (this.vectorRun) await this.vectorRun
+    let done = 0
+    const epoch = this.vectorEpoch
+    this.vectorRun = (async () => {
+      done = await this.vectorLoop(epoch)
+    })().finally(() => {
+      this.vectorRun = null
+    })
+    await this.vectorRun
+    return done
+  }
+
+  private async runVectorPhase(epoch: number): Promise<void> {
+    await this.vectorLoop(epoch)
+  }
+
+  private async vectorLoop(epoch: number): Promise<number> {
+    const cancelled = (): boolean => epoch !== this.vectorEpoch || !this.vectorPhaseAllowed()
+    let complete = 0
+    while (!cancelled()) {
+      const model = this.vectors!.resolveModel()
+      if (!model) break
+      const session = this.repository.findPendingVectorSession(
+        model.modelId,
+        new Date(this.now()).toISOString()
+      )
+      if (!session) break
+      const outcome = await this.vectorizeSession(session, model, cancelled)
+      if (outcome === 'aborted') break
+      if (outcome === 'complete') complete++
+      // Event-Loop zwischen zwei Sitzungen freigeben
+      await new Promise((r) => setImmediate(r))
+    }
+    return complete
+  }
+
+  private async vectorizeSession(
+    session: { sessionId: string; textGen: number; attempts: number },
+    model: SearchModelInfo,
+    cancelled: () => boolean
+  ): Promise<VectorSessionOutcome> {
+    const { sessionId, textGen } = session
+    if (this.repository.beginVectorGeneration(sessionId, model.modelId)) {
+      // Vektoren eines anderen Modells: die alte Generation ist veraltet
+      this.staleSessions.add(sessionId)
+      this.vectors!.onSessionVectorsChanged?.(sessionId)
+    }
+    // Längste zuerst: gleich lange Texte im selben Batch füllen wenig auf
+    const pending = this.repository
+      .findPendingVectorChunks(sessionId, textGen)
+      .sort((a, b) => b.text.length - a.text.length || a.id - b.id)
+    for (let i = 0; i < pending.length; i += SEARCH_VECTOR_BATCH) {
+      if (cancelled()) return 'aborted'
+      const batch = pending.slice(i, i + SEARCH_VECTOR_BATCH)
+      let vectors: Float32Array[]
+      try {
+        vectors = await this.vectors!.embedDocuments(
+          batch.map((c) => sectionEmbeddingText({ text: c.text }))
+        )
+      } catch (error) {
+        if (cancelled()) return 'aborted'
+        if (error instanceof SearchWorkerUnavailableError) {
+          // Verarbeitung, Beenden, Modell fehlt, Werkzeug blockiert: kein
+          // Fehler dieser Sitzung. Ein Absturz ('error') zählt dagegen — sonst
+          // brächte ein Abschnitt, der den Dienst jedes Mal kippt, die
+          // Vektorphase in eine Schleife.
+          if (error.reason !== 'error') return 'aborted'
+        }
+        this.recordVectorFailure(sessionId, session.attempts, error)
+        return error instanceof SearchWorkerUnavailableError ? 'aborted' : 'failed'
+      }
+      // Nach dem Beenden (DB zu) bzw. einem Abbruch nichts mehr schreiben
+      if (this.halted || cancelled()) return 'aborted'
+      this.repository.writeVectors(
+        batch.map((chunk, k) => {
+          const { q, scale } = quantizeVector(vectors[k])
+          return { id: chunk.id, vec: vectorToBlob(q), scale }
+        })
+      )
+    }
+    const done = this.repository.completeVectorGeneration(sessionId, textGen, model.modelId)
+    if (!done) return 'superseded'
+    if (done.previous !== null && done.previous !== textGen) {
+      this.staleSessions.add(sessionId)
+      this.scheduleContinuation(SEARCH_SLICE_PAUSE_MS)
+    }
+    this.vectors!.onSessionVectorsChanged?.(sessionId)
+    return 'complete'
+  }
+
+  private recordVectorFailure(sessionId: string, attempts: number, error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error)
+    const delay = SEARCH_VECTOR_BACKOFF_MS[Math.min(attempts, SEARCH_VECTOR_BACKOFF_MS.length - 1)]
+    const next = new Date(this.now() + delay).toISOString()
+    console.error(
+      `[Search] Vektoren der Sitzung ${sessionId} fehlgeschlagen (Versuch ${attempts + 1}), nächster Versuch ${next}: ${message}`
+    )
+    try {
+      this.repository.recordVectorFailure(sessionId, message, next)
+    } catch (dbError) {
+      console.error('[Search] Fehler der Vektorphase nicht gespeichert:', dbError)
+    }
   }
 
   /**

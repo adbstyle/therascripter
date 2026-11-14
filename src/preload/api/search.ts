@@ -15,5 +15,6 @@ export const searchApi: SearchApi = {
   query: (input) => ipcRenderer.invoke('search:query', input),
   recentList: () => ipcRenderer.invoke('search:recent:list'),
   recentRemember: (query) => ipcRenderer.invoke('search:recent:remember', { query }),
-  recentClear: () => ipcRenderer.invoke('search:recent:clear')
+  recentClear: () => ipcRenderer.invoke('search:recent:clear'),
+  semantic: (input) => ipcRenderer.invoke('search:semantic', input)
 }

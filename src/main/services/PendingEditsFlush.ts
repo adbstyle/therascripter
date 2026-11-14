@@ -80,6 +80,12 @@ export interface QuitCleanupSteps {
   /** Epic #192: Aufbereitung für die Suche anhalten — nach dem Flush, vor der DB. */
   stopSearchIndex: () => void
   /**
+   * Epic #192 (PR S4): Suchprozess beenden (stdin-EOF → SIGTERM → SIGKILL,
+   * begrenzt) — nach der Aufbereitung, die ihn sonst wieder anfragte, vor
+   * der Datenbank. Optional, weil nicht jeder Aufrufer ihn hat.
+   */
+  stopSearchWorker?: () => Promise<void>
+  /**
    * Epic #192: Hintergrund-Download des Suchmodells abbrechen. Zählt nicht als
    * Arbeit (WorkGuard) — beim Beenden und vor einem Update-Austausch endet er
    * hier; der nächste Start setzt am `.partial` fort.
@@ -95,7 +101,7 @@ export interface QuitCleanupSteps {
  * Reihenfolge des Aufräumens beim Beenden (vorher inline in `before-quit`):
  * zuerst speichert der Renderer ausstehende Änderungen — solange die
  * Datenbank offen ist —, dann Aufnahme, Aufbereitung für die Suche,
- * Download des Suchmodells, Aufräumdienst, Warteschlange, Tray,
+ * Suchprozess, Download des Suchmodells, Aufräumdienst, Warteschlange, Tray,
  * zuletzt die Datenbank. Kein Schritt hält die folgenden auf.
  */
 export async function runQuitCleanup(steps: QuitCleanupSteps): Promise<void> {
@@ -113,6 +119,13 @@ export async function runQuitCleanup(steps: QuitCleanupSteps): Promise<void> {
   }
   run(steps.cleanupRecording)
   run(steps.stopSearchIndex)
+  if (steps.stopSearchWorker) {
+    try {
+      await steps.stopSearchWorker()
+    } catch {
+      // Ein hängender Suchprozess darf das Beenden nicht aufhalten
+    }
+  }
   run(steps.stopSearchModelProvisioner)
   run(steps.stopSourceFileCleanup)
   try {

@@ -14,6 +14,8 @@ import {
 } from './ModelDownloadService'
 import { SearchModelProvisioner } from './SearchModelProvisioner'
 import { getTaskQueue } from './TaskQueueService'
+import { getSearchRuntime, semanticAvailabilityOf, warmupSearch } from '../search/searchRuntime'
+import { getSearchIndexService } from '../search/SearchIndexService'
 
 /** Event an den Renderer, sobald sich die Verfügbarkeit der Suche ändert. */
 export const SEARCH_AVAILABILITY_CHANNEL = 'search:availabilityChanged'
@@ -51,8 +53,13 @@ export function initSearchModelProvisioner(): SearchModelProvisioner {
       for (const path of [archive, `${archive}.partial`]) rmSync(path, { force: true })
     },
     onStateChange: (model) => {
-      const availability: SearchAvailability = { model }
-      sendToRenderer(SEARCH_AVAILABILITY_CHANNEL, availability)
+      if (model.status === 'ready') {
+        // PR S4: Modell da → Bestand für die Suche nach Bedeutung aufbereiten
+        // (#210 AK 1), ohne auf den nächsten Takt zu warten
+        getSearchRuntime()?.worker.refreshState()
+        getSearchIndexService()?.maybeStartVectorPhase()
+      }
+      sendSearchAvailability()
     },
     now: () => new Date(),
     log: (message) => console.log(message),
@@ -66,7 +73,30 @@ export function getSearchModelProvisioner(): SearchModelProvisioner | null {
   return provisioner
 }
 
-/** Antwort von `search:open` (PR S4 ergänzt Verarbeitung und Suchprozess). */
+/**
+ * Gemeinsame Verfügbarkeit der Suche: Stand des Suchmodells (Provisioner,
+ * PR S2) und der Suche nach Bedeutung (Verarbeitung, Suchprozess; PR S4).
+ */
 export function getSearchAvailability(): SearchAvailability {
-  return { model: provisioner?.getState() ?? { status: 'unpublished' } }
+  const model = provisioner?.getState() ?? { status: 'unpublished' }
+  const runtime = getSearchRuntime()
+  const semantic = runtime ? semanticAvailabilityOf(runtime.worker.getState()) : 'model-missing'
+  return { model, semantic }
+}
+
+/** Event `search:availabilityChanged` — bei jeder Änderung von Modell oder Suchprozess. */
+export function sendSearchAvailability(): void {
+  sendToRenderer(SEARCH_AVAILABILITY_CHANNEL, getSearchAvailability())
+}
+
+/**
+ * `search:open`: beim Öffnen der Suche das Suchmodell und parallel die
+ * Vektoren vorladen (#209 AK 16) — nur, wenn die Suche nach Bedeutung gerade
+ * möglich ist — und den Stand sofort liefern (dann meist `loading`); das
+ * Ende des Ladens meldet `search:availabilityChanged`.
+ */
+export function openSearch(): SearchAvailability {
+  const runtime = getSearchRuntime()
+  if (runtime) void warmupSearch(runtime)
+  return getSearchAvailability()
 }

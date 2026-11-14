@@ -51,7 +51,7 @@ export const SEARCH_ANCHOR_CHARS = 60
 /**
  * Schwelle «ausreichend passend» für Treffer nach Bedeutung (#209 AK 6).
  * Vorläufig (Entscheid des Orchestrators), endgültig nach dem Abnahmetest
- * (PR S6). Wird erst ab PR S4 verwendet.
+ * (PR S6).
  */
 export const SEARCH_SEMANTIC_THRESHOLD = 0.7
 
@@ -78,3 +78,36 @@ export const SEARCH_SLICE_PAUSE_MS = 30
 
 /** Letzte Suchanfragen (#209 AK 27). */
 export const SEARCH_RECENT_LIMIT = 5
+
+/**
+ * Suchprozess (PR S4, Bauplan 5b). Zeitlimits [A, auf einem 8-GB-Mac
+ * nachmessen]: Start bis zur Startzeile, eine Suchanfrage, ein Batch der
+ * Aufbereitung.
+ */
+export const SEARCH_WORKER_START_TIMEOUT_MS = 60_000
+export const SEARCH_WORKER_QUERY_TIMEOUT_MS = 10_000
+export const SEARCH_WORKER_BATCH_TIMEOUT_MS = 60_000
+/** Arbeitsspeicher freigeben nach so langer Zeit ohne Suche bzw. Batch (#209 AK 17). */
+export const SEARCH_WORKER_IDLE_MS = 5 * 60_000
+/**
+ * Neustart des Suchprozesses zwischen zwei Batches, sobald sein
+ * phys_footprint diese Grenze überschreitet: auf MPS wächst er pro
+ * Forward-Pass um ~50–130 KiB ausserhalb des torch-Allokators (Review S1).
+ * Bereit nach dem Laden ~1.6 GiB, Aufbereiten bis ~2.1 GiB — die Grenze
+ * hält den Prozess unter den 3.5 GiB von #209 AK 15.
+ */
+export const SEARCH_WORKER_RESTART_FOOTPRINT_BYTES = 2.5 * 1024 ** 3
+/** Nach einem Absturz bzw. gescheiterten Start: so lange kein neuer Versuch. */
+export const SEARCH_WORKER_FAILURE_COOLDOWN_MS = 30_000
+
+/** Vektorphase: Abschnitte pro Anfrage an den Suchdienst und pro Commit (Review S1). */
+export const SEARCH_VECTOR_BATCH = 2
+/** Backoff einer Sitzung nach einem Fehler der Vektorphase: 1 min, 5 min, 30 min, 6 h. */
+export const SEARCH_VECTOR_BACKOFF_MS = [60_000, 5 * 60_000, 30 * 60_000, 6 * 60 * 60_000] as const
+/**
+ * Kosinus über alle Abschnitte im Main-Prozess: höchstens so lange am Stück
+ * rechnen, dann den Event-Loop freigeben.
+ */
+export const SEARCH_COSINE_SLICE_MS = 20
+/** Beim Beenden der App: ausstehendes gestaffeltes Löschen höchstens so lange fortsetzen. */
+export const SEARCH_QUIT_PURGE_BUDGET_MS = 2_000

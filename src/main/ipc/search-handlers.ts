@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { getDatabase } from '../db/connection'
 import { SearchService } from '../search/SearchService'
+import { getSearchRuntime } from '../search/searchRuntime'
 import { validateIpc } from '../utils/ipc-helpers'
 import {
   SearchQueryInputSchema,
@@ -12,40 +13,87 @@ import type {
   SearchQueryResult
 } from '../../shared/types/Search'
 
-// IPC der Suche (Epic #192 — #209, #210, #211). search:open, search:retryModel
-// und das Event search:availabilityChanged (Suchmodell) kommen aus PR S2;
-// PR S4 ergänzt search:semantic und in SearchAvailability Verarbeitung und
-// Suchprozess.
+// IPC der Suche (Epic #192 — #209, #210, #211). search:open,
+// search:retryModel und das Event search:availabilityChanged (PR S2;
+// SearchAvailability trägt seit PR S4 auch `semantic`: Verarbeitung und
+// Suchprozess); search:semantic (PR S4).
 
-type Service = Pick<SearchService, 'query' | 'listRecent' | 'rememberRecent' | 'clearRecent'>
+type Service = Pick<
+  SearchService,
+  'query' | 'semantic' | 'listRecent' | 'rememberRecent' | 'clearRecent'
+>
 
 /** Woher `search:open` und `search:retryModel` ihre Antwort nehmen. */
 export interface SearchAvailabilityProvider {
   get: () => SearchAvailability
+  /**
+   * Beim Öffnen der Suche: Suchmodell und Vektoren vorladen (#209 AK 16) und
+   * den Stand sofort liefern; ohne: nur `get`.
+   */
+  open?: () => SearchAvailability
   /** «Erneut versuchen» (#210 AK 5): wartet den Versuch ab. */
   retryModel: () => Promise<SearchAvailability>
 }
 
-export function handleSearchQuery(service: Service, args: unknown): SearchQueryResult {
+export function handleSearchQuery(
+  service: Pick<Service, 'query'>,
+  args: unknown
+): SearchQueryResult {
   return service.query(validateIpc(SearchQueryInputSchema, args, 'search:query'))
 }
 
-export function handleSearchRecentList(service: Service): RecentSearchQuery[] {
+/**
+ * Neueste Anfrage je Fenster: eine neuere Anfrage desselben Fensters löst
+ * die ältere ab — die ältere endet am nächsten Haltepunkt mit 'superseded'
+ * und hält den Suchprozess nicht weiter auf.
+ */
+export class SemanticRequestTracker {
+  private latest = new Map<number, number>()
+
+  begin(windowId: number, requestId: number): () => boolean {
+    this.latest.set(windowId, requestId)
+    return () => this.latest.get(windowId) !== requestId
+  }
+
+  end(windowId: number, requestId: number): void {
+    if (this.latest.get(windowId) === requestId) this.latest.delete(windowId)
+  }
+}
+
+export async function handleSearchSemantic(
+  service: Pick<Service, 'semantic'>,
+  tracker: SemanticRequestTracker,
+  windowId: number,
+  args: unknown
+): Promise<SearchQueryResult> {
+  const input = validateIpc(SearchQueryInputSchema, args, 'search:semantic')
+  const isSuperseded = tracker.begin(windowId, input.requestId)
+  try {
+    return await service.semantic(input, { isSuperseded })
+  } finally {
+    tracker.end(windowId, input.requestId)
+  }
+}
+
+export function handleSearchRecentList(service: Pick<Service, 'listRecent'>): RecentSearchQuery[] {
   return service.listRecent()
 }
 
-export function handleSearchRecentRemember(service: Service, args: unknown): void {
+export function handleSearchRecentRemember(
+  service: Pick<Service, 'rememberRecent'>,
+  args: unknown
+): void {
   const { query } = validateIpc(SearchRecentRememberSchema, args, 'search:recent:remember')
   service.rememberRecent(query)
 }
 
-export function handleSearchRecentClear(service: Service): void {
+export function handleSearchRecentClear(service: Pick<Service, 'clearRecent'>): void {
   service.clearRecent()
 }
 
-/** Beim Öffnen der Suche: Stand des Suchmodells (#210 AK 4/5). */
+/** Beim Öffnen der Suche: Stand von Modell und Suche nach Bedeutung, Vorladen (#209 AK 16, #210 AK 4/5). */
 export function handleSearchOpen(availability: SearchAvailabilityProvider): SearchAvailability {
-  return availability.get()
+  return (availability.open ?? availability.get)()
 }
 
 export function handleSearchRetryModel(
@@ -54,14 +102,22 @@ export function handleSearchRetryModel(
   return availability.retryModel()
 }
 
+function defaultService(): SearchService {
+  return new SearchService(getDatabase(), { semantic: getSearchRuntime()?.semanticDeps })
+}
+
 export function registerSearchHandlers(
   availability: SearchAvailabilityProvider,
-  createService: () => Service = () => new SearchService(getDatabase())
+  createService: () => Service = defaultService
 ): void {
+  const tracker = new SemanticRequestTracker()
   ipcMain.handle('search:open', () => handleSearchOpen(availability))
   ipcMain.handle('search:retryModel', () => handleSearchRetryModel(availability))
   ipcMain.handle('search:query', (_event, args: unknown) =>
     handleSearchQuery(createService(), args)
+  )
+  ipcMain.handle('search:semantic', (event, args: unknown) =>
+    handleSearchSemantic(createService(), tracker, event.sender.id, args)
   )
   ipcMain.handle('search:recent:list', () => handleSearchRecentList(createService()))
   ipcMain.handle('search:recent:remember', (_event, args: unknown) =>

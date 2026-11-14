@@ -131,7 +131,8 @@ describe('SearchService — exact search', () => {
     ).run()
     const result = search('prüfungsangst')
     expect(result.requestId).toBe(7)
-    expect(result.semantic).toBe('unavailable')
+    // Ohne Suchprozess (keine Laufzeit): Modell gilt als fehlend
+    expect(result.semantic).toBe('model-missing')
     const meier = result.results.find((r) => r.sessionId === 'meier')!
     expect(meier).toMatchObject({
       type: 'audio',
