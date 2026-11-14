@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildManifest, type CatalogModel, type ManifestModel } from '../update-manifest'
 import { parseManifest } from '../validation/model-update-schemas'
-import { MODEL_DEFINITIONS } from '../model-catalog'
+import { MODEL_DEFINITIONS, isPublished } from '../model-catalog'
 
 const sha = (c: string): string => c.repeat(64)
 const now = new Date('2026-10-12T10:00:00.123Z')
@@ -116,6 +116,58 @@ describe('buildManifest', () => {
       now
     })
     const parsed = parseManifest(JSON.parse(JSON.stringify(manifest)))
-    expect(parsed.models.map((m) => m.id)).toEqual(MODEL_DEFINITIONS.map((m) => m.id))
+    expect(parsed.models.map((m) => m.id)).toEqual(
+      MODEL_DEFINITIONS.filter(isPublished).map((m) => m.id)
+    )
+  })
+
+  describe('Schalter «noch nicht veröffentlicht» (Suchmodell, Epic #192)', () => {
+    const search = MODEL_DEFINITIONS.find((m) => m.id === 'embeddinggemma-2-text')!
+
+    it('der echte Katalog führt das Suchmodell mit echtem Hash, aber unveröffentlicht', () => {
+      expect(search.sha256).toBe('49e225895475004c699f08390f822e92a1fa8be4882e03e50d44c50f3badf4f8')
+      expect(search.sizeBytes).toBe(430_211_881)
+      expect(search.published).toBe(false)
+      expect(isPublished(search)).toBe(false)
+    })
+
+    it('published: false — kein Manifest-Eintrag, kein Abbruch', () => {
+      const manifest = buildManifest({
+        catalog: [...catalog, { ...search, published: false }],
+        live: {},
+        appVersion: '1.2.0',
+        dmg,
+        now
+      })
+      expect(manifest.models.map((m) => m.id)).toEqual(['asr', 'ner'])
+    })
+
+    it('veröffentlicht — Pflichtmodell mit Ablage, damit eine ältere App es mitlädt', () => {
+      const manifest = buildManifest({
+        catalog: [...catalog, { ...search, published: true }],
+        live: {},
+        appVersion: '1.2.0',
+        dmg,
+        now
+      })
+      const entry = manifest.models.find((m) => m.id === search.id)
+      expect(entry).toMatchObject({
+        relativePath: 'search/embeddinggemma-2-text-v1',
+        checkPath: 'search/embeddinggemma-2-text-v1/READY',
+        archive: true,
+        group: 'search',
+        required: true,
+        minAppVersion: '1.2.0',
+        sha256: search.sha256,
+        sizeBytes: search.sizeBytes
+      })
+      expect(() => parseManifest(JSON.parse(JSON.stringify(manifest)))).not.toThrow()
+    })
+
+    it('der alte Platzhalter-Hash wirkt wie published: false', () => {
+      expect(isPublished({ sha256: '0'.repeat(64) })).toBe(false)
+      expect(isPublished({ sha256: 'a'.repeat(64) })).toBe(true)
+      expect(isPublished({ sha256: 'a'.repeat(64), published: true })).toBe(true)
+    })
   })
 })

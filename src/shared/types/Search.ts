@@ -125,3 +125,41 @@ export interface RecentSearchQuery {
   query: string
   usedAt: string
 }
+
+/**
+ * Warum das Suchmodell nicht geladen werden konnte (#210 AK 5). Texte für die
+ * Oberfläche: `SEARCH_MODEL_FAILURE_TEXT` in `shared/search-model-texts.ts`.
+ */
+export type SearchModelFailureReason = 'network' | 'disk-space' | 'checksum' | 'extract' | 'unknown'
+
+/**
+ * Bereitstellung des Suchmodells (#210 AK 2–5, PC 1), geführt vom
+ * SearchModelProvisioner im Main-Prozess.
+ *
+ * - `ready`: liegt vollständig auf dem Mac.
+ * - `downloading`: Download läuft im Hintergrund; `progress` 0–100.
+ * - `retry-scheduled`: ein Versuch ist gescheitert, der nächste folgt von
+ *   selbst um `nextAttemptAt` (ISO-Zeit; Staffel 1, 5, 30 Minuten).
+ * - `failed`: auch die kurzen Wiederholungen sind gescheitert. Die App
+ *   versucht es weiter alle 6 Stunden still im Hintergrund; die Oberfläche
+ *   zeigt den Grund und «Erneut versuchen».
+ * - `unpublished`: diese Version kennt das Suchmodell, es ist aber noch nicht
+ *   zum Download freigegeben (`published: false` im Katalog).
+ */
+export type SearchModelState =
+  | { status: 'ready' }
+  | { status: 'downloading'; progress: number }
+  | { status: 'retry-scheduled'; reason: SearchModelFailureReason; nextAttemptAt: string }
+  | { status: 'failed'; reason: SearchModelFailureReason }
+  | { status: 'unpublished' }
+
+/**
+ * Antwort von `search:open` und Inhalt von `search:availabilityChanged`.
+ * Bewusst ein Objekt mit einem Feld pro Teil: PR S4 ergänzt «Verarbeitung
+ * läuft» und den Zustand des Suchprozesses als weitere Felder, ohne dass
+ * bestehende Aufrufer brechen.
+ */
+export interface SearchAvailability {
+  /** Ohne Modell keine Suche nach Bedeutung; die exakte Suche geht immer. */
+  model: SearchModelState
+}
