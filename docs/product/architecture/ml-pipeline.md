@@ -11,6 +11,7 @@ Therascript processes audio recordings and PDF documents through a strictly sequ
 | Alignment | In-process (no model) | < 50 MB |
 | NER / Anonymization | flair/ner-german-large | ~3.5 GB on 8-GB Macs, ~4.8 GB above (process incl. GPU memory, fp16 on MPS) |
 | OCR (PDF only) | Apple Vision (Swift subprocess) | < 100 MB |
+| Search (outside the pipeline) | EmbeddingGemma 2 text encoder (`search_service.py`) | ~1.5 GiB loaded, < 2.2 GiB while indexing (process incl. GPU memory, bf16 on MPS) |
 
 Models are never loaded simultaneously. Each subprocess exits before the next task begins.
 
@@ -265,6 +266,31 @@ At app startup, `TaskQueueService.recoverStuckTasks()` resets any tasks left in 
 ### Missing Binary or Model
 
 Each executor checks for the presence of its binary and model file before spawning. If either is missing, it throws immediately with a German-language error directing the user to the relevant setup script. This produces an `error` session status before any subprocess is started.
+
+---
+
+## Search Service (`search_service.py`)
+
+**Source:** `python_sidecar/search_service.py` (Epic #192, ADR-010). Not a pipeline step: it embeds search queries and transcript sections for the semantic search. The Node side (worker, index, ranking) is built in later PRs of the epic.
+
+- **Model:** text encoder of `google/embeddinggemma-2` (Apache-2.0), re-implemented in pure torch after `modeling_embedding_gemma2.py` from transformers — sentence-transformers needs transformers ≥ 5, flair needs < 5 (ADR-010). Artifact `embeddinggemma-2-text-v1` (`config.json`, `model.safetensors` bf16, `tokenizer.json`, `LICENSE`, `READY`), produced by `scripts/export-search-model.py`.
+- **Pipeline:** prompt + text → tokenizer (truncated to `max_tokens` incl. `<bos>`/`<eos>`) → encoder → mean pooling over the mask → L2 normalization → 768 float32 values. Prompts, `max_tokens` and `pad_multiple` are arguments (they will come from the catalog).
+- **Precision:** bf16 on MPS, never fp16; fp32 on the CPU. After an MPS OOM the batch shrinks to half the failed batch; a single text that still fails moves the model to the CPU (`.to('cpu')`, then `.float()`).
+- **Memory:** batches sorted by length, padded to multiples of 128 tokens, at most 4 texts and 2048 padded token slots per batch, `empty_cache` after every batch. Without the 128 grid indexing peaked at 3.9 GiB `phys_footprint`.
+- **Process:** one long-lived process per use (`serve --model-dir <dir>`), JSON Lines with request IDs:
+
+| Direction | Line |
+|---|---|
+| stdout, first line | `{"ready":true,"device":"mps","dtype":"bfloat16","load_ms":…,"dim":768}` |
+| `ping` | `{"id":1,"op":"ping"}` → `{"id":1,"ok":true,"device":…,"dtype":…}` |
+| `embed_query` | `{"id":2,"op":"embed_query","text":"…"}` → `{"id":2,"dim":768,"vector":"<base64>"}` |
+| `embed_documents` | `{"id":3,"op":"embed_documents","texts":[…]}` → `{"id":3,"dim":768,"vectors":["<base64>",…]}` (max. 256 texts) |
+| `shutdown` | `{"id":4,"op":"shutdown"}` → `{"id":4,"ok":true}`, exit 0 |
+| error (process keeps running) | `{"id":…,"error":{"code":"bad_json\|bad_request\|unknown_op\|too_large\|internal","message":"…"}}` |
+
+  Vectors are float32 little-endian, base64. stdout carries **only** protocol lines: fd 1 is redirected to stderr at start-up, everything else goes through `_emit` to stderr, including the contract line `Gewichte: torch.bfloat16 auf mps`. Exit codes: 0 (stdin EOF, `shutdown`, parent gone), 1 (bad arguments), 2 (model not loadable), 3 (fatal).
+- **Lifetime:** stdin EOF ends the process within 2 s with exit 0, even in the middle of a batch; a watcher thread exits when the parent process disappears. No `[HEARTBEAT]`: there is no ProcessWatchdog, the Node side sets a timeout per request.
+- **Safeguard:** `selftest --model-dir <dir> --golden tests/fixtures/search-golden/golden.json [--bench 40]` compares against golden vectors from sentence-transformers (fp32, CPU, original model): cosine ≥ 0.999 on MPS, ≥ 0.99999 on the CPU. Smoke checks `search load`, `search eof`, `search parity`, `search memory` in `scripts/smoke-packaged.sh --search-model-dir <dir>`.
 
 ---
 
