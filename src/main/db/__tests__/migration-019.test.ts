@@ -16,7 +16,7 @@ function migrateUpTo(db: Database.Database, version: number): void {
 }
 
 describe('migrations array', () => {
-  it('has unique, ascending, gap-free versions starting at 1 (the runner applies only > MAX)', () => {
+  it('has unique, ascending, gap-free versions starting at 1 (no gap, no double use)', () => {
     const versions = migrations.map((m) => m.version)
     expect(versions).toEqual(versions.map((_, i) => i + 1))
   })

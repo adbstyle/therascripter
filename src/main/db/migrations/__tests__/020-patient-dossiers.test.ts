@@ -30,7 +30,8 @@ describe('Migration 020 — patient dossiers', () => {
   beforeEach(() => {
     db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
-    migrateUpTo(db, 18)
+    // Stand direkt vor 020, damit «Bestandsdaten unverändert» nur 020 prüft
+    migrateUpTo(db, 19)
   })
 
   afterEach(() => {
