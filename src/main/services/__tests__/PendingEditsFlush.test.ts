@@ -89,6 +89,7 @@ describe('runQuitCleanup', () => {
       },
       cleanupRecording: () => order.push('recording'),
       stopSearchIndex: () => order.push('search'),
+      stopSearchModelProvisioner: () => order.push('search-model'),
       stopSourceFileCleanup: () => order.push('cleanup'),
       shutdownTaskQueue: async () => {
         order.push('queue')
@@ -96,7 +97,16 @@ describe('runQuitCleanup', () => {
       destroyTray: () => order.push('tray'),
       closeDatabase: () => order.push('db')
     })
-    expect(order).toEqual(['flush', 'recording', 'search', 'cleanup', 'queue', 'tray', 'db'])
+    expect(order).toEqual([
+      'flush',
+      'recording',
+      'search',
+      'search-model',
+      'cleanup',
+      'queue',
+      'tray',
+      'db'
+    ])
   })
 
   it('schliesst die Datenbank auch, wenn das Speichern im Renderer scheitert', async () => {
@@ -107,6 +117,9 @@ describe('runQuitCleanup', () => {
         throw new Error('nicht initialisiert')
       },
       stopSearchIndex: () => {
+        throw new Error('nicht initialisiert')
+      },
+      stopSearchModelProvisioner: () => {
         throw new Error('nicht initialisiert')
       },
       stopSourceFileCleanup: vi.fn(),
