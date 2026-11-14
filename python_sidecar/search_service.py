@@ -7,9 +7,23 @@ zustandslos: er liest keine Datenbank, hält keine Vektoren und kennt keine
 Sitzungen — er übersetzt Text in normalisierte float32-Vektoren. Node hält,
 quantisiert und vergleicht sie (siehe docs/product/architecture/ml-pipeline.md).
 
-Herkunft des Encoders: nachgebaut nach `modeling_embedding_gemma2.py` aus
-Hugging Face transformers (Copyright The HuggingFace Team, Apache License 2.0),
-nur der Text-Zweig, in reinem torch. Grund (ADR-010): flair verlangt
+Herkunft des Encoders: nachgebaut nach
+`transformers/models/embedding_gemma2/modeling_embedding_gemma2.py` aus
+Hugging Face transformers 5.x. Dessen Kopf lautet wörtlich:
+
+    Copyright 2026 the HuggingFace Team. All rights reserved.
+    Licensed under the Apache License, Version 2.0 (the "License")
+
+Lizenz: https://www.apache.org/licenses/LICENSE-2.0 — Kopie des Texts neben
+diesem Skript (python_sidecar/LICENSE-Apache-2.0.txt, im App-Paket
+ml_sidecar/LICENSE-Apache-2.0.txt).
+
+Änderungen gegenüber dem Original (Apache-2.0 Abschnitt 4(b)): nur der
+Text-Zweig, ohne Bild- und Audio-Encoder; ohne transformers-Basisklassen,
+Konfigurations- und Masken-Hilfen von transformers (Masken, RoPE und
+Attention direkt in torch); keine Generierung, kein Cache, kein Training;
+Mean-Pooling und Normalisierung aus dem sentence-transformers-Modell des
+Originals hier angefügt. Grund (ADR-010): flair verlangt
 transformers<5, die Modellklasse gibt es erst ab transformers 5 — eine
 gemeinsame Umgebung ist unmöglich. Abgesichert wird der Nachbau durch
 Goldvektoren aus sentence-transformers (tests/fixtures/search-golden/,
@@ -25,8 +39,8 @@ Usage:
     search_service.py serve --model-dir <dir> [--query-prompt …] [--document-prompt …]
                             [--max-tokens 1024]
     search_service.py selftest --model-dir <dir> --golden <json> [--bench 40]
-                               [--max-footprint-gib 2.5]
-    gemeinsam: [--batch-size 4] [--token-budget 2048] [--pad-multiple 128] [--threads 4]
+                               [--max-footprint-gib 2.5] [--soak 2000]
+    gemeinsam: [--batch-size 2] [--token-budget 2048] [--pad-multiple 128] [--threads 4]
 
 Protokoll (serve): JSON-Lines, eine Zeile pro Nachricht.
     stdout, erste Zeile:
@@ -73,6 +87,7 @@ import json
 import logging
 import os
 import queue
+import re
 import sys
 import threading
 import time
@@ -87,18 +102,32 @@ DEFAULT_MAX_TOKENS = 1024
 # gemessen 3.9 GiB phys_footprint beim Aufbereiten von 148 Abschnitten,
 # mit Raster 128 1.81 GiB und schneller (Bauplan Suche, Befund 3).
 DEFAULT_PAD_MULTIPLE = 128
-DEFAULT_BATCH_SIZE = 4
+# Batch 2 statt 4: gemessen gleich schnell (58 vs. 58–74 ms pro Abschnitt bei
+# Ø 372 Tokens, 148 Abschnitte), Peak 2.09 statt 2.23 GiB.
+DEFAULT_BATCH_SIZE = 2
 
 # Zweite Grenze pro Batch: Anzahl × aufgefüllte Länge. Vier Texte à 1024
 # Tokens trieben den phys_footprint auf 3.4 GiB (gemessen, M5 Pro), zwei à
 # 1024 auf 1.8 GiB — die Batchgrösse allein schützt nicht vor langen Texten.
-# 2048 = 4 × 512 lässt die üblichen Abschnitte (Ø ~380 Tokens) bei Batch 4.
+# 2048 = 2 × 1024: greift bei Batch 2 erst, wenn --batch-size erhöht wird.
 DEFAULT_TOKEN_BUDGET = 2048
+
+# Boden der Budget-Halbierung nach MPS-OOM: eine Rasterzeile. Darunter passt
+# ohnehin nur noch ein Text pro Batch.
+MIN_TOKEN_BUDGET = DEFAULT_PAD_MULTIPLE
+
+# Vor dem Tokenisieren wird jeder Text auf max_tokens × CHARS_PER_TOKEN_LIMIT
+# Zeichen gekürzt: das begrenzt Zeit und Speicher des Tokenizers bei riesigen
+# Eingaben, ohne das Ergebnis zu ändern — ein Token deckt im Gemma-Vokabular
+# höchstens 31 Zeichen ab (Leerzeichenfolgen), deutscher Text Ø ~4. Bei 32
+# bleiben also immer mindestens max_tokens Tokens übrig, und gekürzt wird
+# danach ohnehin auf max_tokens.
+CHARS_PER_TOKEN_LIMIT = 32
 DEFAULT_THREADS = 4
 
 EXPECTED_DIM = 768
 
-# Schutz vor Fehlbedienung, kein Fachlimit: Node schickt Batches zu 4.
+# Schutz vor Fehlbedienung, kein Fachlimit: Node schickt wenige Texte pro Anfrage.
 MAX_TEXTS_PER_REQUEST = 256
 MAX_REQUEST_BYTES = 8 * 1024 * 1024
 
@@ -108,9 +137,13 @@ EOF_EXIT_GRACE_SEC = 1.5
 PARENT_POLL_SEC = 1.0
 
 # Kosinus-Schwellen gegen die Goldvektoren (fp32 auf der CPU aus dem Original
-# mit sentence-transformers). bf16 auf MPS: gemessen ≥ 0.99984 über 148
-# Abschnitte; fp32 auf der CPU: identisch bis 2.8e-7.
-MIN_COSINE = {"mps": 0.999, "cpu": 0.99999}
+# mit sentence-transformers). bf16 auf MPS: gemessen min. 0.99991 — das
+# bf16-Rauschen verdeckt Off-by-one-Fehler (Sliding Window 511/513, Kürzung
+# auf 1023 blieben dort ≥ 0.99992). fp32 auf der CPU: gemessen 1.0 (auf 9
+# Stellen), dieselben drei Fehler 0.99993–0.999998 — 0.9999995 trennt beide
+# mit Faktor > 4 zum nächsten Fehler. Deshalb prüfen Smoke und Vitest BEIDE
+# Geräte (THERASCRIPT_SEARCH_DEVICE=cpu).
+MIN_COSINE = {"mps": 0.999, "cpu": 0.9999995}
 
 # Nur für Messwerkzeuge: "cpu" erzwingt den fp32-Pfad auf der CPU. Die App
 # setzt die Variable nie (Whitelist-Env in subprocess.ts).
@@ -214,7 +247,7 @@ def parse_request(line) -> dict:
         text = message.get("text")
         if not isinstance(text, str):
             raise RequestError("bad_request", "embed_query braucht 'text' (Text)", request_id)
-        return {"id": request_id, "op": op, "text": text}
+        return {"id": request_id, "op": op, "text": clean_text(text)}
 
     if op == "embed_documents":
         texts = message.get("texts")
@@ -228,9 +261,28 @@ def parse_request(line) -> dict:
                 f"höchstens {MAX_TEXTS_PER_REQUEST} Texte pro Anfrage, erhalten {len(texts)}",
                 request_id,
             )
-        return {"id": request_id, "op": op, "texts": texts}
+        return {"id": request_id, "op": op, "texts": [clean_text(t) for t in texts]}
 
     raise RequestError("unknown_op", f"unbekannte Operation: {op}", request_id)
+
+
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def clean_text(text: str) -> str:
+    """
+    Ungepaarte Surrogate (JSON erlaubt "\\ud800") durch U+FFFD ersetzen.
+
+    json.loads setzt gültige Paare zu einem Zeichen zusammen; was danach noch
+    im Surrogat-Bereich liegt, ist ungepaart und liesse sich nicht als UTF-8
+    kodieren — der Tokenizer würfe, und mit ihm der ganze Batch.
+    """
+    return _LONE_SURROGATE.sub("\ufffd", text)
+
+
+def clip_text(text: str, max_tokens: int) -> str:
+    """Auf eine sichere Zeichenzahl kürzen (siehe CHARS_PER_TOKEN_LIMIT)."""
+    return text[: max_tokens * CHARS_PER_TOKEN_LIMIT]
 
 
 def encode_response(message: dict) -> str:
@@ -367,21 +419,52 @@ class EncoderState:
         self.token_budget = token_budget
 
 
-def embed_tokens(sequences, state, forward, release, to_cpu, pad_multiple, max_tokens, pad_id):
+class FatalError(Exception):
+    """Der Prozess ist in einem Zustand, in dem er nicht weiterlaufen darf (Exit 3)."""
+
+
+def shrink_budget(state, rows: int, padded: int, floor: int) -> bool:
+    """
+    Token-Budget nach einem MPS-OOM halbieren — bezogen auf den GESCHEITERTEN
+    Batch, nicht auf das alte Budget (sonst bräuchten kurze Batches, die von
+    batch_size statt vom Budget begrenzt waren, mehrere Fehlversuche).
+
+    → True, wenn das neue Budget den gescheiterten Batch tatsächlich teilt;
+    False, wenn nichts mehr zu teilen ist (ein Text, oder Boden erreicht).
+    """
+    if rows <= 1:
+        return False
+    used = rows * padded
+    current = used if state.token_budget is None else min(state.token_budget, used)
+    new_budget = max(floor, current // 2)
+    if new_budget // padded >= rows:
+        return False
+    state.token_budget = new_budget
+    return True
+
+
+def embed_tokens(
+    sequences, state, forward, release, to_cpu, pad_multiple, max_tokens, pad_id, devices=None
+):
     """
     Token-Folgen in Batches durch forward() schicken, mit OOM-Rückzug.
 
     forward(ids, mask) → pro Zeile ein Vektor (indexierbar); release() gibt
     nach jedem Batch den MPS-Cache frei; to_cpu() verlegt das Modell auf die
-    CPU in fp32. Bei einem MPS-OOM sinkt die Batchgrösse auf die Hälfte des
-    gescheiterten Batches (bleibt für die Lebensdauer des Prozesses — der
-    Speicher dieser Maschine ändert sich nicht) und der Rest wird neu geplant;
-    erst ein einzelner Text geht auf die CPU.
+    CPU in fp32. Bei einem MPS-OOM wird das Token-Budget halbiert (wie beim
+    NER, Boden MIN_TOKEN_BUDGET; bleibt für die Lebensdauer des Prozesses —
+    der Speicher dieser Maschine ändert sich nicht) und der Rest neu geplant;
+    erst ein einzelner Text, der auch so nicht passt, geht auf die CPU.
+    Scheitert der Umzug auf die CPU selbst, ist der Zustand des Modells
+    unklar → FatalError (der Dienst beendet sich mit Exit 3).
 
     Die Reaktion läuft bewusst NACH dem except-Block: solange er aktiv ist,
     hält der Traceback die Aktivierungen des gescheiterten Passes auf der GPU
     fest, und weder empty_cache() noch der Umzug auf die CPU hätten Luft
     (NER-Gotcha in CLAUDE.md).
+
+    devices: optionale Liste gleicher Länge; erhält pro Text das Gerät, auf
+    dem sein Vektor gerechnet wurde (selftest wendet danach die Schwelle an).
 
     → Liste der Vektoren in der Reihenfolge von sequences.
     """
@@ -409,23 +492,27 @@ def embed_tokens(sequences, state, forward, release, to_cpu, pad_multiple, max_t
 
             release()
 
-            if oom and len(indices) > 1:
-                state.batch_size = max(1, len(indices) // 2)
+            if oom and shrink_budget(state, len(indices), batch["padded"], MIN_TOKEN_BUDGET):
                 _emit(
-                    f"MPS out of memory — halbiere Batchgrösse auf {state.batch_size} "
+                    f"MPS out of memory — halbiere Token-Budget auf {state.token_budget} "
                     "und plane die verbleibenden Texte neu"
                 )
                 break
 
             if oom:
-                _emit("MPS out of memory bei einem einzelnen Text — wechsle auf CPU")
-                to_cpu()
+                _emit("MPS out of memory, Batch nicht weiter teilbar — wechsle auf CPU")
+                try:
+                    to_cpu()
+                except Exception as e:  # noqa: BLE001 — halber Umzug: nicht weiterrechnen
+                    raise FatalError(f"Umzug auf die CPU fehlgeschlagen: {e}") from e
                 state.device = "cpu"
                 state.dtype = "float32"
                 vectors = forward(ids, mask)
 
             for row, index in enumerate(indices):
                 results[index] = vectors[row]
+                if devices is not None:
+                    devices[index] = state.device
         pending = [i for i in pending if results[i] is None]
     return results
 
@@ -484,6 +571,39 @@ def reset_footprint_interval() -> None:
 # ---------------------------------------------------------------------------
 # Encoder (torch erst hier)
 # ---------------------------------------------------------------------------
+
+class _AutoreleasePool:
+    """
+    Objective-C-Autorelease-Pool um einen MPS-Forward-Pass.
+
+    torch-MPS legt pro Kernel-Aufruf autoreleased Objective-C-Objekte an
+    (Command-Buffer, Encoder, Deskriptoren). Ein Python-Prozess hat keinen
+    Runloop, der den Pool leert — die Objekte bleiben für immer liegen.
+    Gemessen (M5 Pro): +100 KiB phys_footprint pro Forward-Pass, linear, ohne
+    Plateau; torch.mps.driver_allocated_memory(), der Python-Heap
+    (tracemalloc), gc.collect() und torch.mps.synchronize() bleiben davon
+    unberührt bzw. helfen nicht. Mit Push/Pop um jeden Pass verschwindet das
+    Wachstum. Ausserhalb von macOS ein No-op.
+    """
+
+    def __init__(self):
+        try:
+            objc = ctypes.CDLL("/usr/lib/libobjc.A.dylib")
+            objc.objc_autoreleasePoolPush.restype = ctypes.c_void_p
+            objc.objc_autoreleasePoolPop.argtypes = [ctypes.c_void_p]
+            self._objc = objc
+        except (OSError, AttributeError):
+            self._objc = None
+
+    def __enter__(self):
+        self._token = self._objc.objc_autoreleasePoolPush() if self._objc else None
+        return self
+
+    def __exit__(self, *exc):
+        if self._token is not None:
+            self._objc.objc_autoreleasePoolPop(self._token)
+        return False
+
 
 _MODULES = None
 
@@ -696,6 +816,7 @@ class Encoder:
         from tokenizers import Tokenizer
 
         model_dir = args.model_dir
+        self._pool = _AutoreleasePool()
         with open(os.path.join(model_dir, "config.json"), encoding="utf-8") as f:
             config = json.load(f)
         self.config = config.get("text_config", config)
@@ -706,6 +827,9 @@ class Encoder:
         self.max_tokens = args.max_tokens
         self.pad_multiple = args.pad_multiple
 
+        # Tokenizer seriell: parallel zu den Gewichten geladen (Thread) war die
+        # Zeit bis «ready» gemessen gleich (4.32 vs. 4.33 s), der Tokenizer
+        # allein braucht ~0.4 s.
         self.tokenizer = Tokenizer.from_file(os.path.join(model_dir, "tokenizer.json"))
         # Kürzen auf max_tokens INKLUSIVE <bos>/<eos> (wie sentence-transformers
         # mit max_seq_length); aufgefüllt wird selbst, pro Batch (plan_batches).
@@ -760,6 +884,18 @@ class Encoder:
             args.token_budget,
         )
         self.emit_weights()
+        # Peak direkt nach dem Laden, vor jedem Forward-Pass.
+        self.load_footprint = footprint()
+        if getattr(args, "warmup", True):
+            self.warmup()
+
+    def warmup(self) -> None:
+        """
+        Ein Forward-Pass vor der Startzeile: die MPS-Shader der häufigsten Form
+        (ein Text, eine Rasterzeile) werden dabei kompiliert, sonst zahlte die
+        erste Anfrage dafür.
+        """
+        self.embed_query("Aufwärmen")
 
     def emit_weights(self) -> None:
         # Vertrag mit dem Smoke-Check `search load`: mit MPS muss die Zeile
@@ -773,16 +909,19 @@ class Encoder:
         import torch.nn.functional as F
 
         device = self.state.device
-        ids_t = torch.tensor(ids, dtype=torch.long, device=device)
-        mask_t = torch.tensor(mask, dtype=torch.long, device=device)
-        with torch.inference_mode():
+        # Der Pool umschliesst auch .cpu(): erst danach sind alle Kernel des
+        # Passes fertig und ihre Objekte freigebbar. numpy hält eine Kopie.
+        with self._pool, torch.inference_mode():
+            ids_t = torch.tensor(ids, dtype=torch.long, device=device)
+            mask_t = torch.tensor(mask, dtype=torch.long, device=device)
             hidden = self.model(ids_t, mask_t)
             # Mean-Pooling über die Maske (inkl. Prompt und <bos>/<eos>, wie
             # 1_Pooling/config.json: include_prompt) — in fp32 summiert.
             weights = mask_t.unsqueeze(-1).to(torch.float32)
             pooled = (hidden.float() * weights).sum(1) / weights.sum(1).clamp(min=1)
             vectors = F.normalize(pooled, dim=-1)
-        result = vectors.cpu().numpy().astype("<f4")
+            result = vectors.cpu().numpy().astype("<f4")
+            del ids_t, mask_t, hidden, weights, pooled, vectors
         if result.shape[1] != self.dim:
             raise RuntimeError(f"Vektor hat {result.shape[1]} statt {self.dim} Dimensionen")
         return result
@@ -798,12 +937,14 @@ class Encoder:
 
     def _release(self) -> None:
         if self.state.device == "mps":
-            _release_mps_cache()
+            with self._pool:
+                _release_mps_cache()
 
     def tokenize(self, texts, prompt):
-        return [e.ids for e in self.tokenizer.encode_batch([prompt + t for t in texts])]
+        clipped = [prompt + clip_text(t, self.max_tokens) for t in texts]
+        return [e.ids for e in self.tokenizer.encode_batch(clipped)]
 
-    def embed(self, texts, prompt):
+    def embed(self, texts, prompt, devices=None):
         """→ Liste von float32-Zeilen (numpy), Reihenfolge wie texts."""
         if not texts:
             return []
@@ -817,13 +958,14 @@ class Encoder:
             self.pad_multiple,
             self.max_tokens,
             self.pad_id,
+            devices,
         )
 
-    def embed_query(self, text):
-        return self.embed([text], self.query_prompt)[0]
+    def embed_query(self, text, devices=None):
+        return self.embed([text], self.query_prompt, devices)[0]
 
-    def embed_documents(self, texts):
-        return self.embed(texts, self.document_prompt)
+    def embed_documents(self, texts, devices=None):
+        return self.embed(texts, self.document_prompt, devices)
 
 
 # ---------------------------------------------------------------------------
@@ -878,28 +1020,45 @@ def _start_stdin_reader(lines: "queue.Queue") -> None:
     threading.Thread(target=read, name="stdin-reader", daemon=True).start()
 
 
+def _current_footprint():
+    return footprint()[0]
+
+
 def handle_request(encoder, request: dict) -> dict:
+    """
+    Eine Anfrage beantworten. Jede Antwort trägt phys_footprint_bytes: auf MPS
+    wächst der Prozess pro Forward-Pass um ~50–130 KiB ausserhalb des
+    torch-Allokators (siehe docs/product/architecture/ml-pipeline.md) — der
+    Aufrufer startet den Dienst ab einer Schwelle neu.
+    """
     op = request["op"]
     if op == "ping":
-        return {
+        response = {
             "id": request["id"],
             "ok": True,
             "device": encoder.state.device,
             "dtype": encoder.state.dtype,
         }
-    if op == "shutdown":
-        return {"id": request["id"], "ok": True}
-    if op == "embed_query":
+    elif op == "shutdown":
+        response = {"id": request["id"], "ok": True}
+    elif op == "embed_query":
         vector = encoder.embed_query(request["text"])
-        return {"id": request["id"], "dim": encoder.dim, "vector": encode_float32(vector.tobytes())}
-    if op == "embed_documents":
+        response = {
+            "id": request["id"],
+            "dim": encoder.dim,
+            "vector": encode_float32(vector.tobytes()),
+        }
+    elif op == "embed_documents":
         vectors = encoder.embed_documents(request["texts"])
-        return {
+        response = {
             "id": request["id"],
             "dim": encoder.dim,
             "vectors": [encode_float32(v.tobytes()) for v in vectors],
         }
-    raise RequestError("unknown_op", f"unbekannte Operation: {op}", request["id"])
+    else:
+        raise RequestError("unknown_op", f"unbekannte Operation: {op}", request["id"])
+    response["phys_footprint_bytes"] = _current_footprint()
+    return response
 
 
 def _install_logging() -> None:
@@ -937,6 +1096,7 @@ def serve(args) -> int:
             "dtype": encoder.state.dtype,
             "load_ms": load_ms,
             "dim": encoder.dim,
+            "phys_footprint_bytes": _current_footprint(),
         }
     )
 
@@ -956,6 +1116,9 @@ def serve(args) -> int:
             response = handle_request(encoder, request)
         except RequestError as e:
             response = error_response(request["id"], e.code, e.message)
+        except FatalError as e:
+            _emit(f"Fehler: {e} — Suchdienst beendet sich")
+            return EXIT_FATAL
         except Exception as e:  # noqa: BLE001 — eine Anfrage darf den Dienst nicht kippen
             _emit(f"Fehler bei Anfrage {request['id']!r} ({request['op']}): {e}")
             response = error_response(request["id"], "internal", str(e))
@@ -989,12 +1152,16 @@ _BENCH_SENTENCES = [
 
 
 def bench_texts(count: int) -> list:
-    """count Abschnitte zwischen ~120 und ~600 Tokens (Ø ~360, wie das Referenz-Set)."""
+    """
+    count Abschnitte nahe der Längenverteilung des Referenz-Sets (Spike #208:
+    Ø ~384, max. ~584 Tokens): gemessen ~170 bis ~576 Tokens, Ø ~372 (mit
+    Prompt; selftest gibt die Werte des Laufs mit aus).
+    """
     texts = []
     for i in range(count):
-        repeats = 2 + (i * 7) % 12
-        parts = [_BENCH_SENTENCES[(i + j) % len(_BENCH_SENTENCES)] for j in range(repeats * 2)]
-        texts.append(" ".join(parts))
+        parts = 9 + (i * 37) % 23
+        sentences = [_BENCH_SENTENCES[(i + j) % len(_BENCH_SENTENCES)] for j in range(parts)]
+        texts.append(" ".join(sentences))
     return texts
 
 
@@ -1016,25 +1183,55 @@ def selftest(args) -> int:
     load_ms = int((time.perf_counter() - started) * 1000)
 
     texts = [entry["text"] for entry in golden["texts"]]
-    query_vectors = [encoder.embed_query(t) for t in texts]
-    document_vectors = encoder.embed_documents(texts)
+    # Gerät pro Vektor festhalten: fällt der Lauf mitten drin auf die CPU
+    # zurück, gilt für jeden Vektor die Schwelle SEINES Geräts.
+    query_devices = [None] * len(texts)
+    query_vectors = []
+    for i, text in enumerate(texts):
+        one = [None]
+        query_vectors.append(encoder.embed_query(text, one))
+        query_devices[i] = one[0]
+    document_devices = [None] * len(texts)
+    document_vectors = encoder.embed_documents(texts, document_devices)
 
     per_text = []
     worst = 1.0
-    for entry, q, d in zip(golden["texts"], query_vectors, document_vectors):
+    parity_ok = True
+    for i, (entry, q, d) in enumerate(zip(golden["texts"], query_vectors, document_vectors)):
         q_cos = cosine(q.tolist(), decode_float32(entry["query"]))
         d_cos = cosine(d.tolist(), decode_float32(entry["document"]))
         worst = min(worst, q_cos, d_cos)
-        per_text.append({"id": entry["id"], "query": round(q_cos, 7), "document": round(d_cos, 7)})
+        for value, device in ((q_cos, query_devices[i]), (d_cos, document_devices[i])):
+            limit = args.min_cosine if args.min_cosine is not None else MIN_COSINE[device]
+            if value < limit:
+                parity_ok = False
+        per_text.append(
+            {
+                "id": entry["id"],
+                "query": round(q_cos, 9),
+                "query_device": query_devices[i],
+                "document": round(d_cos, 9),
+                "document_device": document_devices[i],
+            }
+        )
 
-    threshold = args.min_cosine if args.min_cosine is not None else MIN_COSINE[encoder.state.device]
+    devices_used = sorted(set(query_devices + document_devices))
+    threshold = (
+        args.min_cosine
+        if args.min_cosine is not None
+        else max(MIN_COSINE[device] for device in devices_used)
+    )
+    load_footprint = encoder.load_footprint
     report = {
         "device": encoder.state.device,
         "dtype": encoder.state.dtype,
+        "devices_used": devices_used,
         "load_ms": load_ms,
-        "min_cosine": round(worst, 7),
+        "phys_footprint_after_load_bytes": load_footprint[0],
+        "phys_footprint_load_peak_bytes": load_footprint[1],
+        "min_cosine": round(worst, 9),
         "threshold": threshold,
-        "parity_ok": worst >= threshold,
+        "parity_ok": parity_ok,
         "texts": per_text,
     }
 
@@ -1044,7 +1241,6 @@ def selftest(args) -> int:
         # nicht der Lade-Peak — die Grenze `search memory` gilt dem Betrieb.
         chunks = bench_texts(args.bench)
         token_counts = [len(s) for s in encoder.tokenize(chunks, encoder.document_prompt)]
-        _, load_peak, _ = footprint()
         reset_footprint_interval()
         t0 = time.perf_counter()
         encoder.embed_documents(chunks)
@@ -1055,17 +1251,41 @@ def selftest(args) -> int:
             "tokens_mean": round(sum(token_counts) / len(token_counts)),
             "tokens_max": max(token_counts),
             "seconds": round(elapsed, 2),
-            "ms_per_100": round(elapsed / len(chunks) * 100 * 1000),
+            "ms_per_chunk": round(elapsed / len(chunks) * 1000, 1),
             "phys_footprint_bytes": current,
             "phys_footprint_peak_bytes": interval_peak,
-            "phys_footprint_load_peak_bytes": load_peak,
             "batch_size": encoder.state.batch_size,
+            "token_budget": encoder.state.token_budget,
             "device_after": encoder.state.device,
         }
         if args.max_footprint_gib is not None and interval_peak is not None:
             footprint_ok = interval_peak <= args.max_footprint_gib * GIB
             report["bench"]["max_footprint_gib"] = args.max_footprint_gib
             report["bench"]["footprint_ok"] = footprint_ok
+
+    if args.soak:
+        # Dauerlauf: N einzelne Anfragen (je ein Forward-Pass), Wachstum des
+        # phys_footprint pro Pass. Auf MPS wächst er ausserhalb des
+        # torch-Allokators — der Aufrufer startet den Dienst deshalb neu.
+        queries = [f"Anfrage {i}: Schlafprobleme wegen der Arbeit" for i in range(16)]
+        for i in range(20):
+            encoder.embed_query(queries[i % len(queries)])
+        before = footprint()[0]
+        t0 = time.perf_counter()
+        for i in range(args.soak):
+            encoder.embed_query(queries[i % len(queries)])
+        elapsed = time.perf_counter() - t0
+        after = footprint()[0]
+        report["soak"] = {
+            "passes": args.soak,
+            "seconds": round(elapsed, 2),
+            "phys_footprint_before_bytes": before,
+            "phys_footprint_after_bytes": after,
+            "growth_per_pass_bytes": (
+                round((after - before) / args.soak) if before is not None else None
+            ),
+            "device": encoder.state.device,
+        }
 
     print(json.dumps(report, ensure_ascii=False))
     if report["parity_ok"]:
@@ -1094,6 +1314,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="höchstens so viele aufgefüllte Token-Slots pro Batch",
     )
     shared.add_argument("--threads", type=int, default=DEFAULT_THREADS, help="CPU-Threads")
+    shared.add_argument(
+        "--no-warmup",
+        dest="warmup",
+        action="store_false",
+        help="ohne Aufwärm-Pass vor der Startzeile (nur zum Messen)",
+    )
 
     parser = argparse.ArgumentParser(
         prog="search_service.py",
@@ -1116,6 +1342,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--bench", type=int, default=0, help="zusätzlich N Abschnitte aufbereiten und messen"
     )
     test_parser.add_argument("--max-footprint-gib", type=float, default=None)
+    test_parser.add_argument(
+        "--soak", type=int, default=0, help="Dauerlauf: N Anfragen, Speicherwachstum pro Pass"
+    )
     return parser
 
 

@@ -7,7 +7,7 @@ in fp32 auf der CPU — genau die Pipeline, die python_sidecar/search_service.py
 reinem torch nachbaut (ADR-010). Der Suchdienst vergleicht sich im Modus `selftest`
 damit; die Smoke-Prüfung `search parity` (scripts/smoke-packaged.sh) und der
 Vitest `search-service.test.ts` verlangen Kosinus ≥ 0.999 (bf16 auf MPS) bzw.
-≥ 0.99999 (fp32 auf der CPU).
+≥ 0.9999995 (fp32 auf der CPU).
 
 Ausführen (eigenes venv, NICHT das Standalone der App — sentence-transformers
 braucht transformers ≥ 5, flair verträgt das nicht):
