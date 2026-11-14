@@ -62,6 +62,14 @@ describe('SessionService → sessions:changed', () => {
     expect(notifySessionsChanged).toHaveBeenCalledWith([session.id])
   })
 
+  it('nicht im Dossier-Löschpfad — DossierService meldet die IDs dort selbst (kein Doppel)', () => {
+    const session = service.createSession('Arztbericht', 'pdf')
+    notifySessionsChanged.mockReset()
+    service.markForDeletion([session.id])
+    expect(service.finishDeletion(session.id)).toBe(true)
+    expect(notifySessionsChanged).not.toHaveBeenCalled()
+  })
+
   it('nicht für eine unbekannte Sitzung', () => {
     expect(service.deleteSession('gibt-es-nicht')).toBe(false)
     expect(service.renameSession('gibt-es-nicht', 'x')).toBeNull()

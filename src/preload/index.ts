@@ -35,6 +35,7 @@ function readInitialViewMode(): ViewMode {
     return normalizeViewMode(undefined)
   }
 }
+import { dossierApi } from './api/dossiers'
 
 const api: IpcApi = {
   sessions: {
@@ -258,6 +259,7 @@ const api: IpcApi = {
     initial: readInitialViewMode(),
     set: (mode) => ipcRenderer.invoke('viewMode:set', { mode })
   },
+  dossiers: dossierApi,
   nav: {
     onOpenSettings: (callback) => {
       const handler = (): void => callback()

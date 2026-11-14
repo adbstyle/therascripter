@@ -1,6 +1,6 @@
 # Storage and Data Model
 
-Therascript uses two storage mechanisms: **better-sqlite3** for structured session and blocklist data, and **electron-store** for application settings. All data is written to `~/.therascript/` on the user's machine.
+Therascript uses two storage mechanisms: **better-sqlite3** for structured session, patient-dossier and blocklist data, and **electron-store** for application settings. All data is written to `~/.therascript/` on the user's machine.
 
 ---
 
@@ -16,7 +16,7 @@ The database is opened with WAL journal mode, foreign keys enabled, `synchronous
 
 ### Migration System
 
-Migrations are numbered SQL files in `src/main/db/migrations/`. At startup, `initDatabase()` creates a `schema_version` table (if it does not exist) and runs every migration whose version number exceeds the current maximum version recorded there. Each migration runs inside a transaction; on success the version number is inserted into `schema_version`. This means migrations are applied exactly once and are never re-run.
+Migrations are numbered SQL files in `src/main/db/migrations/`. At startup, `initDatabase()` creates a `schema_version` table (if it does not exist) and runs every migration whose version is not yet recorded there, in ascending order (`runMigrations` in `connection.ts`). Each migration runs inside a transaction; on success the version number is inserted into `schema_version`. This means migrations are applied exactly once and are never re-run — and a version merged later than a higher one (e.g. 019 after a database already has 020) is still applied instead of being skipped. `migration-019.test.ts` keeps the version list unique, ascending and gap-free; `migrations.test.ts` tests the real runner.
 
 | File | Version | Change |
 |---|---|---|
@@ -26,6 +26,10 @@ Migrations are numbered SQL files in `src/main/db/migrations/`. At startup, `ini
 | … | … | (see `src/main/db/migrations/index.ts`) |
 | `017-session-deleting-at.sql` | 17 | Adds `deleting_at` to `sessions` — restart-proof deletion (#202); existing rows stay `NULL` |
 | `018-app-maintenance.sql` | 18 | Adds `app_maintenance(task, done_at)` and records the one-time `secure-delete-vacuum` as pending (#202) |
+| `019-placeholder-snapshots.sql` | 19 | Adds `title_entity_snapshot`, `summary_entity_snapshot`, `title_plain`, `summary_plain` to `sessions` (#203) |
+| `020-patient-dossiers.sql` | 20 | Patient dossiers for the whole Epic #192 block: `dossiers`, `session_dossiers`, `recent_items`, `sessions.document_date`. Only `CREATE TABLE` / `ADD COLUMN`, existing rows untouched (#204 PC 6) |
+
+**Table rebuilds and foreign keys.** `task_queue`, `session_dossiers` and `recent_items` reference `sessions` with `ON DELETE CASCADE`. A rebuild of `sessions` (CREATE new → DROP old → RENAME) with foreign keys on deletes all tasks, all dossier assignments and all «recently opened» entries — `DROP TABLE` runs an implicit `DELETE FROM` whose cascade fires immediately. `PRAGMA defer_foreign_keys = ON` does **not** prevent this (it defers constraint *checks*, not `ON DELETE` *actions*; proven in `020-patient-dossiers.test.ts`). Only `PRAGMA foreign_keys = OFF` does, and it has no effect inside a transaction — the runner must be extended (FK off before the migration's transaction, `PRAGMA foreign_key_check`, FK on) before such a migration is written. See the rule comment in `src/main/db/migrations/index.ts`.
 
 ---
 
@@ -52,6 +56,7 @@ Tracks every transcription and PDF import session.
 | `updated_at` | TEXT | DEFAULT `datetime('now')` | ISO 8601 timestamp of last update |
 | `review_at` | TEXT | nullable | ISO 8601 timestamp of when the session first reached `review` status; used for source-file cleanup |
 | `deleting_at` | TEXT | nullable | Set when the user confirmed the deletion and its files are not all removed yet (#202). Rows with a value are hidden from every read that reaches the user (`findById`, `findAll`, source-file cleanup) |
+| `document_date` | TEXT | nullable, CHECK `YYYY-MM-DD` | Date a PDF document was written (#205); `NULL` = use the local import day (migration 020) |
 | `title_entity_snapshot` | TEXT | nullable | Issue #203 (migration 019): JSON `{ "[PERSON 1]": "Ruth Gerber", … }` — meaning of the placeholder tokens in `title` when it was written. The Klartext view resolves a token only while `entity_map` still gives it this meaning (`shared/utils/resolvePlaceholders.ts`) |
 | `summary_entity_snapshot` | TEXT | nullable | Same for `summary`; written by the summarization (from the EntityMap read with the LLM input) and on user edits (only tokens absent from the old text count as newly typed and get the current meaning; tokens of the old text keep their record — or, without one, stay placeholders for good). Migration 019 backfilled existing rows with today's unambiguous meanings, reading only object entries of valid maps (never fails on malformed legacy data) |
 | `title_plain` / `summary_plain` | TEXT | nullable | Issue #203: Klartext of `title`/`summary`, computed on every write that can change it (`SessionRepository.update` → `db/plainTexts.ts`, incl. `review:save`'s entity_map). NULL = same as the raw text. The session list selects only these — never `entity_map` or the snapshots. Existing rows: one-time `placeholder-plain-backfill` in `runStartupMaintenance` (`app_maintenance`) |
@@ -85,6 +90,35 @@ anonymizing  → review       | error
 review       → review       | error
 error        → recording | transcribing | diarizing | extracting | anonymizing
 ```
+
+---
+
+### `dossiers`
+
+One row per patient dossier (#204). Stored only locally and kept without time limit until the user deletes it or removes Therascript completely.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | TEXT | PRIMARY KEY | UUID |
+| `first_name`, `last_name` | TEXT | NOT NULL, 1–100 characters | Display form: NFC-composed and trimmed |
+| `first_name_norm`, `last_name_norm` | TEXT | NOT NULL | Comparison key (see below) |
+| `external_id` | TEXT | nullable, 1–50 characters | Patient dossier ID (e.g. from the practice software); an empty input is stored as `NULL` |
+| `external_id_norm` | TEXT | nullable, UNIQUE where not `NULL` | Comparison key of `external_id`; `NULL` exactly when `external_id` is `NULL` |
+| `birth_date` | TEXT | nullable, CHECK `YYYY-MM-DD` | Valid calendar day, not after today (validated in Zod and `DossierService`) |
+| `diagnoses`, `medication`, `note` | TEXT | NOT NULL DEFAULT `''`, ≤ 20 000 characters | Multi-line free text |
+| `created_at`, `updated_at` | TEXT | NOT NULL | ISO 8601 UTC |
+
+Indexes: `idx_dossiers_external_id_norm` (partial unique), `idx_dossiers_name_norm` on `(last_name_norm, first_name_norm)` — the sort order of the overview.
+
+**Equality rule (#204 AK 7).** Names and dossier IDs are equal when they differ only in case, leading/trailing whitespace or the spelling of umlauts. The comparison key is `normalizeDossierKey()` (`src/shared/utils/dossier-normalize.ts`): NFC (macOS delivers some input decomposed), trim, lowercase (`de-CH`), then ä→ae, ö→oe, ü→ue, ß→ss (so ẞ → ß → ss). Only `DossierService` writes the `*_norm` columns; SQL never normalizes on its own, so there is one implementation. The overview sorts by `last_name_norm, first_name_norm, id` — ä sorts as ae, consistent with the equality rule.
+
+### `session_dossiers`
+
+n:m assignment of sessions to dossiers (#205). `WITHOUT ROWID`, primary key `(session_id, dossier_id)`, `assigned_at` ISO UTC, index `idx_session_dossiers_dossier` on `(dossier_id, session_id)`. Both foreign keys are `ON DELETE CASCADE`: these are pure reference rows without files. Deleting a session (final `DELETE FROM sessions` of #202) removes its assignments; deleting a dossier removes its assignments. There is **never** a cascade from a dossier to a session — sessions have files, tasks and the two-phase deletion; `DossierService` deletes them via `SessionService` (see «Deleting a patient dossier»).
+
+### `recent_items`
+
+«Recently opened» (#213): `id` INTEGER PRIMARY KEY, exactly one of `dossier_id` / `session_id` (CHECK), each `ON DELETE CASCADE` and unique where not `NULL`, `opened_at` ISO UTC, index on `(opened_at DESC, id DESC)`.
 
 ---
 
@@ -233,3 +267,16 @@ If a file cannot be removed (anything but «does not exist»), the row stays mar
 - Apart from that one-time step there is no `VACUUM`: with `secure_delete` nothing readable is left in free pages; a periodic `VACUUM` would only shrink the file.
 - Files are removed with `unlink`, not overwritten. On APFS (copy-on-write) and SSDs (wear levelling) overwriting a file in place does not reach the original blocks, so it would add no protection; FileVault (checked at startup) is what protects freed blocks.
 - Out of scope: copies in Time Machine backups or APFS snapshots of the Mac.
+
+### Deleting a patient dossier
+
+`DossierService.deleteDossier(id, fingerprint)` (#204, #207) reuses the session deletion of #202:
+
+1. **One transaction:** recompute the delete preview (`deletePreview`). If its fingerprint (SHA-256 over the sorted IDs of exclusively and of shared assigned sessions) no longer matches the one the user confirmed, nothing is deleted and the new preview is returned (`reason: 'changed'`). If an exclusively assigned session is being recorded, nothing is deleted (`'blocked-recording'`). Otherwise the exclusively assigned sessions are marked (`SessionService.markForDeletion` → `deleting_at`) and the dossier row is deleted; its assignments and «recently opened» entry follow via `ON DELETE CASCADE`. After the commit the dossier is gone atomically — no `deleting_at` column for dossiers is needed — and the marked sessions are invisible to every read.
+2. **After the commit:** each marked session is finished with `SessionService.finishDeletion` (abort tasks, remove files and row). If one fails, the result says `incomplete: true` and `finishPendingDeletions()` completes it at the next start (#204 PC 5). Then `wal_checkpoint(TRUNCATE)`; with `secure_delete` no copy of the dossier stays in `.db` or `-wal` (#204 PC 4). A crash between commit and checkpoint is covered by the checkpoint at every start.
+
+Sessions shared with another dossier stay; they only lose this assignment. Tested in `DossierService.test.ts` and, on a real database file with a marker string, in `DossierService.secureDelete.test.ts` (including an interrupted deletion completed by a restart).
+
+### Removing Therascript completely
+
+«TheraScript vollständig entfernen» (Settings → Über, and the native confirmation dialog in `system-handlers.ts`) deletes `~/.therascript/` — including the database with every patient dossier — and the settings folder. Moving only the app to the Bin keeps all data.

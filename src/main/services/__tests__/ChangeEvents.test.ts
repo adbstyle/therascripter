@@ -1,74 +1,109 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-const sendToRenderer = vi.fn()
-vi.mock('../../utils/ipc-helpers', () => ({
-  sendToRenderer: (...args: unknown[]) => sendToRenderer(...args)
+const getAllWindows = vi.fn((): unknown[] => [])
+vi.mock('electron', () => ({
+  BrowserWindow: { getAllWindows: () => getAllWindows() }
 }))
 
-import { notifySessionsChanged } from '../ChangeEvents'
 import {
+  notifyDossiersChanged,
+  notifySessionsChanged,
+  setChangeEventSenderForTests
+} from '../ChangeEvents'
+import {
+  DossiersChangedSchema,
   MAX_CHANGED_IDS,
   SessionsChangedSchema
 } from '../../../shared/validation/change-event-schemas'
 
-const nextTick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
-
-beforeEach(() => {
-  sendToRenderer.mockReset()
-})
+function nextTick(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
+}
 
 describe('ChangeEvents (Epic #192)', () => {
-  it('bündelt alle Meldungen eines Ticks zu einem Event', async () => {
-    notifySessionsChanged()
-    notifySessionsChanged()
-    notifySessionsChanged()
-    expect(sendToRenderer).not.toHaveBeenCalled()
+  const sent: { channel: string; deletedIds: string[] }[] = []
 
-    await nextTick()
-    expect(sendToRenderer).toHaveBeenCalledTimes(1)
-    expect(sendToRenderer).toHaveBeenCalledWith('sessions:changed', { deletedIds: [] })
+  beforeEach(() => {
+    sent.length = 0
+    setChangeEventSenderForTests((channel, data) => sent.push({ channel, ...data }))
   })
 
-  it('sammelt gelöschte IDs ohne Doppel', async () => {
-    notifySessionsChanged(['a'])
-    notifySessionsChanged()
-    notifySessionsChanged(['b', 'a'])
-    await nextTick()
-    expect(sendToRenderer).toHaveBeenCalledTimes(1)
-    expect(sendToRenderer.mock.calls[0][1]).toEqual({ deletedIds: ['a', 'b'] })
+  afterEach(() => {
+    setChangeEventSenderForTests(null)
   })
 
-  it('beginnt nach dem Senden einen neuen Bündel', async () => {
-    notifySessionsChanged(['a'])
+  it('bündelt alle Meldungen eines Ticks zu einem Event pro Kanal, IDs ohne Doppel', async () => {
+    notifyDossiersChanged()
+    notifyDossiersChanged(['d1'])
+    notifyDossiersChanged(['d1', 'd2'])
+    notifySessionsChanged(['s1'])
+    notifySessionsChanged()
+    notifySessionsChanged(['s1'])
+    expect(sent).toEqual([])
+
     await nextTick()
+
+    expect(sent).toEqual([
+      { channel: 'dossiers:changed', deletedIds: ['d1', 'd2'] },
+      { channel: 'sessions:changed', deletedIds: ['s1'] }
+    ])
+  })
+
+  it('sendet bei reinen Änderungen eine leere Liste und beginnt danach neu', async () => {
     notifySessionsChanged()
     await nextTick()
-    expect(sendToRenderer).toHaveBeenCalledTimes(2)
-    expect(sendToRenderer.mock.calls[1][1]).toEqual({ deletedIds: [] })
+    notifySessionsChanged(['s9'])
+    await nextTick()
+    expect(sent).toEqual([
+      { channel: 'sessions:changed', deletedIds: [] },
+      { channel: 'sessions:changed', deletedIds: ['s9'] }
+    ])
   })
 
   it('teilt grosse Löschungen in Events, die das Schema annimmt', async () => {
-    const ids = Array.from({ length: MAX_CHANGED_IDS + 5 }, (_, i) => `s${i}`)
+    const ids = Array.from({ length: MAX_CHANGED_IDS + 500 }, (_, i) => `s${i}`)
     notifySessionsChanged(ids)
+    notifyDossiersChanged(ids)
     await nextTick()
-    expect(sendToRenderer).toHaveBeenCalledTimes(2)
-    for (const [, payload] of sendToRenderer.mock.calls) {
-      expect(SessionsChangedSchema.safeParse(payload).success).toBe(true)
+    expect(sent.map((e) => e.deletedIds.length)).toEqual([
+      MAX_CHANGED_IDS,
+      500,
+      MAX_CHANGED_IDS,
+      500
+    ])
+    for (const { channel, deletedIds } of sent) {
+      const schema = channel === 'sessions:changed' ? SessionsChangedSchema : DossiersChangedSchema
+      expect(schema.safeParse({ deletedIds }).success).toBe(true)
     }
-    const sent = sendToRenderer.mock.calls.flatMap(
-      ([, p]) => (p as { deletedIds: string[] }).deletedIds
-    )
-    expect(sent).toEqual(ids)
+    expect(sent.slice(0, 2).flatMap((e) => e.deletedIds)).toEqual(ids)
   })
 
-  it('bleibt ohne Fenster still (kein Absturz)', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    sendToRenderer.mockImplementation(() => {
-      throw new Error('kein Fenster')
+  describe('Zustellung an die Fenster', () => {
+    beforeEach(() => setChangeEventSenderForTests(null))
+
+    it('sendet an jedes offene Fenster', async () => {
+      const send = vi.fn()
+      getAllWindows.mockReturnValue([{ isDestroyed: () => false, webContents: { send } }])
+      notifyDossiersChanged(['d1'])
+      await nextTick()
+      expect(send).toHaveBeenCalledWith('dossiers:changed', { deletedIds: ['d1'] })
     })
-    notifySessionsChanged()
-    await nextTick()
-    expect(warn).toHaveBeenCalled()
-    warn.mockRestore()
+
+    it('bleibt ohne Fenster still — kein Fehler, keine Warnung', async () => {
+      const warn = vi.spyOn(console, 'warn')
+      const error = vi.spyOn(console, 'error')
+      getAllWindows.mockReturnValue([])
+      notifySessionsChanged()
+      await nextTick()
+      getAllWindows.mockImplementation(() => {
+        throw new Error('Electron fehlt')
+      })
+      notifySessionsChanged()
+      await nextTick()
+      expect(warn).not.toHaveBeenCalled()
+      expect(error).not.toHaveBeenCalled()
+      warn.mockRestore()
+      error.mockRestore()
+    })
   })
 })

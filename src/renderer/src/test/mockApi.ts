@@ -162,6 +162,15 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
       onOpenSettings: on('nav.onOpenSettings'),
       onCommand: on('nav.onCommand')
     },
+    dossiers: {
+      list: vi.fn().mockResolvedValue([]),
+      get: vi.fn().mockResolvedValue(null),
+      create: vi.fn(),
+      update: vi.fn(),
+      deletePreview: vi.fn().mockResolvedValue(null),
+      delete: vi.fn(),
+      onChanged: on('dossiers.onChanged')
+    },
     viewMode: {
       initial: 'pseudonymized',
       set: vi.fn().mockResolvedValue(undefined)
