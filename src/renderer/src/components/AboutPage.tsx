@@ -149,8 +149,10 @@ export default function AboutPage(): React.JSX.Element {
         <div className="rounded-lg border border-border bg-surface-1 p-4">
           <h4 className="mb-1 text-sm font-medium text-text-secondary">Kopieren</h4>
           <p className="text-sm text-text-secondary">
-            Kopiert wird immer die gewählte Ansicht: «Pseudonymisiert» mit Platzhaltern wie [PERSON
-            1], «Klartext» mit den Originalnamen.
+            Kopiert wird immer die gewählte Ansicht. In «Pseudonymisiert» erscheinen
+            pseudonymisierte Angaben als Platzhalter wie [PERSON 1]; was die Pseudonymisierung nicht
+            erfasst hat, etwa übersehene oder selbst getippte Namen, bleibt stehen. In «Klartext»
+            stehen an Stelle der Platzhalter die Originale.
           </p>
           <p className="mt-1 text-sm text-text-secondary">
             Kopierter Text verlässt Therascript über die Zwischenablage Ihres Macs. Andere Apps
