@@ -60,6 +60,11 @@ export interface Session {
    */
   titlePlain?: string
   summaryPlain?: string | null
+  /**
+   * Epic #192 (#205) — date a PDF document was written (ISO day, Migration
+   * 020). NULL: not set — the import date counts. Always NULL for recordings.
+   */
+  documentDate?: string | null
 }
 
 export interface CreateSessionInput {

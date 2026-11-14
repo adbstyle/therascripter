@@ -46,6 +46,8 @@ export interface SessionRow {
   /** Klartext computed on write (plainTexts.ts); NULL = same as title/summary. */
   title_plain: string | null
   summary_plain: string | null
+  /** Migration 020 (#205) — ISO day the PDF was written. */
+  document_date: string | null
 }
 
 /** Columns whose change can change the stored Klartext (Issue #203). */
@@ -114,7 +116,8 @@ export function rowToSession(row: SessionRow): Session {
     titleEntitySnapshot: parsePlaceholderSnapshot(row.title_entity_snapshot),
     summaryEntitySnapshot: parsePlaceholderSnapshot(row.summary_entity_snapshot),
     titlePlain: row.title_plain ?? row.title,
-    summaryPlain: summary == null ? null : (row.summary_plain ?? summary)
+    summaryPlain: summary == null ? null : (row.summary_plain ?? summary),
+    documentDate: row.document_date ?? null
   }
 }
 
@@ -131,7 +134,7 @@ export const SESSION_LIST_COLUMNS = `s.id, s.title, s.type, s.status, s.audio_pa
   s.anonymization_count, s.summary, s.summary_model_id, s.summarized_at,
   s.planned_steps, s.retry_count, s.pdf_has_scanned_pages,
   NULL AS processed_with_models,
-  s.title_plain, s.summary_plain`
+  s.title_plain, s.summary_plain, s.document_date`
 
 export class SessionRepository {
   constructor(private db: Database.Database) {}
