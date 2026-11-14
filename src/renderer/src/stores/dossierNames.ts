@@ -6,7 +6,9 @@ import { ambiguousDossierNames } from '../utils/dossierFormat'
  * Dossiers unterscheidbar machen, wo sonst nur der Name steht — «Zuletzt
  * geöffnet», Plaketten, Toasts). Eine Quelle für die ganze App: geladen beim
  * ersten Abonnenten, nachgeladen bei jedem `dossiers:changed`, freigegeben,
- * wenn niemand mehr zuhört. Hält nur Vergleichsschlüssel, keine Namen.
+ * wenn niemand mehr zuhört (dann wird der Stand geleert). Hält die
+ * normalisierten Namen (Nachname + Vorname nach `normalizeDossierKey`) der
+ * mehrfach vergebenen Namen — keine weiteren Felder, keine IDs.
  */
 
 const EMPTY: ReadonlySet<string> = new Set()
@@ -55,6 +57,7 @@ function subscribe(listener: () => void): () => void {
       offChanged?.()
       offChanged = null
       generation++
+      snapshot = EMPTY
     }
   }
 }
