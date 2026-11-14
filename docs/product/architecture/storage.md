@@ -25,6 +25,7 @@ Migrations are numbered SQL files in `src/main/db/migrations/`. At startup, `ini
 | `003-add-review-at.sql` | 3 | Adds `review_at` column to `sessions`; backfills existing review sessions |
 | … | … | (see `src/main/db/migrations/index.ts`) |
 | `017-session-deleting-at.sql` | 17 | Adds `deleting_at` to `sessions` — restart-proof deletion (#202); existing rows stay `NULL` |
+| `018-app-maintenance.sql` | 18 | Adds `app_maintenance(task, done_at)` and records the one-time `secure-delete-vacuum` as pending (#202) |
 
 ---
 
@@ -220,6 +221,9 @@ If a file cannot be removed (anything but «does not exist»), the row stays mar
 - `secure_delete = ON` makes SQLite overwrite deleted rows and freed pages (including overflow pages of large entity maps) with zeros instead of leaving them as free space.
 - In WAL mode the zeroed pages first land in the `-wal` file, while older frames there and the main file may still hold the content. The `wal_checkpoint(TRUNCATE)` after every deletion writes the zeroed pages into `therascript.db` and truncates the WAL to zero bytes.
 - `SessionService.secureDelete.test.ts` checks this on a real database file: a marker string in title, summary, error message and a multi-page entity map is found in neither `.db` nor `-wal` after the deletion; a control without `secure_delete` shows that the search would find it.
-- `VACUUM` is not needed for this (and no longer runs): with `secure_delete` nothing readable is left in free pages; `VACUUM` would only shrink the file.
+- `secure_delete` only covers content freed from now on. Databases of earlier versions may still hold old row versions (entity maps with real names, sessions deleted by the 30-day rule) in free pages. `runStartupMaintenance()` (`src/main/db/maintenance.ts`, called by `initDatabase` after the migrations) therefore runs **one** `VACUUM` after the update: migration 018 records the step as pending, `done_at` is set only after the `VACUUM` succeeded, so an interrupted start repeats it. `VACUUM` cannot run inside a transaction, which is why it is not a migration. A failing `VACUUM` (e.g. disk full) is logged and retried at the next start; the app still starts. Tested in `maintenance.test.ts` (legacy file without `secure_delete`, marker gone after `initDatabase`, second start does not vacuum again).
+- `runStartupMaintenance()` also runs `wal_checkpoint(TRUNCATE)` at every start. This finishes a checkpoint that was blocked (`busy ≠ 0` — logged by `SessionService` after a deletion) and closes the gap «crash between commit of the deletion and checkpoint».
+- After every executor run `TaskQueueService` calls `SessionService.removeFilesIfDeleted()`: if the session was deleted meanwhile, files an executor wrote after the abort are removed again with the same code as the deletion (`PDFExtractionExecutor` also checks the signal before writing).
+- Apart from that one-time step there is no `VACUUM`: with `secure_delete` nothing readable is left in free pages; a periodic `VACUUM` would only shrink the file.
 - Files are removed with `unlink`, not overwritten. On APFS (copy-on-write) and SSDs (wear levelling) overwriting a file in place does not reach the original blocks, so it would add no protection; FileVault (checked at startup) is what protects freed blocks.
 - Out of scope: copies in Time Machine backups or APFS snapshots of the Mac.

@@ -9,6 +9,10 @@ Therascript releases are built as macOS DMG installers targeting Apple Silicon (
 
 The end-user install guide (`scripts/release-install-guide.md`) is **always** appended to the release notes, regardless of how the notes were produced. The same guide appears on the website (`website/installation.html`, linked from every download button), in README.md ("Installation") and in short form in the DMG window (`build/dmg-background.svg`, rendered via `npm run dmg:background`) and on the website's start page (`website/index.html`, section «In 3 Schritten startklar»). Keep steps and facts (macOS floor, model size, disk space) identical at all five places.
 
+## Integration Branches and the Website
+
+`publish-website.yml` publishes `website/` on **every push to `main`** that touches it — not on a release. Changes whose public statements must only appear together with the app version that implements them (e.g. the retention statements of Epic #192 / Story #202, AK 8) are therefore collected on an integration branch (`epic/192`). Merge it into `main` **immediately before** running `scripts/release.sh` for that version, and release right after the merge — otherwise website and README describe behaviour the downloadable app does not have yet. README follows the same rule (it is read on `main`).
+
 ## Release Flow
 
 ### scripts/release.sh
