@@ -107,8 +107,10 @@ export class WhisperService implements TaskExecutor {
     const modelPath = this.getModelPath()
 
     if (!existsSync(binaryPath)) {
+      // Entwicklung: scripts/setup-whisper.sh. Der Pfad landet im Log; die
+      // Sitzungskarte zeigt die Meldung ohne Pfad (stripAbsolutePaths)
       throw new Error(
-        `whisper-cli binary nicht gefunden: ${binaryPath}. Bitte führen Sie scripts/setup-whisper.sh aus.`
+        `whisper-cli binary nicht gefunden: ${binaryPath}. Bitte prüfen Sie die Installation.`
       )
     }
 

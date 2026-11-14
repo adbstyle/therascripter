@@ -12,6 +12,7 @@ import { AUDIO_PIPELINE, PDF_PIPELINE } from '../../shared/constants/pipeline'
 import { getActiveModelId } from './ModelDownloadService'
 import { captureProcessedModels } from './ProvenanceCapture'
 import { isToolBlockedMessage } from '../../shared/tool-blocked'
+import { stripAbsolutePaths } from '../utils/userFacingError'
 
 // Issue #80 / DR-5: tasks[] is the source of truth for "current step".
 // SessionStatus only carries lifecycle phase (queued / processing / review / error / recording).
@@ -834,11 +835,15 @@ export class TaskQueueService {
       console.log(`[TaskQueue] Cancelled ${cancelled} pending tasks for session ${task.sessionId}`)
     }
 
+    // Sichtbar ohne absolute Pfade (Benutzername, Installationsort); die
+    // vollständige Meldung steht im Log und in der Task-Zeile
+    const visibleMessage = stripAbsolutePaths(errorMessage) || 'Verarbeitung fehlgeschlagen.'
+
     // Set session to error state
     try {
       this.sessionService.updateSession(task.sessionId, {
         status: 'error',
-        errorMessage
+        errorMessage: visibleMessage
       })
     } catch (err) {
       console.error(`[TaskQueue] Failed to set session ${task.sessionId} to error state:`, err)
@@ -848,7 +853,7 @@ export class TaskQueueService {
     sendToRenderer('task:error', {
       sessionId: task.sessionId,
       taskType: task.type,
-      error: errorMessage
+      error: visibleMessage
     })
   }
 
