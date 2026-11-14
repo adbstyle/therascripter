@@ -47,7 +47,9 @@ function reviewData(): ReviewData {
     titleSnapshot: null,
     processedWithModels: null,
     reviewAt: null,
-    audioStats: null
+    audioStats: null,
+    createdAt: '2026-11-10T09:00:00.000Z',
+    documentDate: null
   }
 }
 
@@ -70,7 +72,16 @@ function makeApi() {
     },
     tasks: { onCompleted: vi.fn(() => () => {}) },
     blocklist: { add: vi.fn(), delete: vi.fn() },
-    sessions: { delete: vi.fn(), list: vi.fn().mockResolvedValue([]) }
+    dossiers: {
+      list: vi.fn().mockResolvedValue([]),
+      listForSession: vi.fn().mockResolvedValue([]),
+      onChanged: vi.fn(() => () => {})
+    },
+    sessions: {
+      delete: vi.fn(),
+      list: vi.fn().mockResolvedValue([]),
+      onChanged: vi.fn(() => () => {})
+    }
   }
 }
 

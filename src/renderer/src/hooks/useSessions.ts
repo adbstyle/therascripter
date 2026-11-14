@@ -1,9 +1,10 @@
 import { useCallback } from 'react'
 import type { Session } from '../../../shared/types'
+import type { SessionListItem } from '../../../shared/types/Dossier'
 import { useLiveQuery, type LiveQueryEvent } from './useLiveQuery'
 
 interface UseSessionsResult {
-  sessions: Session[]
+  sessions: SessionListItem[]
   loading: boolean
   error: string | null
   refresh: () => Promise<void>
@@ -11,16 +12,20 @@ interface UseSessionsResult {
   renameSession: (sessionId: string, title: string) => Promise<Session | null>
 }
 
-const fetchSessions = (): Promise<Session[]> => window.api.sessions.list()
+const fetchSessions = (): Promise<SessionListItem[]> => window.api.sessions.list()
 
 // Der Main-Prozess meldet jede Änderung an einer Sitzung (angelegt, Status,
 // Titel, Zusammenfassung, gelöscht) gebündelt über `sessions:changed`
 // (Epic #192). Der Fortschritt innerhalb eines Schritts kommt weiterhin über
 // die Task-Events (useTaskProgress), die Liste muss dafür nicht neu laden.
-const SESSION_EVENTS: LiveQueryEvent[] = [(callback) => window.api.sessions.onChanged(callback)]
+// `dossiers:changed`: die Plaketten zeigen Dossier-Namen (#205 AK 5).
+const SESSION_EVENTS: LiveQueryEvent[] = [
+  (callback) => window.api.sessions.onChanged(callback),
+  (callback) => window.api.dossiers.onChanged(callback)
+]
 
 export function useSessions(): UseSessionsResult {
-  const query = useLiveQuery(fetchSessions, SESSION_EVENTS, [] as Session[])
+  const query = useLiveQuery(fetchSessions, SESSION_EVENTS, [] as SessionListItem[])
   const { setData } = query
 
   const deleteSession = useCallback(
@@ -38,7 +43,9 @@ export function useSessions(): UseSessionsResult {
     async (sessionId: string, title: string): Promise<Session | null> => {
       const updated = await window.api.sessions.rename(sessionId, title)
       if (updated) {
-        setData((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+        setData((prev) =>
+          prev.map((s) => (s.id === updated.id ? { ...updated, dossiers: s.dossiers } : s))
+        )
       }
       return updated
     },

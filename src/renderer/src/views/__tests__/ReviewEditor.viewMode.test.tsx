@@ -55,7 +55,9 @@ function reviewData(): ReviewData {
     titleSnapshot: { '[PERSON 1]': 'Ruth Gerber' },
     processedWithModels: null,
     reviewAt: null,
-    audioStats: null
+    audioStats: null,
+    createdAt: '2026-11-10T09:00:00.000Z',
+    documentDate: null
   }
 }
 
@@ -87,7 +89,13 @@ function makeApi(initial: ViewMode) {
     },
     tasks: { onCompleted: vi.fn(() => () => {}) },
     blocklist: { add: vi.fn(), delete: vi.fn() },
+    dossiers: {
+      list: vi.fn().mockResolvedValue([]),
+      listForSession: vi.fn().mockResolvedValue([]),
+      onChanged: vi.fn(() => () => {})
+    },
     sessions: {
+      onChanged: vi.fn(() => () => {}),
       delete: vi.fn(),
       list: vi.fn().mockResolvedValue([
         {
