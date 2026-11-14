@@ -17,7 +17,10 @@ import {
   QueuePositionsDataSchema
 } from '../shared/validation/task-schemas'
 import type { AppUpdateState } from '../shared/types/AppUpdate'
-import type { ModelGroup, DiarizationPipeline } from '../shared/validation/model-catalog-schemas'
+import type {
+  SlotModelGroup,
+  DiarizationPipeline
+} from '../shared/validation/model-catalog-schemas'
 import { SummaryChangedSchema } from '../shared/validation/summary-schemas'
 import { ToolHealthStateSchema } from '../shared/validation/tool-health-schemas'
 import { normalizeViewMode, type ViewMode } from '../shared/types/ViewMode'
@@ -199,13 +202,14 @@ const api: IpcApi = {
     }
   },
   modelCatalog: {
-    list: (group: ModelGroup) => ipcRenderer.invoke('modelCatalog:list', { group }),
+    list: (group: SlotModelGroup) => ipcRenderer.invoke('modelCatalog:list', { group }),
     listAsr: () => ipcRenderer.invoke('modelCatalog:listAsr'),
     download: (id: string) => ipcRenderer.invoke('modelCatalog:download', { id }),
     delete: (id: string) => ipcRenderer.invoke('modelCatalog:delete', { id }),
-    setActive: (group: ModelGroup, id: string) =>
+    setActive: (group: SlotModelGroup, id: string) =>
       ipcRenderer.invoke('modelCatalog:setActive', { group, id }),
-    clearActive: (group: ModelGroup) => ipcRenderer.invoke('modelCatalog:clearActive', { group }),
+    clearActive: (group: SlotModelGroup) =>
+      ipcRenderer.invoke('modelCatalog:clearActive', { group }),
     cancelDownload: () => ipcRenderer.invoke('modelCatalog:cancelDownload')
   },
   pipeline: {

@@ -160,7 +160,7 @@ package_ner() {
   echo "  -> $NER_OUTPUT_NAME"
 }
 
-# Suchmodell (Archiv wird INS Modellverzeichnis search/embeddinggemma-2-text-v1/
+# Suchmodell (Archiv wird INS Modellverzeichnis search-embeddinggemma-2-text-v1/
 # entpackt, Dateien liegen deshalb auf oberster Ebene des Tars).
 #
 # Reproduzierbar, damit ein erneutes Packen denselben sha256 ergibt und der

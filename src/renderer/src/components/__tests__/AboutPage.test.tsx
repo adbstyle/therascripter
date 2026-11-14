@@ -21,7 +21,10 @@ describe('AboutPage', () => {
 
     expect(screen.getByText('whisper.cpp')).toBeInTheDocument()
     expect(screen.getByText('Gemma 4 E2B')).toBeInTheDocument()
-    expect(screen.getByText(/© Google LLC/)).toHaveTextContent('Apache License 2.0')
+    for (const google of screen.getAllByText(/© Google LLC/)) {
+      expect(google).toHaveTextContent('Apache License 2.0')
+    }
+    expect(screen.getByText('EmbeddingGemma 2')).toBeInTheDocument()
     expect(screen.queryByText('Modelle von Drittanbietern')).not.toBeInTheDocument()
   })
 

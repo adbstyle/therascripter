@@ -21,7 +21,7 @@
 #                                                  #   Upload (Default ~/.therascript/models/ner)
 #   ... --search-model-dir <pfad>                  # Such-Checks gegen ein entpacktes
 #                                                  #   Text-Artefakt (Default ~/.therascript/
-#                                                  #   models/search/embeddinggemma-2-text-v1)
+#                                                  #   models/search-embeddinggemma-2-text-v1)
 #   ... --require-search                           # fehlendes Suchmodell ist ein Fehler
 #                                                  #   (siehe «Such-Checks» unten)
 #
@@ -35,7 +35,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TARGET="/Applications/Therascript.app"
 MODE="app"
 NER_MODEL_DIR="$HOME/.therascript/models/ner"
-SEARCH_MODEL_DIR="$HOME/.therascript/models/search/embeddinggemma-2-text-v1"
+SEARCH_MODEL_DIR="$HOME/.therascript/models/search-embeddinggemma-2-text-v1"
 SEARCH_MODEL_EXPLICIT=false
 REQUIRE_SEARCH=false
 while [ $# -gt 0 ]; do

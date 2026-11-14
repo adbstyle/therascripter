@@ -4,7 +4,9 @@ import { createHash } from 'crypto'
 import { mkdtempSync, readFileSync, writeFileSync, existsSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { downloadFile, verifyFileSha256 } from '../DownloadService'
+import { execFileSync } from 'child_process'
+import { mkdirSync } from 'fs'
+import { downloadFile, extractTarGz, verifyFileSha256 } from '../DownloadService'
 
 // Tests laufen gegen einen echten lokalen HTTP-Server — die Redirect-,
 // Resume- und Abort-Semantik ist genau das, was Mocks nicht beweisen können.
@@ -225,5 +227,29 @@ describe('DownloadService', () => {
       expect(result.success).toBe(true)
       expect(result.sha256).toBeUndefined()
     })
+  })
+})
+
+describe('extractTarGz', () => {
+  let dir: string
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'extract-test-'))
+    mkdirSync(join(dir, 'src'))
+    writeFileSync(join(dir, 'src', 'READY'), 'ok')
+    execFileSync('tar', ['-czf', join(dir, 'a.tar.gz'), '-C', join(dir, 'src'), 'READY'])
+    mkdirSync(join(dir, 'out'))
+  })
+  afterEach(() => rmSync(dir, { recursive: true, force: true }))
+
+  it('entpackt ohne Signal und löscht das Archiv', async () => {
+    expect(await extractTarGz(join(dir, 'a.tar.gz'), join(dir, 'out'))).toEqual({ success: true })
+    expect(existsSync(join(dir, 'out', 'READY'))).toBe(true)
+    expect(existsSync(join(dir, 'a.tar.gz'))).toBe(false)
+  })
+
+  it('mit gesetztem Abbruch-Signal: Aborted, Archiv bleibt für den nächsten Versuch', async () => {
+    const result = await extractTarGz(join(dir, 'a.tar.gz'), join(dir, 'out'), { aborted: true })
+    expect(result).toEqual({ success: false, error: 'Aborted' })
+    expect(existsSync(join(dir, 'a.tar.gz'))).toBe(true)
   })
 })

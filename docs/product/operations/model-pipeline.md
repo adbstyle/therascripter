@@ -4,13 +4,16 @@ This document describes how ML models are built, packaged, and published to Clou
 
 ## Overview
 
-Therascript ships three required ML models that are downloaded on first launch (~1.7 GB total; source of truth for URLs, sizes and hashes: `src/shared/model-catalog.ts`):
+Therascript ships four required ML models that are downloaded on first launch (~2.1 GB total, ~1.7 GB as long as the search model is not yet published; source of truth for URLs, sizes and hashes: `src/shared/model-catalog.ts`):
 
 | Model | Archive | Size |
 |-------|---------|------|
 | Whisper Large V3 Turbo (Q5_0) | `whisper-ggml-large-v3-turbo-q5_0.bin` | ~0.6 GB |
 | pyannote suite (3.1 + community-1 + sub-models) | `pyannote-suite.tar.gz` | ~0.06 GB |
 | flair/ner-german-large (fp16, Issue #131) | `flair-ner-german-large-v3.tar.gz` | ~1.0 GB |
+| EmbeddingGemma 2 text encoder (search, Epic #192) — `published: false` until uploaded | `embeddinggemma-2-text-v1.tar.gz` | ~0.43 GB (~0.58 GB extracted) |
+
+The search model is required but `deferrable`: first launch downloads it last, a failure there does not block the app, and installs without it (existing users after the update) get it from the `SearchModelProvisioner` in the background (`docs/product/features/model-management.md`, «Search model»).
 
 Older artifacts (`flair-ner-german-large.tar.gz`, `-v2.tar.gz`, `pyannote-models.tar.gz`) stay on R2 because shipped app versions verify first-launch downloads against their built-in hashes.
 
@@ -96,7 +99,7 @@ HF_HOME=<hf-cache> PYTHONDONTWRITEBYTECODE=1 python_sidecar/standalone/bin/pytho
 scripts/package-models.sh search /tmp/eg2-export
 ```
 
-`PACKAGE_OUTPUT_DIR=<dir>` writes somewhere else than `r2-upload/`. Two runs over the same snapshot produce the same sha256 (verified: revision `f9972ac…`, `embeddinggemma-2-text-v1.tar.gz`, 430'211'881 bytes, sha256 `49e225895475004c699f08390f822e92a1fa8be4882e03e50d44c50f3badf4f8`). The archive is extracted into `search/embeddinggemma-2-text-v1/`; `READY` is the catalog's `checkPath`.
+`PACKAGE_OUTPUT_DIR=<dir>` writes somewhere else than `r2-upload/`. Two runs over the same snapshot produce the same sha256 (verified: revision `f9972ac…`, `embeddinggemma-2-text-v1.tar.gz`, 430'211'881 bytes, sha256 `49e225895475004c699f08390f822e92a1fa8be4882e03e50d44c50f3badf4f8`). The archive is extracted into `search-embeddinggemma-2-text-v1/`; `READY` is the catalog's `checkPath`.
 
 Verify before uploading:
 
@@ -130,6 +133,21 @@ Model-only republish between releases: `scripts/publish-manifest.sh --from-catal
 2. Verify the artifact via CDN (size and hash must match the catalog):
    `curl -sI https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/<file> | grep -i content-length` and `curl -s https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/<file> | shasum -a 256`.
 3. The manifest goes live with the next `scripts/release.sh` run. Check it afterwards with `curl https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/manifest.json | jq .`. `manifest.json` is gitignored, so there is nothing to commit.
+
+## Publishing a new model (`published: false` → live)
+
+A catalog entry can exist with its real hash and size before the artifact is on R2: `published: false` hides it from every runtime access (`isPublished` in `src/shared/model-catalog.ts`). The app does not download it, first launch is unchanged, Settings shows no row (the search model shows «Noch nicht verfügbar»), and `buildManifest` / `manifest-from-catalog.ts` leave it out without aborting. A copy placed by hand at its `checkPath` (or, in development, `THERASCRIPT_SEARCH_MODEL_DIR`) still counts as installed. The search model `embeddinggemma-2-text` is in this state.
+
+Steps to publish it (product owner only — nothing goes to R2 otherwise). **Mandatory before `epic/192` is merged into `main`:**
+
+1. **Upload** exactly the file whose values are in the catalog: `scripts/upload-r2.sh r2-upload/embeddinggemma-2-text-v1.tar.gz`. Never a full `package-models.sh` run (new gzip timestamps → new hashes for the other artifacts).
+2. **Check the uploaded object**, not the local file, against the catalog (`sizeBytes` `430211881`, `sha256` `49e225895475004c699f08390f822e92a1fa8be4882e03e50d44c50f3badf4f8`):
+   `curl -sI https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/embeddinggemma-2-text-v1.tar.gz | grep -i content-length` and `curl -s https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/embeddinggemma-2-text-v1.tar.gz | shasum -a 256`. If they differ, put the values of the uploaded object into the catalog (model-hash-sync gotcha), never the other way round.
+3. **Flip the switch:** remove `published: false` from the entry in `src/shared/model-catalog.ts` (absent = published). Adjust the tests that pin the switch (`src/shared/__tests__/update-manifest.test.ts`, «der echte Katalog führt das Suchmodell … unveröffentlicht»), run `npm run typecheck && npm test`. The public texts (README, website, install guide) describe this target state on `epic/192` already, which is why the switch must be flipped **before** `epic/192` is merged into `main` (`docs/product/operations/release.md`, «Integration Branches»); until then texts and app disagree. `FirstLaunchScreen` computes its total from the catalog and shows ~2.1 GB from now on. `release.sh` refuses to release while a required model is `published: false` (`scripts/check-unpublished-models.ts`, override only with `--allow-unpublished-models "<reason>"`).
+4. **Release** with `scripts/release.sh`. Its manifest step now HEAD-checks the artifact and publishes the entry with `required: true` and its layout, so apps from #167 on get it in the same update as `kind: 'new'`; the release's own `SearchModelProvisioner` loads it in the background for everyone else. Also set `--require-search` in `release.sh` for the smoke step (see the search-service gotcha in `CLAUDE.md`).
+5. After the release: `curl https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/manifest.json | jq '.models[] | select(.id == "embeddinggemma-2-text")'`.
+
+What only becomes testable after step 1: the first-launch download with search model (~2.1 GB), the background download of an existing install after the update, the update path from the previous version (search model as `kind: 'new'`), and the manifest HEAD check.
 
 ## torchcodec shim
 

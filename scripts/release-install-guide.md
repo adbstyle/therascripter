@@ -10,7 +10,7 @@
 
 ## 📦 Installationsanleitung
 
-**Systemvoraussetzungen:** Mac mit Apple-Chip (M1 oder neuer), macOS 26 (Tahoe) oder neuer, mindestens 8 GB Arbeitsspeicher, ca. 5 GB freier Speicherplatz. Beim ersten Start lädt Therascript die Sprachmodelle herunter (~1.7 GB), dafür braucht es eine Internetverbindung.
+**Systemvoraussetzungen:** Mac mit Apple-Chip (M1 oder neuer), macOS 26 (Tahoe) oder neuer, mindestens 8 GB Arbeitsspeicher, ca. 5 GB freier Speicherplatz (Sprachmodelle ~2.4 GB, dazu der Suchindex, bis ~0.6 GB bei 2'000 Sitzungen). Beim ersten Start lädt Therascript die Sprachmodelle herunter (~2.1 GB), dafür braucht es eine Internetverbindung.
 
 Ausführliche Anleitung mit Erklärungen: https://adbstyle.github.io/therascripter/installation.html
 

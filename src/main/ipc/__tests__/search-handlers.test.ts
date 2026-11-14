@@ -3,6 +3,8 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() } }))
 
 import {
+  handleSearchOpen,
+  handleSearchRetryModel,
   handleSearchQuery,
   handleSearchRecentClear,
   handleSearchRecentList,
@@ -57,5 +59,17 @@ describe('search IPC handlers', () => {
     expect(() => handleSearchRecentRemember(s, { query: '' })).toThrow()
     handleSearchRecentClear(s)
     expect(s.clearRecent).toHaveBeenCalled()
+  })
+
+  it('search:open und search:retryModel liefern den Stand des Suchmodells (#210 AK 4/5)', async () => {
+    const availability = {
+      get: vi.fn(() => ({ model: { status: 'downloading' as const, progress: 12 } })),
+      retryModel: vi.fn(async () => ({ model: { status: 'ready' as const } }))
+    }
+    expect(handleSearchOpen(availability)).toEqual({
+      model: { status: 'downloading', progress: 12 }
+    })
+    expect(await handleSearchRetryModel(availability)).toEqual({ model: { status: 'ready' } })
+    expect(availability.retryModel).toHaveBeenCalledTimes(1)
   })
 })

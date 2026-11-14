@@ -19,15 +19,16 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 - **Updates in der App** — signierte Update-Beschreibung (Ed25519) auf Cloudflare R2; neue App-Versionen und neue Fassungen der Sprachmodelle kommen als **ein** Update: im Hintergrund geladen, geprüft und beim Beenden, nach 10 min Leerlauf oder auf Klick gemeinsam installiert, mit einem Neustart (abschaltbar; scheitert ein Teil, bleibt alles beim bisherigen Stand)
 - **Datenschutz** — keine Übermittlung von Sitzungsinhalten; Renderer ohne Netzwerkzugriff (CSP `connect-src 'none'`), Netzwerk nur im Main-Prozess für Modelle und Versionsprüfung, Electron Fuses gehärtet, FileVault-Prüfung
 - **System-Tray** — App läuft im Hintergrund weiter, Aufnahme über Menüleisten-Icon stoppbar
-- **Aufbewahrung** — Der Text von Sitzungen und PDF-Dokumenten bleibt erhalten, bis Sie ihn selbst löschen. Audioaufnahmen und Original-PDFs werden 24 Stunden nach erfolgreicher Verarbeitung gelöscht; schlägt die Verarbeitung fehl, bleiben sie erhalten, bis Sie die Sitzung selbst löschen. Inhalte mit Aufbewahrungspflicht gehören weiterhin in die rechtlich führende Praxissoftware. Beim Löschen einer Sitzung entfernt die App alle zugehörigen Daten aus ihren Dateien (nicht aus Backups des Macs)
+- **Aufbewahrung** — Der Text von Sitzungen und PDF-Dokumenten bleibt erhalten, bis Sie ihn selbst löschen. Audioaufnahmen und Original-PDFs werden 24 Stunden nach erfolgreicher Verarbeitung gelöscht; schlägt die Verarbeitung fehl, bleiben sie erhalten, bis Sie die Sitzung selbst löschen. Inhalte mit Aufbewahrungspflicht gehören weiterhin in die rechtlich führende Praxissoftware. Beim Löschen einer Sitzung entfernt die App alle zugehörigen Daten aus ihren Dateien (nicht aus Backups des Macs), auch ihre Einträge im Suchindex. Der Suchindex liegt nur lokal auf dem Mac
 
 ## Systemvoraussetzungen
 
 - macOS 26 (Tahoe) oder neuer (die mitgelieferte Metal-GPU-Bibliothek für die Spracherkennung wurde gegen das macOS-26-SDK gebaut; eine niedrigere Untergrenze ist als [Issue #97](https://github.com/adbstyle/therascripter/issues/97) erfasst)
 - Mac mit Apple-Chip (M1 oder neuer)
 - Mindestens 8 GB RAM
-- ~5 GB freier Speicherplatz (App ~1 GB + ML-Modelle ~1.8 GB; der Erststart prüft 5 GB für
-  Download und Entpacken; zusätzlich ~3.4 GB optional für Zusammenfassung)
+- ~5 GB freier Speicherplatz (App ~1 GB + ML-Modelle ~2.4 GB inkl. Suchmodell; dazu der
+  Suchindex, bis ~0.6 GB bei 2'000 Sitzungen; der Erststart prüft 5 GB für Download und
+  Entpacken; zusätzlich ~3.4 GB optional für Zusammenfassung)
 
 ## Installation
 
@@ -36,7 +37,7 @@ Ausführliche Anleitung mit Erklärungen: [adbstyle.github.io/therascripter/inst
 1. [`Therascript.dmg` herunterladen](https://github.com/adbstyle/therascripter/releases/latest/download/Therascript.dmg), doppelklicken und Therascript auf den Ordner **Programme** ziehen.
 2. Therascript im Ordner **Programme** öffnen. macOS meldet, Apple könne nicht überprüfen, ob die App frei von Schadsoftware ist. Auf **Fertig** klicken, nicht auf «In den Papierkorb legen».
 3. Programm-Freigabe erteilen: direkt danach in **Systemeinstellungen → Datenschutz & Sicherheit** ganz nach unten scrollen, beim Hinweis zu Therascript auf **Dennoch öffnen** klicken und mit Passwort oder Touch ID bestätigen. macOS bietet die Freigabe nur kurze Zeit nach dem blockierten Start an. Fehlt der Hinweis, Therascript erneut öffnen (Schritt 2) und gleich danach zurückkehren.
-4. Beim ersten Start lädt Therascript die Sprachmodelle herunter (~1.7 GB; das Zusammenfassungs-Modell ist optional und kann später nachgeladen werden).
+4. Beim ersten Start lädt Therascript die Sprachmodelle herunter (~2.1 GB inkl. Suchmodell; das Zusammenfassungs-Modell ist optional und kann später nachgeladen werden).
 
 **Warum die Programm-Freigabe?** Apple bestätigt Apps nur gegen eine jährliche Gebühr. Therascript ist kostenlos und quelloffen und verzichtet auf diese Beglaubigung. Die Freigabe gilt für die ganze App samt der eingebauten Werkzeuge für Transkription, Sprechererkennung, Pseudonymisierung, Texterkennung und Zusammenfassung. Niemand bestätigt unabhängig, dass die heruntergeladene Datei vom Projekt stammt: Laden Sie Therascript nur über die Website oder die [Release-Seite](https://github.com/adbstyle/therascripter/releases).
 
@@ -50,7 +51,7 @@ Ausführliche Anleitung mit Erklärungen: [adbstyle.github.io/therascripter/inst
 
 Aufnahmen, Transkripte, PDFs und Zusammenfassungen übermittelt Therascript nie; sie verlassen den Mac nur, wenn man sie selbst kopiert. Mit dem Internet verbindet sich Therascript nur in drei Fällen:
 
-- **Sprachmodelle herunterladen:** bei der Ersteinrichtung, beim Hinzufügen eines Modells in den Einstellungen und mit Updates: neue Fassungen der installierten Modelle und Modelle, die eine neue Version braucht, lädt Therascript automatisch zusammen mit dem Update; nach dem Ausschalten der automatischen Updates (Einstellungen → Updates) nur auf Klick.
+- **Sprachmodelle herunterladen:** bei der Ersteinrichtung, beim Hinzufügen eines Modells in den Einstellungen und mit Updates: neue Fassungen der installierten Modelle und Modelle, die eine neue Version braucht, lädt Therascript automatisch zusammen mit dem Update; nach dem Ausschalten der automatischen Updates (Einstellungen → Updates) nur auf Klick. Fehlt das Suchmodell (~0.43 GB; z. B. nach dem Update von einer Version ohne Suche oder wenn der Download bei der Ersteinrichtung scheiterte), lädt Therascript es selbständig im Hintergrund nach, auch wenn die automatischen Updates ausgeschaltet sind, und versucht es bei einem Fehlschlag später erneut; bis dahin ist nur die Suche nach Bedeutung nicht verfügbar.
 - **Nach neuen Versionen suchen:** beim Start, danach alle 4 Stunden und auf Klick unter Einstellungen → Updates.
 - **Neue Versionen herunterladen:** automatisch, sobald eine erscheint; nach dem Ausschalten der automatischen Updates (Einstellungen → Updates) nur auf Klick.
 

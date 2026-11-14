@@ -59,6 +59,7 @@ usage() {
 Usage: scripts/release.sh [--bump patch|minor|major | --version X.Y.Z]
                           [--notes "text" | --notes-file <pfad>]
                           [--override-release-check "<Begründung>"]
+                          [--allow-unpublished-models "<Begründung>"]
 
 Ohne Argumente: interaktiver Modus (Fragen wie bisher).
 Mit --bump oder --version: nicht-interaktiv, keine Rückfragen; läuft nur auf
@@ -73,6 +74,10 @@ Aufnahme und PDF bis zur Zusammenfassung. Ist sie rot, bricht der Release ab.
 --override-release-check gibt einen roten Lauf bewusst frei; die Begründung
 landet in der Tag-Nachricht und im Release-Text. Interaktiv fragt das Skript
 bei Rot nach einer Begründung.
+
+Vorbedingung: kein Pflichtmodell im Katalog trägt noch published: false
+(scripts/check-unpublished-models.ts) — README und Website beschreiben es
+schon. --allow-unpublished-models übersteuert das bewusst mit Begründung.
 EOF
 }
 
@@ -81,9 +86,10 @@ VERSION_ARG=""
 NOTES_ARG=""
 NOTES_FILE_ARG=""
 RELEASE_CHECK_OVERRIDE=""
+UNPUBLISHED_OVERRIDE=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --bump|--version|--notes|--notes-file|--override-release-check)
+    --bump|--version|--notes|--notes-file|--override-release-check|--allow-unpublished-models)
       if [ $# -lt 2 ]; then
         echo "❌ Option $1 braucht einen Wert."
         usage
@@ -98,6 +104,13 @@ while [ $# -gt 0 ]; do
           RELEASE_CHECK_OVERRIDE="$2"
           if [ -z "${RELEASE_CHECK_OVERRIDE// /}" ]; then
             echo "❌ --override-release-check braucht eine Begründung."
+            exit 1
+          fi
+          ;;
+        --allow-unpublished-models)
+          UNPUBLISHED_OVERRIDE="$2"
+          if [ -z "${UNPUBLISHED_OVERRIDE// /}" ]; then
+            echo "❌ --allow-unpublished-models braucht eine Begründung."
             exit 1
           fi
           ;;
@@ -141,6 +154,16 @@ if [ -n "$NOTES_FILE_ARG" ]; then
   NOTES_BODY="$(cat "$NOTES_FILE_ARG")"
 elif [ -n "$NOTES_ARG" ]; then
   NOTES_BODY="$NOTES_ARG"
+fi
+
+# Pflichtmodell mit published: false (Suchmodell, Epic #192): README und
+# Website nennen es schon — vor dem Build abbrechen, nicht nach 10 Minuten.
+if ! (cd "$ROOT_DIR" && npx --no-install tsx scripts/check-unpublished-models.ts); then
+  if [ -z "$UNPUBLISHED_OVERRIDE" ]; then
+    echo "   Bewusst trotzdem releasen: --allow-unpublished-models \"<Begründung>\""
+    exit 1
+  fi
+  echo "⚠️  Übersteuert: $UNPUBLISHED_OVERRIDE"
 fi
 
 if [ ! -f "$INSTALL_GUIDE_FILE" ]; then
