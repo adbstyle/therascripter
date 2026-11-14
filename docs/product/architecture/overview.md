@@ -145,15 +145,16 @@ Since Epic #192 the app has a **page history** with back/forward instead of a si
 ```ts
 type Route =
   | { kind: 'sessions' }
-  | { kind: 'dossiers' }                       // placeholder until #204
-  | { kind: 'dossier'; dossierId: string }     // placeholder until #204
+  | { kind: 'dossiers' }                       // overview «Alle Patientendossiers» (#204)
+  | { kind: 'dossier'; dossierId: string }     // page of one patient dossier (#204)
   | { kind: 'session'; sessionId: string; focus?: SessionFocus }
   | { kind: 'settings'; subpage: SubPage | null }
 ```
 
 - `navReducer.ts` — pure history `{ back, current, forward }`, at most 50 entries, kept in memory only (#213 OOS 1). `navigate(route, { anchorId })` writes the anchor onto the entry being left; navigating to the same page creates no entry; `back`/`forward` skip invalid entries; `purge` removes entries of deleted objects and replaces the current one (dossier → overview, session → previous entry, otherwise the sessions list).
 - `NavigationContext.tsx` — `useNavigation()` with `route`, `entryId`, `anchorId`, `canBack`, `canForward`, `navigate`, `back`, `forward`. Subscribes to `nav:command` (menu «Gehe zu»), `nav:openSettings` (app menu ⌘, and tray, always the Settings overview), `sessions:changed` and `dossiers:changed` (`deletedIds` → `purge`, #213 PC 3).
-- `useScrollRestoration(ready)` — `PageScroll` is the shell's only scroll container and is keyed by `entryId`; it stores `scrollTop` per entry. Once a page's data is loaded, the position is restored and the card of `anchorId` is highlighted (scrolled into view only if hidden) — e.g. after closing a session (#205 AK 16).
+- `useScrollRestoration(ready)` — `PageScroll` is the shell's only scroll container and is keyed by `entryId`; it stores `scrollTop` per entry. Once a page's data is loaded, the position is restored and the card of `anchorId` (`data-session-id`, or `data-anchor-id` for other rows such as dossiers) is highlighted (scrolled into view only if hidden) — e.g. after closing a session (#205 AK 16).
+- The sidebar entry «Alle Patientendossiers» stays highlighted on a dossier page (`aria-current` only on the overview); its «+» and the overview button call `useWorkspaceActions().openNewDossier()`, which renders `NewDossierDialog` and navigates to the new dossier. Details: [patient-dossiers.md](../features/patient-dossiers.md) «User interface».
 
 **Rendering:**
 
@@ -165,7 +166,8 @@ type Route =
 | route `sessions` | `SessionsPage` (`PageHeader` with «PDF importieren» / «Aufnahme starten», `ConsentBanner`, `SessionDashboard`) |
 | route `session` | `ReviewEditor` (own header, scrolls internally; no close button — Esc, ‹ or ⌘[ go back) |
 | route `settings` | `Settings` with the sub-page from the route |
-| route `dossiers` / `dossier` | placeholder, linked from nowhere yet |
+| route `dossiers` | `DossiersPage` (heading with count and «Neues Patientendossier», name filter, list sorted by last name; empty state with instructions) |
+| route `dossier` | `DossierPage` (`DossierHeader` + `DossierHeaderActions`, `DossierTimeline` on the left — placeholder until #205 —, `DossierMasterDataForm` with autosave on the right; wraps below ~800 px) |
 
 **Navigation constraints:**
 - The app stays fully navigable during recording; the sessions list shows the live `RecordingSessionCard`, every other route the `RecordingBar`. Starting a recording navigates to the sessions list.
