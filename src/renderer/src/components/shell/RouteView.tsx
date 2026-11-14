@@ -18,6 +18,10 @@ export default function RouteView(): React.JSX.Element {
     () => back({ fromEntryId: entryId, fallback: HOME_ROUTE }),
     [back, entryId]
   )
+  const openDossier = useCallback(
+    (dossierId: string) => navigate({ kind: 'dossier', dossierId }),
+    [navigate]
+  )
   const openSubpage = useCallback(
     (subpage: SubPage | null) => navigate({ kind: 'settings', subpage }),
     [navigate]
@@ -28,7 +32,12 @@ export default function RouteView(): React.JSX.Element {
       return <SessionsPage />
     case 'session':
       return (
-        <ReviewEditor key={route.sessionId} sessionId={route.sessionId} onBack={closeSession} />
+        <ReviewEditor
+          key={route.sessionId}
+          sessionId={route.sessionId}
+          onBack={closeSession}
+          onOpenDossier={openDossier}
+        />
       )
     case 'settings':
       return <Settings subpage={route.subpage} onSubpageChange={openSubpage} />

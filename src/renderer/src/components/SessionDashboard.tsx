@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { Session, SessionStatus } from '../../../shared/types'
+import type { Session } from '../../../shared/types'
+import { isAnyInPipeline } from '../hooks/useAnyInPipeline'
+import type { SessionListItem } from '../../../shared/types/Dossier'
 import { useSessions } from '../hooks/useSessions'
 import { useStartOfToday } from '../hooks/useStartOfToday'
 import { groupSessionsByTime, GROUP_ORDER } from '../utils/groupSessionsByTime'
@@ -10,8 +12,6 @@ import { useViewMode } from '../viewMode/useViewMode'
 import { sessionTitleIn } from '../viewMode/sessionText'
 import { useScrollRestoration } from '../navigation/useScrollRestoration'
 import { useWorkspaceActions } from '../contexts/workspaceActions'
-
-const PROCESSING_STATUSES: SessionStatus[] = ['queued', 'processing']
 
 interface SessionDashboardProps {
   onOpenReview?: (sessionId: string) => void
@@ -33,17 +33,20 @@ export default function SessionDashboard({
   const { importPdfs, isImporting } = useWorkspaceActions()
   // Rendert um Mitternacht neu: Zeitgruppen und memoisierte Karten ("Gestern")
   const today = useStartOfToday()
-  const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
+  // Nur die ID: der Dialog zeigt so immer den aktuellen Stand der Sitzung,
+  // auch ihre Patientendossiers (#205 AK 23)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const deleteTarget: SessionListItem | null = deleteTargetId
+    ? (sessions.find((s) => s.id === deleteTargetId) ?? null)
+    : null
+  const requestDelete = useCallback((session: Session) => setDeleteTargetId(session.id), [])
   const viewMode = useViewMode()
   const [isDragOver, setIsDragOver] = useState(false)
 
   useScrollRestoration(!loading)
 
   // Derive processing state from sessions list (avoids race with brief isProcessing=false between tasks)
-  const isAnyProcessing = useMemo(
-    () => sessions.some((s) => PROCESSING_STATUSES.includes(s.status)),
-    [sessions]
-  )
+  const isAnyProcessing = useMemo(() => isAnyInPipeline(sessions), [sessions])
 
   const handleDrop = useCallback(
     async (e: React.DragEvent) => {
@@ -85,7 +88,7 @@ export default function SessionDashboard({
   const handleDelete = async (): Promise<void> => {
     if (!deleteTarget) return
     await deleteSession(deleteTarget.id)
-    setDeleteTarget(null)
+    setDeleteTargetId(null)
   }
 
   const handleRetry = useCallback(
@@ -196,7 +199,7 @@ export default function SessionDashboard({
                       key={session.id}
                       session={session}
                       data-session-id={session.id}
-                      onDelete={setDeleteTarget}
+                      onDelete={requestDelete}
                       onRetry={session.status === 'error' ? handleRetry : undefined}
                       retryDisabled={isAnyProcessing}
                       today={today}
@@ -213,9 +216,10 @@ export default function SessionDashboard({
       {deleteTarget && (
         <DeleteSessionDialog
           session={deleteTarget}
+          dossiers={deleteTarget.dossiers}
           displayTitle={sessionTitleIn(deleteTarget, viewMode)}
           onConfirm={handleDelete}
-          onCancel={() => setDeleteTarget(null)}
+          onCancel={() => setDeleteTargetId(null)}
         />
       )}
     </>

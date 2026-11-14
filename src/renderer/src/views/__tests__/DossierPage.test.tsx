@@ -34,15 +34,15 @@ beforeEach(() => {
 })
 
 describe('DossierPage (#204 AK 3/4/9–11)', () => {
-  it('zeigt Kopf, Verlauf-Platzhalter und alle Stammdaten', async () => {
+  it('zeigt Kopf, leeren Verlauf und alle Stammdaten', async () => {
     renderPage()
     expect(await screen.findByRole('heading', { name: 'Lukas Hofer' })).toBeInTheDocument()
     expect(
       await screen.findByText('PD-1188 · geboren 03.02.1978 · Keine Einträge')
     ).toBeInTheDocument()
     expect(
-      within(screen.getByRole('region', { name: 'Verlauf' })).getByText(
-        'Noch keine Sitzungen oder PDF-Dokumente zugeordnet.'
+      await within(screen.getByRole('region', { name: 'Verlauf' })).findByText(
+        'Noch keine Sitzungen oder PDF-Dokumente'
       )
     ).toBeInTheDocument()
     expect(screen.getByLabelText(/^Vorname/)).toHaveValue('Lukas')

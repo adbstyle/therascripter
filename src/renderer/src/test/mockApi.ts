@@ -56,6 +56,7 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
       list: vi.fn().mockResolvedValue([]),
       delete: vi.fn().mockResolvedValue(true),
       rename: vi.fn().mockResolvedValue(null),
+      setDocumentDate: vi.fn().mockResolvedValue({ ok: true }),
       onChanged: on('sessions.onChanged')
     },
     recording: {
@@ -170,6 +171,10 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
       update: vi.fn(),
       deletePreview: vi.fn().mockResolvedValue(null),
       delete: vi.fn(),
+      timeline: vi.fn().mockResolvedValue([]),
+      listForSession: vi.fn().mockResolvedValue([]),
+      assign: vi.fn().mockResolvedValue({ ok: true }),
+      unassign: vi.fn().mockResolvedValue({ ok: true }),
       onChanged: on('dossiers.onChanged')
     },
     search: {

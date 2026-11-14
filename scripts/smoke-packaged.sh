@@ -19,6 +19,11 @@
 #                                                  #   Modellverzeichnis, z. B. ein
 #                                                  #   entpacktes R2-Artefakt vor dem
 #                                                  #   Upload (Default ~/.therascript/models/ner)
+#   ... --search-model-dir <pfad>                  # Such-Checks gegen ein entpacktes
+#                                                  #   Text-Artefakt (Default ~/.therascript/
+#                                                  #   models/search/embeddinggemma-2-text-v1)
+#   ... --require-search                           # fehlendes Suchmodell ist ein Fehler
+#                                                  #   (siehe «Such-Checks» unten)
 #
 # Exit: 0 wenn alle Checks grün, 1 sonst.
 #
@@ -30,6 +35,9 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TARGET="/Applications/Therascript.app"
 MODE="app"
 NER_MODEL_DIR="$HOME/.therascript/models/ner"
+SEARCH_MODEL_DIR="$HOME/.therascript/models/search/embeddinggemma-2-text-v1"
+SEARCH_MODEL_EXPLICIT=false
+REQUIRE_SEARCH=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --app)
@@ -40,6 +48,10 @@ while [ $# -gt 0 ]; do
     --ner-model-dir)
       if [ $# -lt 2 ]; then echo "FEHLER: --ner-model-dir braucht einen Pfad" >&2; exit 2; fi
       NER_MODEL_DIR="$2"; shift 2 ;;
+    --search-model-dir)
+      if [ $# -lt 2 ]; then echo "FEHLER: --search-model-dir braucht einen Pfad" >&2; exit 2; fi
+      SEARCH_MODEL_DIR="$2"; SEARCH_MODEL_EXPLICIT=true; shift 2 ;;
+    --require-search) REQUIRE_SEARCH=true; shift ;;
     *) echo "FEHLER: unbekannte Option: $1" >&2; exit 2 ;;
   esac
 done
@@ -63,6 +75,7 @@ if [ "$MODE" = "app" ]; then
   SIDECAR_PY="$RES/ml_sidecar/standalone/bin/python3"
   NER_SCRIPT="$RES/ml_sidecar/ner_service.py"
   DIARIZE_SCRIPT="$RES/ml_sidecar/diarize.py"
+  SEARCH_SCRIPT="$RES/ml_sidecar/search_service.py"
   VISION_OCR="$RES/bin/vision-ocr"
   echo "Smoke-Target: $TARGET"
 else
@@ -71,6 +84,7 @@ else
   SIDECAR_PY="$REPO_ROOT/python_sidecar/standalone/bin/python3"
   NER_SCRIPT="$REPO_ROOT/python_sidecar/ner_service.py"
   DIARIZE_SCRIPT="$REPO_ROOT/python_sidecar/diarize.py"
+  SEARCH_SCRIPT="$REPO_ROOT/python_sidecar/search_service.py"
   VISION_OCR="$REPO_ROOT/resources/bin/vision-ocr"
   echo "Smoke-Target: Repo-Staging-Tree ($REPO_ROOT)"
 fi
@@ -594,6 +608,223 @@ PYWAV
   rm -f "$FIXTURE"
 else
   skip_check 'diarize offline e2e' "Diarization-Modell nicht installiert ($DIARIZE_MODEL_DIR)"
+fi
+
+# 4c. Suchdienst (search_service.py, Epic #192). Vier Checks gegen das
+#     entpackte Text-Artefakt, sandboxed wie alle anderen:
+#     - search load:   `serve` meldet bereit, beantwortet embed_query mit einem
+#                      normalisierten 768er-Vektor, stdout trägt NUR
+#                      Protokollzeilen, und die Vertragszeile lautet mit MPS
+#                      `Gewichte: torch.bfloat16 auf mps` — nie float16 (Gemma
+#                      überläuft), nie still float32 auf der CPU.
+#     - search eof:    stdin schliessen → Exit 0 in < 2 s (der Worker in Node
+#                      verlässt sich darauf, keine Waisen).
+#     - search parity: selftest gegen die Goldvektoren aus sentence-transformers
+#                      (tests/fixtures/search-golden/, aus dem Repo derselben
+#                      Revision wie die SUMMARIZATION_GBNF oben), auf dem
+#                      Standardgerät: Kosinus ≥ 0.999 in bf16 auf MPS.
+#     - search parity cpu: derselbe Vergleich in fp32 auf der CPU, Kosinus
+#                      ≥ 0.9999995. Nur hier fallen Off-by-one-Fehler im
+#                      Encoder auf (Sliding Window, Kürzung) — das bf16-
+#                      Rauschen auf MPS ist grösser als ihr Effekt.
+#     - search memory: phys_footprint-Peak beim Aufbereiten von 40 Abschnitten
+#                      < 2.5 GiB (RSS zählt MPS nicht mit).
+#     Ohne Modell, aber immer: `search script` — `--help` läuft und `serve`
+#     auf ein leeres Verzeichnis endet mit Exit 2 bei leerem stdout. So fällt
+#     ein Syntax- oder Importfehler im gebundelten Skript in jedem Release auf.
+#
+#     Skip-Regel — bewusst anders als bei NER/Diarization: solange das
+#     Suchmodell nicht auf R2 liegt, hat KEIN Mac es installiert, auch der
+#     Release-Mac nicht. Ein Skip im Gate-Modus wäre dann ein Fehler und jeder
+#     Release bis zum Upload rot. Deshalb: fehlt das Modell am Default-Ort,
+#     wird nur gemeldet (auch im Gate-Modus nicht rot). Ein Fehler ist es — in
+#     JEDEM Modus —, wenn --search-model-dir auf ein fehlendes Modell zeigt
+#     oder --require-search gesetzt ist. release.sh setzt --require-search
+#     (über verify-bundles.sh --smoke --require-search), sobald das Modell im
+#     Katalog veröffentlicht ist (Epic #192, PR S2/S6). Liegt das Modell da,
+#     laufen die Checks immer und zählen voll.
+SEARCH_GOLDEN="$REPO_ROOT/tests/fixtures/search-golden/golden.json"
+SEARCH_MAX_FOOTPRINT_GIB=2.5
+SEARCH_CHECKS=('search load' 'search eof' 'search parity' 'search parity cpu' 'search memory')
+if [ ! -f "$SEARCH_SCRIPT" ]; then
+  fail_check 'search script' "search_service.py fehlt: $SEARCH_SCRIPT"
+elif [ ! -x "$SIDECAR_PY" ]; then
+  skip_check 'search script' "Python-Interpreter fehlt: $SIDECAR_PY"
+else
+  run_check 'search script' 'search script ok' \
+    "$SIDECAR_PY" - "$SIDECAR_PY" "$SEARCH_SCRIPT" <<'PYSCRIPT'
+import subprocess
+import sys
+
+python, script = sys.argv[1:3]
+env = {"PYTHONDONTWRITEBYTECODE": "1", "PATH": "/usr/bin:/bin"}
+help_run = subprocess.run([python, script, "--help"], capture_output=True, text=True, env=env)
+if help_run.returncode != 0 or "selftest" not in help_run.stdout:
+    sys.exit(f"--help: Exit {help_run.returncode}: {help_run.stderr[-300:]}")
+missing = subprocess.run(
+    [python, script, "serve", "--model-dir", "/nonexistent-therascript-search"],
+    capture_output=True, text=True, env=env, timeout=60,
+)
+if missing.returncode != 2 or missing.stdout:
+    sys.exit(f"serve ohne Modell: Exit {missing.returncode} statt 2, stdout {missing.stdout[:200]!r}")
+print("search script ok")
+PYSCRIPT
+fi
+if [ -x "$SIDECAR_PY" ] && [ -f "$SEARCH_SCRIPT" ] \
+  && [ -f "$SEARCH_MODEL_DIR/READY" ] && [ -f "$SEARCH_MODEL_DIR/model.safetensors" ]; then
+  echo "     Suchmodell: $SEARCH_MODEL_DIR"
+  if run_check_capture 'search serve' '' \
+    "$SIDECAR_PY" - "$SIDECAR_PY" "$SEARCH_SCRIPT" "$SEARCH_MODEL_DIR" <<'PYSEARCH'
+import base64
+import json
+import os
+import struct
+import subprocess
+import sys
+import threading
+import time
+
+python, script, model_dir = sys.argv[1:4]
+env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+proc = subprocess.Popen(
+    [python, script, "serve", "--model-dir", model_dir],
+    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
+)
+stderr_lines = []
+threading.Thread(target=lambda: stderr_lines.extend(proc.stderr), daemon=True).start()
+
+
+def read_line(timeout):
+    box = []
+    reader = threading.Thread(target=lambda: box.append(proc.stdout.readline()), daemon=True)
+    reader.start()
+    reader.join(timeout)
+    return box[0] if box else None
+
+
+def fail(check, message):
+    print(f"{check}_FAIL {message}")
+
+
+load_ok = False
+try:
+    first = read_line(180)
+    ready = json.loads(first) if first else None
+    if not ready or ready.get("ready") is not True or ready.get("dim") != 768:
+        fail("SEARCH_LOAD", f"keine gültige Startzeile: {first!r}")
+    else:
+        proc.stdin.write(b'{"id":"smoke","op":"embed_query","text":"Schlafprobleme wegen der Arbeit"}\n')
+        proc.stdin.flush()
+        line = read_line(60)
+        answer = json.loads(line) if line else {}
+        raw = base64.b64decode(answer.get("vector", ""))
+        vector = struct.unpack(f"<{len(raw) // 4}f", raw)
+        norm = sum(x * x for x in vector) ** 0.5
+        if answer.get("id") != "smoke" or len(vector) != 768 or abs(norm - 1) > 1e-3:
+            fail("SEARCH_LOAD", f"embed_query-Antwort ungültig: {line!r:.200}")
+        else:
+            import torch
+
+            mps = torch.backends.mps.is_available()
+            expected = "Gewichte: torch.bfloat16 auf mps" if mps else "Gewichte: torch.float32 auf cpu"
+            time.sleep(0.2)
+            weights = [l.decode().strip() for l in stderr_lines if l.startswith(b"Gewichte:")]
+            if expected not in weights:
+                fail("SEARCH_LOAD", f"erwartet '{expected}', gefunden {weights}")
+            else:
+                load_ok = True
+                print(f"SEARCH_LOAD_OK {ready['device']}/{ready['dtype']}, load_ms={ready['load_ms']}")
+finally:
+    started = time.perf_counter()
+    proc.stdin.close()
+    try:
+        rc = proc.wait(timeout=2.0)
+        elapsed = time.perf_counter() - started
+        rest = proc.stdout.read()
+        if rc != 0:
+            fail("SEARCH_EOF", f"Exit {rc} statt 0")
+        elif rest.strip():
+            # stdout darf nichts ausser Protokollzeilen tragen
+            fail("SEARCH_EOF", f"unerwartete stdout-Ausgabe: {rest[:200]!r}")
+        else:
+            print(f"SEARCH_EOF_OK Exit 0 nach {elapsed:.2f} s")
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        fail("SEARCH_EOF", "nach stdin-EOF nicht binnen 2 s beendet")
+print("stderr:", "".join(l.decode(errors="replace") for l in stderr_lines[-5:]))
+PYSEARCH
+  then
+    for marker in LOAD EOF; do
+      name="search $(echo "$marker" | tr '[:upper:]' '[:lower:]')"
+      if grep -q "^SEARCH_${marker}_OK" "$LAST_OUTPUT"; then
+        echo "ok   [$name] ($(grep -m1 "^SEARCH_${marker}_OK" "$LAST_OUTPUT" | cut -d' ' -f2-))"
+        PASS_LIST="$PASS_LIST ${name// /-}"
+      else
+        fail_check "$name" "$(grep -m1 "^SEARCH_${marker}_FAIL" "$LAST_OUTPUT" || echo 'kein Ergebnis')"
+      fi
+    done
+  else
+    fail_check 'search load' 'Treiber für den Suchdienst ist abgestürzt'
+    fail_check 'search eof' 'Treiber für den Suchdienst ist abgestürzt'
+  fi
+
+  if [ ! -f "$SEARCH_GOLDEN" ]; then
+    fail_check 'search parity' "Goldvektoren fehlen: $SEARCH_GOLDEN"
+    fail_check 'search memory' "Goldvektoren fehlen: $SEARCH_GOLDEN"
+  elif run_check_capture 'search parity' 'search parity ok' \
+    "$SIDECAR_PY" "$SEARCH_SCRIPT" selftest --model-dir "$SEARCH_MODEL_DIR" \
+    --golden "$SEARCH_GOLDEN" --bench 40; then
+    set +e
+    SEARCH_MEMORY=$(PYTHONDONTWRITEBYTECODE=1 "$SIDECAR_PY" - "$LAST_OUTPUT" "$SEARCH_MAX_FOOTPRINT_GIB" <<'PYMEM'
+import json
+import sys
+
+report = next(json.loads(l) for l in open(sys.argv[1]) if l.startswith("{"))
+bench = report["bench"]
+peak = bench["phys_footprint_peak_bytes"]
+limit = float(sys.argv[2]) * 1024**3
+print(f"Peak {peak / 1024**3:.2f} GiB bei {bench['chunks']} Abschnitten "
+      f"(Ø {bench['tokens_mean']} Tokens), {bench['ms_per_chunk']:.0f} ms pro Abschnitt, "
+      f"min. Kosinus {report['min_cosine']}")
+sys.exit(0 if peak is not None and peak < limit else 1)
+PYMEM
+)
+    memory_rc=$?
+    set -e
+    if [ $memory_rc -eq 0 ]; then
+      echo "ok   [search memory] ($SEARCH_MEMORY)"
+      PASS_LIST="$PASS_LIST search-memory"
+    else
+      fail_check 'search memory' "über ${SEARCH_MAX_FOOTPRINT_GIB} GiB oder nicht messbar: $SEARCH_MEMORY"
+    fi
+  else
+    fail_check 'search memory' 'übersprungen — search parity ist rot'
+  fi
+
+  if [ -f "$SEARCH_GOLDEN" ]; then
+    run_check_capture 'search parity cpu' 'search parity ok' \
+      env THERASCRIPT_SEARCH_DEVICE=cpu \
+      "$SIDECAR_PY" "$SEARCH_SCRIPT" selftest --model-dir "$SEARCH_MODEL_DIR" \
+      --golden "$SEARCH_GOLDEN" || true
+  else
+    fail_check 'search parity cpu' "Goldvektoren fehlen: $SEARCH_GOLDEN"
+  fi
+elif [ ! -x "$SIDECAR_PY" ] || [ ! -f "$SEARCH_SCRIPT" ]; then
+  for check in "${SEARCH_CHECKS[@]}"; do
+    if [ "$SEARCH_MODEL_EXPLICIT" = true ] || [ "$REQUIRE_SEARCH" = true ]; then
+      fail_check "$check" "Python ($SIDECAR_PY) oder search_service.py ($SEARCH_SCRIPT) fehlt"
+    else
+      skip_check "$check" "Python ($SIDECAR_PY) oder search_service.py ($SEARCH_SCRIPT) fehlt"
+    fi
+  done
+elif [ "$SEARCH_MODEL_EXPLICIT" = true ] || [ "$REQUIRE_SEARCH" = true ]; then
+  for check in "${SEARCH_CHECKS[@]}"; do
+    fail_check "$check" "kein Suchmodell in $SEARCH_MODEL_DIR (READY/model.safetensors fehlen)"
+  done
+else
+  for check in "${SEARCH_CHECKS[@]}"; do
+    echo "skip [$check]: Suchmodell nicht installiert ($SEARCH_MODEL_DIR) — noch kein Pflichtmodell, erst mit --require-search ein Fehler"
+  done
 fi
 
 # 5. vision-ocr: System-Framework-Binary startet

@@ -11,7 +11,7 @@ vi.mock('electron', () => ({
 }))
 vi.mock('../recording-handlers', () => ({ getActiveSessionId: () => null }))
 
-import { registerDossierHandlers } from '../dossier-handlers'
+import { registerDossierAssignmentHandlers, registerDossierHandlers } from '../dossier-handlers'
 
 describe('dossier IPC handlers', () => {
   const service = {
@@ -82,5 +82,59 @@ describe('dossier IPC handlers', () => {
     expect(service.create).not.toHaveBeenCalled()
     expect(service.update).not.toHaveBeenCalled()
     expect(service.deleteDossier).not.toHaveBeenCalled()
+  })
+})
+
+describe('dossier assignment IPC handlers (#205)', () => {
+  const service = {
+    timeline: vi.fn(() => []),
+    listForSession: vi.fn(() => []),
+    assign: vi.fn(() => ({ ok: true })),
+    unassign: vi.fn(() => ({ ok: true }))
+  }
+
+  function invoke(channel: string, args?: unknown): unknown {
+    const handler = handlers.get(channel)
+    if (!handler) throw new Error(`no handler for ${channel}`)
+    return handler({}, args)
+  }
+
+  beforeEach(() => {
+    handlers.clear()
+    vi.clearAllMocks()
+    registerDossierAssignmentHandlers(() => service as never)
+  })
+
+  it('registers timeline, listForSession, assign and unassign', () => {
+    expect([...handlers.keys()].sort()).toEqual([
+      'dossier:assign',
+      'dossier:listForSession',
+      'dossier:timeline',
+      'dossier:unassign'
+    ])
+  })
+
+  it('passes validated payloads to the service', () => {
+    invoke('dossier:timeline', { dossierId: 'd1' })
+    invoke('dossier:listForSession', { sessionId: 's1' })
+    expect(invoke('dossier:assign', { sessionId: 's1', dossierId: 'd1' })).toEqual({ ok: true })
+    invoke('dossier:unassign', { sessionId: 's1', dossierId: 'd1' })
+
+    expect(service.timeline).toHaveBeenCalledWith('d1')
+    expect(service.listForSession).toHaveBeenCalledWith('s1')
+    expect(service.assign).toHaveBeenCalledWith('s1', 'd1')
+    expect(service.unassign).toHaveBeenCalledWith('s1', 'd1')
+  })
+
+  it('rejects malformed payloads before reaching the service', () => {
+    expect(() => invoke('dossier:assign', { sessionId: 's1' })).toThrow(/dossier:assign/)
+    expect(() => invoke('dossier:assign', { sessionId: '', dossierId: 'd1' })).toThrow()
+    expect(() =>
+      invoke('dossier:unassign', { sessionId: 's1', dossierId: 'd1', extra: true })
+    ).toThrow()
+    expect(() => invoke('dossier:timeline', {})).toThrow()
+    expect(() => invoke('dossier:listForSession', { sessionId: 'x'.repeat(65) })).toThrow()
+    expect(service.assign).not.toHaveBeenCalled()
+    expect(service.unassign).not.toHaveBeenCalled()
   })
 })

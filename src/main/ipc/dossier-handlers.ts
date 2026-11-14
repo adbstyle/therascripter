@@ -1,25 +1,30 @@
 import { ipcMain } from 'electron'
 import { getDatabase } from '../db/connection'
 import { DossierService } from '../services/DossierService'
+import { SessionDossierService } from '../services/SessionDossierService'
 import { getActiveSessionId } from './recording-handlers'
 import { validateIpc } from '../utils/ipc-helpers'
 import {
   DossierCreateSchema,
+  DossierAssignmentSchema,
   DossierDeleteSchema,
   DossierIdInputSchema,
-  DossierUpdateSchema
+  DossierUpdateSchema,
+  SessionIdInputSchema
 } from '../../shared/validation/dossier-schemas'
 import type {
   CreateDossierResult,
   DeleteDossierResult,
   Dossier,
   DossierDeletePreview,
+  DossierAssignmentResult,
   DossierListItem,
+  DossierRef,
+  TimelineEntry,
   UpdateDossierResult
 } from '../../shared/types/Dossier'
 
-// IPC für Patientendossiers (#204). #205 ergänzt timeline, listForSession,
-// assign und unassign hier in eigenen Handlern.
+// IPC für Patientendossiers (#204) und ihre Zuordnungen (#205).
 
 type Service = Pick<
   DossierService,
@@ -55,6 +60,58 @@ export function handleDossierDeletePreview(
 export function handleDossierDelete(service: Service, args: unknown): DeleteDossierResult {
   const { dossierId, fingerprint } = validateIpc(DossierDeleteSchema, args, 'dossier:delete')
   return service.deleteDossier(dossierId, fingerprint)
+}
+
+type AssignmentService = Pick<
+  SessionDossierService,
+  'timeline' | 'listForSession' | 'assign' | 'unassign'
+>
+
+export function handleDossierTimeline(service: AssignmentService, args: unknown): TimelineEntry[] {
+  const { dossierId } = validateIpc(DossierIdInputSchema, args, 'dossier:timeline')
+  return service.timeline(dossierId)
+}
+
+export function handleDossierListForSession(
+  service: AssignmentService,
+  args: unknown
+): DossierRef[] {
+  const { sessionId } = validateIpc(SessionIdInputSchema, args, 'dossier:listForSession')
+  return service.listForSession(sessionId)
+}
+
+export function handleDossierAssign(
+  service: AssignmentService,
+  args: unknown
+): DossierAssignmentResult {
+  const { sessionId, dossierId } = validateIpc(DossierAssignmentSchema, args, 'dossier:assign')
+  return service.assign(sessionId, dossierId)
+}
+
+export function handleDossierUnassign(
+  service: AssignmentService,
+  args: unknown
+): DossierAssignmentResult {
+  const { sessionId, dossierId } = validateIpc(DossierAssignmentSchema, args, 'dossier:unassign')
+  return service.unassign(sessionId, dossierId)
+}
+
+/** #205 — Zuordnen, Lösen und Verlauf. */
+export function registerDossierAssignmentHandlers(
+  createService: () => AssignmentService = () => new SessionDossierService(getDatabase())
+): void {
+  ipcMain.handle('dossier:timeline', (_event, args: unknown) =>
+    handleDossierTimeline(createService(), args)
+  )
+  ipcMain.handle('dossier:listForSession', (_event, args: unknown) =>
+    handleDossierListForSession(createService(), args)
+  )
+  ipcMain.handle('dossier:assign', (_event, args: unknown) =>
+    handleDossierAssign(createService(), args)
+  )
+  ipcMain.handle('dossier:unassign', (_event, args: unknown) =>
+    handleDossierUnassign(createService(), args)
+  )
 }
 
 export function registerDossierHandlers(

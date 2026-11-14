@@ -67,7 +67,7 @@ export const SOFTWARE_ACKNOWLEDGMENTS: Acknowledgment[] = [
   {
     name: 'Python',
     description:
-      'Laufzeit für Sprechererkennung und Pseudonymisierung, mit Open-Source-Bibliotheken',
+      'Laufzeit für Sprechererkennung, Pseudonymisierung und Suche, mit Open-Source-Bibliotheken',
     license: 'je Bibliothek',
     notice:
       'TheraScript nutzt Python und verschiedene Open-Source-Bibliotheken. Jede steht unter ihrer eigenen Lizenz; die Lizenztexte liegen den Bibliotheken im App-Paket bei.'

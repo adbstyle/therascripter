@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
   formatSwissDate,
   isValidIsoDate,
+  BEFORE_MIN_YEAR_MESSAGE,
+  isBeforeMinYear,
   isValidIsoDateNotAfter,
   localTodayIso,
   parseSwissDate
@@ -84,5 +86,17 @@ describe('formatSwissDate', () => {
   it('formats ISO as TT.MM.JJJJ', () => {
     expect(formatSwissDate('1978-02-03')).toBe('03.02.1978')
     expect(formatSwissDate('kaputt')).toBe('kaputt')
+  })
+})
+
+describe('MIN_CALENDAR_YEAR (Review #223)', () => {
+  it('accepts dates from 1900 on and rejects earlier ones as typos', () => {
+    expect(isValidIsoDateNotAfter('1900-01-01', '2026-11-14')).toBe(true)
+    expect(isValidIsoDateNotAfter('1899-12-31', '2026-11-14')).toBe(false)
+    expect(isValidIsoDateNotAfter('0026-11-02', '2026-11-14')).toBe(false)
+    expect(isBeforeMinYear('0026-11-02')).toBe(true)
+    expect(isBeforeMinYear('1900-01-01')).toBe(false)
+    expect(isBeforeMinYear('kein Datum')).toBe(false)
+    expect(BEFORE_MIN_YEAR_MESSAGE).toBe('Bitte ein Datum ab 1900 eingeben.')
   })
 })

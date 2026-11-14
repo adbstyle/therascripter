@@ -11,6 +11,7 @@ Therascript processes audio recordings and PDF documents through a strictly sequ
 | Alignment | In-process (no model) | < 50 MB |
 | NER / Anonymization | flair/ner-german-large | ~3.5 GB on 8-GB Macs, ~4.8 GB above (process incl. GPU memory, fp16 on MPS) |
 | OCR (PDF only) | Apple Vision (Swift subprocess) | < 100 MB |
+| Search (outside the pipeline) | EmbeddingGemma 2 text encoder (`search_service.py`) | ~1.5 GiB loaded, ~2.1 GiB while indexing in short runs (≤ 148 sections; process incl. GPU memory, bf16 on MPS) |
 
 Models are never loaded simultaneously. Each subprocess exits before the next task begins.
 
@@ -265,6 +266,38 @@ At app startup, `TaskQueueService.recoverStuckTasks()` resets any tasks left in 
 ### Missing Binary or Model
 
 Each executor checks for the presence of its binary and model file before spawning. If either is missing, it throws immediately with a German-language error directing the user to the relevant setup script. This produces an `error` session status before any subprocess is started.
+
+---
+
+## Search Service (`search_service.py`)
+
+**Source:** `python_sidecar/search_service.py` (Epic #192, ADR-010). Not a pipeline step: it embeds search queries and transcript sections for the semantic search. The Node side (worker, index, ranking) is built in later PRs of the epic.
+
+- **Model:** text encoder of `google/embeddinggemma-2` (Apache-2.0), re-implemented in pure torch after `modeling_embedding_gemma2.py` from transformers — sentence-transformers needs transformers ≥ 5, flair needs < 5 (ADR-010). Artifact `embeddinggemma-2-text-v1` (`config.json`, `model.safetensors` bf16, `tokenizer.json`, `LICENSE`, `READY`), produced by `scripts/export-search-model.py`.
+- **Pipeline:** prompt + text → tokenizer (truncated to `max_tokens` incl. `<bos>`/`<eos>`) → encoder → mean pooling over the mask → L2 normalization → 768 float32 values. Prompts, `max_tokens` and `pad_multiple` are arguments (they will come from the catalog). Before tokenizing, each text is clipped to `max_tokens × 32` characters (no Gemma token covers more than 31 characters, so the result is unchanged) and unpaired surrogates become U+FFFD.
+- **Precision:** bf16 on MPS, never fp16; fp32 on the CPU. After an MPS OOM the token budget is halved relative to the failed batch (floor 128, kept for the process lifetime); a single text that still fails moves the model to the CPU (`.to('cpu')`, then `.float()`). If that move itself fails, the service exits with code 3.
+- **Memory:** batches sorted by length, padded to multiples of 128 tokens, at most 2 texts and 2048 padded token slots per batch, `empty_cache` after every batch. Without the 128 grid indexing peaked at 3.9 GiB `phys_footprint`. Measured on short runs (M5 Pro): ~1.5 GiB after loading, ~2.1 GiB peak while indexing 40–148 sections (Ø ~372 tokens). Batch 2 is as fast as batch 4 (~58 ms per section) with a lower peak.
+- **Autorelease pool:** torch-MPS creates autoreleased Objective-C objects per kernel launch, and a Python process has no run loop that drains them: without a pool `phys_footprint` grew by ~100 KiB per forward pass, linearly and outside the torch allocator (`driver_allocated_memory()`, tracemalloc, `gc.collect()` and `synchronize()` showed or changed nothing). Every forward pass therefore runs inside `objc_autoreleasePoolPush/Pop` (ctypes). Measured with `selftest --soak 2000`: 827 bytes per pass instead of ~100 KiB.
+- **Process:** one long-lived process per use (`serve --model-dir <dir>`), JSON Lines with request IDs. Before the ready line one warm-up pass compiles the MPS shaders (first request 48 instead of ~200 ms; ready ~0.25 s later).
+
+| Direction | Line |
+|---|---|
+| stdout, first line | `{"ready":true,"device":"mps","dtype":"bfloat16","load_ms":…,"dim":768,"phys_footprint_bytes":…}` |
+| `ping` | `{"id":1,"op":"ping"}` → `{"id":1,"ok":true,"device":…,"dtype":…,"phys_footprint_bytes":…}` |
+| `embed_query` | `{"id":2,"op":"embed_query","text":"…"}` → `{"id":2,"dim":768,"vector":"<base64>","phys_footprint_bytes":…}` |
+| `embed_documents` | `{"id":3,"op":"embed_documents","texts":[…]}` → `{"id":3,"dim":768,"vectors":["<base64>",…],"phys_footprint_bytes":…}` (max. 256 texts) |
+| `shutdown` | `{"id":4,"op":"shutdown"}` → `{"id":4,"ok":true,"phys_footprint_bytes":…}`, exit 0 |
+| error (process keeps running) | `{"id":…,"error":{"code":"bad_json\|bad_request\|unknown_op\|too_large\|internal","message":"…"}}` |
+
+  Vectors are float32 little-endian, base64. stdout carries **only** protocol lines: fd 1 is redirected to stderr at start-up, everything else goes through `_emit` to stderr, including the contract line `Gewichte: torch.bfloat16 auf mps`. Exit codes: 0 (stdin EOF, `shutdown`, parent gone), 1 (bad arguments), 2 (model not loadable), 3 (fatal, e.g. failed move to the CPU).
+
+  Rules for the caller (the worker in a later PR):
+  - **Restart by memory:** every response carries `phys_footprint_bytes`. The caller restarts the process once it exceeds a threshold (e.g. 2.5 GiB) or after N forward passes, whichever comes first. The autorelease pool removes the measured growth, but a residual of ~1 KiB per pass remains, and future torch versions may behave differently.
+  - **`id: null`:** `bad_json` and `too_large` answer with `id: null`, because the line could not be read. The caller assigns them by order (requests are answered strictly in order).
+  - **EOF:** after stdin EOF the process exits within 2 s, also mid-batch; a half-written last stdout line is possible and must be discarded.
+  - **stderr:** the caller must drain stderr continuously, otherwise a full pipe blocks the service.
+- **Lifetime:** a watcher thread exits when the parent process disappears. No `[HEARTBEAT]`: there is no ProcessWatchdog, the Node side sets a timeout per request.
+- **Safeguard:** `selftest --model-dir <dir> --golden tests/fixtures/search-golden/golden.json [--bench N] [--soak N]` compares against golden vectors from sentence-transformers (fp32, CPU, original model), with the threshold of the device each vector was computed on: cosine ≥ 0.999 in bf16 on MPS, ≥ 0.9999995 in fp32 on the CPU (`THERASCRIPT_SEARCH_DEVICE=cpu`). Only the CPU run catches off-by-one errors in the encoder: sliding window 511/513 and truncation to 1023 stayed ≥ 0.99992 on MPS but fell to 0.99993–0.999998 on the CPU. Smoke checks `search script` (always: `--help`, exit 2 without a model), `search load`, `search eof`, `search parity`, `search parity cpu`, `search memory` in `scripts/smoke-packaged.sh --search-model-dir <dir>`.
 
 ---
 

@@ -1,12 +1,22 @@
 import { ipcMain } from 'electron'
 import { getDatabase } from '../db/connection'
 import { SessionService } from '../services/SessionService'
+import { SessionDossierService } from '../services/SessionDossierService'
 import { SessionDeleteSchema, SessionRenameSchema } from '../../shared/validation/session-schemas'
+import { SessionDocumentDateSchema } from '../../shared/validation/dossier-schemas'
+import { validateIpc } from '../utils/ipc-helpers'
 
 export function registerSessionHandlers(): void {
-  ipcMain.handle('session:list', () => {
-    const service = new SessionService(getDatabase())
-    return service.getAllSessions()
+  // #205: mit den Patientendossiers jeder Sitzung (zweite Abfrage, kein GROUP_CONCAT)
+  ipcMain.handle('session:list', () => new SessionDossierService(getDatabase()).listSessions())
+
+  ipcMain.handle('session:setDocumentDate', (_event, args: unknown) => {
+    const { sessionId, documentDate } = validateIpc(
+      SessionDocumentDateSchema,
+      args,
+      'session:setDocumentDate'
+    )
+    return new SessionService(getDatabase()).setDocumentDate(sessionId, documentDate)
   })
 
   ipcMain.handle('session:delete', (_event, args: unknown) => {
