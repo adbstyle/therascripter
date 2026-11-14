@@ -7,6 +7,12 @@ import { renderWithProviders } from '../../../test/renderWithProviders'
 import { createMockApi, emitApiEvent } from '../../../test/mockApi'
 import { makeDeletePreview } from '../../../test/dossierFixtures'
 import { useNavigation } from '../../../navigation/navigation'
+import {
+  acquireDossierEditor,
+  hasDossierDraft,
+  resetDossierDrafts
+} from '../../../stores/dossierDrafts'
+import { makeDossier } from '../../../test/dossierFixtures'
 
 // Aufnahme steuerbar ohne Mikrofon: «Aufnahme stoppen» im gesperrten Dialog
 const rec = vi.hoisted(() => ({ recording: false, stop: vi.fn() }))
@@ -186,6 +192,10 @@ describe('DossierHeaderActions', () => {
         delete: vi.fn().mockResolvedValue({ ok: true, deletedSessionIds: [], incomplete: false })
       }
     })
+    resetDossierDrafts()
+    // Ein Entwurf mit Klarnamen darf das Löschen nicht überleben
+    acquireDossierEditor(makeDossier(), vi.fn()).change('firstName', '')
+    expect(hasDossierDraft('d1')).toBe(true)
     renderWithProviders(
       <>
         <DossierHeaderActions dossierId="d1" />
@@ -203,6 +213,7 @@ describe('DossierHeaderActions', () => {
     expect(await screen.findByText('Route: dossiers')).toBeInTheDocument()
     expect(await screen.findByText('Patientendossier gelöscht')).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(hasDossierDraft('d1')).toBe(false)
   })
 
   it('schliesst das Menü mit Escape und gibt den Fokus zurück', async () => {

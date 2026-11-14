@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { createMockApi, emitApiEvent } from '../../test/mockApi'
+import { flushPendingEdits } from '../../services/pendingEdits'
 import {
   AUTOSAVE_DELAY_MS,
+  discardDossierDraft,
   TECHNICAL_SAVE_ERROR,
   acquireDossierEditor,
   hasDossierDraft,
@@ -257,5 +260,65 @@ describe('dossierDrafts — Autosave (#204 AK 10/11)', () => {
     expect(state.errors.firstName).toMatch(/Vorname darf nicht leer sein/)
     expect(state.values.diagnoses).toBe('F32.1')
     expect(state.values.note).toBe('gespeichert')
+  })
+
+  it('zeigt eine abgelehnte ID nach Tippen und Löschen wieder als nicht gespeichert (Review #219)', async () => {
+    const update = vi
+      .fn<UpdateDossier>()
+      .mockResolvedValue({ ok: false, reason: 'external-id-taken', ownerName: 'Meier, Anna' })
+    const editor = acquireDossierEditor(makeDossier(), update)
+    editor.change('externalId', 'PD-2')
+    await editor.flush()
+    expect(editor.getState().status).toBe('error')
+    editor.change('externalId', 'PD-23')
+    expect(editor.getState().errors.externalId).toBeUndefined()
+    editor.change('externalId', 'PD-2')
+    // Sofort wieder sichtbar, nicht erst nach der Pause
+    expect(editor.getState().errors.externalId).toMatch(/«PD-2».*Meier, Anna/)
+    await editor.flush()
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(editor.getState().errors.externalId).toMatch(/noch nicht gespeichert/)
+    expect(editor.getState().status).toBe('error')
+  })
+})
+
+describe('dossierDrafts — Beenden der App und gelöschte Dossiers (Review #219)', () => {
+  it('speichert beim Beenden alle gültigen ausstehenden Felder aller Dossiers', async () => {
+    window.api = createMockApi()
+    const update = vi.fn<UpdateDossier>().mockResolvedValue(ok())
+    const a = acquireDossierEditor(makeDossier({ id: 'a' }), update)
+    const b = acquireDossierEditor(makeDossier({ id: 'b' }), update)
+    a.change('diagnoses', 'F32.1')
+    a.change('medication', 'Sertralin')
+    a.change('lastName', '')
+    b.change('note', 'Notiz B')
+    await flushPendingEdits()
+    expect(update.mock.calls).toEqual([
+      ['a', { diagnoses: 'F32.1' }],
+      ['a', { medication: 'Sertralin' }],
+      ['b', { note: 'Notiz B' }]
+    ])
+    expect(a.getState().errors.lastName).toBeDefined()
+  })
+
+  it('verwirft Entwürfe gelöschter Dossiers bei dossiers:changed', async () => {
+    window.api = createMockApi()
+    const update = vi.fn<UpdateDossier>().mockResolvedValue(ok())
+    const editor = acquireDossierEditor(makeDossier(), update)
+    editor.change('firstName', '')
+    releaseDossierEditor(editor)
+    await settle()
+    expect(hasDossierDraft('d1')).toBe(true)
+    emitApiEvent(window.api, 'dossiers.onChanged', { deletedIds: ['andere'] })
+    expect(hasDossierDraft('d1')).toBe(true)
+    emitApiEvent(window.api, 'dossiers.onChanged', { deletedIds: ['d1'] })
+    expect(hasDossierDraft('d1')).toBe(false)
+  })
+
+  it('discardDossierDraft entfernt auch einen belegten Entwurf', () => {
+    const editor = acquireDossierEditor(makeDossier(), vi.fn<UpdateDossier>())
+    editor.change('note', 'x')
+    discardDossierDraft('d1')
+    expect(hasDossierDraft('d1')).toBe(false)
   })
 })

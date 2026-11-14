@@ -119,7 +119,13 @@ export function NewDossierDialog({ onClose, onCreated }: NewDossierDialogProps):
   })
 
   return (
-    <DialogShell ariaLabel="Neues Patientendossier" onDismiss={onClose} size="lg">
+    <DialogShell
+      ariaLabel="Neues Patientendossier"
+      // Während des Anlegens weder Esc noch Klick daneben: sonst entstünde ein
+      // Dossier, ohne dass die App dorthin führt
+      onDismiss={busy ? () => undefined : onClose}
+      size="lg"
+    >
       <form
         ref={formRef}
         noValidate
@@ -175,14 +181,15 @@ export function NewDossierDialog({ onClose, onCreated }: NewDossierDialogProps):
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            disabled={busy}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-2 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             Abbrechen
           </button>
           <button
             type="submit"
             disabled={busy}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
+            className="rounded-lg bg-primary-solid px-4 py-2 text-sm font-medium text-white hover:bg-primary-solid-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
           >
             {duplicates.length > 0 ? 'Trotzdem anlegen' : 'Anlegen'}
           </button>

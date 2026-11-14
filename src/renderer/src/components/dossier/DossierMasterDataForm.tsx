@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { AlertCircle, Check } from 'lucide-react'
 import { DossierFormField } from './DossierFormField'
 import { DuplicateNameNotice } from './DuplicateNameNotice'
@@ -26,6 +27,7 @@ interface DossierMasterDataFormProps {
  */
 export function DossierMasterDataForm({ autosave }: DossierMasterDataFormProps): React.JSX.Element {
   const { state, change, commit, retry } = autosave
+  const announcement = useSaveAnnouncement(state.status)
   const field = (
     key: DossierField
   ): {
@@ -49,9 +51,10 @@ export function DossierMasterDataForm({ autosave }: DossierMasterDataFormProps):
     >
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-text-primary">Stammdaten</h2>
+        {/* Sichtbarer Status — bewusst ausserhalb der Live-Region: «Wird
+            gespeichert …» bei jedem Tastendruck anzusagen, störte beim Tippen */}
         <span
-          role="status"
-          aria-live="polite"
+          data-save-status={state.status}
           className={`inline-flex items-center gap-1 text-xs ${
             state.status === 'error' ? 'text-error-text' : 'text-text-secondary'
           }`}
@@ -63,6 +66,9 @@ export function DossierMasterDataForm({ autosave }: DossierMasterDataFormProps):
             <AlertCircle className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
           )}
           {STATUS_TEXT[state.status]}
+        </span>
+        <span role="status" className="sr-only">
+          {announcement}
         </span>
       </div>
 
@@ -112,4 +118,24 @@ export function DossierMasterDataForm({ autosave }: DossierMasterDataFormProps):
       </p>
     </aside>
   )
+}
+
+/**
+ * Text der Live-Region: angesagt wird nur der Wechsel auf «Nicht gespeichert»
+ * und danach zurück auf «Gespeichert» — nicht jedes «Wird gespeichert …» und
+ * nicht der Ausgangszustand.
+ */
+function useSaveAnnouncement(status: DossierSaveStatus): string {
+  const [announcement, setAnnouncement] = useState('')
+  const lastRef = useRef('')
+  useEffect(() => {
+    let next = lastRef.current
+    if (status === 'error') next = STATUS_TEXT.error
+    else if (status === 'saved' && lastRef.current === STATUS_TEXT.error) next = STATUS_TEXT.saved
+    if (next !== lastRef.current) {
+      lastRef.current = next
+      setAnnouncement(next)
+    }
+  }, [status])
+  return announcement
 }

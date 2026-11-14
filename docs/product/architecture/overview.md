@@ -173,5 +173,6 @@ type Route =
 - The app stays fully navigable during recording; the sessions list shows the live `RecordingSessionCard`, every other route the `RecordingBar`. Starting a recording navigates to the sessions list.
 - The sidebar can be hidden (title-bar button, ⌃⌘S); the state is stored as `sidebarOpen` in electron-store and read synchronously by the preload before the first render.
 - The app stays alive in the macOS menu bar when the window is closed (standard macOS behavior via `TrayService`).
+- Quitting the app (not closing the window, which only hides it) first asks the renderer to save pending edits (`app:flushPendingEdits`, at most 3 s, `src/main/services/PendingEditsFlush.ts`; renderer registry `src/renderer/src/services/pendingEdits.ts` with the dossier drafts and the review editor), then closes the database and, if due, swaps in the update.
 - Lists reload on the bundled main-process event `sessions:changed` (`src/main/services/ChangeEvents.ts`) via `hooks/useLiveQuery`.
 - Updates (app and models as one, #167) show as «Update bereit» / «Update verfügbar» in the sidebar footer, which opens Settings → Updates; installing restarts the app once.

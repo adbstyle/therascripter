@@ -24,8 +24,10 @@ function renderPage(update = vi.fn().mockResolvedValue(okResult())) {
   return { ...view, update, user: userEvent.setup() }
 }
 
-const status = () =>
-  within(screen.getByRole('complementary', { name: 'Stammdaten' })).getAllByRole('status')[0]
+const status = (): HTMLElement =>
+  screen
+    .getByRole('complementary', { name: 'Stammdaten' })
+    .querySelector<HTMLElement>('[data-save-status]')!
 
 beforeEach(() => {
   resetDossierDrafts()
@@ -170,5 +172,24 @@ describe('DossierPage (#204 AK 3/4/9–11)', () => {
     expect(
       await screen.findByText('Dieses Patientendossier gibt es nicht mehr.')
     ).toBeInTheDocument()
+  })
+
+  it('sagt nur den Wechsel auf «Nicht gespeichert» und zurück an, nicht jedes Speichern (Review #219)', async () => {
+    const { user } = renderPage()
+    const live = (): HTMLElement =>
+      within(screen.getByRole('complementary', { name: 'Stammdaten' })).getAllByRole('status')[0]
+    const note = await screen.findByLabelText('Notiz')
+    expect(live()).toHaveTextContent('')
+    await user.type(note, 'x')
+    expect(status()).toHaveTextContent('Wird gespeichert …')
+    expect(live()).toHaveTextContent('')
+    await waitFor(() => expect(status()).toHaveTextContent('Gespeichert'))
+    expect(live()).toHaveTextContent('')
+
+    const first = screen.getByLabelText(/^Vorname/)
+    await user.clear(first)
+    await waitFor(() => expect(live()).toHaveTextContent('Nicht gespeichert'))
+    await user.type(first, 'Lukas')
+    await waitFor(() => expect(live()).toHaveTextContent('Gespeichert'))
   })
 })

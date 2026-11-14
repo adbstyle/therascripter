@@ -21,7 +21,7 @@ const CHANGED_NOTICE =
 const SECONDARY_BUTTON =
   'rounded-lg px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50'
 const PRIMARY_BUTTON =
-  'rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2'
+  'rounded-lg bg-primary-solid px-4 py-2 text-sm font-medium text-white hover:bg-primary-solid-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2'
 const DESTRUCTIVE_BUTTON =
   'rounded-lg bg-recording-solid px-4 py-2 text-sm font-medium text-white hover:bg-recording-solid-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50'
 

@@ -295,3 +295,30 @@ describe('Review-Editor: Speichern beim Schliessen', () => {
     expect(api.review.save).not.toHaveBeenCalled()
   })
 })
+
+describe('Review-Editor: Speichern beim Beenden der App (Review PR #219)', () => {
+  it('speichert eine ausstehende Änderung, wenn der Main-Prozess vor dem Beenden nachfragt', async () => {
+    const { flushPendingEdits } = await import('../../services/pendingEdits')
+    await openEditor()
+    type('x')
+    await act(async () => {
+      await flushPendingEdits()
+    })
+    expect(api.review.save).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(api.review.save.mock.calls[0][1])).toContain('x')
+  })
+
+  it('speichert ohne Änderung nichts und meldet sich beim Schliessen ab', async () => {
+    const { flushPendingEdits } = await import('../../services/pendingEdits')
+    const { unmount } = await openEditor()
+    await act(async () => {
+      await flushPendingEdits()
+    })
+    expect(api.review.save).not.toHaveBeenCalled()
+    type('y')
+    unmount()
+    expect(api.review.save).toHaveBeenCalledTimes(1)
+    await flushPendingEdits()
+    expect(api.review.save).toHaveBeenCalledTimes(1)
+  })
+})

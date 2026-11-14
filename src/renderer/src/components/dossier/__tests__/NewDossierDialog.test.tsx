@@ -158,4 +158,21 @@ describe('NewDossierDialog (#204 AK 1–8)', () => {
     await user.tab({ shift: true })
     expect(screen.getByRole('button', { name: 'Anlegen' })).toHaveFocus()
   })
+
+  it('sperrt Esc, Abbrechen und Klick daneben, solange angelegt wird (Review #219)', async () => {
+    let resolve!: (v: unknown) => void
+    const create = vi.fn().mockReturnValue(new Promise((r) => (resolve = r)))
+    const { user, onClose, onCreated } = setup(create)
+    await user.type(vorname(), 'Lukas')
+    await user.type(nachname(), 'Hofer')
+    await user.click(screen.getByRole('button', { name: 'Anlegen' }))
+    expect(screen.getByRole('button', { name: 'Abbrechen' })).toBeDisabled()
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('dialog'))
+    expect(onClose).not.toHaveBeenCalled()
+    const dossier = makeDossier()
+    resolve({ ok: true, dossier })
+    await screen.findByRole('button', { name: 'Abbrechen' })
+    await vi.waitFor(() => expect(onCreated).toHaveBeenCalledWith(dossier))
+  })
 })

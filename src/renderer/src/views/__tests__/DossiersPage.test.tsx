@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { Profiler } from 'react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import DossiersPage from '../DossiersPage'
 import { renderWithProviders } from '../../test/renderWithProviders'
@@ -122,7 +123,6 @@ describe('DossiersPage (#204 AK 12–15)', () => {
   })
 
   it('zeigt und filtert 500 Dossiers ohne spürbare Verzögerung (AK 15)', async () => {
-    const user = userEvent.setup()
     const many = Array.from({ length: 500 }, (_, i) =>
       makeDossierListItem({
         id: `d${i}`,
@@ -131,13 +131,27 @@ describe('DossiersPage (#204 AK 12–15)', () => {
         externalId: `PD-${i}`
       })
     )
-    const start = performance.now()
-    renderPage(many)
+    let commits = 0
+    window.api = createMockApi({ dossiers: { list: vi.fn().mockResolvedValue(many) } })
+    const renderStart = performance.now()
+    renderWithProviders(
+      <Profiler id="dossiers" onRender={() => commits++}>
+        <DossiersPage />
+      </Profiler>,
+      { route: { kind: 'dossiers' } }
+    )
     await waitFor(() => expect(rowNames()).toHaveLength(500))
+    // Budgets grosszügig für jsdom auf CI; im echten Build sind es Millisekunden
+    expect(performance.now() - renderStart).toBeLessThan(1500)
+
     const filter = screen.getByRole('searchbox', { name: 'Nach Namen filtern' })
-    await user.type(filter, 'nachname42')
+    commits = 0
+    const filterStart = performance.now()
+    fireEvent.change(filter, { target: { value: 'nachname42' } })
     await waitFor(() => expect(rowNames()).toHaveLength(10))
-    // Grosszügig wegen jsdom und CI; im echten Build per Hand prüfen (Bericht)
-    expect(performance.now() - start).toBeLessThan(5000)
+    expect(performance.now() - filterStart).toBeLessThan(1500)
+    // Ein Tastendruck: Eingabe sofort, gefilterte Liste nachgezogen (useDeferredValue) —
+    // höchstens wenige Durchläufe, kein Durchlauf pro Zeile
+    expect(commits).toBeLessThanOrEqual(3)
   })
 })

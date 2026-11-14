@@ -79,18 +79,16 @@ export default function DossiersPage(): React.JSX.Element {
         <div className="flex items-baseline gap-2">
           <h1 className="text-xl font-semibold leading-7 text-text-primary">Patientendossiers</h1>
           {hasDossiers && (
-            <span
-              className="text-xs text-text-secondary"
-              aria-label={`${dossiers.length} insgesamt`}
-            >
+            <span className="text-xs text-text-secondary">
               {dossiers.length}
+              <span className="sr-only"> insgesamt</span>
             </span>
           )}
         </div>
         <button
           type="button"
           onClick={openNewDossier}
-          className="flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className="flex items-center gap-1.5 rounded-lg bg-primary-solid px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-solid-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
           <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
           Neues Patientendossier
@@ -164,7 +162,7 @@ function EmptyOverview({ onCreate }: { onCreate: () => void }): React.JSX.Elemen
       <button
         type="button"
         onClick={onCreate}
-        className="rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        className="rounded-lg bg-primary-solid px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-solid-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
       >
         Neues Patientendossier
       </button>

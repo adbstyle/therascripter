@@ -218,3 +218,34 @@ describe('navReducer', () => {
     expect(state.back).toEqual([])
   })
 })
+
+describe('Dossier löschen: Übersicht steht nicht doppelt im Verlauf (Review #219)', () => {
+  const dossiers: Route = { kind: 'dossiers' }
+  const purgeD1: NavAction = {
+    type: 'purge',
+    predicate: (route) => route.kind === 'dossier' && route.dossierId === 'd1'
+  }
+  const start = (): NavState => run(initialNavState(), go(dossiers), go(dossier('d1')))
+
+  it('erst die IPC-Antwort (replace), dann dossiers:changed (purge)', () => {
+    const state = run(start(), go(dossiers, { replace: true }), purgeD1)
+    expect(keys(state.back)).toEqual(['sessions'])
+    expect(routeKey(state.current.route)).toBe('dossiers')
+    expect(state.forward).toEqual([])
+  })
+
+  it('erst dossiers:changed (purge), dann die IPC-Antwort (replace)', () => {
+    const state = run(start(), purgeD1, go(dossiers, { replace: true }))
+    expect(keys(state.back)).toEqual(['sessions'])
+    expect(routeKey(state.current.route)).toBe('dossiers')
+  })
+
+  it('replace legt auch vorwärts gleiche Nachbarn zusammen', () => {
+    let state = run(initialNavState(), go(dossiers), go(dossier('d1')), go(dossiers))
+    state = navReducer(state, { type: 'back' })
+    expect(routeKey(state.current.route)).toBe('dossier:d1')
+    state = navReducer(state, go(dossiers, { replace: true }))
+    expect(keys(state.back)).toEqual(['sessions'])
+    expect(state.forward).toEqual([])
+  })
+})
