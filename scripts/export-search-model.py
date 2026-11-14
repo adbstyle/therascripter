@@ -36,8 +36,12 @@ import sys
 
 PREFIX = "language_model."
 EXPECTED_TENSORS = 413
+# Dieselbe Kopie, die electron-builder als ml_sidecar/LICENSE-Apache-2.0.txt
+# neben search_service.py bündelt.
 LICENSE_TEMPLATE = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "assets", "apache-2.0.txt"
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "python_sidecar",
+    "LICENSE-Apache-2.0.txt",
 )
 
 LICENSE_HEADER = """EmbeddingGemma 2 (google/embeddinggemma-2), Text-Encoder

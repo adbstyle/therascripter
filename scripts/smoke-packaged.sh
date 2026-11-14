@@ -621,23 +621,55 @@ fi
 #                      verlässt sich darauf, keine Waisen).
 #     - search parity: selftest gegen die Goldvektoren aus sentence-transformers
 #                      (tests/fixtures/search-golden/, aus dem Repo derselben
-#                      Revision wie die SUMMARIZATION_GBNF oben). Kosinus
-#                      ≥ 0.999 auf MPS, ≥ 0.99999 in fp32 auf der CPU.
+#                      Revision wie die SUMMARIZATION_GBNF oben), auf dem
+#                      Standardgerät: Kosinus ≥ 0.999 in bf16 auf MPS.
+#     - search parity cpu: derselbe Vergleich in fp32 auf der CPU, Kosinus
+#                      ≥ 0.9999995. Nur hier fallen Off-by-one-Fehler im
+#                      Encoder auf (Sliding Window, Kürzung) — das bf16-
+#                      Rauschen auf MPS ist grösser als ihr Effekt.
 #     - search memory: phys_footprint-Peak beim Aufbereiten von 40 Abschnitten
 #                      < 2.5 GiB (RSS zählt MPS nicht mit).
+#     Ohne Modell, aber immer: `search script` — `--help` läuft und `serve`
+#     auf ein leeres Verzeichnis endet mit Exit 2 bei leerem stdout. So fällt
+#     ein Syntax- oder Importfehler im gebundelten Skript in jedem Release auf.
 #
 #     Skip-Regel — bewusst anders als bei NER/Diarization: solange das
 #     Suchmodell nicht auf R2 liegt, hat KEIN Mac es installiert, auch der
 #     Release-Mac nicht. Ein Skip im Gate-Modus wäre dann ein Fehler und jeder
 #     Release bis zum Upload rot. Deshalb: fehlt das Modell am Default-Ort,
-#     wird nur gemeldet (auch im Gate-Modus nicht rot). Ein Fehler ist es, wenn
-#     --search-model-dir auf ein fehlendes Modell zeigt oder --require-search
-#     gesetzt ist — release.sh setzt --require-search, sobald das Modell im
+#     wird nur gemeldet (auch im Gate-Modus nicht rot). Ein Fehler ist es — in
+#     JEDEM Modus —, wenn --search-model-dir auf ein fehlendes Modell zeigt
+#     oder --require-search gesetzt ist. release.sh setzt --require-search
+#     (über verify-bundles.sh --smoke --require-search), sobald das Modell im
 #     Katalog veröffentlicht ist (Epic #192, PR S2/S6). Liegt das Modell da,
 #     laufen die Checks immer und zählen voll.
 SEARCH_GOLDEN="$REPO_ROOT/tests/fixtures/search-golden/golden.json"
 SEARCH_MAX_FOOTPRINT_GIB=2.5
-SEARCH_CHECKS=('search load' 'search eof' 'search parity' 'search memory')
+SEARCH_CHECKS=('search load' 'search eof' 'search parity' 'search parity cpu' 'search memory')
+if [ ! -f "$SEARCH_SCRIPT" ]; then
+  fail_check 'search script' "search_service.py fehlt: $SEARCH_SCRIPT"
+elif [ ! -x "$SIDECAR_PY" ]; then
+  skip_check 'search script' "Python-Interpreter fehlt: $SIDECAR_PY"
+else
+  run_check 'search script' 'search script ok' \
+    "$SIDECAR_PY" - "$SIDECAR_PY" "$SEARCH_SCRIPT" <<'PYSCRIPT'
+import subprocess
+import sys
+
+python, script = sys.argv[1:3]
+env = {"PYTHONDONTWRITEBYTECODE": "1", "PATH": "/usr/bin:/bin"}
+help_run = subprocess.run([python, script, "--help"], capture_output=True, text=True, env=env)
+if help_run.returncode != 0 or "selftest" not in help_run.stdout:
+    sys.exit(f"--help: Exit {help_run.returncode}: {help_run.stderr[-300:]}")
+missing = subprocess.run(
+    [python, script, "serve", "--model-dir", "/nonexistent-therascript-search"],
+    capture_output=True, text=True, env=env, timeout=60,
+)
+if missing.returncode != 2 or missing.stdout:
+    sys.exit(f"serve ohne Modell: Exit {missing.returncode} statt 2, stdout {missing.stdout[:200]!r}")
+print("search script ok")
+PYSCRIPT
+fi
 if [ -x "$SIDECAR_PY" ] && [ -f "$SEARCH_SCRIPT" ] \
   && [ -f "$SEARCH_MODEL_DIR/READY" ] && [ -f "$SEARCH_MODEL_DIR/model.safetensors" ]; then
   echo "     Suchmodell: $SEARCH_MODEL_DIR"
@@ -751,8 +783,9 @@ report = next(json.loads(l) for l in open(sys.argv[1]) if l.startswith("{"))
 bench = report["bench"]
 peak = bench["phys_footprint_peak_bytes"]
 limit = float(sys.argv[2]) * 1024**3
-print(f"Peak {peak / 1024**3:.2f} GiB bei {bench['chunks']} Abschnitten, "
-      f"{bench['ms_per_100'] / 1000:.1f} s pro 100, min. Kosinus {report['min_cosine']}")
+print(f"Peak {peak / 1024**3:.2f} GiB bei {bench['chunks']} Abschnitten "
+      f"(Ø {bench['tokens_mean']} Tokens), {bench['ms_per_chunk']:.0f} ms pro Abschnitt, "
+      f"min. Kosinus {report['min_cosine']}")
 sys.exit(0 if peak is not None and peak < limit else 1)
 PYMEM
 )
@@ -767,13 +800,26 @@ PYMEM
   else
     fail_check 'search memory' 'übersprungen — search parity ist rot'
   fi
-elif [ "$SEARCH_MODEL_EXPLICIT" = true ]; then
+
+  if [ -f "$SEARCH_GOLDEN" ]; then
+    run_check_capture 'search parity cpu' 'search parity ok' \
+      env THERASCRIPT_SEARCH_DEVICE=cpu \
+      "$SIDECAR_PY" "$SEARCH_SCRIPT" selftest --model-dir "$SEARCH_MODEL_DIR" \
+      --golden "$SEARCH_GOLDEN" || true
+  else
+    fail_check 'search parity cpu' "Goldvektoren fehlen: $SEARCH_GOLDEN"
+  fi
+elif [ ! -x "$SIDECAR_PY" ] || [ ! -f "$SEARCH_SCRIPT" ]; then
+  for check in "${SEARCH_CHECKS[@]}"; do
+    if [ "$SEARCH_MODEL_EXPLICIT" = true ] || [ "$REQUIRE_SEARCH" = true ]; then
+      fail_check "$check" "Python ($SIDECAR_PY) oder search_service.py ($SEARCH_SCRIPT) fehlt"
+    else
+      skip_check "$check" "Python ($SIDECAR_PY) oder search_service.py ($SEARCH_SCRIPT) fehlt"
+    fi
+  done
+elif [ "$SEARCH_MODEL_EXPLICIT" = true ] || [ "$REQUIRE_SEARCH" = true ]; then
   for check in "${SEARCH_CHECKS[@]}"; do
     fail_check "$check" "kein Suchmodell in $SEARCH_MODEL_DIR (READY/model.safetensors fehlen)"
-  done
-elif [ "$REQUIRE_SEARCH" = true ]; then
-  for check in "${SEARCH_CHECKS[@]}"; do
-    skip_check "$check" "Suchmodell nicht installiert ($SEARCH_MODEL_DIR)"
   done
 else
   for check in "${SEARCH_CHECKS[@]}"; do
