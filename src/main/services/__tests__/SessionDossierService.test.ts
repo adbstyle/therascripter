@@ -262,6 +262,20 @@ describe('SessionDossierService', () => {
       expect(timeline.find((e) => e.id === referral)?.documentDate).toBeNull()
     })
 
+    it('uses the same document date in every dossier (AK 22)', () => {
+      const hofer = dossier('Lukas', 'Hofer')
+      const maria = dossier('Maria', 'Hofer')
+      const report = session('Bericht', 'pdf', '2026-11-13T09:00:00.000Z', 'review')
+      service.assign(report, hofer)
+      service.assign(report, maria)
+      sessions.setDocumentDate(report, '2026-09-30')
+      for (const owner of [hofer, maria]) {
+        expect(service.timeline(owner).map((e) => [e.sortDay, e.documentDate])).toEqual([
+          ['2026-09-30', '2026-09-30']
+        ])
+      }
+    })
+
     it('counts the local day just after midnight, in winter and in summer time', () => {
       const hofer = dossier('Lukas', 'Hofer')
       // 00:30 lokal (UTC+1) — in UTC noch der Vortag

@@ -181,7 +181,9 @@ export function AssignDossiersPopover({
                     <input
                       type="checkbox"
                       checked={isChecked(dossier.id)}
-                      disabled={pending}
+                      // aria-disabled statt disabled: ein deaktiviertes Element
+                      // verlöre den Tastaturfokus; toggle() ignoriert Klicks solange
+                      aria-disabled={pending || undefined}
                       onChange={() => void toggle(dossier)}
                       className="mt-0.5 h-4 w-4 shrink-0 accent-primary-solid"
                     />

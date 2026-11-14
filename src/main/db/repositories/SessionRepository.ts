@@ -358,18 +358,22 @@ export class SessionRepository {
   /**
    * Removes the content of a marked row while its files could not be removed
    * yet: the paths stay (the next start needs them), title, summary, entity
-   * map (originals of every placeholder) and error message go immediately.
+   * map (originals of every placeholder) and error message go immediately —
+   * as do the document date and the dossier assignments (#205 PC 5/6).
    */
   scrubMarkedContent(id: string): void {
-    this.db
+    const marked = this.db
       .prepare(
         `UPDATE sessions
          SET title = '', summary = NULL, entity_map = NULL, error_message = NULL,
              title_entity_snapshot = NULL, summary_entity_snapshot = NULL,
-             title_plain = NULL, summary_plain = NULL
+             title_plain = NULL, summary_plain = NULL, document_date = NULL
          WHERE id = ? AND deleting_at IS NOT NULL`
       )
       .run(id)
+    if (marked.changes > 0) {
+      this.db.prepare('DELETE FROM session_dossiers WHERE session_id = ?').run(id)
+    }
   }
 
   isMarkedForDeletion(id: string): boolean {
