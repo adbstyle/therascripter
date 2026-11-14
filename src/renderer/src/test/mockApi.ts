@@ -172,6 +172,9 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
       delete: vi.fn(),
       onChanged: on('dossiers.onChanged')
     },
+    pendingEdits: {
+      onFlushRequest: on('pendingEdits.onFlushRequest')
+    },
     viewMode: {
       initial: 'pseudonymized',
       set: vi.fn().mockResolvedValue(undefined)

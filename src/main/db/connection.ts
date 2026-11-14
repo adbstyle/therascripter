@@ -71,6 +71,11 @@ export function initDatabase(dbPath?: string): Database.Database {
   return db
 }
 
+/** Ob die Datenbank offen ist (nach der Deinstallation z. B. nicht mehr). */
+export function isDatabaseOpen(): boolean {
+  return db !== null
+}
+
 export function closeDatabase(): void {
   if (db) {
     db.close()

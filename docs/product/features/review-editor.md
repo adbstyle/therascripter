@@ -145,7 +145,7 @@ All text outputs of a transcript — this export, the Cmd+C serializer (both fla
 
 ## Undo / Redo
 
-Standard ProseMirror undo/redo is available via **Cmd+Z** (undo) and **Cmd+Shift+Z** (redo). These keyboard shortcuts are displayed in the footer status bar.
+Standard ProseMirror undo/redo is available via **Cmd+Z** (undo) and **Cmd+Shift+Z** (redo). The footer status bar shows them in German with macOS symbols («⌘Z Widerrufen · ⇧⌘Z Wiederholen»). Opening a session never saves it: `setContent` runs with `emitUpdate: false`, so only a user edit reaches `review:save`. In a narrow editor column (row narrower than 720 px) the right panel overlays the text instead of sitting beside it; Esc closes it first.
 
 The initial document content loaded from disk is not undoable — the editor resets its undo history after loading by creating a fresh `EditorState` with the loaded document but empty history.
 

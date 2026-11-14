@@ -92,9 +92,14 @@ function navigate(state: NavState, route: Route, options: NavigateOptions): NavS
   }
 
   if (options.replace) {
+    // Ersetzt die Seite und legt dabei gleiche Nachbarn zusammen — etwa nach
+    // dem Löschen eines Dossiers, das aus der Übersicht geöffnet wurde: sonst
+    // stünde die Übersicht zweimal hintereinander im Verlauf.
+    const current: Entry = { id: state.nextId, route }
     return {
-      ...state,
-      current: { id: state.nextId, route },
+      back: dropAdjacent(state.back, current),
+      current,
+      forward: dropLeading(state.forward, current),
       nextId: state.nextId + 1
     }
   }
@@ -166,14 +171,12 @@ function purge(state: NavState, predicate: (route: Route) => boolean): NavState 
   const forward = keep(state.forward)
 
   if (!predicate(state.current.route)) {
-    if (back.length === state.back.length && forward.length === state.forward.length) {
+    const nextBack = dropAdjacent(back, state.current)
+    const nextForward = dropLeading(forward, state.current)
+    if (nextBack.length === state.back.length && nextForward.length === state.forward.length) {
       return state
     }
-    return {
-      ...state,
-      back: dropAdjacent(back, state.current),
-      forward: dropLeading(forward, state.current)
-    }
+    return { ...state, back: nextBack, forward: nextForward }
   }
 
   const deleted = state.current.route

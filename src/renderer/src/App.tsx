@@ -5,6 +5,7 @@ import AppShell from './components/shell/AppShell'
 import { NavigationProvider } from './navigation/NavigationContext'
 import { RecordingProvider } from './contexts/RecordingContext'
 import { WorkspaceActionsProvider } from './contexts/WorkspaceActionsContext'
+import { flushPendingEdits } from './services/pendingEdits'
 
 /**
  * Wurzel der App: Provider plus Shell bzw. Ersteinrichtung (Epic #192).
@@ -17,6 +18,10 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     window.api.modelDownload.status().then((info) => setModelsReady(info.modelsReady))
   }, [])
+
+  // Beim Beenden der App: ausstehende Änderungen speichern, bevor der
+  // Main-Prozess die Datenbank schliesst (services/pendingEdits.ts)
+  useEffect(() => window.api.pendingEdits.onFlushRequest(flushPendingEdits), [])
 
   const handleModelsComplete = useCallback(() => setModelsReady(true), [])
 

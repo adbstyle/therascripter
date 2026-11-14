@@ -26,6 +26,9 @@ export function useAutoSave(
     }
 
     timeoutRef.current = setTimeout(async () => {
+      // Gelaufen: kein Save mehr ausstehend (der Unmount-Flush schriebe sonst
+      // beim Schliessen ein zweites Mal denselben Stand).
+      timeoutRef.current = null
       if (!onSaveRef.current) return
       setSaving(true)
       try {

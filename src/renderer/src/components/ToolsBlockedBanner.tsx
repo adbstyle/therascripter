@@ -61,7 +61,7 @@ export default function ToolsBlockedBanner({
 
       <div className="mt-2 flex flex-wrap items-center gap-2 pl-6">
         <button
-          className="titlebar-no-drag rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-hover"
+          className="titlebar-no-drag rounded-md bg-primary-solid px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-solid-hover"
           onClick={onOpenGuide}
         >
           Anleitung öffnen

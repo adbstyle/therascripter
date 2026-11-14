@@ -51,7 +51,7 @@ export function PlaceholderTypeDropdown({
               key={type.value}
               type="button"
               className={`block w-full px-3 py-2 text-left text-sm hover:bg-surface-2 ${
-                type.value === value ? 'bg-primary-light text-primary' : 'text-text-primary'
+                type.value === value ? 'bg-primary-light text-primary-hover' : 'text-text-primary'
               }`}
               onClick={() => {
                 onChange(type.value)

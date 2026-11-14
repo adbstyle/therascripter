@@ -4,7 +4,8 @@ import { HOME_ROUTE, type SubPage } from '../../navigation/routes'
 import SessionsPage from '../../views/SessionsPage'
 import ReviewEditor from '../../views/ReviewEditor'
 import Settings from '../../views/Settings'
-import { PageContainer, PageHeader } from './PageHeader'
+import DossiersPage from '../../views/DossiersPage'
+import DossierPage from '../../views/DossierPage'
 
 /** Rendert die Seite der aktuellen Route (Epic #192). */
 export default function RouteView(): React.JSX.Element {
@@ -32,13 +33,8 @@ export default function RouteView(): React.JSX.Element {
     case 'settings':
       return <Settings subpage={route.subpage} onSubpageChange={openSubpage} />
     case 'dossiers':
+      return <DossiersPage />
     case 'dossier':
-      // Patientendossiers folgen mit #204; nichts in der Oberfläche führt bisher hierher
-      return (
-        <PageContainer>
-          <PageHeader title="Patientendossiers" />
-          <p className="text-sm text-text-secondary">Diese Seite ist noch nicht verfügbar.</p>
-        </PageContainer>
-      )
+      return <DossierPage key={route.dossierId} dossierId={route.dossierId} />
   }
 }

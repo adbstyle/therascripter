@@ -29,7 +29,7 @@ export default function AboutPage(): React.JSX.Element {
   }, [info?.dataDir])
 
   return (
-    <div className="p-8">
+    <div>
       <div className="max-w-lg space-y-6">
         {/* Version / Logo */}
         <div>
@@ -172,6 +172,11 @@ export default function AboutPage(): React.JSX.Element {
             selbst löschen.
           </p>
           <p className="mt-1 text-sm text-text-secondary">
+            Patientendossiers mit Stammdaten, Diagnosen, Medikation und Notiz bleiben lokal
+            gespeichert, bis Sie sie löschen oder TheraScript vollständig entfernen. TheraScript nur
+            in den Papierkorb zu legen, löscht sie nicht.
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
             Inhalte mit Aufbewahrungspflicht gehören weiterhin in Ihre rechtlich führende
             Praxissoftware.
           </p>
@@ -200,6 +205,7 @@ export default function AboutPage(): React.JSX.Element {
           details={[
             'ML-Modelle (mehrere GB)',
             'Alle Transkriptionen und Audiodateien',
+            'Alle Patientendossiers (Stammdaten, Diagnosen, Medikation, Notizen)',
             'Sperrliste',
             'Einstellungen'
           ]}
