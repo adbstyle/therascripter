@@ -72,11 +72,14 @@ describe('system:uninstall — Suchdaten (#209 PC 3)', () => {
     expect(quit).toHaveBeenCalled()
   })
 
-  it('nennt im Bestätigungsdialog Suchindex und letzte Suchanfragen', async () => {
+  it('nennt im Bestätigungsdialog Patientendossiers, Suchindex und letzte Suchanfragen (#204 AK 18)', async () => {
     dialogMock.showMessageBox.mockResolvedValue({ response: 0 })
     const result = await handlers.get('system:uninstall')!({})
     expect(result).toBe(false)
     const options = dialogMock.showMessageBox.mock.calls[0][0] as { detail: string }
+    expect(options.detail).toContain(
+      'Alle Patientendossiers (Stammdaten, Diagnosen, Medikation, Notizen)'
+    )
     expect(options.detail).toContain('Suchindex und letzte Suchanfragen')
   })
 })
