@@ -197,10 +197,9 @@ describe('ReviewEditor — pseudonymized view (#203)', () => {
 
   it('switches without changing or saving the session (AK 13, Postcondition 1)', async () => {
     await openEditor('pseudonymized')
-    // Let the load's own autosave run out first: setContent's update →
-    // 250 ms counter debounce → re-render → 2 s autosave timer
+    // Opening alone must not save (loading is not an edit)
     await settleAutosave()
-    await waitFor(() => expect(api.review.save).toHaveBeenCalled())
+    expect(api.review.save).not.toHaveBeenCalled()
     const savesBefore = api.review.save.mock.calls.length
 
     act(() => setViewMode('plain'))

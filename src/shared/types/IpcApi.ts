@@ -1,3 +1,4 @@
+import type { PendingEditsApi } from './ipc/PendingEditsApi'
 import type { Session, SessionType } from './Session'
 import type { Task, TaskType } from './Task'
 import type { BlocklistEntry } from './NerTypes'
@@ -311,4 +312,5 @@ export interface IpcApi {
   viewMode: ViewModeApi
   dossiers: DossierApi
   search: SearchApi
+  pendingEdits: PendingEditsApi
 }

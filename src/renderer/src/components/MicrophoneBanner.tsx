@@ -41,7 +41,7 @@ export default function MicrophoneBanner({
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <button
-          className="titlebar-no-drag rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-hover"
+          className="titlebar-no-drag rounded-md bg-primary-solid px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-solid-hover"
           onClick={isLost ? onAllow : onOpenSettings}
         >
           {isLost ? 'Mikrofon erlauben' : 'Systemeinstellungen öffnen'}

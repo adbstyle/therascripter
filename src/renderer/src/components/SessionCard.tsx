@@ -257,7 +257,7 @@ export const SessionCard = memo(function SessionCard({
       )}
       {session.status === 'error' && (toolBlocked || session.retryCount < 3) && onRetry && (
         <button
-          className="pointer-events-auto relative z-10 mt-1.5 text-xs font-medium text-primary hover:text-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+          className="pointer-events-auto relative z-10 mt-1.5 text-xs font-medium text-primary hover:text-primary-hover disabled:cursor-not-allowed disabled:text-text-secondary"
           onClick={() => onRetry(session.id)}
           disabled={retryDisabled}
           title={retryDisabled ? 'Eine andere Transkription wird gerade verarbeitet' : undefined}

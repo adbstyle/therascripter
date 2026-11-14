@@ -8,6 +8,7 @@ import { PlaceholderChip } from '../extensions/placeholderChip'
 import { SpeakerLabel } from '../extensions/speakerLabel'
 import { Timestamp } from '../extensions/timestamp'
 import { useAutoSave } from '../hooks/useAutoSave'
+import { registerPendingEditsFlusher } from '../services/pendingEdits'
 import { useSelectionToolbar } from '../hooks/useSelectionToolbar'
 import { useToast } from '../hooks/useToast'
 import { SelectionToolbar } from '../components/editor/SelectionToolbar'
@@ -84,6 +85,16 @@ interface BlocklistUndoEntry {
   undone: boolean
 }
 
+/**
+ * Breite der Zeile aus Textspalte und Übersicht, unter der die Übersicht (300 px)
+ * der Textspalte weniger als ~420 px liessen: sie legt sich dann als
+ * Überlagerung über den Text. Gemessen am Platz, nicht an der Fensterbreite —
+ * die Seitenleiste ist ein- und ausklappbar.
+ */
+const PANEL_OVERLAY_BELOW_PX = 720
+/** Hysterese: erst ab dieser Breite wird die Überlagerung wieder zur Spalte daneben (kein Flattern beim Ziehen). */
+const PANEL_OVERLAY_ABOVE_PX = 760
+
 interface ReviewEditorProps {
   sessionId: string
   /** Esc, «Zurück» nach einem Ladefehler und nach dem Löschen: zurück im Verlauf. */
@@ -119,7 +130,19 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
   } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
   const showDeleteDialog = deleteTarget !== null
-  const [panelOpen, setPanelOpen] = useState(false)
+  // Sichtbarer Zustand der Übersicht. Er bleibt beim Wechsel zwischen «daneben»
+  // und «Überlagerung» erhalten; gespeichert wird nur, wenn der Nutzer daneben
+  // selbst umschaltet.
+  const [panelShown, setPanelShown] = useState(false)
+  const [overlay, setOverlay] = useState(false)
+  const overlayRef = useRef(false)
+  const measuredRef = useRef(false)
+  const focusAfterPanelRef = useRef<'panel' | 'toggle' | null>(null)
+  const panelRowRef = useRef<HTMLDivElement | null>(null)
+  const panelToggleRef = useRef<HTMLButtonElement | null>(null)
+  const panelFocusRef = useRef<HTMLDivElement | null>(null)
+  const saveVersionRef = useRef({ changed: 0, saved: 0 })
+  const saveInflightRef = useRef<{ version: number; promise: Promise<void> } | null>(null)
   const entityMapRef = useRef<EntityMap>({})
   const editorRef = useRef<Editor | null>(null)
   const editorScrollRef = useRef<HTMLDivElement | null>(null)
@@ -130,21 +153,62 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
 
   useEffect(() => {
     window.api.settings.get('reviewPanelOpen').then((val) => {
-      if (typeof val === 'boolean') setPanelOpen(val)
+      // In schmaler Spalte beginnt die Überlagerung geschlossen
+      if (typeof val === 'boolean' && !overlayRef.current) setPanelShown(val)
     })
   }, [])
 
   const togglePanel = useCallback(() => {
-    setPanelOpen((prev) => {
-      const next = !prev
+    const next = !panelShown
+    setPanelShown(next)
+    if (overlay) {
+      focusAfterPanelRef.current = next ? 'panel' : 'toggle'
+    } else {
       window.api.settings.set('reviewPanelOpen', next)
-      return next
-    })
+    }
+  }, [overlay, panelShown])
+  const closeOverlay = useCallback(() => {
+    focusAfterPanelRef.current = 'toggle'
+    setPanelShown(false)
   }, [])
+
+  // Der Platz neben der Textspalte wird gemessen; erst nach dem Laden ist die
+  // Zeile im DOM.
+  useEffect(() => {
+    const el = panelRowRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width
+      if (typeof width !== 'number') return
+      const next =
+        width < PANEL_OVERLAY_BELOW_PX
+          ? true
+          : width >= PANEL_OVERLAY_ABOVE_PX
+            ? false
+            : overlayRef.current
+      const first = !measuredRef.current
+      measuredRef.current = true
+      overlayRef.current = next
+      setOverlay(next)
+      // Erste Messung schmal: die gespeicherte Vorgabe «offen» würde sonst den Text verdecken
+      if (first && next) setPanelShown(false)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [loading, loadError])
+
+  // Fokus nur nach Nutzeraktion (Knopf, Esc), nicht beim Überschreiten der Schwelle.
+  useEffect(() => {
+    const target = focusAfterPanelRef.current
+    focusAfterPanelRef.current = null
+    if (target === 'panel') panelFocusRef.current?.focus()
+    if (target === 'toggle') panelToggleRef.current?.focus()
+  }, [panelShown])
 
   /** Update entityMap in both state and ref, and trigger auto-save */
   const updateEntityMap = useCallback((updated: EntityMap) => {
     entityMapRef.current = updated
+    saveVersionRef.current.changed++
     setEntityMap(updated)
     setUpdateCounter((c) => c + 1)
   }, [])
@@ -204,6 +268,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
                   delete updated[stackEntry.entityId]
                   entityMapRef.current = updated
                   setEntityMap(updated)
+                  saveVersionRef.current.changed++
                   setUpdateCounter((c) => c + 1)
                 } else if (!snap.hadChips && hasChipsNow && stackEntry.undone) {
                   // Redo: chips reappeared → re-add blocklist entry to SQLite
@@ -226,6 +291,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
                       }
                       entityMapRef.current = updated
                       setEntityMap(updated)
+                      saveVersionRef.current.changed++
                       setUpdateCounter((c) => c + 1)
                     })
                 }
@@ -260,6 +326,8 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
     extensions: EDITOR_EXTENSIONS,
     editorProps,
     onUpdate: ({ editor: current, transaction }) => {
+      // Echte Dokumentänderung (das Laden feuert wegen emitUpdate: false nicht)
+      saveVersionRef.current.changed++
       // Eingefügte Chips können Entitäten zurückbringen, die seit dem Copy
       // aus der EntityMap entfernt wurden — ohne Eintrag vergäbe
       // getNextNumber ihre Nummer neu (entityId-Kollision).
@@ -272,8 +340,10 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
       // Debounced: updateCounter treibt Wortzählung + Anonymisierungs-
       // Übersicht (voller Doc-Walk) — pro Tastendruck ausgeführt machte das
       // Tippen in langen Transkripten spürbar zäh. Der Autosave hängt
-      // ebenfalls am Counter und debounct selbst nochmals (2 s); der
-      // Unmount-Flush liest direkt aus dem Editor und verliert nichts.
+      // ebenfalls am Counter und debounct selbst nochmals (2 s). Dass eine
+      // Änderung vor Ablauf beider Timer nicht verloren geht, sichert der
+      // Änderungszähler (saveVersionRef): der Unmount-Flush speichert, solange
+      // geänderter und gespeicherter Stand abweichen.
       if (updateDebounceRef.current !== null) clearTimeout(updateDebounceRef.current)
       updateDebounceRef.current = setTimeout(() => setUpdateCounter((c) => c + 1), 250)
     }
@@ -300,7 +370,10 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
         setAudioStats(data.audioStats)
         entityMapRef.current = data.entityMap
 
-        editor?.commands.setContent(data.document)
+        // emitUpdate false: das Laden ist keine Bearbeitung — sonst feuert
+        // onUpdate, der Autosave schriebe die unveränderte Sitzung zurück
+        // (und markierte sie für die Suche als neu aufzubereiten).
+        editor?.commands.setContent(data.document, { emitUpdate: false })
 
         // Reset undo history so initial content is not undoable
         const freshState = EditorState.create({
@@ -327,11 +400,44 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
   }, [sessionId, editor])
 
   // Auto-save callback
-  const handleSave = useCallback(async () => {
-    if (!editor) return
+  // Speichert nur bei echter Änderung und höchstens einmal je Stand: Autosave-
+  // Timer und Unmount-Flush dürfen beide anklopfen. Erst nach Erfolg gilt der
+  // Stand als gespeichert; Änderungen während des Speicherns bleiben offen.
+  const handleSave = useCallback((): Promise<void> => {
+    if (!editor || editor.isDestroyed) return Promise.resolve()
+    const versions = saveVersionRef.current
+    const version = versions.changed
+    if (version === versions.saved) return Promise.resolve()
+    const inflight = saveInflightRef.current
+    if (inflight && inflight.version === version) return inflight.promise
     const doc = editor.getJSON() as TipTapDocument
-    await window.api.review.save(sessionId, doc, entityMapRef.current)
+    const promise: Promise<void> = Promise.resolve(
+      window.api.review.save(sessionId, doc, entityMapRef.current)
+    )
+      .then(() => {
+        versions.saved = Math.max(versions.saved, version)
+      })
+      .finally(() => {
+        if (saveInflightRef.current?.promise === promise) saveInflightRef.current = null
+      })
+    saveInflightRef.current = { version, promise }
+    return promise
   }, [editor, sessionId])
+
+  // Schliessen oder Wegnavigieren mit ungespeicherter Änderung (auch innerhalb
+  // des 250-ms-Debounce): genau ein Flush. Deklariert vor dem destroy-Effekt,
+  // damit der Editor beim Lesen noch lebt.
+  const flushRef = useRef(handleSave)
+  flushRef.current = handleSave
+  useEffect(() => {
+    return () => {
+      flushRef.current().catch((err) => console.error('Flush on close failed:', err))
+    }
+  }, [])
+
+  // Beenden der App: der Main-Prozess fragt vor dem Schliessen der Datenbank
+  // nach (services/pendingEdits.ts) — derselbe Pfad, speichert nur bei Änderung
+  useEffect(() => registerPendingEditsFlusher(() => flushRef.current()), [])
 
   const { saving, lastSavedAt } = useAutoSave(
     editor && !loading ? handleSave : null,
@@ -592,11 +698,16 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       if (showDeleteDialog || blocklistConfirm) return
+      // Die Überlagerung schliesst zuerst; erst ein zweites Esc geht zurück.
+      if (overlay && panelShown) {
+        closeOverlay()
+        return
+      }
       onBack()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onBack, showDeleteDialog, blocklistConfirm])
+  }, [onBack, showDeleteDialog, blocklistConfirm, overlay, panelShown, closeOverlay])
 
   // Direkt über den ProseMirror-Doc statt countWords(editor.getJSON()):
   // getJSON() serialisierte das GESAMTE Transkript pro Neuberechnung —
@@ -620,7 +731,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [updateCounter, loading, editor])
 
-  const overviewData = useAnonymizationOverview(editor, updateCounter)
+  const overviewData = useAnonymizationOverview(loading ? null : editor, updateCounter)
 
   const { state: selectionToolbar, hide: hideSelectionToolbar } = useSelectionToolbar({
     editor,
@@ -650,6 +761,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
   // Titles hold tokens as plain text; Klartext resolves those whose meaning
   // is unchanged since the title was written (AK 4, AK 5) — against the live
   // EntityMap, so an unsaved chip change counts immediately.
+  const copyLabel = isPlain ? 'Klartext kopieren' : 'Pseudonymisiert kopieren'
   const displayTitle = isPlain
     ? resolvePlaceholders(sessionTitle, entityMap, titleSnapshot)
     : sessionTitle
@@ -680,64 +792,77 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Header */}
       {/* Kein Schliessen-Knopf (Epic #192): zurück über ‹ in der Titelleiste, ⌘[ oder Esc */}
-      <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
-        <div className="flex min-w-0 items-center gap-3">
-          {sessionType === 'audio' ? (
-            <Mic className="h-5 w-5 shrink-0 text-text-tertiary" strokeWidth={1.75} aria-hidden />
-          ) : (
-            <FileText
-              className="h-5 w-5 shrink-0 text-text-tertiary"
-              strokeWidth={1.75}
-              aria-hidden
+      {/* Container-Query: der Kopf misst seinen eigenen Platz (Seitenleiste und Übersicht
+          nehmen dem Editor Breite, die Fensterbreite sagt darüber nichts). */}
+      <div className="@container border-b border-border">
+        <header className="flex items-center justify-between gap-4 px-6 py-4">
+          <div className="flex min-w-[14rem] flex-1 items-center gap-3">
+            {sessionType === 'audio' ? (
+              <Mic className="h-5 w-5 shrink-0 text-text-tertiary" strokeWidth={1.75} aria-hidden />
+            ) : (
+              <FileText
+                className="h-5 w-5 shrink-0 text-text-tertiary"
+                strokeWidth={1.75}
+                aria-hidden
+              />
+            )}
+            <EditableSessionTitle
+              sessionId={sessionId}
+              title={sessionTitle}
+              readOnlyText={isPlain ? displayTitle : null}
+              fallback="Transkription ohne Titel"
+              onSaved={(next, record) => {
+                setSessionTitle(next)
+                if (record) setTitleSnapshot(record.titleSnapshot)
+              }}
+              className="min-w-0 flex-1 text-base font-semibold text-text-primary"
             />
-          )}
-          <EditableSessionTitle
-            sessionId={sessionId}
-            title={sessionTitle}
-            readOnlyText={isPlain ? displayTitle : null}
-            fallback="Transkription ohne Titel"
-            onSaved={(next, record) => {
-              setSessionTitle(next)
-              if (record) setTitleSnapshot(record.titleSnapshot)
-            }}
-            className="min-w-0 flex-1 text-base font-semibold text-text-primary"
-          />
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface-0 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
-            onClick={handleExportClipboard}
-            title={
-              isPlain
-                ? 'Kopiert den Text mit den Originalnamen'
-                : 'Kopiert den Text mit Platzhaltern'
-            }
-          >
-            <ClipboardCopy className="h-4 w-4" strokeWidth={2} aria-hidden />
-            {isPlain ? 'Klartext kopieren' : 'Pseudonymisiert kopieren'}
-          </button>
-          <button
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface-0 text-text-secondary transition-colors hover:border-error-border hover:bg-error-bg hover:text-error-text"
-            onClick={handleDeleteRequest}
-            aria-label="Transkription löschen"
-            title="Löschen"
-          >
-            <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          </button>
-          <button
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong transition-colors hover:bg-surface-1 ${panelOpen ? 'bg-surface-2 text-text-primary' : 'bg-surface-0 text-text-secondary'}`}
-            onClick={togglePanel}
-            aria-label="Übersicht ein-/ausblenden"
-            aria-pressed={panelOpen}
-            title="Übersicht ein-/ausblenden"
-          >
-            <PanelRight className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          </button>
-        </div>
-      </header>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Schmaler Kopf: nur das Symbol. Die Ansicht bleibt erkennbar — Name im
+              Tooltip und Screenreader, in Klartext zusätzlich der Farbakzent des
+              Umschalters (Warnfarbe). */}
+            <button
+              className={`flex h-9 w-9 items-center justify-center gap-1.5 rounded-lg border text-sm font-semibold transition-colors @min-[40rem]:w-auto @min-[40rem]:px-4 ${
+                isPlain
+                  ? 'border-warning-border bg-warning-bg text-warning-text hover:bg-warning-bg/70 @min-[40rem]:border-border-strong @min-[40rem]:bg-surface-0 @min-[40rem]:text-text-secondary @min-[40rem]:hover:bg-surface-1'
+                  : 'border-border-strong bg-surface-0 text-text-secondary hover:bg-surface-1'
+              }`}
+              onClick={handleExportClipboard}
+              aria-label={copyLabel}
+              title={`${copyLabel} — ${
+                isPlain
+                  ? 'kopiert den Text mit den Originalnamen'
+                  : 'kopiert den Text mit Platzhaltern'
+              }`}
+            >
+              <ClipboardCopy className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+              <span className="hidden @min-[40rem]:inline">{copyLabel}</span>
+            </button>
+            <button
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface-0 text-text-secondary transition-colors hover:border-error-border hover:bg-error-bg hover:text-error-text"
+              onClick={handleDeleteRequest}
+              aria-label="Transkription löschen"
+              title="Löschen"
+            >
+              <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+            </button>
+            <button
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong transition-colors hover:bg-surface-1 ${panelShown ? 'bg-surface-2 text-text-primary' : 'bg-surface-0 text-text-secondary'}`}
+              ref={panelToggleRef}
+              onClick={togglePanel}
+              aria-label="Übersicht ein-/ausblenden"
+              aria-pressed={panelShown}
+              title="Übersicht ein-/ausblenden"
+            >
+              <PanelRight className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+            </button>
+          </div>
+        </header>
+      </div>
 
       {/* Editor + Panel row */}
-      <div className="flex min-h-0 flex-1">
+      <div ref={panelRowRef} className="relative flex min-h-0 flex-1">
         <div
           ref={editorScrollRef}
           className="editor-scroll min-w-0 flex-1 overflow-y-auto"
@@ -757,7 +882,10 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
           </ChipActionsContext.Provider>
         </div>
         <ReviewSidePanel
-          isOpen={panelOpen}
+          isOpen={panelShown}
+          overlay={overlay}
+          onClose={closeOverlay}
+          panelRef={panelFocusRef}
           readOnly={isPlain}
           anonymization={overviewData}
           onRevert={handleBatchRemove}
@@ -821,8 +949,9 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
             <span>Klartext – Bearbeiten in der pseudonymisierten Ansicht</span>
           ) : (
             <>
-              <span>Cmd+Z Undo</span>
-              <span>Cmd+Shift+Z Redo</span>
+              <span>⌘Z Widerrufen</span>
+              <span aria-hidden>·</span>
+              <span>⇧⌘Z Wiederholen</span>
             </>
           )}
         </div>

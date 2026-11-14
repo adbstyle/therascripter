@@ -1,6 +1,22 @@
-import { app, BrowserWindow, dialog, nativeTheme, Notification, session, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  Notification,
+  session,
+  shell
+} from 'electron'
 import { join } from 'path'
-import { initDatabase, getDatabase, closeDatabase, getDataDir } from './db/connection'
+import {
+  initDatabase,
+  getDatabase,
+  closeDatabase,
+  getDataDir,
+  isDatabaseOpen
+} from './db/connection'
+import { requestRendererFlush, runQuitCleanup } from './services/PendingEditsFlush'
 import { initSettings, getSettings } from './services/SettingsService'
 import { initTaskQueue, getTaskQueue } from './services/TaskQueueService'
 import { registerSessionHandlers } from './ipc/session-handlers'
@@ -482,21 +498,29 @@ app.on('before-quit', (event) => {
   // Aufnahme nicht mehr erkennbar (#164 AK 14)
   const installPlan = getAppUpdateService()?.prepareQuitInstall() ?? null
   void (async () => {
-    cleanupRecordingOnQuit()
-    stopSourceFileCleanup()
-    // Vor dem Schliessen der DB: keine Textphase mehr (Epic #192)
-    getSearchIndexService()?.stop()
-    try {
-      await getTaskQueue().shutdown(8_000)
-    } catch {
-      // TaskQueue may not have been initialized
-    }
-    try {
-      getTray().destroy()
-    } catch {
-      // Tray may not have been initialized
-    }
-    closeDatabase()
+    await runQuitCleanup({
+      // Vor dem Schliessen der Datenbank und vor einem Update-Tausch: der
+      // Renderer speichert ausstehende Änderungen (höchstens 3 s). Nach der
+      // Deinstallation ist die Datenbank schon zu — dann nichts anfragen.
+      flushRendererEdits: () =>
+        isDatabaseOpen()
+          ? requestRendererFlush({
+              getTargets: () =>
+                BrowserWindow.getAllWindows().map((win) => ({
+                  isDestroyed: () => win.isDestroyed() || win.webContents.isDestroyed(),
+                  send: (channel, requestId) => win.webContents.send(channel, requestId)
+                })),
+              replies: ipcMain
+            })
+          : Promise.resolve(),
+      cleanupRecording: cleanupRecordingOnQuit,
+      // Epic #192 — keine Aufbereitung für die Suche mehr (nach dem Renderer-Flush)
+      stopSearchIndex: () => getSearchIndexService()?.stop(),
+      stopSourceFileCleanup,
+      shutdownTaskQueue: () => getTaskQueue().shutdown(8_000),
+      destroyTray: () => getTray().destroy(),
+      closeDatabase
+    })
     quitCleanupDone = true
     if (installPlan) {
       // Nur Umbenennungen — die neue Version liegt schon geprüft bereit (NFR 5).

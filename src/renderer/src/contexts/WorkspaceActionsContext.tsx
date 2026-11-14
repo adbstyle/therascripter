@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useNavigation } from '../navigation/navigation'
 import { useRecordingState } from './recording'
+import { useToast } from '../hooks/useToast'
+import { NewDossierDialog } from '../components/dossier/NewDossierDialog'
+import type { Dossier } from '../../../shared/types/Dossier'
 import {
   WorkspaceActionsContext,
   type ImportPdfOptions,
@@ -17,7 +20,9 @@ import {
 export function WorkspaceActionsProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const { navigate } = useNavigation()
   const { isRecording, startRecording: start } = useRecordingState()
+  const toast = useToast()
   const [isImporting, setIsImporting] = useState(false)
+  const [newDossierOpen, setNewDossierOpen] = useState(false)
   const importingRef = useRef(false)
   // Ohne Dossier führt der Aufnahmestart zur Sitzungsliste, dort lebt die
   // Live-Karte. Mit Dossier (ab #206) bleibt die App auf dessen Seite.
@@ -53,12 +58,26 @@ export function WorkspaceActionsProvider({ children }: { children: ReactNode }):
     }
   }, [])
 
+  const openNewDossier = useCallback(() => setNewDossierOpen(true), [])
+  const closeNewDossier = useCallback(() => setNewDossierOpen(false), [])
+  const dossierCreated = useCallback(
+    (dossier: Dossier) => {
+      setNewDossierOpen(false)
+      navigate({ kind: 'dossier', dossierId: dossier.id })
+      toast.success('Patientendossier angelegt')
+    },
+    [navigate, toast]
+  )
+
   const value = useMemo<WorkspaceActions>(
-    () => ({ startRecording, importPdfs, isImporting }),
-    [startRecording, importPdfs, isImporting]
+    () => ({ startRecording, importPdfs, isImporting, openNewDossier }),
+    [startRecording, importPdfs, isImporting, openNewDossier]
   )
 
   return (
-    <WorkspaceActionsContext.Provider value={value}>{children}</WorkspaceActionsContext.Provider>
+    <WorkspaceActionsContext.Provider value={value}>
+      {children}
+      {newDossierOpen && <NewDossierDialog onClose={closeNewDossier} onCreated={dossierCreated} />}
+    </WorkspaceActionsContext.Provider>
   )
 }

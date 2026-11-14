@@ -41,9 +41,10 @@ export function useScrollRestoration(ready: boolean): void {
 
     if (!info.anchorId) return
     info.onAnchorConsumed?.(info.entryId)
-    const card = Array.from(container.querySelectorAll<HTMLElement>('[data-session-id]')).find(
-      (el) => el.dataset.sessionId === info.anchorId
-    )
+    // Sitzungskarten tragen `data-session-id`, andere Zeilen (Dossiers) `data-anchor-id`
+    const card = Array.from(
+      container.querySelectorAll<HTMLElement>('[data-session-id], [data-anchor-id]')
+    ).find((el) => (el.dataset.sessionId ?? el.dataset.anchorId) === info.anchorId)
     if (!card) return
     if (!isFullyVisible(card, container)) {
       card.scrollIntoView({ block: 'center', behavior: 'instant' })

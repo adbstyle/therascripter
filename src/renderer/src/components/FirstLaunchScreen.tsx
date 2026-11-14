@@ -122,7 +122,7 @@ export default function FirstLaunchScreen({
               Modelle hinzufügen.
             </p>
             <button
-              className="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
+              className="rounded-lg bg-primary-solid px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-solid-hover"
               onClick={handleStart}
             >
               Download starten
@@ -214,7 +214,7 @@ export default function FirstLaunchScreen({
             </p>
             <p className="mb-3 text-sm text-error-text">{status.error}</p>
             <button
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
+              className="rounded-lg bg-primary-solid px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-solid-hover"
               onClick={handleStart}
             >
               Erneut versuchen
