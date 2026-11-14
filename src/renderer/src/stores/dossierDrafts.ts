@@ -14,6 +14,7 @@ import {
   MAX_DOSSIER_FREE_TEXT_LENGTH,
   MAX_DOSSIER_NAME_LENGTH
 } from '../../../shared/validation/dossier-schemas'
+import { registerPendingEditsFlusher } from '../services/pendingEdits'
 import type {
   Dossier,
   DossierPatch,
@@ -202,7 +203,7 @@ function createEditor(dossier: Dossier, update: UpdateDossier): EditorInternals 
   const saved: DossierFieldValues = { ...values }
   const errors: Partial<Record<DossierField, string>> = {}
   /** Wert, den der Main-Prozess abgelehnt hat — nicht erneut senden, bis er sich ändert. */
-  const rejected: Partial<Record<DossierField, string>> = {}
+  const rejected: Partial<Record<DossierField, { value: string; message: string }>> = {}
   const failed = new Set<DossierField>()
   const timers = new Map<DossierField, ReturnType<typeof setTimeout>>()
   const queue: DossierField[] = []
@@ -261,7 +262,13 @@ function createEditor(dossier: Dossier, update: UpdateDossier): EditorInternals 
       errors[field] = `${check.message} ${NOT_SAVED}`
       return
     }
-    if (rejected[field] === value) return
+    // Derselbe abgelehnte Wert (z. B. nach Tippen und Löschen eines Zeichens):
+    // nicht erneut senden, aber die Ablehnung wieder anzeigen
+    const known = rejected[field]
+    if (known && known.value === value) {
+      errors[field] = known.message
+      return
+    }
 
     let result: UpdateDossierResult
     try {
@@ -281,10 +288,9 @@ function createEditor(dossier: Dossier, update: UpdateDossier): EditorInternals 
       if (values[field] === value) delete errors[field]
       if (field === 'firstName' || field === 'lastName') duplicates = result.duplicates
     } else if (result.reason === 'external-id-taken') {
-      rejected[field] = value
-      if (values[field] === value) {
-        errors[field] = `${externalIdTakenMessage(value, result.ownerName)} ${NOT_SAVED}`
-      }
+      const message = `${externalIdTakenMessage(value, result.ownerName)} ${NOT_SAVED}`
+      rejected[field] = { value, message }
+      if (values[field] === value) errors[field] = message
     } else {
       failed.add(field)
       technicalError = DOSSIER_GONE_ERROR
@@ -337,7 +343,10 @@ function createEditor(dossier: Dossier, update: UpdateDossier): EditorInternals 
       values[field] = value
       // Eine Meldung verschwindet, sobald die Eingabe wieder stimmt; eine
       // neue erscheint erst nach der Tipp-Pause (beim Speicherversuch).
-      if (errors[field] && validateDossierField(field, value).ok && rejected[field] !== value) {
+      const known = rejected[field]
+      if (known && known.value === value) {
+        errors[field] = known.message
+      } else if (errors[field] && validateDossierField(field, value).ok) {
         delete errors[field]
       }
       clearTimer(field)
@@ -396,6 +405,23 @@ function createEditor(dossier: Dossier, update: UpdateDossier): EditorInternals 
 
 const editors = new Map<string, EditorInternals>()
 
+let integrated = false
+
+/**
+ * Einmalig beim ersten Editor: beim Beenden der App alle Entwürfe speichern
+ * und Entwürfe gelöschter Dossiers verwerfen — Klarnamen und Diagnosen
+ * sollen nicht im Speicher des Renderers zurückbleiben.
+ */
+function ensureIntegration(): void {
+  if (integrated) return
+  integrated = true
+  registerPendingEditsFlusher(flushAllDossierDrafts)
+  const api = typeof window !== 'undefined' ? window.api?.dossiers : undefined
+  api?.onChanged(({ deletedIds }) => {
+    for (const id of deletedIds) discardDossierDraft(id)
+  })
+}
+
 function removeIfUnused(editor: EditorInternals): void {
   if (editor.refCount === 0 && editor.isIdle() && editor.isClean()) {
     editor.dispose()
@@ -412,6 +438,7 @@ export function acquireDossierEditor(
   dossier: Dossier,
   update: UpdateDossier = (id, patch) => window.api.dossiers.update(id, patch)
 ): DossierEditor {
+  ensureIntegration()
   let editor = editors.get(dossier.id)
   if (editor) {
     editor.adopt(dossier)
@@ -444,9 +471,12 @@ export function discardDossierDraft(dossierId: string): void {
   editors.delete(dossierId)
 }
 
-/** Alle Entwürfe sofort speichern — beim Schliessen des Fensters. */
-export function flushAllDossierDrafts(): Promise<void> {
-  return Promise.all([...editors.values()].map((editor) => editor.flush())).then(() => undefined)
+/**
+ * Alle gültigen ausstehenden Felder aller Dossiers sofort speichern, Dossier
+ * für Dossier und je Dossier Feld für Feld — beim Beenden der App.
+ */
+export async function flushAllDossierDrafts(): Promise<void> {
+  for (const editor of [...editors.values()]) await editor.flush()
 }
 
 export function hasDossierDraft(dossierId: string): boolean {
@@ -457,4 +487,5 @@ export function hasDossierDraft(dossierId: string): boolean {
 export function resetDossierDrafts(): void {
   for (const editor of editors.values()) editor.dispose()
   editors.clear()
+  integrated = false
 }

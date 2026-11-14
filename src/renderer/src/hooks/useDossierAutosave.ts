@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import {
   acquireDossierEditor,
-  flushAllDossierDrafts,
   releaseDossierEditor,
   type DossierEditor,
   type DossierEditorState,
@@ -22,8 +21,11 @@ const noopSubscribe = (): (() => void) => () => undefined
  * Autosave der Stammdaten (#204 AK 10/11) über den Entwurfs-Editor in
  * `stores/dossierDrafts.ts`. Der Editor wird belegt, sobald das Dossier
  * geladen ist, und beim Verlassen der Seite freigegeben — ausstehende gültige
- * Änderungen werden dabei sofort gespeichert. Beim Schliessen des Fensters
- * ebenso. Gibt null zurück, solange das Dossier nicht geladen ist.
+ * Änderungen werden dabei sofort gespeichert. Beim Beenden der App speichert
+ * der Entwurfsspeicher über `services/pendingEdits.ts` (Anfrage des
+ * Main-Prozesses vor dem Schliessen der Datenbank). Das Schliessen des
+ * Fensters versteckt es nur; die Seite bleibt gemountet. Gibt null zurück,
+ * solange das Dossier nicht geladen ist.
  */
 export function useDossierAutosave(dossier: Dossier | null): DossierAutosave | null {
   const [editor, setEditor] = useState<DossierEditor | null>(null)
@@ -41,16 +43,6 @@ export function useDossierAutosave(dossier: Dossier | null): DossierAutosave | n
       setEditor(null)
     }
   }, [dossierId])
-
-  useEffect(() => {
-    const flush = (): void => void flushAllDossierDrafts()
-    window.addEventListener('beforeunload', flush)
-    window.addEventListener('pagehide', flush)
-    return () => {
-      window.removeEventListener('beforeunload', flush)
-      window.removeEventListener('pagehide', flush)
-    }
-  }, [])
 
   const state = useSyncExternalStore(
     editor?.subscribe ?? noopSubscribe,
