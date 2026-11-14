@@ -225,4 +225,37 @@ describe('LineProcess', () => {
     await proc.stop()
     await expect(proc.request({ op: 'ping' })).rejects.toBeInstanceOf(LineProcessExitedError)
   })
+
+  it('treats exit without close as ended after SIGKILL + settle time (grandchild holds the pipes)', async () => {
+    const proc = create(
+      { FAKE_IGNORE_EOF: '1', FAKE_IGNORE_SIGTERM: '1' },
+      { eofGraceMs: 100, killGraceMs: 100, killSettleMs: 300 }
+    )
+    await proc.start()
+    const { holderPid } = (await proc.request({ op: 'spawn-holder' })) as { holderPid: number }
+    try {
+      const started = Date.now()
+      const exit = await proc.stop()
+      // Erst nach dem SIGKILL weiter, aber mit harter Obergrenze
+      expect(exit.exitSignal).toBe('SIGKILL')
+      expect(Date.now() - started).toBeGreaterThanOrEqual(200)
+      expect(Date.now() - started).toBeLessThan(2_000)
+      expect(alive(proc.pid)).toBe(false)
+    } finally {
+      try {
+        process.kill(holderPid, 'SIGKILL')
+      } catch {
+        // schon weg
+      }
+    }
+  })
+
+  it('stop() accepts shorter escalation times (quit)', async () => {
+    const proc = create({ FAKE_IGNORE_EOF: '1', FAKE_IGNORE_SIGTERM: '1' })
+    await proc.start()
+    const started = Date.now()
+    const exit = await proc.stop({ eofGraceMs: 50, killGraceMs: 100 })
+    expect(exit.exitSignal).toBe('SIGKILL')
+    expect(Date.now() - started).toBeLessThan(800)
+  })
 })

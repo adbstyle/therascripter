@@ -2,7 +2,8 @@ import { rmSync, statfsSync } from 'fs'
 import { join } from 'path'
 import { powerMonitor } from 'electron'
 import { isPublished } from '../../shared/model-catalog'
-import type { SearchAvailability } from '../../shared/types/Search'
+import type { SearchAvailability, SearchModelState } from '../../shared/types/Search'
+import type { SearchWorker } from '../search/SearchWorker'
 import { getActiveSessionId } from '../ipc/recording-handlers'
 import { sendToRenderer } from '../utils/ipc-helpers'
 import {
@@ -15,7 +16,7 @@ import {
 import { SearchModelProvisioner } from './SearchModelProvisioner'
 import { getTaskQueue } from './TaskQueueService'
 import { getSearchRuntime, semanticAvailabilityOf, warmupSearch } from '../search/searchRuntime'
-import { getSearchIndexService } from '../search/SearchIndexService'
+import { getSearchIndexService, type SearchIndexService } from '../search/SearchIndexService'
 
 /** Event an den Renderer, sobald sich die Verfügbarkeit der Suche ändert. */
 export const SEARCH_AVAILABILITY_CHANNEL = 'search:availabilityChanged'
@@ -52,15 +53,12 @@ export function initSearchModelProvisioner(): SearchModelProvisioner {
       const archive = join(getModelsDir(), `${def.id}.tar.gz`)
       for (const path of [archive, `${archive}.partial`]) rmSync(path, { force: true })
     },
-    onStateChange: (model) => {
-      if (model.status === 'ready') {
-        // PR S4: Modell da → Bestand für die Suche nach Bedeutung aufbereiten
-        // (#210 AK 1), ohne auf den nächsten Takt zu warten
-        getSearchRuntime()?.worker.refreshState()
-        getSearchIndexService()?.maybeStartVectorPhase()
-      }
-      sendSearchAvailability()
-    },
+    onStateChange: (model) =>
+      onSearchModelStateChange(model, {
+        worker: getSearchRuntime()?.worker ?? null,
+        index: getSearchIndexService(),
+        send: sendSearchAvailability
+      }),
     now: () => new Date(),
     log: (message) => console.log(message),
     // Nach dem Ruhezustand einen fälligen Versuch nachholen
@@ -80,13 +78,54 @@ export function getSearchModelProvisioner(): SearchModelProvisioner | null {
 export function getSearchAvailability(): SearchAvailability {
   const model = provisioner?.getState() ?? { status: 'unpublished' }
   const runtime = getSearchRuntime()
-  const semantic = runtime ? semanticAvailabilityOf(runtime.worker.getState()) : 'model-missing'
-  return { model, semantic }
+  if (!runtime) return { model, semantic: 'model-missing' }
+  const availability: SearchAvailability = {
+    model,
+    semantic: semanticAvailabilityOf(runtime.worker.getState())
+  }
+  const message = runtime.worker.getMessage()
+  if (message) availability.semanticMessage = message
+  return availability
 }
 
-/** Event `search:availabilityChanged` — bei jeder Änderung von Modell oder Suchprozess. */
+/**
+ * Modell-Zustand vom Provisioner: ist das Modell (neu) bereit, gelten
+ * angehaltene Starts nicht mehr und die Vektorphase läuft sofort an (Bestand,
+ * #210 AK 1) — ohne auf den nächsten Takt zu warten. Danach das Event.
+ */
+export function onSearchModelStateChange(
+  model: SearchModelState,
+  deps: {
+    worker: Pick<SearchWorker, 'resetStartFailures' | 'refreshState'> | null
+    index: Pick<SearchIndexService, 'maybeStartVectorPhase'> | null
+    send: () => void
+  }
+): void {
+  if (model.status === 'ready') {
+    deps.worker?.resetStartFailures()
+    deps.index?.maybeStartVectorPhase()
+  }
+  deps.send()
+}
+
+let lastSentAvailability = ''
+
+/**
+ * Event `search:availabilityChanged` — nur, wenn sich die Nutzlast ändert
+ * (während der Aufbereitung wechselt der Suchprozess pro Batch zwischen
+ * `busy` und `ready`; für die Oberfläche ist das derselbe Stand).
+ */
 export function sendSearchAvailability(): void {
-  sendToRenderer(SEARCH_AVAILABILITY_CHANNEL, getSearchAvailability())
+  const availability = getSearchAvailability()
+  const key = JSON.stringify(availability)
+  if (key === lastSentAvailability) return
+  lastSentAvailability = key
+  sendToRenderer(SEARCH_AVAILABILITY_CHANNEL, availability)
+}
+
+/** Nur für Tests. */
+export function resetSentAvailabilityForTests(): void {
+  lastSentAvailability = ''
 }
 
 /**

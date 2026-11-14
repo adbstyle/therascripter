@@ -10,7 +10,8 @@ import {
 import type {
   RecentSearchQuery,
   SearchAvailability,
-  SearchQueryResult
+  SearchQueryResult,
+  SearchScope
 } from '../../shared/types/Search'
 
 // IPC der Suche (Epic #192 — #209, #210, #211). search:open,
@@ -48,15 +49,22 @@ export function handleSearchQuery(
  * und hält den Suchprozess nicht weiter auf.
  */
 export class SemanticRequestTracker {
-  private latest = new Map<number, number>()
+  private latest = new Map<string, number>()
 
-  begin(windowId: number, requestId: number): () => boolean {
-    this.latest.set(windowId, requestId)
-    return () => this.latest.get(windowId) !== requestId
+  /** Bereich: Gesamtsuche und Dossier-Suche desselben Fensters lösen sich nicht ab. */
+  private key(windowId: number, scope: SearchScope): string {
+    return scope.kind === 'all' ? `${windowId}:all` : `${windowId}:dossier:${scope.dossierId}`
   }
 
-  end(windowId: number, requestId: number): void {
-    if (this.latest.get(windowId) === requestId) this.latest.delete(windowId)
+  begin(windowId: number, requestId: number, scope: SearchScope = { kind: 'all' }): () => boolean {
+    const key = this.key(windowId, scope)
+    this.latest.set(key, requestId)
+    return () => this.latest.get(key) !== requestId
+  }
+
+  end(windowId: number, requestId: number, scope: SearchScope = { kind: 'all' }): void {
+    const key = this.key(windowId, scope)
+    if (this.latest.get(key) === requestId) this.latest.delete(key)
   }
 }
 
@@ -67,11 +75,11 @@ export async function handleSearchSemantic(
   args: unknown
 ): Promise<SearchQueryResult> {
   const input = validateIpc(SearchQueryInputSchema, args, 'search:semantic')
-  const isSuperseded = tracker.begin(windowId, input.requestId)
+  const isSuperseded = tracker.begin(windowId, input.requestId, input.scope)
   try {
     return await service.semantic(input, { isSuperseded })
   } finally {
-    tracker.end(windowId, input.requestId)
+    tracker.end(windowId, input.requestId, input.scope)
   }
 }
 

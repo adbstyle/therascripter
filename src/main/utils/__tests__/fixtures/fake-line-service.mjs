@@ -15,6 +15,7 @@
 //   FAKE_DIM              Dimension der Vektoren (Default 768)
 //   FAKE_LOG              Datei, in die jede Operation eine Zeile schreibt
 import { appendFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
 
 const env = process.env
 const dim = Number(env.FAKE_DIM ?? 768)
@@ -92,6 +93,16 @@ async function handle(line) {
     case 'half':
       process.stdout.write('{"id": 99, "partial": tr', () => process.exit(0))
       return
+    case 'spawn-holder': {
+      // Enkelprozess in EIGENER Gruppe, der stdout/stderr erbt und offen hält
+      const holder = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 20000)'], {
+        detached: true,
+        stdio: ['ignore', 'inherit', 'inherit']
+      })
+      holder.unref()
+      send({ id, holderPid: holder.pid })
+      return
+    }
     case 'nullid':
       // Wie search_service.py bei einer unlesbaren bzw. zu grossen Zeile
       send({ id: null, error: { code: 'too_large', message: 'Zeile zu gross' } })

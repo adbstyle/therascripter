@@ -97,8 +97,19 @@ export const SEARCH_WORKER_IDLE_MS = 5 * 60_000
  * hält den Prozess unter den 3.5 GiB von #209 AK 15.
  */
 export const SEARCH_WORKER_RESTART_FOOTPRINT_BYTES = 2.5 * 1024 ** 3
-/** Nach einem Absturz bzw. gescheiterten Start: so lange kein neuer Versuch. */
+/**
+ * Nach einem Absturz bzw. gescheiterten Start: so lange kein neuer Versuch —
+ * und nur so lange meldet die Suche den Fehler; danach versucht die nächste
+ * Anfrage einen Neustart.
+ */
 export const SEARCH_WORKER_FAILURE_COOLDOWN_MS = 30_000
+/**
+ * Nach so vielen gescheiterten Starts in Folge startet die Aufbereitung den
+ * Suchprozess nicht mehr (keine Startschleife mit Speicherspitze), bis das
+ * Modell neu bereitgestellt wird, eine USER-Suche ihn erfolgreich startet
+ * oder die App neu startet.
+ */
+export const SEARCH_WORKER_MAX_START_FAILURES = 3
 
 /** Vektorphase: Abschnitte pro Anfrage an den Suchdienst und pro Commit (Review S1). */
 export const SEARCH_VECTOR_BATCH = 2

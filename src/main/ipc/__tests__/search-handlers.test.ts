@@ -129,4 +129,15 @@ describe('search IPC handlers', () => {
     expect(open).toHaveBeenCalledTimes(1)
     expect(get).not.toHaveBeenCalled()
   })
+
+  it('the overall search and a dossier search of the same window do not supersede each other', () => {
+    const tracker = new SemanticRequestTracker()
+    const all = tracker.begin(1, 1, { kind: 'all' })
+    const dossier = tracker.begin(1, 2, { kind: 'dossier', dossierId: 'd1' })
+    expect(all()).toBe(false)
+    expect(dossier()).toBe(false)
+    tracker.begin(1, 3, { kind: 'all' })
+    expect(all()).toBe(true)
+    expect(dossier()).toBe(false)
+  })
 })

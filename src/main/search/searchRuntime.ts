@@ -1,12 +1,11 @@
 import type Database from 'better-sqlite3'
 import { join } from 'path'
 import { app } from 'electron'
-import { SearchWorker, type SearchWorkerDeps } from './SearchWorker'
+import { SearchWorker, type SearchWorkerDeps, type ToolCheckOutcome } from './SearchWorker'
 import { VectorStore } from './VectorStore'
 import { resolveSearchModel } from './searchModel'
 import { resolvePythonSidecar } from '../ml/resolve-python'
-import { throwIfToolBlocked } from '../services/ToolHealthService'
-import { ToolBlockedError } from '../../shared/tool-blocked'
+import { getToolHealthService } from '../services/ToolHealthService'
 import { onSessionsDeleted } from '../services/ChangeEvents'
 import type { VectorPhaseDeps } from './SearchIndexService'
 import type { SemanticSearchDeps } from './SearchService'
@@ -27,18 +26,12 @@ export function resolveSearchCommand(): { bin: string; args: string[] } {
   return resolvePythonSidecar('search_service.py')
 }
 
-/** Nach einem SIGKILL von aussen: blockiert macOS das Python-Werkzeug? (#168) */
-async function isPythonBlocked(exit: { exitSignal: NodeJS.Signals | null }): Promise<boolean> {
-  try {
-    await throwIfToolBlocked('python', {
-      exitSignal: exit.exitSignal,
-      timedOut: false,
-      aborted: false
-    })
-    return false
-  } catch (error) {
-    return error instanceof ToolBlockedError
-  }
+/**
+ * Nach einem SIGKILL von aussen: blockiert macOS das Python-Werkzeug? (#168)
+ * 'repaired' = Therascript hat die Blockade eben behoben → sofort neu versuchen.
+ */
+async function checkPythonBlocked(): Promise<ToolCheckOutcome> {
+  return (await getToolHealthService()?.recheck('python')) ?? 'none'
 }
 
 export interface SearchRuntime {
@@ -54,6 +47,8 @@ export interface SearchRuntime {
 export interface SearchRuntimeOptions {
   isProcessingActive: () => boolean
   onStateChange?: (state: SearchProcessState) => void
+  /** Werkzeug-Prüfung beim Start (startToolCheck) — erst danach startet Python. */
+  startGate?: () => Promise<unknown>
   /** Tests: Abweichungen vom Standard (Fake-Dienst, kürzere Zeiten). */
   workerOverrides?: Partial<SearchWorkerDeps>
 }
@@ -69,7 +64,8 @@ export function createSearchRuntime(
     resolveModel,
     resolveCommand: resolveSearchCommand,
     isProcessingActive: options.isProcessingActive,
-    isToolBlocked: isPythonBlocked,
+    checkToolBlocked: checkPythonBlocked,
+    startGate: options.startGate,
     ...options.workerOverrides
   })
   const store = new VectorStore(db)
@@ -94,6 +90,7 @@ export function createSearchRuntime(
     semanticDeps: {
       embedQuery: (text) => worker.embedQuery(text),
       getState: () => worker.getState(),
+      getUserReason: () => worker.getUserReason(),
       store,
       resolveModel
     },
@@ -102,11 +99,26 @@ export function createSearchRuntime(
       isProcessingActive: options.isProcessingActive,
       embedDocuments: (texts) => worker.embedDocuments(texts),
       onSessionVectorsChanged: (id) => store.refreshSession(id),
-      onTick: () => worker.refreshState()
+      onTick: () => worker.refreshState(),
+      onActiveChange: (active) => worker.setIndexing(active)
     },
     dispose: () => {
       for (const off of unsubscribers) off()
     }
+  }
+}
+
+/**
+ * Hook vor jedem Task der Warteschlange: Suchprozess beenden und Vektorphase
+ * abbrechen; der Task beginnt erst, wenn beides erledigt ist (#209 AK 17).
+ * Obergrenze: LineProcess gilt spätestens nach SIGKILL + Frist als beendet.
+ */
+export function createBeforeTaskHook(
+  rt: Pick<SearchRuntime, 'worker'>,
+  index: { abortVectorPhase: () => Promise<void> }
+): () => Promise<void> {
+  return async () => {
+    await Promise.all([rt.worker.stop('processing'), index.abortVectorPhase()])
   }
 }
 
@@ -155,7 +167,9 @@ export function semanticAvailabilityOf(state: SearchProcessState): SemanticAvail
  */
 export async function warmupSearch(rt: SearchRuntime): Promise<SearchProcessState> {
   const model = rt.semanticDeps.resolveModel()
-  if (rt.worker.getState().reason === null && model) {
+  const reason = rt.worker.getUserReason()
+  // Auch nach einem Fehler (nach der Pause) einen Neustart versuchen
+  if (reason !== 'processing' && reason !== 'model-missing' && model) {
     const loading = rt.store.load(model.modelId).catch((error) => {
       console.error('[Search] Vektoren nicht geladen:', error)
     })

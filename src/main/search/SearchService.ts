@@ -44,6 +44,11 @@ import type {
 export interface SemanticSearchDeps {
   embedQuery: (text: string) => Promise<Float32Array>
   getState: () => SearchProcessState
+  /**
+   * Grund aus Sicht einer USER-Suche (SearchWorker.getUserReason): ohne die
+   * angehaltenen Starts der Aufbereitung. Default: getState().reason.
+   */
+  getUserReason?: () => SearchProcessState['reason']
   store: VectorStore
   resolveModel: () => SearchModelInfo | null
   /** Default SEARCH_SEMANTIC_THRESHOLD. */
@@ -124,7 +129,12 @@ export class SearchService {
   /** Stand der Suche nach Bedeutung, wie `search:query` ihn meldet. */
   semanticStatus(): SemanticSearchStatus {
     if (!this.semanticDeps) return 'model-missing'
-    return semanticStatusOf(this.semanticDeps.getState().reason)
+    return semanticStatusOf(this.userReason())
+  }
+
+  private userReason(): SearchProcessState['reason'] {
+    const deps = this.semanticDeps!
+    return deps.getUserReason ? deps.getUserReason() : deps.getState().reason
   }
 
   query(input: SearchQueryInput): SearchQueryResult {
@@ -219,8 +229,10 @@ export class SearchService {
         semantic
       }
     }
+    // Nur Verarbeitung und fehlendes Modell schliessen einen Versuch aus; nach
+    // einem Fehler versucht die Anfrage (nach der Pause) einen Neustart
     const status = this.semanticStatus()
-    if (status !== 'pending') return exactOnly(status)
+    if (status === 'unavailable-processing' || status === 'model-missing') return exactOnly(status)
     const isSuperseded = options.isSuperseded ?? ((): boolean => false)
     if (isSuperseded()) return exactOnly('superseded')
 
@@ -230,8 +242,7 @@ export class SearchService {
     } catch (error) {
       if (error instanceof VectorStoreCancelledError) return exactOnly('superseded')
       if (error instanceof SearchWorkerUnavailableError) {
-        const reason =
-          error.reason === 'stopped' ? this.semanticDeps!.getState().reason : error.reason
+        const reason = error.reason === 'stopped' ? this.userReason() : error.reason
         return exactOnly(reason === null ? 'error' : semanticStatusOf(reason))
       }
       console.error('[Search] Suche nach Bedeutung fehlgeschlagen:', error)
@@ -337,6 +348,7 @@ export class SearchService {
       this.index.findChunksByIds(chunkIds).map((c) => [c.id, c])
     )
     const ids = documents.map((d) => d.sessionId)
+    const textGens = this.index.findTextGens(ids)
     const meta = this.sessionMeta(ids)
     const dossiers = this.dossiersOfSessions(ids)
 
@@ -345,7 +357,15 @@ export class SearchService {
       const session = meta.get(doc.sessionId)
       if (!session) continue
       const hits = doc.hits
-        .map((hit) => buildHit(hit, chunks, terms))
+        .map((hit) => {
+          const built = buildHit(hit, chunks, terms)
+          const gen = chunks.get(hit.primary.chunkId)?.gen
+          const current = textGens.get(doc.sessionId)
+          if (built && gen !== undefined && current !== undefined && gen !== current) {
+            built.fromEarlierVersion = true
+          }
+          return built
+        })
         .filter((h): h is NonNullable<typeof h> => h !== null)
       results.push({
         sessionId: doc.sessionId,

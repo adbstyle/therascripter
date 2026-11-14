@@ -85,7 +85,8 @@ import {
   sendSearchAvailability
 } from './services/search-model-provisioner-deps'
 import { initSearchIndexService, getSearchIndexService } from './search/SearchIndexService'
-import { getSearchRuntime, initSearchRuntime } from './search/searchRuntime'
+import { createBeforeTaskHook, getSearchRuntime, initSearchRuntime } from './search/searchRuntime'
+import { onSessionsDeleted } from './services/ChangeEvents'
 import { getActiveSessionId } from './ipc/recording-handlers'
 
 // Set in before-quit so the close-handler can distinguish "user closed window"
@@ -319,7 +320,9 @@ app.whenReady().then(() => {
   // ~600 Programmdateien); die Oberfläche wartet nicht, nur die Verarbeitung —
   // sonst scheiterte die erste Aufgabe an einem Werkzeug, das gleich repariert
   // wird. Höchstens 10 s, danach läuft die Verarbeitung trotzdem an.
-  startToolCheck(initToolHealth(), taskQueue)
+  // Epic #192: der Suchprozess wartet auf dieselbe Prüfung (kein Python-Start
+  // mitten in die Quarantäne-Reparatur nach einem Update)
+  const toolCheckGate = startToolCheck(initToolHealth(), taskQueue)
 
   // Register real ML executors (replacing stubs)
   taskQueue.registerExecutor('transcription', new WhisperService())
@@ -463,7 +466,8 @@ app.whenReady().then(() => {
   const searchRuntime = initSearchRuntime(getDatabase(), {
     isProcessingActive: () => taskQueue.hasActiveWork(),
     // Ein Event für Modell und Suchprozess (search:availabilityChanged)
-    onStateChange: () => sendSearchAvailability()
+    onStateChange: () => sendSearchAvailability(),
+    startGate: () => toolCheckGate
   })
   const searchIndex = initSearchIndexService(getDatabase(), {
     // Gestaffeltes Löschen: sind die Indexzeilen weg, schliesst die Sitzung ab
@@ -472,9 +476,11 @@ app.whenReady().then(() => {
     },
     vectors: searchRuntime.vectorPhaseDeps
   })
-  taskQueue.setBeforeTaskHook(() =>
-    Promise.all([searchRuntime.worker.stop('processing'), searchIndex.abortVectorPhase()])
-  )
+  taskQueue.setBeforeTaskHook(createBeforeTaskHook(searchRuntime, searchIndex))
+  // Verarbeitung beginnt/endet: sofort melden, nicht erst im nächsten Takt
+  taskQueue.setActivityListener(() => searchRuntime.worker.refreshState())
+  // Gelöscht: kein Klartext der Sitzung mehr an den Suchprozess (#209 PC 1)
+  onSessionsDeleted((ids) => searchIndex.noteSessionsDeleted(ids))
   searchIndex.setRecordingPause(getActiveSessionId() !== null)
   searchIndex.start()
 

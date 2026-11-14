@@ -37,6 +37,13 @@ export interface LineProcessOptions {
   eofGraceMs?: number
   /** Frist zwischen SIGTERM und SIGKILL. Default 2 s. */
   killGraceMs?: number
+  /**
+   * Nach dem SIGKILL höchstens so lange auf 'close' warten (Default 1 s).
+   * Hält ein Enkelprozess ausserhalb der Gruppe die Pipes offen, käme 'close'
+   * nie — der Prozess gilt dann trotzdem als beendet (laut protokolliert).
+   * Harte Obergrenze für stop(): eofGrace + killGrace + killSettle.
+   */
+  killSettleMs?: number
   /** stderr-Ringpuffer in UTF-16-Einheiten. Default 64 Ki. */
   maxStderrChars?: number
   /** Jede vollständige stderr-Zeile. */
@@ -105,6 +112,7 @@ interface PendingRequest {
 const DEFAULT_START_TIMEOUT_MS = 60_000
 const DEFAULT_EOF_GRACE_MS = 2_000
 const DEFAULT_KILL_GRACE_MS = 2_000
+const DEFAULT_KILL_SETTLE_MS = 1_000
 const DEFAULT_MAX_STDERR_CHARS = 64 * 1024
 /** Vertragszeile des Suchdiensts nach dem Laden (Smoke-Check `search load`). */
 const WEIGHTS_LINE = /^Gewichte: (.+)$/
@@ -133,6 +141,9 @@ export class LineProcess {
   private termTimer: ReturnType<typeof setTimeout> | null = null
   private killTimer: ReturnType<typeof setTimeout> | null = null
   private terminating = false
+  private killGraceOverride: number | undefined
+  private settleTimer: ReturnType<typeof setTimeout> | null = null
+  private exitSeen: { code: number | null; signal: NodeJS.Signals | null } | null = null
   private weights: string | null = null
 
   constructor(private readonly opts: LineProcessOptions) {}
@@ -165,6 +176,9 @@ export class LineProcess {
     proc.on('error', (err) => {
       // spawn selbst gescheitert (sehr selten nach accessSync)
       this.finish(null, null, err.message)
+    })
+    proc.on('exit', (code, signal) => {
+      this.exitSeen = { code, signal }
     })
     proc.on('close', (code, signal) => this.finish(code, signal))
 
@@ -249,8 +263,9 @@ export class LineProcess {
    * nach `eofGraceMs` Gruppen-SIGTERM, nach `killGraceMs` SIGKILL. Idempotent;
    * erfüllt sich erst, wenn der Prozess nachweislich weg ist.
    */
-  stop(): Promise<LineProcessExit> {
+  stop(timing: { eofGraceMs?: number; killGraceMs?: number } = {}): Promise<LineProcessExit> {
     if (this.exitInfo) return Promise.resolve(this.exitInfo)
+    if (timing.killGraceMs !== undefined) this.killGraceOverride = timing.killGraceMs
     if (!this.proc) {
       // Nie gestartet
       this.stopRequested = true
@@ -264,7 +279,7 @@ export class LineProcess {
       } catch {
         // stdin schon zu
       }
-      this.terminate(this.opts.eofGraceMs ?? DEFAULT_EOF_GRACE_MS)
+      this.terminate(timing.eofGraceMs ?? this.opts.eofGraceMs ?? DEFAULT_EOF_GRACE_MS)
     }
     return this.waitForExit()
   }
@@ -273,6 +288,21 @@ export class LineProcess {
   kill(): void {
     this.stopRequested = true
     this.killGroup('SIGKILL')
+  }
+
+  /** Nach dem SIGKILL: spätestens nach killSettleMs gilt der Prozess als beendet. */
+  private armSettle(): void {
+    if (this.settleTimer || this.exitInfo) return
+    this.settleTimer = setTimeout(() => {
+      if (this.exitInfo) return
+      const exit = this.exitSeen
+      console.error(
+        exit
+          ? `[LineProcess] Prozess ${this.proc?.pid} beendet (${exit.signal ?? exit.code}), aber die Pipes bleiben offen (Enkelprozess?) — gilt als beendet`
+          : `[LineProcess] Prozess ${this.proc?.pid} reagiert nicht auf SIGKILL — gilt nach der Frist als beendet`
+      )
+      this.finish(exit?.code ?? null, exit?.signal ?? 'SIGKILL')
+    }, this.opts.killSettleMs ?? DEFAULT_KILL_SETTLE_MS)
   }
 
   /** SIGTERM an die Gruppe nach `afterMs`, SIGKILL nach der Frist. Idempotent. */
@@ -284,7 +314,7 @@ export class LineProcess {
       this.killGroup('SIGTERM')
       this.killTimer = setTimeout(
         () => this.killGroup('SIGKILL'),
-        this.opts.killGraceMs ?? DEFAULT_KILL_GRACE_MS
+        this.killGraceOverride ?? this.opts.killGraceMs ?? DEFAULT_KILL_GRACE_MS
       )
     }
     if (afterMs <= 0) term()
@@ -294,6 +324,7 @@ export class LineProcess {
   private killGroup(sig: NodeJS.Signals): void {
     const proc = this.proc
     if (!proc || this.exitInfo) return
+    if (sig === 'SIGKILL') this.armSettle()
     try {
       if (proc.pid !== undefined) process.kill(-proc.pid, sig)
       else proc.kill(sig)
@@ -407,7 +438,7 @@ export class LineProcess {
     if (spawnError) this.stderrTail += `${spawnError}\n`
     // Halbe letzte Zeile ohne Zeilenende: verwerfen
     this.stdoutBuffer = ''
-    for (const timer of [this.startTimer, this.termTimer, this.killTimer]) {
+    for (const timer of [this.startTimer, this.termTimer, this.killTimer, this.settleTimer]) {
       if (timer) clearTimeout(timer)
     }
     this.exitInfo = {

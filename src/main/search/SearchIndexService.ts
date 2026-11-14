@@ -90,6 +90,11 @@ export interface VectorPhaseDeps {
   onSessionVectorsChanged?: (sessionId: string) => void
   /** In jedem Takt (SearchWorker.refreshState). */
   onTick?: () => void
+  /**
+   * Die Vektorphase arbeitet bzw. ist fertig/pausiert/abgebrochen
+   * (SearchWorker.setIndexing — der Leerlauf zählt nur USER-Interaktionen).
+   */
+  onActiveChange?: (active: boolean) => void
 }
 
 export type VectorSessionOutcome = 'complete' | 'failed' | 'aborted' | 'superseded'
@@ -134,6 +139,8 @@ export class SearchIndexService {
   private vectorRun: Promise<void> | null = null
   /** Steigt mit jedem Abbruch — ein laufender Batch erkennt daran, dass er verworfen ist. */
   private vectorEpoch = 0
+  /** Während des Laufs gelöscht/markiert: kein weiterer Klartext an den Suchprozess. */
+  private deletedDuringVectors = new Set<string>()
   /** stop() wurde aufgerufen (Beenden, Update) — anders als `stopped` nicht schon vor start(). */
   private halted = false
 
@@ -229,6 +236,7 @@ export class SearchIndexService {
    * danach das Löschen der Sitzung abschliessen (ihre Dateien sind weg).
    */
   schedulePurge(sessionId: string, finish: boolean): void {
+    this.deletedDuringVectors.add(sessionId)
     this.purgeQueue.set(sessionId, finish || this.purgeQueue.get(sessionId) === true)
     this.scheduleContinuation(0)
   }
@@ -270,6 +278,15 @@ export class SearchIndexService {
     if (!this.vectors || this.halted || this.recordingPaused) return false
     if (this.vectors.isProcessingActive()) return false
     return this.vectors.resolveModel() !== null
+  }
+
+  /**
+   * Gelöschte bzw. zum Löschen markierte Sitzungen (ChangeEvents,
+   * synchron): die laufende Vektorphase schickt danach keinen Abschnitt
+   * dieser Sitzungen mehr an den Suchprozess (#209 PC 1).
+   */
+  noteSessionsDeleted(ids: readonly string[]): void {
+    for (const id of ids) this.deletedDuringVectors.add(id)
   }
 
   /** true, solange ein Lauf der Vektorphase aktiv ist (Tests, Diagnose). */
@@ -319,19 +336,30 @@ export class SearchIndexService {
   private async vectorLoop(epoch: number): Promise<number> {
     const cancelled = (): boolean => epoch !== this.vectorEpoch || !this.vectorPhaseAllowed()
     let complete = 0
-    while (!cancelled()) {
-      const model = this.vectors!.resolveModel()
-      if (!model) break
-      const session = this.repository.findPendingVectorSession(
-        model.modelId,
-        new Date(this.now()).toISOString()
-      )
-      if (!session) break
-      const outcome = await this.vectorizeSession(session, model, cancelled)
-      if (outcome === 'aborted') break
-      if (outcome === 'complete') complete++
-      // Event-Loop zwischen zwei Sitzungen freigeben
-      await new Promise((r) => setImmediate(r))
+    let active = false
+    try {
+      while (!cancelled()) {
+        const model = this.vectors!.resolveModel()
+        if (!model) break
+        const session = this.repository.findPendingVectorSession(
+          model.modelId,
+          new Date(this.now()).toISOString()
+        )
+        if (!session) break
+        if (!active) {
+          active = true
+          this.vectors!.onActiveChange?.(true)
+        }
+        const outcome = await this.vectorizeSession(session, model, cancelled)
+        if (outcome === 'aborted') break
+        if (outcome === 'complete') complete++
+        // Event-Loop zwischen zwei Sitzungen freigeben
+        await new Promise((r) => setImmediate(r))
+      }
+    } finally {
+      this.deletedDuringVectors.clear()
+      // Fertig, pausiert oder abgebrochen: der Leerlauf des Suchprozesses greift
+      if (active) this.vectors!.onActiveChange?.(false)
     }
     return complete
   }
@@ -353,6 +381,8 @@ export class SearchIndexService {
       .sort((a, b) => b.text.length - a.text.length || a.id - b.id)
     for (let i = 0; i < pending.length; i += SEARCH_VECTOR_BATCH) {
       if (cancelled()) return 'aborted'
+      // Gelöscht: kein Klartext dieser Sitzung mehr an den Suchprozess
+      if (this.deletedDuringVectors.has(sessionId)) return 'superseded'
       const batch = pending.slice(i, i + SEARCH_VECTOR_BATCH)
       let vectors: Float32Array[]
       try {
@@ -362,14 +392,16 @@ export class SearchIndexService {
       } catch (error) {
         if (cancelled()) return 'aborted'
         if (error instanceof SearchWorkerUnavailableError) {
-          // Verarbeitung, Beenden, Modell fehlt, Werkzeug blockiert: kein
-          // Fehler dieser Sitzung. Ein Absturz ('error') zählt dagegen — sonst
-          // brächte ein Abschnitt, der den Dienst jedes Mal kippt, die
-          // Vektorphase in eine Schleife.
-          if (error.reason !== 'error') return 'aborted'
+          // Nur ein Absturz bzw. Timeout WÄHREND dieses Batches zählt gegen
+          // die Sitzung (sonst brächte ein Abschnitt, der den Dienst jedes Mal
+          // kippt, eine Schleife). Pause, gescheiterter Start, angehaltene
+          // Starts, Verarbeitung, Beenden: kein Fehler dieser Sitzung.
+          if (error.kind !== 'request') return 'aborted'
+          this.recordVectorFailure(sessionId, session.attempts, error)
+          return 'aborted'
         }
         this.recordVectorFailure(sessionId, session.attempts, error)
-        return error instanceof SearchWorkerUnavailableError ? 'aborted' : 'failed'
+        return 'failed'
       }
       // Nach dem Beenden (DB zu) bzw. einem Abbruch nichts mehr schreiben
       if (this.halted || cancelled()) return 'aborted'

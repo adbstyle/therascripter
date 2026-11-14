@@ -62,6 +62,8 @@ export interface StoredChunk {
   paraTo: number | null
   units: ChunkUnitRef[]
   text: string
+  /** Generation des Abschnitts (fehlt bei Abfragen, die sie nicht lesen). */
+  gen?: number
 }
 
 interface ChunkRow {
@@ -73,6 +75,7 @@ interface ChunkRow {
   para_to: number | null
   units: string
   text: string
+  gen?: number
 }
 
 function parseUnits(json: string): ChunkUnitRef[] {
@@ -93,7 +96,8 @@ export function rowToChunk(row: ChunkRow): StoredChunk {
     paraFrom: row.para_from,
     paraTo: row.para_to,
     units: parseUnits(row.units),
-    text: row.text
+    text: row.text,
+    ...(row.gen !== undefined ? { gen: row.gen } : {})
   }
 }
 
@@ -325,7 +329,7 @@ export class SearchIndexRepository {
       rows.push(
         ...(this.db
           .prepare(
-            `SELECT id, session_id, field, ord, para_from, para_to, units, text
+            `SELECT id, session_id, field, ord, para_from, para_to, units, text, gen
              FROM search_chunks WHERE id IN (${part.map(() => '?').join(',')})`
           )
           .all(...part) as ChunkRow[])
@@ -475,6 +479,22 @@ export class SearchIndexRepository {
          WHERE session_id = ?`
       )
       .run(error.slice(0, 500), nextAttemptAt, sessionId)
+  }
+
+  /** Aktive Textgeneration je Sitzung (für Treffer aus einer älteren Vektorgeneration). */
+  findTextGens(sessionIds: string[]): Map<string, number> {
+    const map = new Map<string, number>()
+    for (let i = 0; i < sessionIds.length; i += 500) {
+      const part = sessionIds.slice(i, i + 500)
+      const rows = this.db
+        .prepare(
+          `SELECT session_id, text_gen FROM search_index_state
+           WHERE session_id IN (${part.map(() => '?').join(',')})`
+        )
+        .all(...part) as Array<{ session_id: string; text_gen: number }>
+      for (const row of rows) map.set(row.session_id, row.text_gen)
+    }
+    return map
   }
 
   /** Aktive Textgeneration einer Sitzung (Tests, Diagnose). */

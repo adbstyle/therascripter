@@ -12,6 +12,7 @@ import {
   SEARCH_WORKER_BATCH_TIMEOUT_MS,
   SEARCH_WORKER_FAILURE_COOLDOWN_MS,
   SEARCH_WORKER_IDLE_MS,
+  SEARCH_WORKER_MAX_START_FAILURES,
   SEARCH_WORKER_QUERY_TIMEOUT_MS,
   SEARCH_WORKER_RESTART_FOOTPRINT_BYTES,
   SEARCH_WORKER_START_TIMEOUT_MS
@@ -36,25 +37,53 @@ import type {
  *   beendet den Prozess (`stop('processing')`), bevor der Task beginnt.
  *   Während einer Aufnahme sind Anfragen erlaubt (Entscheid des Orchestrators);
  *   die Aufbereitung prüft die Aufnahme selbst.
- * - Arbeitsspeicher frei nach SEARCH_WORKER_IDLE_MS ohne Anfrage bzw. Batch
- *   (#209 AK 17).
- * - Jede Antwort trägt `phys_footprint_bytes`; auf MPS wächst der Prozess pro
- *   Forward-Pass ausserhalb des torch-Allokators. Ab
- *   SEARCH_WORKER_RESTART_FOOTPRINT_BYTES wird er neu gestartet — erst, wenn
- *   keine Anfrage mehr offen ist, also zwischen zwei Batches.
- * - Ein unerwartetes Ende (Absturz, SIGKILL) setzt den Grund 'error' bzw.
- *   nach der Nachprüfung 'tool-blocked'; ein neuer Start folgt frühestens
- *   nach SEARCH_WORKER_FAILURE_COOLDOWN_MS (keine Startschleife bei jedem
- *   Tastendruck).
+ * - Arbeitsspeicher frei (#209 AK 17): gezählt wird nur die letzte
+ *   USER-Interaktion (Öffnen der Suche, Anfrage), nicht die Aufbereitung.
+ *   SEARCH_WORKER_IDLE_MS danach endet der Prozess — ausser die Aufbereitung
+ *   läuft gerade; endet sie (fertig, pausiert, abgebrochen) und liegt die
+ *   letzte USER-Interaktion länger zurück, endet er sofort.
+ * - Jede Antwort trägt `phys_footprint_bytes`; ab
+ *   SEARCH_WORKER_RESTART_FOOTPRINT_BYTES startet der Prozess neu, sobald
+ *   keine Anfrage mehr offen ist (zwischen zwei Batches) — gleich danach,
+ *   wenn er gebraucht wird, nicht erst bei der nächsten Anfrage.
+ * - Ein unerwartetes Ende (Absturz, SIGKILL, Timeout) meldet 'error' bzw.
+ *   nach der Nachprüfung 'tool-blocked' — nur während der Pause
+ *   SEARCH_WORKER_FAILURE_COOLDOWN_MS; danach versucht die nächste Anfrage
+ *   einen Neustart. Eine Blockade, die Therascript selbst behoben hat, gibt
+ *   sofort den Neuversuch frei.
+ * - Nach SEARCH_WORKER_MAX_START_FAILURES gescheiterten Starts in Folge
+ *   startet die Aufbereitung den Prozess nicht mehr (keine Startschleife mit
+ *   Speicherspitze), bis sich etwas ändert: Modell neu bereitgestellt
+ *   (`resetStartFailures`), erfolgreicher Start durch eine USER-Suche oder
+ *   App-Neustart. Bis dahin meldet `getState` 'error' mit Begründung.
  */
 
 /** Warum ein Aufruf nicht bedient wurde; 'stopped': der Prozess wurde gerade beendet. */
 export type SearchWorkerFailure = SearchUnavailableReason | 'stopped'
 
+/**
+ * Woher der Fehler kommt — die Vektorphase rechnet nur 'request' (der Batch
+ * dieser Sitzung liess den Prozess abstürzen bzw. hängen) der Sitzung an.
+ * - request: Absturz/Timeout während dieses Aufrufs
+ * - start: der Prozess liess sich nicht starten
+ * - cooldown: Pause nach einem Fehler, nichts versucht
+ * - blocked: Starts für die Aufbereitung nach wiederholtem Scheitern angehalten
+ * - stopping: der Prozess wurde gerade (absichtlich) beendet
+ * - state: Verarbeitung läuft, Modell fehlt, App wird beendet
+ */
+export type SearchWorkerFailureKind =
+  | 'request'
+  | 'start'
+  | 'cooldown'
+  | 'blocked'
+  | 'stopping'
+  | 'state'
+
 export class SearchWorkerUnavailableError extends Error {
   constructor(
     readonly reason: SearchWorkerFailure,
-    message?: string
+    message?: string,
+    readonly kind: SearchWorkerFailureKind = 'state'
   ) {
     super(message ?? `Suche nach Bedeutung nicht verfügbar (${reason})`)
     this.name = 'SearchWorkerUnavailableError'
@@ -70,7 +99,10 @@ export type SearchWorkerStopReason =
   | 'update'
   | 'test'
 
-export type SearchWorkerStartPurpose = 'warmup' | 'query' | 'index'
+/** warmup/query = USER-Interaktion; index = Aufbereitung; restart = nach Speicher-Neustart. */
+export type SearchWorkerStartPurpose = 'warmup' | 'query' | 'index' | 'restart'
+
+export type ToolCheckOutcome = 'blocked' | 'repaired' | 'none'
 
 export interface SearchWorkerDeps {
   resolveModel: () => SearchModelInfo | null
@@ -78,8 +110,10 @@ export interface SearchWorkerDeps {
   resolveCommand: () => { bin: string; args: string[] }
   /** Läuft eine Verarbeitung oder steht eine an? (TaskQueueService.hasActiveWork) */
   isProcessingActive: () => boolean
-  /** Nach einem SIGKILL von aussen: ist das Werkzeug blockiert? (throwIfToolBlocked) */
-  isToolBlocked?: (exit: LineProcessExit) => Promise<boolean>
+  /** Nach einem SIGKILL von aussen: blockiert macOS das Werkzeug? (ToolHealthService.recheck) */
+  checkToolBlocked?: (exit: LineProcessExit) => Promise<ToolCheckOutcome>
+  /** Erst danach wird gestartet — dieselbe Werkzeug-Prüfung, auf die die Queue wartet. */
+  startGate?: () => Promise<unknown>
   createProcess?: (opts: LineProcessOptions) => LineProcess
   now?: () => number
   idleMs?: number
@@ -88,6 +122,7 @@ export interface SearchWorkerDeps {
   batchTimeoutMs?: number
   restartFootprintBytes?: number
   failureCooldownMs?: number
+  maxStartFailures?: number
   eofGraceMs?: number
   killGraceMs?: number
   /** Zusätzliche Variablen für den Prozess (Tests, Messungen). */
@@ -107,6 +142,17 @@ export function decodeVector(base64: unknown, dim: number): Float32Array {
   return out
 }
 
+/** Meldung, wenn die Starts angehalten sind (SearchAvailability.semanticMessage). */
+export const START_BLOCKED_MESSAGE =
+  'Das Suchmodell liess sich mehrmals nicht starten. Die Suche nach Bedeutung versucht es bei Ihrer nächsten Suche erneut; genaue Begriffe finden Sie weiterhin.'
+const CRASH_MESSAGE =
+  'Die Suche nach Bedeutung ist kurz ausgefallen und startet gleich von selbst neu.'
+const BLOCKED_MESSAGE =
+  'macOS hat ein Werkzeug von Therascript blockiert; die Suche nach Bedeutung ist bis zur Freigabe nicht verfügbar.'
+
+/** Bei quit/update schnell eskalieren: SIGKILL nach 0.5 + 1 s, spätestens fertig nach 2.5 s. */
+const FAST_STOP = { eofGraceMs: 500, killGraceMs: 1_000 }
+
 export class SearchWorker {
   private proc: LineProcess | null = null
   private phase: SearchProcessPhase = 'stopped'
@@ -117,7 +163,16 @@ export class SearchWorker {
   private idleTimer: ReturnType<typeof setTimeout> | null = null
   private restartPending = false
   private stopReason: SearchWorkerStopReason | null = null
-  private failure: { reason: 'tool-blocked' | 'error'; at: number; message: string } | null = null
+  private failure: {
+    reason: 'tool-blocked' | 'error'
+    at: number
+    cooldownMs: number
+    message: string
+  } | null = null
+  private startFailures = 0
+  private closed = false
+  private indexing = false
+  private lastUserActivity: number | null = null
   private model: SearchModelInfo | null = null
   private lastFootprint: number | null = null
   private peakFootprint = 0
@@ -130,15 +185,48 @@ export class SearchWorker {
     this.now = deps.now ?? Date.now
   }
 
+  private get idleMs(): number {
+    return this.deps.idleMs ?? SEARCH_WORKER_IDLE_MS
+  }
+
+  private get startsBlocked(): boolean {
+    return this.startFailures >= (this.deps.maxStartFailures ?? SEARCH_WORKER_MAX_START_FAILURES)
+  }
+
+  private failureActive(): boolean {
+    return this.failure !== null && this.now() - this.failure.at < this.failure.cooldownMs
+  }
+
   /** Prozesszustand plus Grund, warum die Suche nach Bedeutung gerade nicht geht. */
   getState(): SearchProcessState {
     return { phase: this.phase, reason: this.unavailableReason() }
   }
 
+  /** Verständlicher Grund zu 'error'/'tool-blocked' (für SearchAvailability), sonst null. */
+  getMessage(): string | null {
+    const reason = this.unavailableReason()
+    if (reason === 'error') return this.startsBlocked ? START_BLOCKED_MESSAGE : CRASH_MESSAGE
+    if (reason === 'tool-blocked') return BLOCKED_MESSAGE
+    return null
+  }
+
+  /**
+   * Grund aus Sicht einer USER-Suche: wie getState().reason, aber angehaltene
+   * Starts zählen nicht — eine USER-Suche darf es nach der Pause erneut
+   * versuchen (und hebt die Sperre bei Erfolg auf).
+   */
+  getUserReason(): SearchUnavailableReason | null {
+    if (this.deps.isProcessingActive()) return 'processing'
+    if (!this.deps.resolveModel()) return 'model-missing'
+    if (this.failureActive()) return this.failure!.reason
+    return null
+  }
+
   private unavailableReason(): SearchUnavailableReason | null {
     if (this.deps.isProcessingActive()) return 'processing'
     if (!this.deps.resolveModel()) return 'model-missing'
-    if (this.failure) return this.failure.reason
+    if (this.failureActive()) return this.failure!.reason
+    if (this.startsBlocked) return 'error'
     return null
   }
 
@@ -165,10 +253,16 @@ export class SearchWorker {
 
   /**
    * Meldet den Zustand neu, falls sich der Grund ohne eigenes Zutun geändert
-   * hat (Warteschlange leer, Modell installiert) — die Schleife des Suchindex
-   * ruft das in ihrem Takt.
+   * hat (Warteschlange, Modell installiert, Ende einer Pause).
    */
   refreshState(): void {
+    this.emit()
+  }
+
+  /** Modell neu bereitgestellt: angehaltene Starts wieder zulassen. */
+  resetStartFailures(): void {
+    this.startFailures = 0
+    this.failure = null
     this.emit()
   }
 
@@ -191,23 +285,76 @@ export class SearchWorker {
     this.emit()
   }
 
+  // ── Leerlauf (#209 AK 17) ─────────────────────────────────────────────
+
+  private userIdle(): boolean {
+    return this.lastUserActivity === null || this.now() - this.lastUserActivity >= this.idleMs
+  }
+
+  private touchUser(): void {
+    this.lastUserActivity = this.now()
+    this.scheduleIdle()
+  }
+
+  private scheduleIdle(): void {
+    this.clearIdle()
+    if (this.lastUserActivity === null) return
+    const due = Math.max(0, this.lastUserActivity + this.idleMs - this.now())
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null
+      this.maybeStopIdle()
+    }, due)
+    this.idleTimer.unref?.()
+  }
+
+  private clearIdle(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer)
+    this.idleTimer = null
+  }
+
+  /** Beenden, wenn niemand den Prozess braucht: keine offene Anfrage, keine Aufbereitung, USER untätig. */
+  private maybeStopIdle(): void {
+    if (!this.proc || this.phase === 'stopping' || this.startPromise) return
+    if (this.inflight > 0 || this.indexing) return
+    if (!this.userIdle()) {
+      this.scheduleIdle()
+      return
+    }
+    console.log('[SearchWorker] keine Suche in den letzten 5 Minuten — Suchprozess wird beendet')
+    void this.stop('idle')
+  }
+
+  /**
+   * Die Vektorphase meldet Beginn und Ende. Endet sie (fertig, pausiert,
+   * abgebrochen — auch beim Beginn einer Aufnahme) und hat der USER länger
+   * nicht gesucht, endet der Prozess sofort.
+   */
+  setIndexing(active: boolean): void {
+    this.indexing = active
+    if (!active) this.maybeStopIdle()
+  }
+
+  // ── Start und Stopp ───────────────────────────────────────────────────
+
   /**
    * Startet den Prozess, falls nötig (Single-Flight: parallele Aufrufe teilen
    * einen Start). Abgelehnt mit SearchWorkerUnavailableError, solange eine
-   * Verarbeitung läuft oder ansteht, das Modell fehlt oder nach einem Absturz
-   * die Pause noch läuft.
+   * Verarbeitung läuft oder ansteht, das Modell fehlt, nach einem Fehler die
+   * Pause läuft oder (nur Aufbereitung) die Starts angehalten sind.
    */
   async ensureStarted(purpose: SearchWorkerStartPurpose): Promise<void> {
+    if (purpose === 'warmup' || purpose === 'query') this.touchUser()
+    if (this.deps.startGate) await this.deps.startGate()
     for (;;) {
-      const reason = this.unavailableReason()
-      if (reason === 'processing' || reason === 'model-missing') {
-        throw new SearchWorkerUnavailableError(reason)
-      }
-      if (this.failure) {
-        const cooldown = this.deps.failureCooldownMs ?? SEARCH_WORKER_FAILURE_COOLDOWN_MS
-        if (this.now() - this.failure.at < cooldown) {
-          throw new SearchWorkerUnavailableError(this.failure.reason, this.failure.message)
-        }
+      if (this.closed) throw new SearchWorkerUnavailableError('stopped', 'App wird beendet')
+      if (this.deps.isProcessingActive()) throw new SearchWorkerUnavailableError('processing')
+      if (!this.deps.resolveModel()) throw new SearchWorkerUnavailableError('model-missing')
+      if (this.failureActive()) {
+        throw new SearchWorkerUnavailableError(
+          this.failure!.reason,
+          this.failure!.message,
+          'cooldown'
+        )
       }
       if (this.stopPromise) {
         await this.stopPromise
@@ -217,9 +364,9 @@ export class SearchWorker {
         await this.startPromise
         return
       }
-      if (this.proc && (this.phase === 'ready' || this.phase === 'busy')) {
-        if (purpose !== 'index') this.resetIdle()
-        return
+      if (this.proc && (this.phase === 'ready' || this.phase === 'busy')) return
+      if ((purpose === 'index' || purpose === 'restart') && this.startsBlocked) {
+        throw new SearchWorkerUnavailableError('error', START_BLOCKED_MESSAGE, 'blocked')
       }
       this.startPromise = this.spawn().finally(() => {
         this.startPromise = null
@@ -236,8 +383,8 @@ export class SearchWorker {
     try {
       command = this.deps.resolveCommand()
     } catch (error) {
-      this.recordFailure('error', error instanceof Error ? error.message : String(error))
-      throw new SearchWorkerUnavailableError('error', this.failure?.message)
+      this.recordStartFailure(error instanceof Error ? error.message : String(error))
+      throw new SearchWorkerUnavailableError('error', this.failure?.message, 'start')
     }
     this.model = model
     this.stopReason = null
@@ -292,45 +439,82 @@ export class SearchWorker {
       await this.exitHandling
       if (this.stopReason !== null) {
         throw new SearchWorkerUnavailableError(
-          this.stopReason === 'processing' ? 'processing' : 'stopped'
+          this.stopReason === 'processing' ? 'processing' : 'stopped',
+          undefined,
+          'stopping'
         )
       }
-      if (!this.failure) {
-        this.recordFailure('error', error instanceof Error ? error.message : String(error))
+      // Ein blockiertes Werkzeug hat onExit schon als solches vermerkt
+      if (this.failure?.reason !== 'tool-blocked') {
+        this.recordStartFailure(error instanceof Error ? error.message : String(error))
+      } else {
+        this.startFailures++
       }
-      throw new SearchWorkerUnavailableError(this.failure?.reason ?? 'error', this.failure?.message)
+      throw new SearchWorkerUnavailableError(
+        this.failure?.reason ?? 'error',
+        this.failure?.message,
+        'start'
+      )
     }
     if (typeof ready.dim === 'number' && ready.dim !== model.dim) {
-      this.recordFailure('error', `Suchmodell liefert ${ready.dim} statt ${model.dim} Dimensionen`)
+      this.recordStartFailure(`Suchmodell liefert ${ready.dim} statt ${model.dim} Dimensionen`)
       await this.stop('test')
-      throw new SearchWorkerUnavailableError('error', this.failure?.message)
+      throw new SearchWorkerUnavailableError('error', this.failure?.message, 'start')
     }
     this.trackFootprint(ready)
     this.failure = null
+    this.startFailures = 0
     console.log(
       `[SearchWorker] bereit (${String(ready.device)}, ${String(ready.dtype)}, ${String(ready.load_ms)} ms, ${proc.weightsLine ?? '—'})`
     )
     this.setPhase('ready')
-    this.resetIdle()
+    this.scheduleIdle()
+    // Gestartet, aber von niemandem gebraucht (Aufbereitung inzwischen vorbei)?
+    if (!this.indexing && this.inflight === 0 && this.userIdle()) {
+      setImmediate(() => this.maybeStopIdle())
+    }
   }
 
-  private recordFailure(reason: 'tool-blocked' | 'error', message: string): void {
-    this.failure = { reason, at: this.now(), message }
+  private recordFailure(
+    reason: 'tool-blocked' | 'error',
+    message: string,
+    cooldownMs?: number
+  ): void {
+    this.failure = {
+      reason,
+      at: this.now(),
+      cooldownMs: cooldownMs ?? this.deps.failureCooldownMs ?? SEARCH_WORKER_FAILURE_COOLDOWN_MS,
+      message
+    }
+  }
+
+  private recordStartFailure(message: string): void {
+    this.startFailures++
+    this.recordFailure('error', message)
+    if (this.startsBlocked) {
+      console.error(
+        `[SearchWorker] ${this.startFailures} gescheiterte Starts in Folge — Aufbereitung startet den Suchprozess nicht mehr, bis sich etwas ändert`
+      )
+    }
+    this.emit()
   }
 
   private async onExit(proc: LineProcess, exit: LineProcessExit): Promise<void> {
     if (proc !== this.proc) return
     const expected = exit.stopRequested && !exit.startTimedOut
     if (!expected) {
-      let reason: 'tool-blocked' | 'error' = 'error'
+      let outcome: ToolCheckOutcome = 'none'
       if (exit.exitSignal === 'SIGKILL') {
         try {
-          if (await this.deps.isToolBlocked?.(exit)) reason = 'tool-blocked'
+          outcome = (await this.deps.checkToolBlocked?.(exit)) ?? 'none'
         } catch {
           // Nachprüfung gescheitert — bleibt ein gewöhnlicher Fehler
         }
       }
-      this.recordFailure(reason, describeExit(exit))
+      if (outcome === 'blocked') this.recordFailure('tool-blocked', describeExit(exit))
+      // Von Therascript behoben: sofortiger Neuversuch erlaubt
+      else if (outcome === 'repaired') this.failure = null
+      else this.recordFailure('error', describeExit(exit))
       console.error(`[SearchWorker] Suchprozess unerwartet beendet: ${describeExit(exit)}`)
     }
     this.proc = null
@@ -349,17 +533,20 @@ export class SearchWorker {
 
   /**
    * Beendet den Prozess (stdin-EOF → SIGTERM → SIGKILL). Idempotent, wirkt
-   * auch während des Startens; erfüllt sich erst, wenn der Prozess weg ist.
+   * auch während des Startens; erfüllt sich erst, wenn der Prozess weg ist
+   * (LineProcess garantiert eine Obergrenze nach dem SIGKILL).
    */
   stop(reason: SearchWorkerStopReason): Promise<void> {
+    if (reason === 'quit' || reason === 'update') this.closed = true
     this.clearIdle()
     const proc = this.proc
     if (!proc) return this.stopPromise ?? Promise.resolve()
     if (this.stopPromise) return this.stopPromise
     this.stopReason = reason
     this.setPhase('stopping')
+    const fast = reason === 'quit' || reason === 'update'
     this.stopPromise = proc
-      .stop()
+      .stop(fast ? FAST_STOP : {})
       .then(async () => {
         // onExit läuft über waitForExit — erst danach ist der Zustand gesetzt
         await new Promise((r) => setImmediate(r))
@@ -371,31 +558,15 @@ export class SearchWorker {
     return this.stopPromise
   }
 
-  /** Beim Beenden der App: höchstens `timeoutMs` warten (danach hat LineProcess schon SIGKILL geschickt). */
+  /**
+   * Beim Beenden der App: SIGKILL nach spätestens 1.5 s, beendet nach
+   * spätestens 2.5 s (LineProcess); `timeoutMs` ist nur die äussere Sicherung.
+   */
   async shutdown(timeoutMs = 3_000): Promise<void> {
     await Promise.race([
       this.stop('quit'),
       new Promise<void>((r) => setTimeout(r, timeoutMs).unref?.())
     ])
-  }
-
-  private resetIdle(): void {
-    this.clearIdle()
-    this.idleTimer = setTimeout(() => {
-      this.idleTimer = null
-      if (this.inflight > 0) {
-        this.resetIdle()
-        return
-      }
-      console.log('[SearchWorker] 5 Minuten ohne Suche — Suchprozess wird beendet')
-      void this.stop('idle')
-    }, this.deps.idleMs ?? SEARCH_WORKER_IDLE_MS)
-    this.idleTimer.unref?.()
-  }
-
-  private clearIdle(): void {
-    if (this.idleTimer) clearTimeout(this.idleTimer)
-    this.idleTimer = null
   }
 
   private trackFootprint(message: Record<string, unknown>): void {
@@ -407,13 +578,27 @@ export class SearchWorker {
     if (value > limit) this.restartPending = true
   }
 
+  /** Neustart wegen Speicherwachstum — gleich wieder starten, wenn der Prozess gebraucht wird. */
+  private restartForMemory(): void {
+    console.log(
+      `[SearchWorker] phys_footprint ${this.lastFootprint} Bytes über der Grenze — Neustart`
+    )
+    this.restartPending = false
+    void this.stop('memory').then(() => {
+      if (this.indexing || !this.userIdle()) {
+        this.ensureStarted('restart').catch(() => undefined)
+      }
+    })
+  }
+
   private async call(
     message: { op: string } & Record<string, unknown>,
-    timeoutMs: number
+    timeoutMs: number,
+    user: boolean
   ): Promise<Record<string, unknown>> {
     const proc = this.proc
     if (!proc || this.phase === 'stopping' || this.phase === 'stopped') {
-      throw new SearchWorkerUnavailableError(this.unavailableReason() ?? 'stopped')
+      throw new SearchWorkerUnavailableError('stopped', undefined, 'stopping')
     }
     this.inflight++
     if (this.phase === 'ready') this.setPhase('busy')
@@ -423,20 +608,23 @@ export class SearchWorker {
       return response
     } catch (error) {
       if (error instanceof LineProcessTimeoutError) {
-        // Ein Dienst ohne Antwort ist festgefahren: beenden, Pause bis zum nächsten Start
+        // Ein Dienst ohne Antwort ist festgefahren: beenden, kurze Pause
         this.recordFailure('error', error.message)
         void this.stop('timeout')
-        throw new SearchWorkerUnavailableError('error', error.message)
+        throw new SearchWorkerUnavailableError('error', error.message, 'request')
       }
       if (error instanceof LineProcessExitedError) {
         await this.exitHandling
+        const stop = this.stopReason
+        if (stop === 'processing') {
+          throw new SearchWorkerUnavailableError('processing', error.message, 'stopping')
+        }
+        if (stop !== null)
+          throw new SearchWorkerUnavailableError('stopped', error.message, 'stopping')
         throw new SearchWorkerUnavailableError(
-          this.stopReason === 'processing'
-            ? 'processing'
-            : this.stopReason !== null
-              ? 'stopped'
-              : (this.failure?.reason ?? 'error'),
-          error.message
+          this.failure?.reason ?? 'error',
+          error.message,
+          'request'
         )
       }
       if (error instanceof LineProcessRequestError) {
@@ -445,47 +633,68 @@ export class SearchWorker {
       throw error
     } finally {
       this.inflight = Math.max(0, this.inflight - 1)
+      if (user) this.touchUser()
       if (this.inflight === 0 && this.proc === proc && this.phase === 'busy') {
         this.setPhase('ready')
-        if (this.restartPending) {
-          // Zwischen zwei Batches: Speicher zurückholen, der nächste Aufruf startet neu
-          console.log(
-            `[SearchWorker] phys_footprint ${this.lastFootprint} Bytes über der Grenze — Neustart`
-          )
-          this.restartPending = false
-          void this.stop('memory')
-        } else {
-          this.resetIdle()
-        }
+        if (this.restartPending) this.restartForMemory()
+        else this.maybeStopIdle()
+      }
+    }
+  }
+
+  /**
+   * Ein Aufruf mit einem zweiten Versuch, wenn er genau in ein absichtliches
+   * Stoppfenster fiel (Leerlauf, Speicher-Neustart): dann neu starten statt
+   * 'error' zu melden.
+   */
+  private async withRestart<T>(
+    purpose: SearchWorkerStartPurpose,
+    run: (model: SearchModelInfo) => Promise<T>
+  ): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      await this.ensureStarted(purpose)
+      try {
+        return await run(this.model!)
+      } catch (error) {
+        const retry =
+          attempt === 0 &&
+          error instanceof SearchWorkerUnavailableError &&
+          error.reason === 'stopped' &&
+          error.kind === 'stopping' &&
+          !this.closed &&
+          (this.stopReason === 'idle' || this.stopReason === 'memory' || this.stopReason === null)
+        if (!retry) throw error
       }
     }
   }
 
   /** Vektor einer Suchanfrage (normalisiert). Startet den Prozess bei Bedarf. */
-  async embedQuery(text: string): Promise<Float32Array> {
-    await this.ensureStarted('query')
-    const model = this.model!
-    const response = await this.call(
-      { op: 'embed_query', text },
-      this.deps.queryTimeoutMs ?? SEARCH_WORKER_QUERY_TIMEOUT_MS
-    )
-    return decodeVector(response.vector, model.dim)
+  embedQuery(text: string): Promise<Float32Array> {
+    return this.withRestart('query', async (model) => {
+      const response = await this.call(
+        { op: 'embed_query', text },
+        this.deps.queryTimeoutMs ?? SEARCH_WORKER_QUERY_TIMEOUT_MS,
+        true
+      )
+      return decodeVector(response.vector, model.dim)
+    })
   }
 
   /** Vektoren von Abschnitten (normalisiert), in der Reihenfolge der Texte. */
-  async embedDocuments(texts: string[]): Promise<Float32Array[]> {
-    await this.ensureStarted('index')
-    const model = this.model!
-    if (texts.length === 0) return []
-    const response = await this.call(
-      { op: 'embed_documents', texts },
-      this.deps.batchTimeoutMs ?? SEARCH_WORKER_BATCH_TIMEOUT_MS
-    )
-    const vectors = response.vectors
-    if (!Array.isArray(vectors) || vectors.length !== texts.length) {
-      throw new Error('Suchdienst: Antwort mit falscher Anzahl Vektoren')
-    }
-    return vectors.map((v) => decodeVector(v, model.dim))
+  embedDocuments(texts: string[]): Promise<Float32Array[]> {
+    return this.withRestart('index', async (model) => {
+      if (texts.length === 0) return []
+      const response = await this.call(
+        { op: 'embed_documents', texts },
+        this.deps.batchTimeoutMs ?? SEARCH_WORKER_BATCH_TIMEOUT_MS,
+        false
+      )
+      const vectors = response.vectors
+      if (!Array.isArray(vectors) || vectors.length !== texts.length) {
+        throw new Error('Suchdienst: Antwort mit falscher Anzahl Vektoren')
+      }
+      return vectors.map((v) => decodeVector(v, model.dim))
+    })
   }
 
   /** Modell des laufenden bzw. zuletzt gestarteten Prozesses. */

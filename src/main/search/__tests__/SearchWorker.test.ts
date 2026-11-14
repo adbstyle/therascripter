@@ -53,7 +53,7 @@ function create(env: Record<string, string> = {}, deps: Partial<SearchWorkerDeps
     resolveModel: () => model.info,
     resolveCommand: () => ({ bin: process.execPath, args: [FAKE] }),
     isProcessingActive: () => processing.active,
-    isToolBlocked: async () => false,
+    checkToolBlocked: async () => 'none' as const,
     createProcess: (opts: LineProcessOptions) => {
       const proc = new LineProcess({ ...opts, env: { ...opts.env, ...env } })
       spawned.push(proc)
@@ -122,7 +122,7 @@ describe('SearchWorker', () => {
   })
 
   it('stops after the idle time without queries and frees the process', async () => {
-    const h = create({}, { idleMs: 200 })
+    const h = create({}, { idleMs: 200, now: Date.now })
     const stopped: string[] = []
     h.worker.onStopped((r) => stopped.push(r))
     await h.worker.embedQuery('x')
@@ -163,18 +163,21 @@ describe('SearchWorker', () => {
     )
     const stopped: string[] = []
     h.worker.onStopped((r) => stopped.push(r))
+    h.worker.setIndexing(true)
     await h.worker.embedDocuments(['a', 'b']) // 2 GiB
     expect(h.spawned).toHaveLength(1)
     await h.worker.embedDocuments(['c', 'd']) // 3 GiB → Neustart danach
-    await new Promise((r) => setTimeout(r, 200))
+    // Vorgezogen: der neue Prozess startet sofort, nicht erst beim nächsten Batch
+    await vi.waitFor(() => expect(h.spawned).toHaveLength(2), { timeout: 3_000 })
+    await vi.waitFor(() => expect(h.worker.getState().phase).toBe('ready'), { timeout: 3_000 })
     expect(stopped).toEqual(['memory'])
     await h.worker.embedDocuments(['e', 'f'])
     expect(h.spawned).toHaveLength(2)
     expect(h.worker.footprint.peak).toBeGreaterThan(2.5 * 1024 ** 3)
   })
 
-  it('marks an unexpected SIGKILL as tool-blocked after the recheck and waits before restarting', async () => {
-    const h = create({}, { isToolBlocked: async (exit) => exit.exitSignal === 'SIGKILL' })
+  it('marks an unexpected SIGKILL as tool-blocked after the recheck, only during the pause', async () => {
+    const h = create({}, { checkToolBlocked: async () => 'blocked' })
     const stopped: string[] = []
     h.worker.onStopped((r) => stopped.push(r))
     await h.worker.ensureStarted('warmup')
@@ -185,10 +188,65 @@ describe('SearchWorker', () => {
     expect(h.worker.getState()).toEqual({ phase: 'stopped', reason: 'tool-blocked' })
     await expect(h.worker.embedQuery('x')).rejects.toMatchObject({ reason: 'tool-blocked' })
     expect(h.spawned).toHaveLength(1)
-    // Nach der Pause darf ein neuer Start versucht werden; Erfolg löscht den Grund
+    // Nach der Pause meldet die Suche den Fehler nicht mehr und startet neu
     h.clock.now += 60_000
+    expect(h.worker.getState().reason).toBeNull()
     await h.worker.embedQuery('x')
     expect(h.spawned).toHaveLength(2)
+  })
+
+  it('kill -9 (crash/OOM): after the pause the next query by meaning works again', async () => {
+    const h = create()
+    await h.worker.embedQuery('vorher')
+    process.kill(h.worker.pid!, 'SIGKILL')
+    await h.spawned[0].waitForExit()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(h.worker.getState().reason).toBe('error')
+    expect(h.worker.getMessage()).toMatch(/startet gleich von selbst neu/)
+    h.clock.now += 31_000
+    expect(h.worker.getState().reason).toBeNull()
+    expect(await h.worker.embedQuery('nachher')).toHaveLength(768)
+    expect(h.spawned).toHaveLength(2)
+  })
+
+  it('a block Therascript repaired itself allows an immediate retry', async () => {
+    const h = create({}, { checkToolBlocked: async () => 'repaired' })
+    await h.worker.ensureStarted('warmup')
+    process.kill(h.worker.pid!, 'SIGKILL')
+    await h.spawned[0].waitForExit()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(h.worker.getState().reason).toBeNull()
+    expect(await h.worker.embedQuery('x')).toHaveLength(768)
+    expect(h.spawned).toHaveLength(2)
+  })
+
+  it('a request that falls into an intended stop window restarts instead of failing', async () => {
+    const h = create({ FAKE_IGNORE_EOF: '1' })
+    await h.worker.embedQuery('a')
+    const stopping = h.worker.stop('idle')
+    const answer = await h.worker.embedQuery('b')
+    await stopping
+    expect(answer).toHaveLength(768)
+    expect(h.spawned).toHaveLength(2)
+  })
+
+  it('stops the start loop after 3 failed starts; a user search may retry, a new model resets', async () => {
+    const h = create({ FAKE_EXIT_BEFORE_READY: '2' })
+    for (let i = 0; i < 3; i++) {
+      await expect(h.worker.embedDocuments(['x'])).rejects.toMatchObject({ kind: 'start' })
+      h.clock.now += 31_000
+    }
+    expect(h.worker.getState().reason).toBe('error')
+    expect(h.worker.getMessage()).toMatch(/mehrmals nicht starten/)
+    // Die Aufbereitung startet nicht mehr …
+    await expect(h.worker.embedDocuments(['x'])).rejects.toMatchObject({ kind: 'blocked' })
+    expect(h.spawned).toHaveLength(3)
+    // … eine USER-Suche schon (getUserReason ohne die Sperre)
+    expect(h.worker.getUserReason()).toBeNull()
+    await expect(h.worker.embedQuery('x')).rejects.toMatchObject({ kind: 'start' })
+    expect(h.spawned).toHaveLength(4)
+    h.clock.now += 31_000
+    h.worker.resetStartFailures()
     expect(h.worker.getState().reason).toBeNull()
   })
 
@@ -217,13 +275,22 @@ describe('SearchWorker', () => {
     expect(h.worker.getState().reason).toBe('error')
   })
 
-  it('stops a service that does not answer in time', async () => {
+  it('stops a service that does not answer in time; after the pause queries work again', async () => {
     const h = create({ FAKE_QUERY_DELAY_MS: '1000' }, { queryTimeoutMs: 100 })
     await h.worker.ensureStarted('warmup')
     const pid = h.worker.pid
-    await expect(h.worker.embedQuery('x')).rejects.toMatchObject({ reason: 'error' })
-    await new Promise((r) => setTimeout(r, 1500))
-    expect(alive(pid)).toBe(false)
+    await expect(h.worker.embedQuery('x')).rejects.toMatchObject({
+      reason: 'error',
+      kind: 'request'
+    })
+    await vi.waitFor(() => expect(alive(pid)).toBe(false), { timeout: 3_000 })
+    expect(h.worker.getState().reason).toBe('error')
+    h.clock.now += 31_000
+    expect(h.worker.getState().reason).toBeNull()
+    // Der neue Prozess antwortet langsam, aber in der Frist eines längeren Timeouts
+    expect(h.spawned).toHaveLength(1)
+    await h.worker.ensureStarted('query')
+    expect(h.spawned).toHaveLength(2)
   })
 
   it('emits state changes only when phase or reason change', async () => {

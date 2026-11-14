@@ -80,6 +80,14 @@ export interface SearchHit {
   label: { speaker?: string; timestamp?: string }
   snippet: SearchSnippet
   focus: SearchFocus
+  /**
+   * true: der Treffer stammt aus einem früheren Stand der Sitzung (Vektoren
+   * der Fassung vor einer Bearbeitung, bis die neuen fertig sind — #212 AK 1).
+   * `paraFrom`/`paraTo`/`ranges` beziehen sich dann auf die alte
+   * Absatzstruktur: die Oberfläche sucht die Stelle über `anchor` im aktuellen
+   * Dokument und meldet sonst, dass es sie nicht mehr gibt.
+   */
+  fromEarlierVersion?: boolean
 }
 
 /** Eine Sitzung bzw. ein PDF-Dokument mit Treffern (#209 AK 7, AK 9). */
@@ -208,6 +216,8 @@ export interface SearchAvailability {
   model: SearchModelState
   /** Suche nach Bedeutung gerade möglich? (PR S4: Verarbeitung und Suchprozess) */
   semantic: SemanticAvailability
+  /** Verständlicher Grund zu `semantic` 'error' bzw. 'tool-blocked' (Sie-Form). */
+  semanticMessage?: string
 }
 
 /**

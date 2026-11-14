@@ -79,6 +79,13 @@ export class TaskQueueService {
    * whisper oder llama (8-GB-Budget, #209 AK 17).
    */
   private beforeTask: (() => Promise<unknown>) | null = null
+  /**
+   * Epic #192: ob Tasks warten — im Speicher, höchstens 1 s alt (die
+   * Vektorphase fragt vor jedem Batch; keine DB-Abfrage pro Batch). Jeder
+   * neue Task setzt ihn sofort auf true.
+   */
+  private pendingCache: { value: boolean; at: number } | null = null
+  private activityListener: (() => void) | null = null
 
   constructor(private readonly db: Database.Database) {
     this.repository = new TaskRepository(db)
@@ -119,6 +126,7 @@ export class TaskQueueService {
       const created: Task[] = []
       for (const type of plannedSteps) {
         created.push(this.repository.create({ sessionId, type }))
+        this.pendingCache = { value: true, at: Date.now() }
       }
       return created
     })()
@@ -215,6 +223,7 @@ export class TaskQueueService {
       // Create pending tasks for remaining pipeline steps
       for (const type of remainingSteps) {
         this.repository.create({ sessionId, type })
+        this.pendingCache = { value: true, at: Date.now() }
       }
 
       // Transition session: error → queued. The first task's start will then push
@@ -270,6 +279,8 @@ export class TaskQueueService {
       .some((t) => t.type === 'summarization' && (t.status === 'pending' || t.status === 'running'))
     if (running) return false
     this.repository.create({ sessionId, type: 'summarization' })
+    this.pendingCache = { value: true, at: Date.now() }
+    this.notifyActivity()
     this.scheduleNext()
     return true
   }
@@ -445,10 +456,32 @@ export class TaskQueueService {
   hasActiveWork(): boolean {
     if (this.processing) return true
     if (this.pausedForRecording) return false
+    const now = Date.now()
+    if (this.pendingCache && now - this.pendingCache.at < 1_000) return this.pendingCache.value
+    let value = false
     try {
-      return this.repository.findPending() !== null
+      value = this.repository.findPending() !== null
     } catch {
-      return false
+      value = false
+    }
+    this.pendingCache = { value, at: now }
+    return value
+  }
+
+  /**
+   * Epic #192: informiert, sobald sich `hasActiveWork()` ändern kann
+   * (Verarbeitung beginnt/endet, Tasks eingereiht, Aufnahme-Pause) — die
+   * Oberfläche erfährt so sofort, dass die Suche nach Bedeutung (nicht) geht.
+   */
+  setActivityListener(listener: (() => void) | null): void {
+    this.activityListener = listener
+  }
+
+  private notifyActivity(): void {
+    try {
+      this.activityListener?.()
+    } catch (err) {
+      console.error('[TaskQueue] Aktivitäts-Beobachter fehlgeschlagen:', err)
     }
   }
 
@@ -475,11 +508,13 @@ export class TaskQueueService {
     if (this.pausedForRecording === paused) return
     this.pausedForRecording = paused
     console.log(`[TaskQueue] Recording pause ${paused ? 'ON' : 'OFF'}`)
+    this.notifyActivity()
     if (!paused) this.scheduleNext()
   }
 
   /** Fire-and-forget wrapper that swallows rejections during shutdown */
   private scheduleNext(): void {
+    this.notifyActivity()
     this.processNext().catch(() => {
       // Swallow errors during shutdown (e.g., DB closed)
     })
@@ -496,9 +531,16 @@ export class TaskQueueService {
       // DB may be closed during shutdown
       return
     }
-    if (!task) return
+    if (!task) {
+      if (this.pendingCache?.value) {
+        this.pendingCache = { value: false, at: Date.now() }
+        this.notifyActivity()
+      }
+      return
+    }
 
     this.processing = true
+    this.notifyActivity()
 
     if (this.beforeTask) {
       try {
@@ -516,6 +558,8 @@ export class TaskQueueService {
       }
       if (this.shouldStop || this.pausedForRecording || current?.id !== task.id) {
         this.processing = false
+        this.pendingCache = null
+        this.notifyActivity()
         if (!this.shouldStop && !this.pausedForRecording && current) {
           setTimeout(() => this.scheduleNext(), 0)
         }
@@ -694,6 +738,8 @@ export class TaskQueueService {
       }
 
       this.processing = false
+      this.pendingCache = null
+      this.notifyActivity()
 
       // Phase D.4 — task ended (success or fail), queue positions may have shifted
       this.broadcastQueuePositions()
