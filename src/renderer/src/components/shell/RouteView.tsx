@@ -10,7 +10,7 @@ import DossierSearchPage from '../../views/DossierSearchPage'
 
 /** Rendert die Seite der aktuellen Route (Epic #192). */
 export default function RouteView(): React.JSX.Element {
-  const { route, entryId, navigate, back } = useNavigation()
+  const { route, entryId, navigate, back, consumeFocus } = useNavigation()
 
   // Esc und «Zurück» im Editor: nur wenn der Editor noch die aktuelle Seite
   // ist (das Löschen kann den Eintrag schon entfernt haben), sonst
@@ -19,6 +19,8 @@ export default function RouteView(): React.JSX.Element {
     () => back({ fromEntryId: entryId, fallback: HOME_ROUTE }),
     [back, entryId]
   )
+  // Die Fundstelle gilt einmal: bei einer späteren Rückkehr keine zweite Meldung
+  const focusConsumed = useCallback(() => consumeFocus(entryId), [consumeFocus, entryId])
   const openDossier = useCallback(
     (dossierId: string) => navigate({ kind: 'dossier', dossierId }),
     [navigate]
@@ -37,6 +39,7 @@ export default function RouteView(): React.JSX.Element {
           key={route.sessionId}
           sessionId={route.sessionId}
           focus={route.focus}
+          onFocusConsumed={focusConsumed}
           onBack={closeSession}
           onOpenDossier={openDossier}
         />

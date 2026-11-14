@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { Info, X } from 'lucide-react'
 
 export interface ToastData {
   id: number
   message: string
-  type: 'success' | 'error'
+  type: 'success' | 'error' | 'info'
   /** Standard 3000 ms. */
   durationMs?: number
 }
@@ -68,7 +68,7 @@ export function Toast({ toast, onDismiss }: ToastProps): React.JSX.Element {
     }
   }, [toast.id, duration, run])
 
-  const bgColor = toast.type === 'success' ? 'bg-tooltip-bg' : 'bg-recording-solid'
+  const bgColor = toast.type === 'error' ? 'bg-recording-solid' : 'bg-tooltip-bg'
 
   const pauseHandlers = actionable
     ? {
@@ -104,6 +104,8 @@ export function Toast({ toast, onDismiss }: ToastProps): React.JSX.Element {
       <div className="flex items-start gap-2">
         {toast.type === 'success' ? (
           <span aria-hidden="true">&#10003;</span>
+        ) : toast.type === 'info' ? (
+          <Info className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
         ) : (
           <span aria-hidden="true">&#10007;</span>
         )}

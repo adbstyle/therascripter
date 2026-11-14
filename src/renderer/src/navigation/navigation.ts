@@ -28,6 +28,8 @@ export interface Navigation {
   consumeAnchor: (entryId: number) => void
   /** Wieder zu öffnendes Overlay verwerfen, nachdem es geöffnet wurde. */
   consumeOverlay: (entryId: number) => void
+  /** Fundstelle (`focus`) eines Eintrags verwerfen, nachdem der Editor sie aufgelöst hat. */
+  consumeFocus: (entryId: number) => void
 }
 
 /** Ein modaler Dialog ist offen — Menübefehle wechseln dann nicht die Seite. */

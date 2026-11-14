@@ -6,6 +6,8 @@ interface InitOptions {
   onOpenSettings: () => void
   /** Menü «Gehe zu» und «Seitenleiste ein-/ausblenden» (Epic #192). */
   onNavCommand?: (command: NavCommand) => void
+  /** Verstecktes App-Fenster zeigen (vor «Suchen …», wie bei den Einstellungen). */
+  onShowWindow?: () => void
 }
 
 let currentOptions: InitOptions | null = null
@@ -92,7 +94,10 @@ function rebuild(): void {
           // Suchfenster (#209): öffnet und schliesst es, auch mit Fokus im Editor
           label: 'Suchen …',
           accelerator: 'Command+K',
-          click: () => onNavCommand('search')
+          click: () => {
+            currentOptions?.onShowWindow?.()
+            onNavCommand('search')
+          }
         },
         { type: 'separator' },
         {

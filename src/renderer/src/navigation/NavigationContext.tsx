@@ -48,6 +48,10 @@ export function NavigationProvider({
     (entryId: number) => dispatch({ type: 'consumeOverlay', entryId }),
     []
   )
+  const consumeFocus = useCallback(
+    (entryId: number) => dispatch({ type: 'consumeFocus', entryId }),
+    []
+  )
 
   useEffect(
     () =>
@@ -108,9 +112,10 @@ export function NavigationProvider({
       back,
       forward,
       consumeAnchor,
-      consumeOverlay
+      consumeOverlay,
+      consumeFocus
     }),
-    [state, navigate, back, forward, consumeAnchor, consumeOverlay]
+    [state, navigate, back, forward, consumeAnchor, consumeOverlay, consumeFocus]
   )
 
   return <NavigationContext.Provider value={value}>{children}</NavigationContext.Provider>

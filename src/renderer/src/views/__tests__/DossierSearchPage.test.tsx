@@ -12,7 +12,7 @@ import {
   getSearchEntry,
   searchEntryKey
 } from '../../stores/searchSession'
-import { _resetViewModeStoreForTests } from '../../viewMode/viewModeStore'
+import { _resetViewModeStoreForTests, setViewMode } from '../../viewMode/viewModeStore'
 import { answer, doc, exactHit } from '../../components/search/__tests__/searchFixtures'
 import type { Dossier } from '../../../../shared/types/Dossier'
 import type { SearchQueryInput } from '../../../../shared/types/Search'
@@ -155,6 +155,60 @@ describe('Suche im Patientendossier (#211)', () => {
       route: { kind: 'dossierSearch', dossierId: 'd2' }
     })
     await waitFor(() => expect(screen.getByRole('combobox')).toHaveValue(''))
+  })
+
+  it('zeigt die Reihenfolge der Antwort (#211 AK 3) und Klartext-Ausschnitte nur in «Klartext» auswählbar', async () => {
+    vi.mocked(window.api.search.query).mockImplementation(async (input) =>
+      answer(input.requestId, {
+        results: [doc('s2'), doc('s1'), doc('s3')],
+        semantic: 'model-missing'
+      })
+    )
+    renderWithProviders(<DossierSearchPage dossierId="d1" />, {
+      route: { kind: 'dossierSearch', dossierId: 'd1' }
+    })
+    await search('Brändli')
+    const headers = screen
+      .getAllByRole('option')
+      .filter((o) => !o.textContent?.includes('Brändli'))
+      .map((o) => o.textContent?.match(/Sitzung (s\d)/)?.[1])
+    expect(headers).toEqual(['s2', 's1', 's3'])
+    expect(screen.getByTestId('search-results')).toHaveClass('select-none')
+    expect(screen.getByRole('note', { name: 'Ausschnitte im Klartext' })).toBeTruthy()
+    act(() => setViewMode('plain'))
+    expect(screen.getByTestId('search-results')).not.toHaveClass('select-none')
+    expect(screen.queryByRole('note', { name: 'Ausschnitte im Klartext' })).toBeNull()
+  })
+
+  it('nach Pfeiltasten bleiben die Positionen, «nach Relevanz sortieren» stellt die Antwort her', async () => {
+    vi.mocked(window.api.search.query).mockImplementation(async (input) =>
+      answer(input.requestId, { results: [doc('s1'), doc('s2')], semantic: 'pending' })
+    )
+    vi.mocked(window.api.search.semantic).mockImplementation(async (input) =>
+      answer(input.requestId, { results: [doc('s3'), doc('s2'), doc('s1')], semantic: 'complete' })
+    )
+    let release: () => void = () => {}
+    const gate = new Promise<void>((r) => (release = r))
+    const semantic = vi.mocked(window.api.search.semantic).getMockImplementation()!
+    vi.mocked(window.api.search.semantic).mockImplementation(async (input) => {
+      await gate
+      return semantic(input)
+    })
+    renderWithProviders(<DossierSearchPage dossierId="d1" />, {
+      route: { kind: 'dossierSearch', dossierId: 'd1' }
+    })
+    await search('Brändli')
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'ArrowDown' })
+    release()
+    const sort = await screen.findByRole('button', { name: /nach Relevanz sortieren/ })
+    const order = (): Array<string | undefined> =>
+      screen
+        .getAllByRole('option')
+        .filter((o) => !o.textContent?.includes('Brändli'))
+        .map((o) => o.textContent?.match(/Sitzung (s\d)/)?.[1])
+    expect(order()).toEqual(['s1', 's2', 's3'])
+    await userEvent.click(sort)
+    expect(order()).toEqual(['s3', 's2', 's1'])
   })
 
   it('meldet keine Treffer mit dem Hinweis auf die Suche über alle Inhalte', async () => {

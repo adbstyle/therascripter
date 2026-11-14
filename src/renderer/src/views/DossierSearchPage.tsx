@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef } from 'react'
 import type { KeyboardEvent } from 'react'
-import { Search } from 'lucide-react'
+import { RotateCw, Search } from 'lucide-react'
 import { useNavigation } from '../navigation/navigation'
 import { useScrollRestoration } from '../navigation/useScrollRestoration'
 import { useLiveQuery } from '../hooks/useLiveQuery'
@@ -9,6 +9,9 @@ import { semanticNotice } from '../utils/searchNotice'
 import { dossierListName, pluralize } from '../utils/dossierFormat'
 import { SearchResultsList } from '../components/search/SearchResultsList'
 import { SemanticNoticeBox } from '../components/search/SemanticNoticeBox'
+import { ResultsHead } from '../components/search/ResultsHead'
+import { isReordered } from '../stores/searchSession'
+import { useViewMode } from '../viewMode/useViewMode'
 import {
   hitRouteFocus,
   moveActive,
@@ -46,6 +49,7 @@ export default function DossierSearchPage({
     null
   )
   const inputRef = useRef<HTMLInputElement>(null)
+  const plain = useViewMode() === 'plain'
   const listId = `dossier-search-${useId().replace(/:/g, '')}`
   useScrollRestoration(true)
 
@@ -163,12 +167,29 @@ export default function DossierSearchPage({
         {announcement}
       </div>
 
-      {!searched && (
+      {!searched && !state.failed && (
         <p className="text-sm leading-relaxed text-text-secondary">
           Die Suche findet Stellen nach ihrer Bedeutung, nach genauen Begriffen und nach den
           Klarnamen erwähnter Personen — nur in den Sitzungen und PDF-Dokumenten dieses
           Patientendossiers.
         </p>
+      )}
+
+      {state.failed && state.submitted !== null && (
+        <div role="alert" className="rounded-lg border border-border px-4 py-5">
+          <p className="text-sm font-semibold text-text-primary">Die Suche ist fehlgeschlagen.</p>
+          <p className="mt-1 text-sm text-text-secondary">
+            Die Anfrage «{state.submitted}» liess sich gerade nicht ausführen.
+          </p>
+          <button
+            type="button"
+            onClick={() => search.searchNow(state.submitted ?? state.query)}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-surface-0 px-2.5 py-1 text-xs font-medium text-text-primary hover:bg-surface-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <RotateCw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            Erneut versuchen
+          </button>
+        </div>
       )}
 
       {noHits && (
@@ -194,10 +215,20 @@ export default function DossierSearchPage({
         showDocumentsHeading={false}
         semanticPending={semanticPending && searched}
         truncated={!!result?.truncated}
-        onPointerActivity={() => {
-          if (!state.interacted) search.update({ interacted: true })
+        selectable={plain}
+        onUserScroll={() => {
+          if (!state.interacted && searched) search.update({ interacted: true })
         }}
         scrollable={false}
+        before={
+          searched && docCount > 0 ? (
+            <ResultsHead
+              plain={plain}
+              reordered={isReordered(state)}
+              onSortByRelevance={search.sortByRelevance}
+            />
+          ) : null
+        }
       />
     </div>
   )

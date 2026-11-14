@@ -32,11 +32,17 @@ describe('AppMenuService — «Gehe zu» (Epic #192)', () => {
 
   it('sendet «Suchen …» (⌘K) als nav:command search (#209)', () => {
     const onNavCommand = vi.fn()
-    initAppMenu({ onOpenSettings: vi.fn(), onNavCommand })
+    const onShowWindow = vi.fn()
+    initAppMenu({ onOpenSettings: vi.fn(), onNavCommand, onShowWindow })
     const search = findItem('Suchen …')
     expect(search.accelerator).toBe('Command+K')
     ;(search.click as () => void)()
     expect(onNavCommand.mock.calls).toEqual([['search']])
+    // Verstecktes Fenster zuerst zeigen
+    expect(onShowWindow).toHaveBeenCalledTimes(1)
+    expect(onShowWindow.mock.invocationCallOrder[0]).toBeLessThan(
+      onNavCommand.mock.invocationCallOrder[0]
+    )
   })
 
   it('sendet Zurück (⌘[), Vorwärts (⌘]) und Seitenleiste (⌃⌘S) als nav:command', () => {

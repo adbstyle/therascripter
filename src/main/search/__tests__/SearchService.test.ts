@@ -255,9 +255,32 @@ describe('SearchService — dossiers (#209 AK 23–25)', () => {
         firstName: 'Anna',
         lastName: 'Müller',
         externalId: 'PD-4417',
-        birthDate: '1980-01-02'
+        birthDate: '1980-01-02',
+        entryCount: 0
       },
-      { id: 'd2', firstName: 'Anna', lastName: 'Müller', externalId: null, birthDate: '1975-07-08' }
+      {
+        id: 'd2',
+        firstName: 'Anna',
+        lastName: 'Müller',
+        externalId: null,
+        birthDate: '1975-07-08',
+        entryCount: 0
+      }
+    ])
+  })
+
+  it('counts assigned entries like the overview, without sessions being deleted', () => {
+    insertSession(db, { id: 's1' })
+    insertSession(db, { id: 's2', type: 'pdf' })
+    insertSession(db, { id: 's3', deletingAt: '2026-01-02T00:00:00.000Z' })
+    const assign = db.prepare(
+      `INSERT INTO session_dossiers (session_id, dossier_id, assigned_at) VALUES (?, 'd1', 'x')`
+    )
+    for (const id of ['s1', 's2', 's3']) assign.run(id)
+    const found = service.findDossiers('anna müller')
+    expect(found.map((d) => [d.id, d.entryCount])).toEqual([
+      ['d1', 2],
+      ['d2', 0]
     ])
   })
 })

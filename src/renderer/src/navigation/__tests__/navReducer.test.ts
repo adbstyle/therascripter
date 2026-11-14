@@ -289,7 +289,7 @@ describe('Suche (#209 AK 12, #211)', () => {
     expect(state.current.reopenOverlay).toBeUndefined()
   })
 
-  it('übernimmt eine andere Fundstelle derselben Sitzung ohne reopenOverlay', () => {
+  it('Fundstelle in der offenen Sitzung: das Overlay geht beim Schliessen dort auf, wohin es führt', () => {
     let state = run(initialNavState(), go(session('a')))
     state = navReducer(state, {
       type: 'navigate',
@@ -299,6 +299,40 @@ describe('Suche (#209 AK 12, #211)', () => {
     expect(state.current.route).toEqual(hit)
     expect(state.current.reopenOverlay).toBeUndefined()
     expect(keys(state.back)).toEqual(['sessions'])
+    state = navReducer(state, { type: 'back' })
+    expect(state.current.route).toEqual(sessions)
+    expect(state.current.reopenOverlay).toBe('search')
+  })
+
+  it('verwirft reopenOverlay, sobald der USER von der Zielseite aus weiternavigiert', () => {
+    let state = run(initialNavState(), {
+      type: 'navigate',
+      route: hit,
+      options: { reopenOverlay: 'search' }
+    })
+    state = run(state, go(settings()), { type: 'back' }, { type: 'back' })
+    expect(state.current.route).toEqual(sessions)
+    expect(state.current.reopenOverlay).toBeUndefined()
+  })
+
+  it('verwirft reopenOverlay auch bei › (vorwärts) von der Zielseite aus', () => {
+    let state = run(initialNavState(), {
+      type: 'navigate',
+      route: hit,
+      options: { reopenOverlay: 'search' }
+    })
+    state = run(state, go(settings()), { type: 'back' })
+    // Zurück auf der Zielseite: vorwärts weiter, dann zweimal zurück
+    state = run(state, { type: 'forward' }, { type: 'back' }, { type: 'back' })
+    expect(state.current.route).toEqual(sessions)
+    expect(state.current.reopenOverlay).toBeUndefined()
+  })
+
+  it('verwirft die Fundstelle einer Sitzung, sobald sie aufgelöst ist (einmal melden)', () => {
+    let state = run(initialNavState(), go(hit))
+    expect(navReducer(state, { type: 'consumeFocus', entryId: state.current.id + 9 })).toBe(state)
+    state = navReducer(state, { type: 'consumeFocus', entryId: state.current.id })
+    expect(state.current.route).toEqual({ kind: 'session', sessionId: 'a' })
   })
 
   it('unterscheidet die Dossier-Suche vom Dossier und ersetzt sie nach dem Löschen durch die Übersicht', () => {

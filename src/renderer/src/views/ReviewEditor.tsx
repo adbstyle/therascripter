@@ -123,13 +123,16 @@ interface ReviewEditorProps {
   onOpenDossier?: (dossierId: string) => void
   /** #209 AK 11 — Fundstelle der Suche, zu der gesprungen und die hervorgehoben wird. */
   focus?: SessionFocus
+  /** Die Fundstelle ist aufgelöst — die Route verwirft sie (keine zweite Meldung). */
+  onFocusConsumed?: () => void
 }
 
 function ReviewEditor({
   sessionId,
   onBack,
   onOpenDossier,
-  focus
+  focus,
+  onFocusConsumed
 }: ReviewEditorProps): React.JSX.Element {
   const toast = useToast()
   const viewMode = useViewMode()
@@ -191,6 +194,8 @@ function ReviewEditor({
   const summaryWrapRef = useRef<HTMLDivElement | null>(null)
   const panelShownRef = useRef(false)
   const followLayoutRef = useRef<{ scroll: () => void; until: number } | null>(null)
+  const onFocusConsumedRef = useRef(onFocusConsumed)
+  onFocusConsumedRef.current = onFocusConsumed
 
   useEffect(() => {
     window.api.settings.get('reviewPanelOpen').then((val) => {
@@ -783,6 +788,7 @@ function ReviewEditor({
     if (!focus || loading || !editor || editor.isDestroyed) return
     const scroller = editorScrollRef.current
     const resolved = resolveSearchFocus(editor.state.doc, focus)
+    onFocusConsumedRef.current?.()
     followLayoutRef.current = null
     if (hasSearchHighlight(editor.state))
       editor.view.dispatch(setSearchHighlight(editor.state, null))
@@ -796,7 +802,7 @@ function ReviewEditor({
       setFieldHit(null)
       if (scroller) scroller.scrollTop = 0
       setHitAnnouncement(SEARCH_HIT_GONE_TEXT)
-      toast.success(SEARCH_HIT_GONE_TEXT, { durationMs: 6000 })
+      toast.info(SEARCH_HIT_GONE_TEXT, { durationMs: 6000 })
       settleFocus()
       return
     }

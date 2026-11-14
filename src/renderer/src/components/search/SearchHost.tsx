@@ -32,6 +32,9 @@ export function SearchHost(): React.JSX.Element | null {
     []
   )
 
+  // ⌘, bzw. Tray «Einstellungen…»: die Einstellungen öffnen, das Fenster schliesst
+  useEffect(() => window.api.nav.onOpenSettings(() => closeSearchModal('navigate')), [])
+
   useEffect(() => {
     if (reopenOverlay !== 'search') return
     consumeOverlay(entryId)

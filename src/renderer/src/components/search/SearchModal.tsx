@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { Search } from 'lucide-react'
+import { RotateCw, Search } from 'lucide-react'
 import { useSearch, isSemanticUnavailable, normalizeQueryInput } from '../../hooks/useSearch'
 import { useNavigation } from '../../navigation/navigation'
 import { semanticNotice } from '../../utils/searchNotice'
 import { trapFocus } from '../../utils/focusTrap'
 import { pluralize } from '../../utils/dossierFormat'
+import { isReordered, updateSearchEntry } from '../../stores/searchSession'
+import { useViewMode } from '../../viewMode/useViewMode'
 import { SearchResultsList } from './SearchResultsList'
 import { SemanticNoticeBox } from './SemanticNoticeBox'
+import { ResultsHead } from './ResultsHead'
 import {
   hitRouteFocus,
   moveActive,
@@ -44,6 +47,35 @@ export function SearchModal({ onClose }: SearchModalProps): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
   const listId = `search-list-${useId().replace(/:/g, '')}`
+  const plain = useViewMode() === 'plain'
+  // Scroll-Position nur im Ref (kein Re-Render pro Scroll-Ereignis); in den
+  // Store erst beim Schliessen bzw. Öffnen eines Treffers
+  const scrollTopRef = useRef(state.scrollTop)
+  const searchKey = search.key
+  useEffect(() => {
+    return () => {
+      updateSearchEntry(searchKey, { scrollTop: scrollTopRef.current })
+    }
+  }, [searchKey])
+
+  // Esc und Tab robust abfangen — auch wenn der Fokus auf body liegt (Klick auf
+  // Text ohne Fokus) oder ausserhalb: Capture auf document, solange offen
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        // Nur das Fenster schliessen, nicht den Editor oder ein Popover darunter
+        event.preventDefault()
+        event.stopPropagation()
+        onCloseRef.current()
+      } else if (event.key === 'Tab') {
+        trapFocus(event, dialogRef.current)
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -91,7 +123,7 @@ export function SearchModal({ onClose }: SearchModalProps): React.JSX.Element {
         inputRef.current?.focus()
         return
       }
-      search.update({ activeKey: option.key, interacted: true })
+      search.update({ activeKey: option.key, interacted: true, scrollTop: scrollTopRef.current })
       void remember(state.submitted)
       onClose('navigate')
       if (option.kind === 'dossier') {
@@ -119,18 +151,6 @@ export function SearchModal({ onClose }: SearchModalProps): React.JSX.Element {
   }, [])
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
-    if (event.key === 'Escape') {
-      // Nur das Fenster schliessen, nicht den Editor oder ein Popover darunter
-      event.preventDefault()
-      event.stopPropagation()
-      event.nativeEvent.stopImmediatePropagation()
-      onClose()
-      return
-    }
-    if (event.key === 'Tab') {
-      trapFocus(event.nativeEvent, dialogRef.current)
-      return
-    }
     if (event.target !== inputRef.current) return
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
@@ -157,21 +177,25 @@ export function SearchModal({ onClose }: SearchModalProps): React.JSX.Element {
   const semanticPending = state.semantic === 'pending'
   const searched = state.submitted !== null && result !== null
   const noHits = searched && dossierCount === 0 && docCount === 0 && !semanticPending
+  const failed = state.failed && state.submitted !== null
+  const reordered = isReordered(state)
 
   // Ansage der Trefferzahl (Live-Region)
-  const announcement = !searched
-    ? ''
-    : noHits
-      ? `Keine Treffer für «${state.submitted}»`
-      : [
-          dossierCount > 0
-            ? pluralize(dossierCount, 'Patientendossier', 'Patientendossiers')
-            : null,
-          pluralize(docCount, 'Sitzung oder PDF-Dokument', 'Sitzungen und PDF-Dokumente'),
-          semanticPending ? 'Treffer nach Bedeutung werden gesucht' : null
-        ]
-          .filter(Boolean)
-          .join(', ')
+  const announcement = failed
+    ? 'Die Suche ist fehlgeschlagen.'
+    : !searched
+      ? ''
+      : noHits
+        ? `Keine Treffer für «${state.submitted}»`
+        : [
+            dossierCount > 0
+              ? pluralize(dossierCount, 'Patientendossier', 'Patientendossiers')
+              : null,
+            pluralize(docCount, 'Sitzung oder PDF-Dokument', 'Sitzungen und PDF-Dokumente'),
+            semanticPending ? 'Treffer nach Bedeutung werden gesucht' : null
+          ]
+            .filter(Boolean)
+            .join(', ')
 
   return (
     <div
@@ -185,7 +209,17 @@ export function SearchModal({ onClose }: SearchModalProps): React.JSX.Element {
         role="dialog"
         aria-modal="true"
         aria-label="Patientendossiers und Inhalte durchsuchen"
+        tabIndex={-1}
         onKeyDown={onKeyDown}
+        onMouseDown={(e) => {
+          // Klick auf Text ohne Fokus (Fusszeile, Überschriften, Hinweise): der
+          // Fokus bleibt im Feld statt auf body zu fallen
+          const target = e.target as HTMLElement
+          if (!target.closest('input, button, a, [tabindex]:not([tabindex="-1"])')) {
+            e.preventDefault()
+            inputRef.current?.focus()
+          }
+        }}
         className="flex max-h-[72vh] w-full max-w-[680px] flex-col overflow-hidden rounded-xl border border-border bg-surface-0 shadow-xl"
       >
         <label className="flex items-center gap-2.5 border-b border-border px-4 py-3">
@@ -234,14 +268,34 @@ export function SearchModal({ onClose }: SearchModalProps): React.JSX.Element {
           showDocumentsHeading
           semanticPending={semanticPending && searched}
           truncated={!!result?.truncated && !idle}
+          selectable={plain}
           initialScrollTop={state.scrollTop}
-          onScroll={(scrollTop) => search.update({ scrollTop, interacted: true })}
-          onPointerActivity={() => {
+          onScrollPosition={(top) => {
+            scrollTopRef.current = top
+          }}
+          onUserScroll={() => {
             if (!state.interacted && !idle) search.update({ interacted: true })
           }}
           scrollable
           before={
-            idle ? (
+            failed ? (
+              <div className="px-2.5 py-6 text-center" role="alert">
+                <p className="text-sm font-semibold text-text-primary">
+                  Die Suche ist fehlgeschlagen.
+                </p>
+                <p className="mt-1 text-sm text-text-secondary">
+                  Die Anfrage «{state.submitted}» liess sich gerade nicht ausführen.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => search.searchNow(state.submitted ?? state.query)}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-surface-0 px-2.5 py-1 text-xs font-medium text-text-primary hover:bg-surface-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <RotateCw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  Erneut versuchen
+                </button>
+              </div>
+            ) : idle ? (
               <IdleHeader hasRecent={recent.length > 0} onClear={() => void clearRecent()} />
             ) : noHits ? (
               <div className="px-2.5 py-6 text-center">
@@ -255,12 +309,18 @@ export function SearchModal({ onClose }: SearchModalProps): React.JSX.Element {
                     ' Die Suche nach Bedeutung hat dabei nicht mitgesucht.'}
                 </p>
               </div>
+            ) : searched ? (
+              <ResultsHead
+                plain={plain}
+                reordered={reordered}
+                onSortByRelevance={search.sortByRelevance}
+              />
             ) : null
           }
         />
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2 text-[11px] text-text-tertiary">
-          <span>Ausschnitte im Klartext · Treffer öffnen die Fundstelle</span>
+          <span>Dossiers über Name oder ID · Ausschnitte im Klartext</span>
           <span>↑↓ wählen · ↵ öffnen · ⌘K und esc schliessen</span>
         </div>
       </div>

@@ -78,3 +78,6 @@ export function hitRouteFocus(hit: SearchHit): SessionFocus {
     ? { ...hit.focus, fromEarlierVersion: true }
     : hit.focus
 }
+
+/** Zähler gerenderter Zeilen — nur für den Leistungstest (#209, Review S5). */
+export const searchRowRenders = { count: 0 }

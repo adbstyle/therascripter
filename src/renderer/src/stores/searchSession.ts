@@ -1,7 +1,8 @@
 import { createValueStore } from '../utils/valueStore'
 import { isModalDialogOpen } from '../navigation/navigation'
+import { normalizeSearchText } from '../../../shared/utils/search-normalize'
+import type { DossierRef } from '../../../shared/types/Dossier'
 import type {
-  SearchDocumentResult,
   SearchQueryResult,
   SearchScope,
   SemanticSearchStatus
@@ -27,6 +28,14 @@ export interface SearchEntryState {
   /** Angezeigte Treffer (exakt sofort, nach Bedeutung gemischt, sobald da). */
   result: SearchQueryResult | null
   /**
+   * Die letzte Antwort in ihrer gerankten Reihenfolge. Weicht `result` davon ab
+   * (der USER hat schon mit der Liste gearbeitet, als die Treffer nach Bedeutung
+   * kamen), stellt «Nach Relevanz sortieren» sie her.
+   */
+  ranked: SearchQueryResult | null
+  /** Die exakte Suche selbst ist gescheitert (kein «Keine Treffer»). */
+  failed: boolean
+  /**
    * Stand der Suche nach Bedeutung für `result`: 'pending' solange sie läuft,
    * danach die Antwort aus `search:semantic` bzw. der Grund aus `search:query`.
    */
@@ -36,9 +45,10 @@ export interface SearchEntryState {
   /** Scroll-Position der Trefferliste. */
   scrollTop: number
   /**
-   * Der USER hat mit der Liste gearbeitet (Pfeiltasten, Maus, Scrollen,
-   * Treffer geöffnet): nachkommende Treffer nach Bedeutung werden dann unten
-   * angehängt, statt die Liste unter ihm umzusortieren.
+   * Der USER hat mit der Liste gearbeitet (Pfeiltasten, eigenes Scrollen,
+   * Klick): nachkommende Treffer nach Bedeutung behalten dann die Positionen
+   * der angezeigten Dokumente, neue kommen unten dazu. Eine Maus, die nur über
+   * der Liste liegt, zählt nicht.
    */
   interacted: boolean
 }
@@ -47,6 +57,8 @@ export const EMPTY_SEARCH_ENTRY: SearchEntryState = {
   query: '',
   submitted: null,
   result: null,
+  ranked: null,
+  failed: false,
   semantic: null,
   activeKey: null,
   scrollTop: 0,
@@ -73,6 +85,7 @@ export function updateSearchEntry(
 ): void {
   const prev = getSearchEntry(key)
   const next = { ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) }
+  if (next.result !== prev.result) rememberDossiersOf(next.result)
   const map = new Map(entries.get())
   map.set(key, next)
   entries.set(map)
@@ -116,55 +129,93 @@ export function purgeDeletedSessions(deletedIds: readonly string[]): void {
   const map = new Map<SearchEntryKey, SearchEntryState>()
   for (const [key, entry] of entries.get()) {
     const result = withoutSessions(entry.result, deleted)
-    if (result !== entry.result) changed = true
-    map.set(key, result === entry.result ? entry : { ...entry, result })
+    const ranked = withoutSessions(entry.ranked, deleted)
+    if (result !== entry.result || ranked !== entry.ranked) changed = true
+    map.set(
+      key,
+      result === entry.result && ranked === entry.ranked ? entry : { ...entry, result, ranked }
+    )
   }
   if (changed) entries.set(map)
 }
 
-function withoutDossierRefs(doc: SearchDocumentResult, deleted: ReadonlySet<string>) {
-  const dossiers = doc.dossiers.filter((d) => !deleted.has(d.id))
-  return dossiers.length === doc.dossiers.length ? doc : { ...doc, dossiers }
+/**
+ * Dossiers, die in angezeigten Treffern vorkamen (als Treffer oder Plakette) —
+ * nur im Speicher, damit nach dem Löschen eines Dossiers auch Anfragen mit
+ * seinem Namen verworfen werden können (`dossiers:changed` trägt nur IDs).
+ */
+const seenDossiers = new Map<string, DossierRef>()
+
+/** Merkt sich die Dossiers einer angezeigten Antwort. */
+export function rememberDossiersOf(result: SearchQueryResult | null): void {
+  if (!result) return
+  for (const d of result.dossiers) seenDossiers.set(d.id, d)
+  for (const doc of result.results) for (const d of doc.dossiers) seenDossiers.set(d.id, d)
+}
+
+function resultMentions(result: SearchQueryResult | null, deleted: ReadonlySet<string>): boolean {
+  if (!result) return false
+  return (
+    result.dossiers.some((d) => deleted.has(d.id)) ||
+    result.results.some((doc) => doc.dossiers.some((d) => deleted.has(d.id)))
+  )
+}
+
+/** Normalisierte Schlüssel eines Dossiers wie bei #209 PC 4 (Vorname, Nachname, ID). */
+function dossierKeys(ref: DossierRef): string[] {
+  return [ref.firstName, ref.lastName, ref.externalId ?? '']
+    .map((v) => normalizeSearchText(v).trim())
+    .filter((v) => v.length > 0)
+}
+
+function queryMentions(entry: SearchEntryState, keys: string[]): boolean {
+  if (keys.length === 0) return false
+  return [entry.query, entry.submitted ?? ''].some((q) => {
+    const norm = normalizeSearchText(q)
+    return keys.some((k) => norm.includes(k))
+  })
 }
 
 /**
- * Gelöschte Patientendossiers: ihre Dossier-Suche endet (#211 AK 4), sie
- * verschwinden aus den Dossier-Treffern und aus den Plaketten der Inhalte.
+ * Gelöschte Patientendossiers (Datenschutz, gleiche Regel wie #209 PC 4):
+ * jeder gemerkte Zustand — auch die Suche über alle Inhalte — beginnt leer,
+ * wenn sein Ergebnis eines der Dossiers enthielt oder seine Anfrage dessen
+ * Vor-, Nachnamen oder ID enthält; die Dossier-Suche des Dossiers endet
+ * (#211 AK 4). Sonst blieben Anfrage und Klartext-Ausschnitte bis zum Neustart.
  */
 export function purgeDeletedDossiers(deletedIds: readonly string[]): void {
   if (deletedIds.length === 0) return
   const deleted = new Set(deletedIds)
+  const keys = deletedIds.flatMap((id) => {
+    const ref = seenDossiers.get(id)
+    return ref ? dossierKeys(ref) : []
+  })
   let changed = false
   const map = new Map<SearchEntryKey, SearchEntryState>()
   for (const [key, entry] of entries.get()) {
-    if (key.startsWith('dossier:') && deleted.has(key.slice('dossier:'.length))) {
+    const ownScope = key.startsWith('dossier:') && deleted.has(key.slice('dossier:'.length))
+    const affected =
+      ownScope ||
+      resultMentions(entry.result, deleted) ||
+      resultMentions(entry.ranked, deleted) ||
+      queryMentions(entry, keys)
+    if (affected) {
       changed = true
+      latestRequest.delete(key)
       continue
     }
-    const result = entry.result
-    if (!result) {
-      map.set(key, entry)
-      continue
-    }
-    const dossiers = result.dossiers.filter((d) => !deleted.has(d.id))
-    const results = result.results.map((doc) => withoutDossierRefs(doc, deleted))
-    const same =
-      dossiers.length === result.dossiers.length && results.every((d, i) => d === result.results[i])
-    if (same) {
-      map.set(key, entry)
-      continue
-    }
-    changed = true
-    map.set(key, { ...entry, result: { ...result, dossiers, results } })
+    map.set(key, entry)
   }
+  for (const id of deletedIds) seenDossiers.delete(id)
   if (changed) entries.set(map)
 }
 
 /**
- * Treffer nach Bedeutung kommen nach (#209, Bauplan 6): hat der USER schon
- * mit der Liste gearbeitet, bleiben die angezeigten Dokumente an ihrer Stelle
- * und neue kommen unten dazu — die Liste springt nicht unter Maus oder
- * Auswahl weg. Sonst gilt die gerankte Reihenfolge der zweiten Antwort.
+ * Treffer nach Bedeutung kommen nach (#209, Bauplan 6). Ohne Arbeit an der
+ * Liste gilt die gerankte Reihenfolge der zweiten Antwort («passendste
+ * zuerst»). Hat der USER schon gearbeitet, bleiben die angezeigten Dokumente
+ * an ihrer Stelle — jedes aber in der Fassung der zweiten Antwort (neue
+ * Fundstellen erscheinen) — und neue kommen unten dazu.
  */
 export function mergeSemanticResult(
   shown: SearchQueryResult,
@@ -172,13 +223,26 @@ export function mergeSemanticResult(
   keepOrder: boolean
 ): SearchQueryResult {
   if (!keepOrder) return next
+  const fresh = new Map(next.results.map((d) => [d.sessionId, d]))
   const known = new Set(shown.results.map((d) => d.sessionId))
+  const kept = shown.results.map((d) => fresh.get(d.sessionId) ?? d)
   const added = next.results.filter((d) => !known.has(d.sessionId))
-  return {
-    ...next,
-    dossiers: shown.dossiers,
-    results: [...shown.results, ...added]
-  }
+  return { ...next, results: [...kept, ...added] }
+}
+
+/** Weicht die angezeigte Reihenfolge von der gerankten ab? */
+export function isReordered(entry: SearchEntryState): boolean {
+  const { result, ranked } = entry
+  if (!result || !ranked || result === ranked) return false
+  if (result.results.length !== ranked.results.length) return true
+  return result.results.some((d, i) => d.sessionId !== ranked.results[i].sessionId)
+}
+
+/** «Nach Relevanz sortieren» bzw. erneutes Öffnen: Reihenfolge der Antwort herstellen. */
+export function restoreRankedOrder(key: SearchEntryKey): void {
+  const entry = getSearchEntry(key)
+  if (!isReordered(entry)) return
+  updateSearchEntry(key, { result: entry.ranked, interacted: false })
 }
 
 /** Suchfenster (⌘K) offen? Eine Stelle für Menü, Seitenleiste und Rücksprung. */
@@ -213,6 +277,7 @@ export function closeSearchModal(reason?: 'navigate'): void {
 export function _resetSearchSessionForTests(): void {
   entries.set(new Map())
   latestRequest.clear()
+  seenDossiers.clear()
   searchModalOpen.set(false)
   returnFocus = null
 }

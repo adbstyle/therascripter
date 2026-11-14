@@ -61,6 +61,8 @@ export type NavAction =
   | { type: 'consumeAnchor'; entryId: number }
   /** Wieder zu öffnendes Overlay verwerfen, sobald es geöffnet ist (einmal pro Rückkehr). */
   | { type: 'consumeOverlay'; entryId: number }
+  /** Fundstelle einer Sitzung verwerfen, sobald der Editor sie aufgelöst hat (einmal melden). */
+  | { type: 'consumeFocus'; entryId: number }
 
 export function initialNavState(route: Route = HOME_ROUTE): NavState {
   return { back: [], current: { id: 1, route }, forward: [], nextId: 2 }
@@ -93,6 +95,16 @@ export function navReducer(state: NavState, action: NavAction): NavState {
       const { reopenOverlay: _consumed, ...current } = state.current
       return { ...state, current }
     }
+    case 'consumeFocus': {
+      const route = state.current.route
+      if (state.current.id !== action.entryId || route.kind !== 'session' || !route.focus) {
+        return state
+      }
+      return {
+        ...state,
+        current: { ...state.current, route: { kind: 'session', sessionId: route.sessionId } }
+      }
+    }
   }
 }
 
@@ -119,6 +131,13 @@ function navigate(state: NavState, route: Route, options: NavigateOptions): NavS
       ...(options.anchorId !== undefined ? { anchorId: options.anchorId } : {}),
       route
     }
+    // Eine Fundstelle in der gerade offenen Sitzung: das Schliessen führt zum
+    // vorherigen Eintrag — dort geht das Overlay wieder auf (#209 AK 12)
+    const last = state.back[state.back.length - 1]
+    if (options.reopenOverlay !== undefined && last) {
+      const back = [...state.back.slice(0, -1), { ...last, reopenOverlay: options.reopenOverlay }]
+      return { ...state, back, current }
+    }
     return { ...state, current }
   }
 
@@ -135,7 +154,10 @@ function navigate(state: NavState, route: Route, options: NavigateOptions): NavS
     }
   }
 
-  const back = [...state.back, origin]
+  // Wer von der Zielseite aus weiternavigiert, kehrt nicht mehr direkt
+  // zurück: ältere `reopenOverlay` gelten nicht mehr (sonst ginge das
+  // Suchfenster Schritte später unerwartet auf)
+  const back = [...state.back.map(withoutOverlay), origin]
   // Begrenzung: die ältesten Einträge fallen weg (aktuell zählt mit)
   const overflow = back.length + 1 - MAX_HISTORY
   return {
@@ -184,7 +206,7 @@ function step(
     }
   }
   return {
-    back: [...state.back, state.current],
+    back: [...state.back, state.current].map(withoutOverlay),
     current: target,
     forward: from,
     nextId: state.nextId
@@ -243,4 +265,10 @@ function dropLeading(forward: Entry[], current: Entry): Entry[] {
 function dropAdjacent(back: Entry[], current: Entry): Entry[] {
   const last = back[back.length - 1]
   return last && sameRoute(last.route, current.route) ? back.slice(0, -1) : back
+}
+
+function withoutOverlay(entry: Entry): Entry {
+  if (entry.reopenOverlay === undefined) return entry
+  const { reopenOverlay: _dropped, ...rest } = entry
+  return rest
 }

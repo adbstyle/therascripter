@@ -5,6 +5,7 @@ import {
   getSearchEntry,
   isLatestSearchRequest,
   mergeSemanticResult,
+  restoreRankedOrder,
   searchEntriesStore,
   searchEntryKey,
   updateSearchEntry,
@@ -58,6 +59,8 @@ export interface UseSearchResult {
   /** «Erneut versuchen» beim Suchmodell (#210 AK 5). */
   retryModel: () => Promise<void>
   update: (patch: Partial<SearchEntryState>) => void
+  /** «Nach Relevanz sortieren»: Reihenfolge der letzten Antwort herstellen. */
+  sortByRelevance: () => void
 }
 
 /**
@@ -98,6 +101,7 @@ export function useSearch(scope: SearchScope, active = true): UseSearchResult {
         }
         updateSearchEntry(key, (prev) => ({
           result: prev.result ? mergeSemanticResult(prev.result, answer, prev.interacted) : answer,
+          ranked: answer,
           semantic: answer.semantic
         }))
       } catch {
@@ -116,6 +120,8 @@ export function useSearch(scope: SearchScope, active = true): UseSearchResult {
         updateSearchEntry(key, {
           submitted: null,
           result: null,
+          ranked: null,
+          failed: false,
           semantic: null,
           activeKey: null,
           scrollTop: 0,
@@ -132,6 +138,8 @@ export function useSearch(scope: SearchScope, active = true): UseSearchResult {
         updateSearchEntry(key, {
           submitted: query,
           result: answer,
+          ranked: answer,
+          failed: false,
           semantic: answer.semantic,
           activeKey: null,
           scrollTop: 0,
@@ -140,10 +148,13 @@ export function useSearch(scope: SearchScope, active = true): UseSearchResult {
         if (answer.semantic === 'pending') await runSemantic(input, 0)
       } catch {
         if (!isLatestSearchRequest(key, requestId)) return
+        // Eigener Fehlerzustand mit «Erneut versuchen» — nie «Keine Treffer»
         updateSearchEntry(key, {
           submitted: query,
-          result: { requestId, dossiers: [], results: [], truncated: false, semantic: 'error' },
-          semantic: 'error',
+          result: null,
+          ranked: null,
+          failed: true,
+          semantic: null,
           activeKey: null,
           scrollTop: 0,
           interacted: false
@@ -194,11 +205,18 @@ export function useSearch(scope: SearchScope, active = true): UseSearchResult {
 
   const retrySemantic = useCallback(() => {
     const current = getSearchEntry(key)
+    // Läuft gerade eine neue Eingabe (Entprellung) oder weicht das Feld von der
+    // gezeigten Anfrage ab, gilt die aktuelle Eingabe — nie die alte nachholen
+    if (timer.current !== null || normalizeQueryInput(current.query) !== current.submitted) {
+      clearTimer()
+      void run(current.query)
+      return
+    }
     if (current.submitted === null) return
     const requestId = beginSearchRequest(key)
     updateSearchEntry(key, { semantic: 'pending' })
     void runSemantic({ requestId, query: current.submitted, scope: scopeRef.current }, 0)
-  }, [key, runSemantic])
+  }, [key, run, runSemantic])
 
   const retryModel = useCallback(async () => {
     try {
@@ -232,6 +250,8 @@ export function useSearch(scope: SearchScope, active = true): UseSearchResult {
   // Feld und Treffer nicht zusammen
   useEffect(() => {
     if (!active) return
+    // Erneutes Öffnen: die Reihenfolge der Antwort gilt wieder
+    restoreRankedOrder(key)
     const current = getSearchEntry(key)
     if (normalizeQueryInput(current.query) !== current.submitted) void run(current.query)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -250,5 +270,17 @@ export function useSearch(scope: SearchScope, active = true): UseSearchResult {
     [key]
   )
 
-  return { key, state, availability, setQuery, searchNow, retrySemantic, retryModel, update }
+  const sortByRelevance = useCallback(() => restoreRankedOrder(key), [key])
+
+  return {
+    key,
+    state,
+    availability,
+    setQuery,
+    searchNow,
+    retrySemantic,
+    retryModel,
+    update,
+    sortByRelevance
+  }
 }

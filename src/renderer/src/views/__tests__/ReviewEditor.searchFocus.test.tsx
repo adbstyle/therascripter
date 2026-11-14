@@ -203,6 +203,19 @@ describe('Fundstelle im Editor (#209 AK 11)', () => {
     }
   )
 
+  it('meldet die Fundstelle als verbraucht (die Route verwirft sie: keine zweite Meldung)', async () => {
+    api = makeApi('pseudonymized')
+    window.api = api as unknown as typeof window.api
+    _resetViewModeStoreForTests()
+    const consumed = vi.fn()
+    render(
+      <ToastProvider>
+        <ReviewEditor sessionId="s1" onBack={onBack} focus={SCHLAFE} onFocusConsumed={consumed} />
+      </ToastProvider>
+    )
+    await waitFor(() => expect(consumed).toHaveBeenCalledTimes(1))
+  })
+
   it('meldet eine nicht mehr vorhandene Fundstelle und öffnet oben', async () => {
     await openEditor({
       kind: 'hit',

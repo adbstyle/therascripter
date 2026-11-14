@@ -12,7 +12,8 @@ export const DOSSIER_HOFER_LUKAS: SearchDossierResult = {
   firstName: 'Lukas',
   lastName: 'Hofer',
   externalId: 'PD-1188',
-  birthDate: '1978-02-03'
+  birthDate: '1978-02-03',
+  entryCount: 6
 }
 
 export const DOSSIER_HOFER_LUKAS_2: SearchDossierResult = {
@@ -20,7 +21,8 @@ export const DOSSIER_HOFER_LUKAS_2: SearchDossierResult = {
   firstName: 'Lukas',
   lastName: 'Hofer',
   externalId: 'PD-2001',
-  birthDate: '1990-07-12'
+  birthDate: '1990-07-12',
+  entryCount: 1
 }
 
 export function exactHit(overrides: Partial<SearchHit> = {}): SearchHit {

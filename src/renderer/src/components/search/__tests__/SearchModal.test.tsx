@@ -6,6 +6,7 @@ import { renderWithProviders } from '../../../test/renderWithProviders'
 import { createMockApi, emitApiEvent } from '../../../test/mockApi'
 import { useNavigation } from '../../../navigation/navigation'
 import { _resetSearchSessionForTests, openSearchModal } from '../../../stores/searchSession'
+import { searchRowRenders } from '../searchOptions'
 import { _resetViewModeStoreForTests, setViewMode } from '../../../viewMode/viewModeStore'
 import type { SearchAvailability, SearchQueryInput } from '../../../../../shared/types/Search'
 import {
@@ -303,7 +304,7 @@ describe('Treffer in zwei Stufen', () => {
     // Ausschnitt im Klartext, exakte Stelle markiert
     const marks = document.querySelectorAll('mark')
     expect(marks[0].textContent).toBe('Brändli')
-    expect(screen.getByText('Ausschnitte im Klartext · Treffer öffnen die Fundstelle')).toBeTruthy()
+    expect(screen.getByText('Dossiers über Name oder ID · Ausschnitte im Klartext')).toBeTruthy()
     act(() => setViewMode('plain'))
     expect(await screen.findByText('Lukas Hofer Sitzung s1')).toBeTruthy()
     // Stelle links: Sprecher · Zeit, PDF ohne Seitenlabel
@@ -462,7 +463,7 @@ describe('Treffer öffnen und zurückkehren (#209 AK 11/12, AK 26)', () => {
     expect(route()).toEqual({ kind: 'session', sessionId: 's1' })
   })
 
-  it('entfernt gelöschte Sitzungen und Dossiers aus den gemerkten Treffern', async () => {
+  it('entfernt gelöschte Sitzungen aus den gemerkten Treffern', async () => {
     renderHost()
     await openModal()
     await typeQuery('Hofer')
@@ -470,9 +471,17 @@ describe('Treffer öffnen und zurückkehren (#209 AK 11/12, AK 26)', () => {
     act(() => emitApiEvent(window.api, 'sessions.onChanged', { deletedIds: ['s1'] }))
     expect(screen.queryByText(/Sitzung s1/)).toBeNull()
     expect(screen.getByText('Sitzungen und PDF-Dokumente · 2 Treffer')).toBeTruthy()
+  })
+
+  it('verwirft Anfrage und Klartext-Ausschnitte, sobald ein Dossier aus den Treffern gelöscht wird', async () => {
+    renderHost()
+    await openModal()
+    await typeQuery('Hofer')
+    await screen.findByText('Sitzungen und PDF-Dokumente · 3 Treffer')
     act(() => emitApiEvent(window.api, 'dossiers.onChanged', { deletedIds: ['d-lukas'] }))
+    expect(screen.getByRole('combobox')).toHaveValue('')
+    expect(screen.queryByText(/Brändli/)).toBeNull()
     expect(screen.queryByText('PD-1188 · 03.02.1978')).toBeNull()
-    expect(screen.getByText('PD-2001 · 12.07.1990')).toBeTruthy()
   })
 })
 
@@ -512,7 +521,7 @@ describe('Verfügbarkeit der Suche nach Bedeutung (#209 AK 18, #210 AK 4/5)', ()
     act(() => emitApiEvent(window.api, 'search.onAvailabilityChanged', READY))
     await waitFor(() => expect(window.api.search.semantic).toHaveBeenCalledTimes(1))
     expect(await screen.findByText('[PERSON 1] Sitzung s3')).toBeTruthy()
-    expect(screen.queryByRole('note')).toBeNull()
+    expect(screen.queryByRole('note', { name: /Suche nach Bedeutung/ })).toBeNull()
   })
 
   it('Suchmodell lädt: erkennbar, dass die Suche erst danach verfügbar ist, mit Fortschritt', async () => {
@@ -558,10 +567,10 @@ describe('Verfügbarkeit der Suche nach Bedeutung (#209 AK 18, #210 AK 4/5)', ()
     withAvailability({ model: { status: 'ready' }, semantic: 'error' })
     renderHost()
     await openModal()
-    await screen.findByRole('note')
+    await screen.findByRole('note', { name: /Suche nach Bedeutung/ })
     await typeQuery('Hofer')
     await screen.findByText('[PERSON 1] Sitzung s3')
-    expect(screen.queryByRole('note')).toBeNull()
+    expect(screen.queryByRole('note', { name: /Suche nach Bedeutung/ })).toBeNull()
   })
 
   it('Werkzeug blockiert', async () => {
@@ -593,5 +602,188 @@ describe('Verfügbarkeit der Suche nach Bedeutung (#209 AK 18, #210 AK 4/5)', ()
     })
     await userEvent.click(within(note).getByRole('button', { name: 'Erneut versuchen' }))
     expect(await screen.findByText('[PERSON 1] Sitzung s3')).toBeTruthy()
+  })
+})
+
+describe('Review S5: Fokus, Kopieren, Reihenfolge, Fehler, Leistung', () => {
+  it('Esc mit Fokus auf body schliesst nur das Suchfenster; Tab holt den Fokus zurück', async () => {
+    renderHost()
+    const below = vi.fn()
+    const windowHandler = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && !e.defaultPrevented) below()
+    }
+    window.addEventListener('keydown', windowHandler)
+    const dialog = await openModal()
+    // Klick auf Text ohne Fokus: der Fokus bleibt im Feld
+    fireEvent.mouseDown(within(dialog).getByText(/Dossiers über Name oder ID/))
+    expect(screen.getByRole('combobox')).toHaveFocus()
+    ;(document.activeElement as HTMLElement).blur()
+    expect(document.activeElement).toBe(document.body)
+    fireEvent.keyDown(document.body, { key: 'Tab' })
+    expect(dialog.contains(document.activeElement)).toBe(true)
+    ;(document.activeElement as HTMLElement).blur()
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(below).not.toHaveBeenCalled()
+    window.removeEventListener('keydown', windowHandler)
+  })
+
+  it('pseudonymisierte Ansicht: Ausschnitte nicht auswählbar, deutlicher Hinweis im Listenkopf', async () => {
+    renderHost()
+    await openModal()
+    await typeQuery('Hofer')
+    await screen.findByText('Sitzungen und PDF-Dokumente · 2 Treffer')
+    expect(screen.getByTestId('search-results')).toHaveClass('select-none')
+    expect(screen.getByRole('note', { name: 'Ausschnitte im Klartext' })).toHaveTextContent(
+      'Auswählen und kopieren lassen sie sich nur in der Klartext-Ansicht'
+    )
+  })
+
+  it('Klartext-Ansicht: Ausschnitte auswählbar, nur der dezente Hinweis', async () => {
+    renderHost()
+    act(() => setViewMode('plain'))
+    await openModal()
+    await typeQuery('Hofer')
+    await screen.findByText('Sitzungen und PDF-Dokumente · 2 Treffer')
+    expect(screen.getByTestId('search-results')).not.toHaveClass('select-none')
+    expect(screen.queryByRole('note', { name: 'Ausschnitte im Klartext' })).toBeNull()
+  })
+
+  it('eine Maus über der Liste ändert nichts: es gilt die Reihenfolge der zweiten Antwort', async () => {
+    const second = deferred<ReturnType<typeof answer>>()
+    vi.mocked(window.api.search.semantic).mockImplementation(async (input) => ({
+      ...(await second.promise),
+      requestId: input.requestId
+    }))
+    renderHost()
+    await openModal()
+    await typeQuery('Hofer')
+    await screen.findByText('Sitzungen und PDF-Dokumente · 2 Treffer')
+    fireEvent.mouseMove(screen.getByTestId('search-results'))
+    second.resolve(answer(0, { results: [doc('s3', { hits: [semanticHit()] }), doc('s1')] }))
+    await waitFor(() => expect(screen.queryByTestId('semantic-pending')).toBeNull())
+    expect(screen.getAllByRole('option')[0]).toHaveTextContent('Sitzung s3')
+    expect(screen.queryByRole('button', { name: /nach Relevanz sortieren/ })).toBeNull()
+  })
+
+  it('nach Interaktion: Positionen bleiben, neue Fundstellen erscheinen, «nach Relevanz sortieren» stellt die Antwort her', async () => {
+    const second = deferred<ReturnType<typeof answer>>()
+    vi.mocked(window.api.search.semantic).mockImplementation(async (input) => ({
+      ...(await second.promise),
+      requestId: input.requestId
+    }))
+    renderHost()
+    await openModal()
+    await typeQuery('Hofer')
+    await screen.findByText('Sitzungen und PDF-Dokumente · 2 Treffer')
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'ArrowDown' })
+    second.resolve(
+      answer(0, {
+        dossiers: [DOSSIER_HOFER_LUKAS, DOSSIER_HOFER_LUKAS_2],
+        results: [
+          doc('s3', { hits: [semanticHit()] }),
+          doc('s1', {
+            hits: [
+              exactHit(),
+              semanticHit({ snippet: { ...semanticHit().snippet, text: 'Neue Stelle in s1' } })
+            ]
+          }),
+          doc('s2')
+        ]
+      })
+    )
+    await waitFor(() => expect(screen.queryByTestId('semantic-pending')).toBeNull())
+    const titles = (): string[] =>
+      screen
+        .getAllByRole('option')
+        .map((o) => o.textContent ?? '')
+        .filter((t) => t.includes('Sitzung s'))
+        .map((t) => t.match(/Sitzung (s\d)/)![1])
+    expect(titles()).toEqual(['s1', 's2', 's3'])
+    // Neue Fundstelle des bekannten Dokuments erscheint
+    expect(screen.getByText(/Neue Stelle in s1/)).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: /nach Relevanz sortieren/ }))
+    expect(titles()).toEqual(['s3', 's1', 's2'])
+  })
+
+  it('beim erneuten Öffnen gilt wieder die Reihenfolge der Antwort', async () => {
+    const second = deferred<ReturnType<typeof answer>>()
+    vi.mocked(window.api.search.semantic).mockImplementation(async (input) => ({
+      ...(await second.promise),
+      requestId: input.requestId
+    }))
+    renderHost()
+    await openModal()
+    await typeQuery('Hofer')
+    await screen.findByText('Sitzungen und PDF-Dokumente · 2 Treffer')
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'ArrowDown' })
+    second.resolve(
+      answer(0, { results: [doc('s3', { hits: [semanticHit()] }), doc('s1'), doc('s2')] })
+    )
+    await screen.findByRole('button', { name: /nach Relevanz sortieren/ })
+    act(() => emitApiEvent(window.api, 'nav.onCommand', 'search'))
+    await openModal()
+    expect(screen.queryByRole('button', { name: /nach Relevanz sortieren/ })).toBeNull()
+    expect(screen.getAllByRole('option')[0]).toHaveTextContent('Sitzung s3')
+  })
+
+  it('holt bei wieder verfügbarer Bedeutungssuche die aktuelle Eingabe, nicht die alte Anfrage', async () => {
+    vi.mocked(window.api.search.open).mockResolvedValue({
+      model: { status: 'ready' },
+      semantic: 'unavailable-processing'
+    })
+    vi.mocked(window.api.search.query).mockImplementation(async (input) =>
+      answer(input.requestId, { results: [doc(input.query)], semantic: 'unavailable-processing' })
+    )
+    renderHost()
+    await openModal()
+    await typeQuery('Ho')
+    await screen.findByText('[PERSON 1] Sitzung Ho')
+    // Neue Eingabe läuft noch in der Entprellung
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Hofer' } })
+    act(() => emitApiEvent(window.api, 'search.onAvailabilityChanged', READY))
+    await screen.findByText('[PERSON 1] Sitzung Hofer')
+    expect(vi.mocked(window.api.search.semantic).mock.calls.every((c) => c[0].query !== 'Ho')).toBe(
+      true
+    )
+  })
+
+  it('⌘, (Einstellungen) schliesst das Suchfenster', async () => {
+    renderHost()
+    await openModal()
+    act(() => emitApiEvent(window.api, 'nav.onOpenSettings'))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('zeigt einen Fehler der exakten Suche nicht als «Keine Treffer», mit «Erneut versuchen»', async () => {
+    vi.mocked(window.api.search.query)
+      .mockRejectedValueOnce(new Error('kaputt'))
+      .mockImplementation(async (input) =>
+        answer(input.requestId, { results: [doc('s1')], semantic: 'model-missing' })
+      )
+    renderHost()
+    await openModal()
+    await typeQuery('Hofer')
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Die Suche ist fehlgeschlagen.')
+    expect(screen.queryByText(/Keine Treffer/)).toBeNull()
+    await userEvent.click(within(alert).getByRole('button', { name: 'Erneut versuchen' }))
+    expect(await screen.findByText('[PERSON 1] Sitzung s1')).toBeTruthy()
+  })
+
+  it('Tippen und Scrollen rendern die Zeilen nicht neu', async () => {
+    renderHost()
+    await openModal()
+    await typeQuery('Hofer')
+    await screen.findByText('Sitzungen und PDF-Dokumente · 3 Treffer')
+    const before = searchRowRenders.count
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Hofer ' } })
+    const list = screen.getByTestId('search-results')
+    list.scrollTop = 30
+    fireEvent.scroll(list)
+    expect(searchRowRenders.count).toBe(before)
+    // Pfeiltaste: nur die beiden betroffenen Zeilen
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'ArrowDown' })
+    expect(searchRowRenders.count - before).toBeLessThanOrEqual(2)
   })
 })
