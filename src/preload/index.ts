@@ -52,6 +52,8 @@ const api: IpcApi = {
     list: () => ipcRenderer.invoke('session:list'),
     delete: (sessionId) => ipcRenderer.invoke('session:delete', { sessionId }),
     rename: (sessionId, title) => ipcRenderer.invoke('session:rename', { sessionId, title }),
+    setDocumentDate: (sessionId, documentDate) =>
+      ipcRenderer.invoke('session:setDocumentDate', { sessionId, documentDate }),
     onChanged: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, data: unknown): void => {
         const parsed = SessionsChangedSchema.safeParse(data)

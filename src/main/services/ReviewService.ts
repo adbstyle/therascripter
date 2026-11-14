@@ -38,6 +38,8 @@ export class ReviewService {
       entityMap,
       sessionType: session.type,
       sessionTitle: session.title,
+      createdAt: session.createdAt,
+      documentDate: session.documentDate ?? null,
       titleSnapshot: session.titleEntitySnapshot ?? null,
       processedWithModels: session.processedWithModels,
       reviewAt: session.reviewAt,

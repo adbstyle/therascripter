@@ -17,11 +17,15 @@ import type {
 import type { ToolHealthState } from '../tool-blocked'
 import type { NavCommand, SessionsChangedData } from '../validation/change-event-schemas'
 import type { DossierApi } from './ipc/DossierApi'
+import type { SessionListItem, SetDocumentDateResult } from './Dossier'
 
 export interface SessionApi {
-  list(): Promise<Session[]>
+  /** #205 — mit den Patientendossiers jeder Sitzung (Plaketten). */
+  list(): Promise<SessionListItem[]>
   delete(sessionId: string): Promise<boolean>
   rename(sessionId: string, title: string): Promise<Session | null>
+  /** #205 — Dokumentdatum eines PDFs (ISO-Tag, nicht nach heute). */
+  setDocumentDate(sessionId: string, documentDate: string): Promise<SetDocumentDateResult>
   /** Epic #192 — Sitzungen geändert (gebündelt); `deletedIds` nennt gelöschte. */
   onChanged(callback: (data: SessionsChangedData) => void): () => void
 }
@@ -100,6 +104,10 @@ export interface ReviewData {
   entityMap: EntityMap
   sessionType: SessionType
   sessionTitle: string
+  /** #205 — recording time resp. import time (ISO UTC); the PDF import date derives from it. */
+  createdAt: string
+  /** #205 — document date of a PDF (ISO day); null: the import date counts. */
+  documentDate: string | null
   /** #203 — meaning of the tokens in `sessionTitle` when it was written. */
   titleSnapshot: PlaceholderSnapshot | null
   /**

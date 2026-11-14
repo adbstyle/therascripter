@@ -74,7 +74,7 @@ import {
 } from './services/ModelDownloadService'
 import { registerSummaryHandlers } from './ipc/summary-handlers'
 import { startToolCheck } from './services/ToolHealthService'
-import { registerDossierHandlers } from './ipc/dossier-handlers'
+import { registerDossierAssignmentHandlers, registerDossierHandlers } from './ipc/dossier-handlers'
 
 // Set in before-quit so the close-handler can distinguish "user closed window"
 // (hide) from "app is shutting down" (allow destroy).
@@ -363,6 +363,7 @@ app.whenReady().then(() => {
   registerMicrophoneHandlers()
   registerToolHealthHandlers()
   registerDossierHandlers()
+  registerDossierAssignmentHandlers()
   registerSummaryHandlers({
     sessionService,
     summaries: {

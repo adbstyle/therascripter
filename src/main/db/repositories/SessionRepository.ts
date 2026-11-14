@@ -324,6 +324,21 @@ export class SessionRepository {
     return this.findById(id)
   }
 
+  /**
+   * #205 — sets the document date of a PDF (ISO day). Never NULL: a date once
+   * set can be changed but not reset to the import date (Out of Scope 3).
+   * Returns false if there is no such PDF (missing, being deleted, or audio).
+   */
+  setDocumentDate(id: string, documentDate: string): boolean {
+    const result = this.db
+      .prepare(
+        `UPDATE sessions SET document_date = ?, updated_at = ?
+         WHERE id = ? AND type = 'pdf' AND deleting_at IS NULL`
+      )
+      .run(documentDate, new Date().toISOString(), id)
+    return result.changes > 0
+  }
+
   delete(id: string): boolean {
     const result = this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
     return result.changes > 0

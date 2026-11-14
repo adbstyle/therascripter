@@ -1,3 +1,5 @@
+import type { Session } from './Session'
+
 /**
  * Patientendossiers (Epic #192, Story #204).
  *
@@ -98,3 +100,29 @@ export type DeleteDossierResult =
   | { ok: true; deletedSessionIds: string[]; incomplete: boolean }
   | { ok: false; reason: 'blocked-recording' | 'not-found' }
   | { ok: false; reason: 'changed'; preview: DossierDeletePreview }
+
+/* ---------------------------------------------------------------------------
+ * Zuordnen, Verlauf, Dokumentdatum (#205)
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Eintrag der Sitzungsliste (`session:list`): Listen-Projektion einer Sitzung
+ * mit den Patientendossiers, denen sie zugeordnet ist — alphabetisch nach
+ * Nachname, dann Vorname (#205 AK 5).
+ */
+export type SessionListItem = Session & { dossiers: DossierRef[] }
+
+/**
+ * Eintrag im Verlauf eines Patientendossiers (#205 AK 6–14). `sortDay` ist der
+ * Tag, der die Stelle im Verlauf bestimmt (`YYYY-MM-DD`, lokale Zeit): bei
+ * Sitzungen der Tag der Aufnahme, bei PDF-Dokumenten das Dokumentdatum, sonst
+ * der Tag des Imports. Der Main-Prozess rechnet ihn aus — Renderer und Main
+ * können so nie mit verschiedenen Tagesgrenzen gruppieren.
+ */
+export type TimelineEntry = SessionListItem & { sortDay: string }
+
+/** Ergebnis von `dossier:assign` / `dossier:unassign`. */
+export type DossierAssignmentResult = { ok: true } | { ok: false; reason: 'not-found' }
+
+/** Ergebnis von `session:setDocumentDate` (#205 AK 18–22). */
+export type SetDocumentDateResult = { ok: true } | { ok: false; reason: 'not-found' | 'not-pdf' }

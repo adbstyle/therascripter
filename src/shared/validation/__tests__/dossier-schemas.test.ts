@@ -5,7 +5,8 @@ import {
   DossierIdInputSchema,
   DossierUpdateSchema,
   DossiersChangedSchema,
-  PastOrTodayIsoDateSchema
+  PastOrTodayIsoDateSchema,
+  SessionDocumentDateSchema
 } from '../dossier-schemas'
 
 describe('DossierCreateSchema', () => {
@@ -190,6 +191,44 @@ describe('control and invisible characters', () => {
     ).toBe(false)
     expect(
       DossierUpdateSchema.safeParse({ dossierId: 'd1', patch: { medication: 'x\u001B' } }).success
+    ).toBe(false)
+  })
+})
+
+describe('SessionDocumentDateSchema (#205 AK 21)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 10, 14, 12, 0))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const parse = (documentDate: unknown): boolean =>
+    SessionDocumentDateSchema.safeParse({ sessionId: 's1', documentDate }).success
+
+  it('accepts a complete, valid date up to today', () => {
+    expect(parse('2026-11-14')).toBe(true)
+    expect(parse('2024-02-29')).toBe(true)
+  })
+
+  it('rejects tomorrow, impossible and incomplete dates', () => {
+    expect(parse('2026-11-15')).toBe(false)
+    expect(parse('2025-02-29')).toBe(false)
+    expect(parse('2026-04-31')).toBe(false)
+    expect(parse('2026-11')).toBe(false)
+    expect(parse('14.11.2026')).toBe(false)
+  })
+
+  it('never accepts null — a document date cannot be reset (OOS 3)', () => {
+    expect(parse(null)).toBe(false)
+    expect(parse(undefined)).toBe(false)
+  })
+
+  it('rejects unknown keys', () => {
+    expect(
+      SessionDocumentDateSchema.safeParse({ sessionId: 's1', documentDate: '2026-11-01', x: 1 })
+        .success
     ).toBe(false)
   })
 })
