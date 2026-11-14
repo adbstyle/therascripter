@@ -21,6 +21,7 @@ import type { ModelGroup, DiarizationPipeline } from '../shared/validation/model
 import { SummaryChangedSchema } from '../shared/validation/summary-schemas'
 import { ToolHealthStateSchema } from '../shared/validation/tool-health-schemas'
 import { normalizeViewMode, type ViewMode } from '../shared/types/ViewMode'
+import { NavCommandSchema, SessionsChangedSchema } from '../shared/validation/change-event-schemas'
 
 /**
  * Issue #203 — the saved view, read synchronously before any renderer code
@@ -36,11 +37,30 @@ function readInitialViewMode(): ViewMode {
 }
 import { dossierApi } from './api/dossiers'
 
+/** Epic #192 — gespeicherte Seitenleiste vor dem ersten Render; im Zweifel eingeblendet. */
+function readInitialSidebarOpen(): boolean {
+  try {
+    return ipcRenderer.sendSync('sidebarOpen:getSync') !== false
+  } catch {
+    return true
+  }
+}
+
 const api: IpcApi = {
   sessions: {
     list: () => ipcRenderer.invoke('session:list'),
     delete: (sessionId) => ipcRenderer.invoke('session:delete', { sessionId }),
-    rename: (sessionId, title) => ipcRenderer.invoke('session:rename', { sessionId, title })
+    rename: (sessionId, title) => ipcRenderer.invoke('session:rename', { sessionId, title }),
+    onChanged: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: unknown): void => {
+        const parsed = SessionsChangedSchema.safeParse(data)
+        if (parsed.success) callback(parsed.data)
+      }
+      ipcRenderer.on('sessions:changed', handler)
+      return () => {
+        ipcRenderer.removeListener('sessions:changed', handler)
+      }
+    }
   },
   recording: {
     start: () => ipcRenderer.invoke('recording:start'),
@@ -250,11 +270,22 @@ const api: IpcApi = {
   },
   dossiers: dossierApi,
   nav: {
+    initialSidebarOpen: readInitialSidebarOpen(),
     onOpenSettings: (callback) => {
       const handler = (): void => callback()
       ipcRenderer.on('nav:openSettings', handler)
       return () => {
         ipcRenderer.removeListener('nav:openSettings', handler)
+      }
+    },
+    onCommand: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: unknown): void => {
+        const parsed = NavCommandSchema.safeParse(data)
+        if (parsed.success) callback(parsed.data)
+      }
+      ipcRenderer.on('nav:command', handler)
+      return () => {
+        ipcRenderer.removeListener('nav:command', handler)
       }
     }
   }

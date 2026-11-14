@@ -5,11 +5,13 @@ import App from '../App'
 import { ToastProvider } from '../contexts/ToastContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
 import { createValueStore } from '../utils/valueStore'
+import { createMockApi, makeSession } from '../test/mockApi'
 
 // useRecording mocken: Aufnahme-Zustand pro Test steuerbar, ohne
 // getUserMedia/AudioWorklet in jsdom simulieren zu müssen.
 const mockRecordingState = {
   isRecording: false,
+  sessionId: null as string | null,
   level: createValueStore(0),
   duration: createValueStore(0),
   error: null as string | null,
@@ -20,6 +22,7 @@ vi.mock('../hooks/useRecording', () => ({
   useRecording: () => mockRecordingState
 }))
 
+// Wie main.tsx: Theme und Toasts liegen ausserhalb von App
 const renderApp = (): ReturnType<typeof render> =>
   render(
     <ThemeProvider>
@@ -29,210 +32,62 @@ const renderApp = (): ReturnType<typeof render> =>
     </ThemeProvider>
   )
 
-const mockModelUpdate = {
-  check: vi.fn().mockResolvedValue([]),
-  restart: vi.fn(),
-  startDownload: vi.fn(),
-  getPending: vi.fn().mockResolvedValue(null),
-  getAvailable: vi.fn().mockResolvedValue([]),
-  clearPending: vi.fn().mockResolvedValue(undefined),
-  dismissVersions: vi.fn().mockResolvedValue(undefined),
-  onAvailable: vi.fn().mockReturnValue(() => {}),
-  onDownloadProgress: vi.fn().mockReturnValue(() => {}),
-  onDownloadComplete: vi.fn().mockReturnValue(() => {}),
-  onDownloadError: vi.fn().mockReturnValue(() => {})
-}
-
 beforeEach(() => {
   mockRecordingState.isRecording = false
+  mockRecordingState.sessionId = null
   mockRecordingState.duration = createValueStore(0)
   mockRecordingState.error = null
-
-  window.api = {
-    sessions: {
-      list: vi.fn().mockResolvedValue([]),
-      delete: vi.fn(),
-      rename: vi.fn()
-    },
-    recording: {
-      start: vi.fn(),
-      stop: vi.fn(),
-      sendData: vi.fn(),
-      onDuration: vi.fn().mockReturnValue(() => {}),
-      onError: vi.fn().mockReturnValue(() => {}),
-      onAutoStopped: vi.fn().mockReturnValue(() => {})
-    },
-    settings: {
-      get: vi.fn().mockResolvedValue(false),
-      set: vi.fn().mockResolvedValue(undefined)
-    },
-    tasks: {
-      getSessionTasks: vi.fn().mockResolvedValue([]),
-      isProcessing: vi.fn().mockResolvedValue(false),
-      retry: vi.fn().mockResolvedValue(undefined),
-      onProgress: vi.fn().mockReturnValue(() => {}),
-      onStarted: vi.fn().mockReturnValue(() => {}),
-      onCompleted: vi.fn().mockReturnValue(() => {}),
-      onError: vi.fn().mockReturnValue(() => {}),
-      onQueuePositions: vi.fn().mockReturnValue(() => {})
-    },
-    blocklist: {
-      list: vi.fn().mockResolvedValue([]),
-      add: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn()
-    },
-    import: {
-      pdf: vi.fn().mockResolvedValue([]),
-      showPDFDialog: vi.fn().mockResolvedValue([]),
-      getPathForFile: vi.fn().mockReturnValue('')
-    },
-    review: {
-      load: vi.fn(),
-      save: vi.fn(),
-      exportClipboard: vi.fn()
-    },
-    system: {
-      aboutInfo: vi.fn().mockResolvedValue({}),
-      uninstall: vi.fn(),
-      openInFinder: vi.fn()
-    },
-    modelDownload: {
-      status: vi.fn().mockResolvedValue({ modelsReady: true, models: [] }),
-      checkDiskSpace: vi
-        .fn()
-        .mockResolvedValue({ sufficient: true, availableBytes: 0, requiredBytes: 0 }),
-      start: vi.fn(),
-      onStatus: vi.fn().mockReturnValue(() => {})
-    },
-    modelCatalog: {
-      list: vi.fn().mockResolvedValue([]),
-      listAsr: vi.fn().mockResolvedValue([]),
-      download: vi.fn().mockResolvedValue([]),
-      delete: vi.fn().mockResolvedValue([]),
-      setActive: vi.fn().mockResolvedValue([]),
-      clearActive: vi.fn().mockResolvedValue([]),
-      cancelDownload: vi.fn().mockResolvedValue(undefined)
-    },
-    pipeline: {
-      getDiarization: vi.fn().mockResolvedValue('pyannote/speaker-diarization-3.1'),
-      setDiarization: vi.fn().mockResolvedValue('pyannote/speaker-diarization-3.1'),
-      listDiarization: vi.fn().mockResolvedValue([])
-    },
-    modelUpdate: mockModelUpdate,
-    appUpdate: {
-      getState: vi.fn().mockResolvedValue({
-        phase: 'idle',
-        currentVersion: '0.9.0',
-        version: null,
-        sizeBytes: null,
-        progress: null,
-        manualDownload: false,
-        autoUpdate: true,
-        installPending: false,
-        message: null,
-        unsupportedReason: null,
-        checkedAt: null,
-        checkFailed: false
-      }),
-      check: vi.fn(),
-      download: vi.fn(),
-      cancelDownload: vi.fn(),
-      install: vi.fn(),
-      setAutoUpdate: vi.fn(),
-      openInstallGuide: vi.fn(),
-      onState: vi.fn().mockReturnValue(() => {})
-    },
-    summary: {
-      get: vi.fn().mockResolvedValue(null),
-      updateTitle: vi.fn().mockResolvedValue(undefined),
-      updateText: vi.fn().mockResolvedValue(undefined),
-      missingReason: vi.fn().mockResolvedValue(null),
-      regenerate: vi.fn().mockResolvedValue(false),
-      onChanged: vi.fn().mockReturnValue(() => {})
-    },
-    microphone: {
-      getState: vi.fn().mockResolvedValue({ status: 'granted', previouslyGranted: true }),
-      ensureAccess: vi.fn().mockResolvedValue('granted'),
-      dismissHint: vi.fn().mockResolvedValue(undefined),
-      openSettings: vi.fn().mockResolvedValue(undefined)
-    },
-    nav: {
-      onOpenSettings: vi.fn().mockReturnValue(() => {})
-    },
-    dossiers: {
-      list: vi.fn().mockResolvedValue([]),
-      get: vi.fn().mockResolvedValue(null),
-      create: vi.fn(),
-      update: vi.fn(),
-      deletePreview: vi.fn().mockResolvedValue(null),
-      delete: vi.fn(),
-      onChanged: vi.fn().mockReturnValue(() => {})
-    },
-    viewMode: {
-      initial: 'pseudonymized',
-      set: vi.fn().mockResolvedValue(undefined)
-    },
-    toolHealth: {
-      getState: vi.fn().mockResolvedValue({ status: 'ok', tools: [], bundlePath: '' }),
-      recheck: vi.fn(),
-      openGuide: vi.fn(),
-      onState: vi.fn().mockReturnValue(() => {})
-    },
-    modelReconcile: {
-      getEvents: vi.fn().mockResolvedValue([]),
-      markSeen: vi.fn().mockResolvedValue([]),
-      dismiss: vi.fn().mockResolvedValue(undefined)
-    }
-  } as typeof window.api
+  window.api = createMockApi()
 })
 
 describe('App', () => {
-  it('renders bottom navigation', async () => {
+  it('zeigt die Shell mit Seitenleiste, sobald die Modelle bereit sind', async () => {
     renderApp()
-    await waitFor(() => {
-      expect(screen.getByRole('tab', { name: 'Transkriptionen' })).toBeInTheDocument()
-      expect(screen.getByRole('tab', { name: 'Einstellungen' })).toBeInTheDocument()
-    })
+    expect(await screen.findByRole('navigation', { name: 'Seitenleiste' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Einstellungen' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Transkriptionen' })).toBeInTheDocument()
   })
 
-  it('shows empty state message when no sessions', async () => {
+  it('zeigt den Leerzustand ohne Transkriptionen', async () => {
     renderApp()
+    expect(await screen.findByText('Keine Transkriptionen')).toBeInTheDocument()
+  })
 
-    await waitFor(() => {
-      expect(screen.getByText('Keine Transkriptionen')).toBeInTheDocument()
+  it('zeigt die Ersteinrichtung ohne Seitenleiste und ohne Navigation', async () => {
+    window.api.modelDownload.status = vi.fn().mockResolvedValue({
+      modelsReady: false,
+      models: [{ id: 'asr', label: 'Spracherkennung', sizeBytes: 1 }]
     })
+    renderApp()
+    await waitFor(() => expect(window.api.modelDownload.status).toHaveBeenCalled())
+    await screen.findByRole('banner', { name: 'TheraScript' })
+    await waitFor(() => expect(window.api.modelDownload.checkDiskSpace).toHaveBeenCalled())
+    expect(screen.queryByRole('navigation', { name: 'Seitenleiste' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Zurück' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Ansicht' })).not.toBeInTheDocument()
   })
 })
 
 describe('App — Navigation während der Aufnahme', () => {
-  it('zeigt BottomNav während der Aufnahme, versteckt nur "Aufnahme starten"', async () => {
+  it('bleibt während der Aufnahme navigierbar, nur «Aufnahme starten» ruht', async () => {
     mockRecordingState.isRecording = true
     renderApp()
 
-    await waitFor(() => {
-      expect(screen.getByRole('tab', { name: 'Transkriptionen' })).toBeInTheDocument()
-      expect(screen.getByRole('tab', { name: 'Einstellungen' })).toBeInTheDocument()
-    })
-
+    await screen.findByRole('navigation', { name: 'Seitenleiste' })
+    expect(screen.getByRole('button', { name: 'Einstellungen' })).toBeEnabled()
     expect(screen.getByText('PDF importieren')).toBeInTheDocument()
     expect(screen.queryByText('Aufnahme starten')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Aufnahme läuft bereits' })).toBeDisabled()
   })
 
   it('rendert die Live-Karte für die Recording-Session in der Liste', async () => {
     mockRecordingState.isRecording = true
     mockRecordingState.duration.set(95)
-
-    window.api.sessions.list = vi.fn().mockResolvedValue([
-      {
-        id: 'rec-1',
-        title: 'Aufnahme 07.08.2026 14:02',
-        type: 'audio',
-        status: 'recording',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-    ])
+    window.api.sessions.list = vi
+      .fn()
+      .mockResolvedValue([
+        makeSession({ id: 'rec-1', title: 'Aufnahme 07.08.2026 14:02', status: 'recording' })
+      ])
 
     renderApp()
 
@@ -241,22 +96,17 @@ describe('App — Navigation während der Aufnahme', () => {
     })
     expect(screen.getByText('00:01:35')).toBeInTheDocument()
     expect(screen.getByLabelText('Aufnahme stoppen')).toBeInTheDocument()
-    // Auf der Sessions-Liste keine RecordingBar (Karte übernimmt)
+    // Auf der Sitzungsliste keine RecordingBar (Karte übernimmt)
     expect(screen.queryByLabelText('Zur laufenden Aufnahme wechseln')).not.toBeInTheDocument()
   })
 
-  it('zeigt die RecordingBar in Settings und navigiert per Klick zurück', async () => {
+  it('zeigt die RecordingBar in den Einstellungen und navigiert per Klick zurück', async () => {
     const user = userEvent.setup()
     mockRecordingState.isRecording = true
     mockRecordingState.duration.set(61)
 
     renderApp()
-
-    await waitFor(() => {
-      expect(screen.getByRole('tab', { name: 'Einstellungen' })).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('tab', { name: 'Einstellungen' }))
+    await user.click(await screen.findByRole('button', { name: 'Einstellungen' }))
 
     const bar = await screen.findByLabelText('Zur laufenden Aufnahme wechseln')
     expect(screen.getByText('Aufnahme läuft')).toBeInTheDocument()

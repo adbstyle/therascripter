@@ -67,7 +67,7 @@ export function RecordingSessionCard({
 
         <button
           onClick={live.onStop}
-          className="flex shrink-0 items-center gap-1.5 rounded-md bg-recording px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-recording-hover"
+          className="flex shrink-0 items-center gap-1.5 rounded-md bg-recording-solid px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-recording-solid-hover"
           aria-label="Aufnahme stoppen"
         >
           <Square className="h-3 w-3 fill-current" strokeWidth={2} aria-hidden />

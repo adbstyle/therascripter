@@ -94,12 +94,8 @@ export const DossierDeleteSchema = z
   })
   .strict()
 
-/** Event `dossiers:changed` (Main → Renderer). */
-export const DossiersChangedSchema = z
-  .object({
-    deletedIds: z.array(DossierIdSchema).max(1000)
-  })
-  .strict()
+/** Event `dossiers:changed` — definiert mit den anderen Änderungs-Events. */
+export { DossiersChangedSchema } from './change-event-schemas'
 
 export type DossierCreateInput = z.infer<typeof DossierCreateSchema>
 export type DossierPatchInput = z.infer<typeof DossierPatchSchema>

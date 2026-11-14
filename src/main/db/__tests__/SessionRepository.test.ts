@@ -442,4 +442,20 @@ describe('SessionRepository', () => {
       expect(repo.findById('ancient')).not.toBeNull()
     })
   })
+
+  // Epic #192 — die Listen-Projektion liefert das Dokumentdatum (Migration 020)
+  describe('documentDate', () => {
+    it('ist ohne Wert null, in Liste und Einzelabfrage', () => {
+      const session = repo.create({ title: 'Arztbericht', type: 'pdf' })
+      expect(session.documentDate).toBeNull()
+      expect(repo.findAll()[0].documentDate).toBeNull()
+    })
+
+    it('liest document_date in findAll und findById', () => {
+      const session = repo.create({ title: 'Arztbericht', type: 'pdf' })
+      db.prepare("UPDATE sessions SET document_date = '2026-02-01' WHERE id = ?").run(session.id)
+      expect(repo.findAll()[0].documentDate).toBe('2026-02-01')
+      expect(repo.findById(session.id)?.documentDate).toBe('2026-02-01')
+    })
+  })
 })

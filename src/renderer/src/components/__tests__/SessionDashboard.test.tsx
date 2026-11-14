@@ -1,9 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { groupSessionsByTime } from '../../utils/groupSessionsByTime'
 import SessionDashboard from '../SessionDashboard'
 import type { Session } from '../../../../shared/types'
+import { createMockApi, emitApiEvent } from '../../test/mockApi'
+import { renderWithProviders } from '../../test/renderWithProviders'
+
+const render = renderWithProviders
 
 function makeSession(overrides: Partial<Session> = {}): Session {
   return {
@@ -97,155 +101,9 @@ const mockSessions = {
   rename: vi.fn()
 }
 
-const mockModelUpdate = {
-  check: vi.fn().mockResolvedValue([]),
-  restart: vi.fn(),
-  startDownload: vi.fn(),
-  getPending: vi.fn().mockResolvedValue(null),
-  getAvailable: vi.fn().mockResolvedValue([]),
-  clearPending: vi.fn().mockResolvedValue(undefined),
-  dismissVersions: vi.fn().mockResolvedValue(undefined),
-  onAvailable: vi.fn().mockReturnValue(() => {}),
-  onDownloadProgress: vi.fn().mockReturnValue(() => {}),
-  onDownloadComplete: vi.fn().mockReturnValue(() => {}),
-  onDownloadError: vi.fn().mockReturnValue(() => {})
-}
-
 beforeEach(() => {
-  window.api = {
-    sessions: mockSessions,
-    recording: {
-      start: vi.fn(),
-      stop: vi.fn(),
-      sendData: vi.fn(),
-      onDuration: vi.fn().mockReturnValue(() => {}),
-      onError: vi.fn().mockReturnValue(() => {}),
-      onAutoStopped: vi.fn().mockReturnValue(() => {})
-    },
-    settings: {
-      get: vi.fn().mockResolvedValue(false),
-      set: vi.fn().mockResolvedValue(undefined)
-    },
-    tasks: {
-      getSessionTasks: vi.fn().mockResolvedValue([]),
-      isProcessing: vi.fn().mockResolvedValue(false),
-      retry: vi.fn().mockResolvedValue(undefined),
-      onProgress: vi.fn().mockReturnValue(() => {}),
-      onStarted: vi.fn().mockReturnValue(() => {}),
-      onCompleted: vi.fn().mockReturnValue(() => {}),
-      onError: vi.fn().mockReturnValue(() => {}),
-      onQueuePositions: vi.fn().mockReturnValue(() => {})
-    },
-    blocklist: {
-      list: vi.fn().mockResolvedValue([]),
-      add: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn()
-    },
-    import: {
-      pdf: vi.fn().mockResolvedValue([]),
-      showPDFDialog: vi.fn().mockResolvedValue([]),
-      getPathForFile: vi.fn().mockReturnValue('')
-    },
-    review: {
-      load: vi.fn(),
-      save: vi.fn(),
-      exportClipboard: vi.fn()
-    },
-    system: {
-      aboutInfo: vi.fn().mockResolvedValue({}),
-      uninstall: vi.fn(),
-      openInFinder: vi.fn()
-    },
-    modelDownload: {
-      status: vi.fn().mockResolvedValue({ modelsReady: true, models: [] }),
-      checkDiskSpace: vi
-        .fn()
-        .mockResolvedValue({ sufficient: true, availableBytes: 0, requiredBytes: 0 }),
-      start: vi.fn(),
-      onStatus: vi.fn().mockReturnValue(() => {})
-    },
-    modelCatalog: {
-      list: vi.fn().mockResolvedValue([]),
-      listAsr: vi.fn().mockResolvedValue([]),
-      download: vi.fn().mockResolvedValue([]),
-      delete: vi.fn().mockResolvedValue([]),
-      setActive: vi.fn().mockResolvedValue([]),
-      clearActive: vi.fn().mockResolvedValue([]),
-      cancelDownload: vi.fn().mockResolvedValue(undefined)
-    },
-    pipeline: {
-      getDiarization: vi.fn().mockResolvedValue('pyannote/speaker-diarization-3.1'),
-      setDiarization: vi.fn().mockResolvedValue('pyannote/speaker-diarization-3.1'),
-      listDiarization: vi.fn().mockResolvedValue([])
-    },
-    modelUpdate: mockModelUpdate,
-    appUpdate: {
-      getState: vi.fn().mockResolvedValue({
-        phase: 'idle',
-        currentVersion: '0.9.0',
-        version: null,
-        sizeBytes: null,
-        progress: null,
-        manualDownload: false,
-        autoUpdate: true,
-        installPending: false,
-        message: null,
-        unsupportedReason: null,
-        checkedAt: null,
-        checkFailed: false
-      }),
-      check: vi.fn(),
-      download: vi.fn(),
-      cancelDownload: vi.fn(),
-      install: vi.fn(),
-      setAutoUpdate: vi.fn(),
-      openInstallGuide: vi.fn(),
-      onState: vi.fn().mockReturnValue(() => {})
-    },
-    summary: {
-      get: vi.fn().mockResolvedValue(null),
-      updateTitle: vi.fn().mockResolvedValue(undefined),
-      updateText: vi.fn().mockResolvedValue(undefined),
-      missingReason: vi.fn().mockResolvedValue(null),
-      regenerate: vi.fn().mockResolvedValue(false),
-      onChanged: vi.fn().mockReturnValue(() => {})
-    },
-    microphone: {
-      getState: vi.fn().mockResolvedValue({ status: 'granted', previouslyGranted: true }),
-      ensureAccess: vi.fn().mockResolvedValue('granted'),
-      dismissHint: vi.fn().mockResolvedValue(undefined),
-      openSettings: vi.fn().mockResolvedValue(undefined)
-    },
-    nav: {
-      onOpenSettings: vi.fn().mockReturnValue(() => {})
-    },
-    dossiers: {
-      list: vi.fn().mockResolvedValue([]),
-      get: vi.fn().mockResolvedValue(null),
-      create: vi.fn(),
-      update: vi.fn(),
-      deletePreview: vi.fn().mockResolvedValue(null),
-      delete: vi.fn(),
-      onChanged: vi.fn().mockReturnValue(() => {})
-    },
-    viewMode: {
-      initial: 'pseudonymized',
-      set: vi.fn().mockResolvedValue(undefined)
-    },
-    toolHealth: {
-      getState: vi.fn().mockResolvedValue({ status: 'ok', tools: [], bundlePath: '' }),
-      recheck: vi.fn(),
-      openGuide: vi.fn(),
-      onState: vi.fn().mockReturnValue(() => {})
-    },
-    modelReconcile: {
-      getEvents: vi.fn().mockResolvedValue([]),
-      markSeen: vi.fn().mockResolvedValue([]),
-      dismiss: vi.fn().mockResolvedValue(undefined)
-    }
-  } as typeof window.api
   vi.clearAllMocks()
+  window.api = createMockApi({ sessions: mockSessions })
 })
 
 describe('SessionDashboard', () => {
@@ -333,5 +191,53 @@ describe('SessionDashboard', () => {
       'Zwischenergebnisse der Verarbeitung',
       'Titel und Zusammenfassung'
     ])
+  })
+
+  // Epic #192: die Liste lädt nach jeder Änderung im Main-Prozess selbst nach
+  it('lädt nach sessions:changed neu, ohne Refresh-Trigger von aussen', async () => {
+    mockSessions.list.mockResolvedValue([])
+    render(<SessionDashboard />)
+    await screen.findByText('Keine Transkriptionen')
+
+    mockSessions.list.mockResolvedValue([makeSession({ id: '1', title: 'Neue Sitzung' })])
+    act(() => emitApiEvent(window.api, 'sessions.onChanged', { deletedIds: [] }))
+
+    expect(await screen.findByText('Neue Sitzung')).toBeInTheDocument()
+  })
+
+  it('bündelt einen Sturm von Änderungen zu höchstens einer nachgeschobenen Abfrage', async () => {
+    let resolveFirst: (value: Session[]) => void = () => {}
+    mockSessions.list.mockReturnValueOnce(
+      new Promise<Session[]>((resolve) => {
+        resolveFirst = resolve
+      })
+    )
+    mockSessions.list.mockResolvedValue([])
+    render(<SessionDashboard />)
+    await waitFor(() => expect(mockSessions.list).toHaveBeenCalled())
+    const callsAfterMount = mockSessions.list.mock.calls.length
+
+    act(() => {
+      for (let i = 0; i < 5; i++) emitApiEvent(window.api, 'sessions.onChanged', { deletedIds: [] })
+    })
+    await act(async () => resolveFirst([]))
+
+    await screen.findByText('Keine Transkriptionen')
+    expect(mockSessions.list.mock.calls.length).toBe(callsAfterMount + 1)
+  })
+
+  it('importiert per Ziehen und Ablegen nur PDF-Dateien', async () => {
+    mockSessions.list.mockResolvedValue([])
+    window.api.import.getPathForFile = vi.fn((file: File) => `/tmp/${file.name}`)
+    render(<SessionDashboard />)
+    const empty = await screen.findByText('Keine Transkriptionen')
+
+    const files = [
+      new File(['%PDF'], 'bericht.pdf', { type: 'application/pdf' }),
+      new File(['x'], 'notiz.txt', { type: 'text/plain' })
+    ]
+    fireEvent.drop(empty, { dataTransfer: { files } })
+
+    await waitFor(() => expect(window.api.import.pdf).toHaveBeenCalledWith(['/tmp/bericht.pdf']))
   })
 })

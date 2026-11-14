@@ -8,13 +8,13 @@ Therascript can anonymize existing PDF documents (e.g. reports, referrals, disch
 
 ### Drag-and-Drop
 
-The `SessionDashboard` component registers drag-and-drop handlers on its root container. When the user drags files over the dashboard, a visual overlay appears ("PDF hier ablegen" with a dashed border and highlighted background). On drop, the component filters for `.pdf` files, resolves native file paths via `webUtils.getPathForFile()`, and calls `window.api.import.pdf(pdfPaths)`. Non-PDF files in the drop are silently ignored.
+The `SessionDashboard` component registers drag-and-drop handlers on its root container. When the user drags files over the dashboard, a visual overlay appears ("PDF hier ablegen" with a dashed border and highlighted background). On drop, the component filters for `.pdf` files, resolves native file paths via `webUtils.getPathForFile()`, and calls `importPdfs(pdfPaths)` from `useWorkspaceActions()`. Non-PDF files in the drop are silently ignored.
 
 ### File Picker Button
 
-The header bar contains an import button that triggers `handleImportPDF()` in `App.tsx`. This calls `window.api.import.showPDFDialog()`, which opens a native macOS file dialog (`dialog.showOpenDialog`) configured for multi-selection with a `.pdf` file filter. The dialog title reads "PDF-Dokumente zum Anonymisieren auswahlen". If the user cancels, an empty array is returned and no session is created.
+The «PDF importieren» button in the page header of «Transkriptionen» and the import icon next to «Transkriptionen» in the sidebar both call `importPdfs()` from `useWorkspaceActions()` (`src/renderer/src/contexts/WorkspaceActionsContext.tsx`, Epic #192). Without paths it calls `window.api.import.showPDFDialog()`, which opens a native macOS file dialog (`dialog.showOpenDialog`) configured for multi-selection with a `.pdf` file filter. The dialog title reads "PDF-Dokumente zum Anonymisieren auswahlen". If the user cancels, an empty array is returned and no session is created.
 
-Both methods set an `isImporting` flag that prevents concurrent imports. The flag is cleared in a `finally` block so it resets even if the import fails.
+All entry points share one `isImporting` flag that prevents concurrent imports. The flag is cleared in a `finally` block so it resets even if the import fails. The list shows the new sessions because the main process fires `sessions:changed` on session creation — no manual refresh.
 
 ## File Handling and Session Creation
 
@@ -129,4 +129,4 @@ The `extraction` and `ocr` task completions both map to session status `anonymiz
 | `src/main/ml/VisionOCRService.ts` | Stage 2: Apple Vision OCR for scanned pages |
 | `src/main/services/TaskQueueService.ts` | Pipeline definition and task orchestration |
 | `src/renderer/src/components/SessionDashboard.tsx` | Drag-and-drop UI |
-| `src/renderer/src/App.tsx` | File picker button handler |
+| `src/renderer/src/contexts/WorkspaceActionsContext.tsx` | `importPdfs` for button, sidebar icon and drag-and-drop |

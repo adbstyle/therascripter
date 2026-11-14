@@ -5,7 +5,7 @@ vi.mock('electron', () => ({
   nativeTheme: { themeSource: 'system' }
 }))
 
-import { readViewMode, writeViewMode } from '../settings-handlers'
+import { readSidebarOpen, readViewMode, writeViewMode } from '../settings-handlers'
 
 describe('view mode settings (#203)', () => {
   it('returns the saved view', () => {
@@ -34,5 +34,22 @@ describe('view mode settings (#203)', () => {
     expect(() => writeViewMode({ mode: 'alles' }, set)).toThrow()
     expect(() => writeViewMode({}, set)).toThrow()
     expect(set).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('sidebar state (Epic #192)', () => {
+  it('returns the saved state', () => {
+    expect(readSidebarOpen(() => false)).toBe(false)
+    expect(readSidebarOpen(() => true)).toBe(true)
+  })
+
+  it('falls back to shown when nothing, something odd or nothing readable is saved', () => {
+    expect(readSidebarOpen(() => undefined)).toBe(true)
+    expect(readSidebarOpen(() => 'nein')).toBe(true)
+    expect(
+      readSidebarOpen(() => {
+        throw new Error('settings.json korrupt')
+      })
+    ).toBe(true)
   })
 })

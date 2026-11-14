@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReconcileEvent } from '../../../shared/types/ReconcileEvent'
 
-// Cross-component synchronisation: the BottomNav dot and the Settings →
+// Cross-component synchronisation: the sidebar dot and the Settings →
 // Modelle banner both render reconcile events. When one component mutates
 // the events (markSeen on settings mount, dismiss on "Verstanden"), the
 // other needs to re-read. A window-level CustomEvent keeps the two views

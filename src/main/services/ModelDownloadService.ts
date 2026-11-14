@@ -774,7 +774,7 @@ export interface ReconcileRepair {
  * Wird auf wirklich frischen Installationen (`modelsDownloaded === false`)
  * komplett übersprungen — dort ist der FirstLaunchScreen das Gate. Jede
  * Reparatur wird als `pending` ReconcileEvent persistiert, was den Dot im
- * BottomNav und das Banner in Settings → Modelle treibt.
+ * den Hinweispunkt der Seitenleiste und das Banner in Settings → Modelle treibt.
  *
  * Performance: nur `existsSync`-Calls (≤ Katalog-Größe, derzeit 6), kein I/O
  * darüber hinaus. Crash-sicher per design — Disk ist Source of Truth,
@@ -902,7 +902,7 @@ function newReconcileEvent(repair: ReconcileRepair): ReconcileEvent {
  * Datei samt Download-/Update-Resten (`removeModelArtifacts` — kennt sonst
  * niemand mehr), den Installed-Version-Eintrag (No-op, wenn schon weg) und —
  * falls das Modell aktiv war — leert den Slot und meldet ein
- * `model-retired`-ReconcileEvent (BottomNav-Dot → Banner in Einstellungen →
+ * `model-retired`-ReconcileEvent (Hinweispunkt der Seitenleiste → Banner in Einstellungen →
  * Modelle). Vorgemerkte Updates für die ID verwirft das Update-System selbst
  * (`selectBundle` überspringt ausgemusterte IDs).
  *
@@ -958,7 +958,7 @@ export function getReconcileEvents(): ReconcileEvent[] {
   return getSettings().get('reconcileEvents') ?? []
 }
 
-/** Renderer hat Settings → Modelle gemountet — Banner gesehen, BottomNav-Dot kann weg. */
+/** Renderer hat Settings → Modelle gemountet — Banner gesehen, Hinweispunkt der Seitenleiste kann weg. */
 export function markReconcileEventsSeen(): ReconcileEvent[] {
   const settings = getSettings()
   const events = settings.get('reconcileEvents') ?? []

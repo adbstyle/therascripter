@@ -14,7 +14,7 @@ import { parsePlaceholderSnapshot } from '../../../shared/utils/resolvePlacehold
 import { walCheckpointTruncate } from '../maintenance'
 import { refreshPlainTexts } from '../plainTexts'
 
-interface SessionRow {
+export interface SessionRow {
   id: string
   title: string
   type: SessionType
@@ -46,6 +46,8 @@ interface SessionRow {
   /** Klartext computed on write (plainTexts.ts); NULL = same as title/summary. */
   title_plain: string | null
   summary_plain: string | null
+  /** Migration 020 (#205) — ISO day the PDF was written. */
+  document_date: string | null
 }
 
 /** Columns whose change can change the stored Klartext (Issue #203). */
@@ -82,7 +84,7 @@ function parseProcessedModels(
   }
 }
 
-function rowToSession(row: SessionRow): Session {
+export function rowToSession(row: SessionRow): Session {
   const entityMap = parseEntityMap(row.entity_map, row.id)
   const summary = row.summary
   return {
@@ -114,9 +116,25 @@ function rowToSession(row: SessionRow): Session {
     titleEntitySnapshot: parsePlaceholderSnapshot(row.title_entity_snapshot),
     summaryEntitySnapshot: parsePlaceholderSnapshot(row.summary_entity_snapshot),
     titlePlain: row.title_plain ?? row.title,
-    summaryPlain: summary == null ? null : (row.summary_plain ?? summary)
+    summaryPlain: summary == null ? null : (row.summary_plain ?? summary),
+    documentDate: row.document_date ?? null
   }
 }
+
+/**
+ * Spalten der Listen-Projektion (siehe findAll), qualifiziert mit dem Alias
+ * `s` für `sessions`. Exportiert, damit spätere Abfragen (Verlauf eines
+ * Patientendossiers, «Zuletzt geöffnet», Epic #192) dieselbe Form liefern und
+ * rowToSession wiederverwenden — inklusive der Klartext-Spalten aus #203.
+ */
+export const SESSION_LIST_COLUMNS = `s.id, s.title, s.type, s.status, s.audio_path, s.transcript_path,
+  s.anonymized_path, s.diarization_path, s.aligned_transcript_path,
+  s.pdf_path, s.extracted_path, NULL AS entity_map, s.error_message,
+  s.created_at, s.updated_at, s.review_at, s.word_count,
+  s.anonymization_count, s.summary, s.summary_model_id, s.summarized_at,
+  s.planned_steps, s.retry_count, s.pdf_has_scanned_pages,
+  NULL AS processed_with_models,
+  s.title_plain, s.summary_plain, s.document_date`
 
 export class SessionRepository {
   constructor(private db: Database.Database) {}
@@ -180,15 +198,8 @@ export class SessionRepository {
   findAll(): Session[] {
     const rows = this.db
       .prepare(
-        `SELECT id, title, type, status, audio_path, transcript_path,
-                anonymized_path, diarization_path, aligned_transcript_path,
-                pdf_path, extracted_path, NULL AS entity_map, error_message,
-                created_at, updated_at, review_at, word_count,
-                anonymization_count, summary, summary_model_id, summarized_at,
-                planned_steps, retry_count, pdf_has_scanned_pages,
-                NULL AS processed_with_models,
-                title_plain, summary_plain
-         FROM sessions WHERE deleting_at IS NULL ORDER BY created_at DESC`
+        `SELECT ${SESSION_LIST_COLUMNS}
+         FROM sessions s WHERE s.deleting_at IS NULL ORDER BY s.created_at DESC`
       )
       .all() as SessionRow[]
     return rows.map(rowToSession)

@@ -25,4 +25,22 @@ describe('ToastProvider', () => {
     expect(screen.getByText('Gespeichert')).toBeInTheDocument()
     expect(new Set(seen).size).toBe(1)
   })
+
+  // Epic #192: ohne untere Leiste sitzen die Toasts am unteren Fensterrand
+  it('platziert die Toasts am unteren Rand, nicht über einer Leiste', () => {
+    let toast: ToastContextValue | null = null
+    function Consumer(): null {
+      toast = useToast()
+      return null
+    }
+    render(
+      <ToastProvider>
+        <Consumer />
+      </ToastProvider>
+    )
+    act(() => toast!.error('Fehler'))
+    const stack = screen.getByText('Fehler').closest('.fixed')
+    expect(stack).toHaveClass('bottom-4')
+    expect(stack).not.toHaveClass('bottom-16')
+  })
 })

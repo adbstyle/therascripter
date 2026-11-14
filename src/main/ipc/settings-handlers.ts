@@ -22,11 +22,28 @@ export function writeViewMode(args: unknown, set: (mode: ViewMode) => void): voi
   set(mode)
 }
 
+/**
+ * Epic #192 — saved sidebar state, read synchronously by the preload like the
+ * view mode, so the first render never flashes the other state. Anything
+ * unreadable counts as «shown».
+ */
+export function readSidebarOpen(get: () => unknown): boolean {
+  try {
+    return get() !== false
+  } catch {
+    return true
+  }
+}
+
 export function registerSettingsHandlers(): void {
   // Synchronous on purpose: the preload reads the view before the renderer's
   // first render, so the app never paints a moment in the other view (AK 12).
   ipcMain.on('viewMode:getSync', (event) => {
     event.returnValue = readViewMode(() => getSettings().get('viewMode'))
+  })
+
+  ipcMain.on('sidebarOpen:getSync', (event) => {
+    event.returnValue = readSidebarOpen(() => getSettings().get('sidebarOpen'))
   })
 
   ipcMain.handle('viewMode:set', (_event, args: unknown) => {

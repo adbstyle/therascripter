@@ -16,7 +16,7 @@ Therascript is an Electron-based macOS desktop application for on-device transcr
 │  │   Renderer Process   │      │      Main Process         │   │
 │  │   (React 19 + Vite)  │◄────►│  (Node.js / Electron API) │   │
 │  │                      │ IPC  │                           │   │
-│  │  App.tsx (view state)│      │  IPC handlers             │   │
+│  │  AppShell + history  │      │  IPC handlers             │   │
 │  │  TipTap editor       │      │  TaskQueueService         │   │
 │  │  Tailwind CSS v4     │      │  better-sqlite3 (WAL)     │   │
 │  └──────────────────────┘      │  electron-store           │   │
@@ -140,24 +140,36 @@ Key details:
 
 ## Navigation Model
 
-Therascript does not use a client-side router. Navigation is managed via a single `View` state in `App.tsx`:
+Since Epic #192 the app has a **page history** with back/forward instead of a single view state — still without a router library. Everything lives in `src/renderer/src/navigation/`.
 
 ```ts
-type View = 'sessions' | 'settings' | 'review'
+type Route =
+  | { kind: 'sessions' }
+  | { kind: 'dossiers' }                       // placeholder until #204
+  | { kind: 'dossier'; dossierId: string }     // placeholder until #204
+  | { kind: 'session'; sessionId: string; focus?: SessionFocus }
+  | { kind: 'settings'; subpage: SubPage | null }
 ```
 
-**Rendering logic (priority order):**
+- `navReducer.ts` — pure history `{ back, current, forward }`, at most 50 entries, kept in memory only (#213 OOS 1). `navigate(route, { anchorId })` writes the anchor onto the entry being left; navigating to the same page creates no entry; `back`/`forward` skip invalid entries; `purge` removes entries of deleted objects and replaces the current one (dossier → overview, session → previous entry, otherwise the sessions list).
+- `NavigationContext.tsx` — `useNavigation()` with `route`, `entryId`, `anchorId`, `canBack`, `canForward`, `navigate`, `back`, `forward`. Subscribes to `nav:command` (menu «Gehe zu»), `nav:openSettings` (app menu ⌘, and tray, always the Settings overview), `sessions:changed` and `dossiers:changed` (`deletedIds` → `purge`, #213 PC 3).
+- `useScrollRestoration(ready)` — `PageScroll` is the shell's only scroll container and is keyed by `entryId`; it stores `scrollTop` per entry. Once a page's data is loaded, the position is restored and the card of `anchorId` is highlighted (scrolled into view only if hidden) — e.g. after closing a session (#205 AK 16).
+
+**Rendering:**
 
 | Condition | What renders |
 |---|---|
-| `modelsReady === null` | Empty loading screen (transparent, no flash) |
-| `modelsReady === false` | `FirstLaunchScreen` — model download wizard |
-| `isRecording === true` | No dedicated view — the sessions list renders a live `RecordingSessionCard`; other views show the `RecordingBar` |
-| `currentView === 'review'` | `ReviewEditor` (full-screen, own header) |
-| `currentView === 'sessions'` | `SessionDashboard` |
-| `currentView === 'settings'` | `Settings` (tabbed: Sperrliste / Darstellung / Modelle / Über) |
+| `modelsReady === null` | Title bar (`minimal`) and an empty area |
+| `modelsReady === false` | Title bar (`minimal`) + `FirstLaunchScreen` — no sidebar, no navigation |
+| otherwise | `AppShell`: `TitleBar` (sidebar button, ‹ ›, wordmark, view toggle) above `Sidebar` + content column (banners, `RecordingBar`, `PageScroll` → `RouteView`) |
+| route `sessions` | `SessionsPage` (`PageHeader` with «PDF importieren» / «Aufnahme starten», `ConsentBanner`, `SessionDashboard`) |
+| route `session` | `ReviewEditor` (own header, scrolls internally; no close button — Esc, ‹ or ⌘[ go back) |
+| route `settings` | `Settings` with the sub-page from the route |
+| route `dossiers` / `dossier` | placeholder, linked from nowhere yet |
 
 **Navigation constraints:**
-- Sidebar navigation (Sitzungen / Einstellungen) is disabled during recording and during review.
+- The app stays fully navigable during recording; the sessions list shows the live `RecordingSessionCard`, every other route the `RecordingBar`. Starting a recording navigates to the sessions list.
+- The sidebar can be hidden (title-bar button, ⌃⌘S); the state is stored as `sidebarOpen` in electron-store and read synchronously by the preload before the first render.
 - The app stays alive in the macOS menu bar when the window is closed (standard macOS behavior via `TrayService`).
-- Updates (app and models as one, #167) show as «Update bereit» / «Update verfügbar» in the bottom bar, which opens Settings → Updates; installing restarts the app once.
+- Lists reload on the bundled main-process event `sessions:changed` (`src/main/services/ChangeEvents.ts`) via `hooks/useLiveQuery`.
+- Updates (app and models as one, #167) show as «Update bereit» / «Update verfügbar» in the sidebar footer, which opens Settings → Updates; installing restarts the app once.

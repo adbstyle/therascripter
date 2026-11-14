@@ -48,7 +48,7 @@ function formatTimestamp(iso: string): string {
  * Issue #84 / Story C — surfaces invariant repairs the bootstrap reconciler
  * made (active model deleted from disk → promoted to default / cleared) and
  * models retired from the catalog (`retireObsoleteModels`). The
- * BottomNav dot routed the user here; this banner explains *what* was changed
+ * sidebar dot routed the user here; this banner explains *what* was changed
  * and lets them dismiss the notice. Persisted reconcile events are deleted
  * server-side when the user clicks "Verstanden".
  */

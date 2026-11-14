@@ -37,7 +37,7 @@ export default function ModelsSettings(): React.JSX.Element {
   const [deleteCandidate, setDeleteCandidate] = useState<ModelCatalogEntry | null>(null)
 
   // Mark reconcile events as seen on mount — the banner stays visible until
-  // the user clicks "Verstanden", but the BottomNav dot disappears immediately
+  // the user clicks "Verstanden", but the sidebar dot disappears immediately
   // because the user has now reached the surface that explains the change.
   // Dep is the events array (changes when the hook refreshes) + the stable
   // markSeen callback. The `.some` guard short-circuits subsequent runs once

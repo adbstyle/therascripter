@@ -67,6 +67,21 @@ Source: `src/main/ipc/session-handlers.ts`
 | `session:delete` | invoke | `SessionDeleteSchema` — `{ sessionId: string }` | `void` | Delete a session and its associated files |
 | `session:rename` | invoke | `SessionRenameSchema` — `{ sessionId: string, title: string(1..200) }` | `void` | Rename a session title |
 
+**Event channels (main -> renderer, Epic #192):**
+
+| Channel | Payload | Description |
+|---|---|---|
+| `sessions:changed` | `SessionsChangedSchema` — `{ deletedIds: string[] (max. 1000) }` | A session was created, or its status, title or summary changed, or it was deleted (`deletedIds`). Sent by `ChangeEvents.notifySessionsChanged` (`src/main/services/ChangeEvents.ts`), bundled per `setImmediate` so one tick yields one event; larger deletions are split. Lists reload via `useLiveQuery`; the navigation history removes deleted sessions (#213 PC 3). Path-only updates (pipeline intermediates) do not fire it. |
+
+### Navigation (Epic #192)
+
+Source: `src/main/services/AppMenuService.ts`, `src/main/index.ts`
+
+| Channel | Direction | Payload | Description |
+|---|---|---|---|
+| `nav:command` | event | `NavCommandSchema` — `'back' \| 'forward' \| 'toggleSidebar'` | Menu «Gehe zu» → Zurück (⌘[) / Vorwärts (⌘]), «Darstellung» → Seitenleiste ein-/ausblenden (⌃⌘S). #209 adds `'search'`. |
+| `nav:openSettings` | event | _(none)_ | App menu «Einstellungen…» (⌘,) and tray: opens the Settings overview |
+
 ### Recording Handlers
 
 Source: `src/main/ipc/recording-handlers.ts`
@@ -154,9 +169,9 @@ Source: `src/main/ipc/dossier-handlers.ts`, service `src/main/services/DossierSe
 | Channel | Payload | Description |
 |---|---|---|
 | `dossiers:changed` | `{ deletedIds: string[] }` (≤ 1000, parsed with `DossiersChangedSchema` in the preload) | After create, after an update of name, dossier ID or birth date (not for free text — it is shown nowhere else), after a deletion with the deleted ID |
-| `sessions:changed` | `{ deletedIds: string[] }` | Sent by the dossier deletion with the IDs of the sessions it deleted. Wiring into the other session paths and the preload listener come with the shell rework of Epic #192 |
+| `sessions:changed` | `{ deletedIds: string[] }` | Also sent by the dossier deletion with the IDs of the sessions it deleted (via `DossierService`; `SessionService.finishDeletion` itself does not notify, so nothing is sent twice). All other triggers: see «Session Handlers» |
 
-Both events go through `src/main/services/ChangeEvents.ts` (`notifyDossiersChanged`, `notifySessionsChanged`): bundled with `setImmediate`, so one tick yields at most one event per channel with the union of deleted IDs.
+Both events go through `src/main/services/ChangeEvents.ts` (`notifyDossiersChanged`, `notifySessionsChanged`): bundled with `setImmediate`, so one tick yields at most one event per channel with the union of deleted IDs; more than 1000 IDs are split. Without a window nothing is sent. Limit and schemas: `src/shared/validation/change-event-schemas.ts`. The renderer removes deleted dossiers from its page history (current page → `dossiers` overview).
 
 ### Model Download Handlers
 
@@ -203,13 +218,14 @@ Source: `src/main/ipc/settings-handlers.ts`
 | `settings:get` | invoke | `SettingsGetSchema` — `{ key: SettingsKey }` | `unknown` | Read a setting value from electron-store |
 | `settings:set` | invoke | `SettingsSetSchema` — `{ key: SettingsKey, value: unknown }` | `void` | Write a setting value. When `key` is `"theme"`, also syncs Electron's `nativeTheme.themeSource`. |
 
-`SettingsKey` is an enum: `activeModels | firstLaunchDone | consentReminderShown | modelsDownloaded | theme | reviewPanelOpen`.
+`SettingsKey` is an enum: `activeModels | firstLaunchDone | consentReminderShown | modelsDownloaded | theme | reviewPanelOpen | sidebarOpen` (`sidebarOpen`: sidebar shown, default `true`, Epic #192).
 
 #### View mode (Issue #203)
 
 | Channel | Direction | Input Schema | Return Type | Description |
 |---|---|---|---|---|
 | `viewMode:getSync` | sendSync | _(none)_ | `ViewMode` | Read by the preload **synchronously** before the renderer runs (`window.api.viewMode.initial`), so the first render already shows the saved view. Unknown/unreadable → `'pseudonymized'` |
+| `sidebarOpen:getSync` | sendSync | _(none)_ | `boolean` | Read by the preload synchronously (`window.api.nav.initialSidebarOpen`, Epic #192) so the sidebar never flashes at start. Anything but `false` → `true` |
 | `viewMode:set` | invoke | `ViewModeSetSchema` — `{ mode: 'pseudonymized' \| 'plain' }` | `void` | Persist the chosen view (electron-store `viewMode`) |
 
 ### System Handlers
@@ -280,6 +296,9 @@ Source: `src/main/ipc/system-handlers.ts`
 | `task:error` | task |
 | `modelDownload:status` | model-download |
 | `appUpdate:state` | app-update |
+| `sessions:changed` | session (ChangeEvents) |
+| `nav:command` | app menu |
+| `nav:openSettings` | app menu / tray |
 
 ### Tool Health (Issue #168)
 

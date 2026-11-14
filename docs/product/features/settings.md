@@ -4,9 +4,9 @@ The Settings view provides four tabs: **Sperrliste**, **Darstellung**, **Modelle
 
 ## Navigation
 
-The sidebar in `App.tsx` contains a persistent "Einstellungen" button that sets `currentView` to `'settings'`, rendering the `<Settings />` component. The sidebar buttons are disabled during recording (`isRecording`) and while in review (`currentView === 'review'`). There is no separate back button — the user navigates back by clicking "Sitzungen" in the sidebar.
+«Einstellungen» sits in the sidebar footer (Epic #192); it is marked `aria-current="page"` while a settings route is shown and carries a small dot while an automatic model adjustment has not been seen (#84). The app menu «Einstellungen…» (⌘,) and the tray open the Settings overview via `nav:openSettings`, also from a sub-page.
 
-The header displays "Einstellungen" as the title when the settings view is active.
+The sub-page is part of the route (`{ kind: 'settings', subpage }`), so ‹ / ⌘[ step back between sub-pages and the overview. `Settings` is controlled (`subpage`, `onSubpageChange`); the page heading «Einstellungen › Updates» is a breadcrumb whose first part opens the overview. Settings stays reachable during a recording.
 
 ## Tabs
 
@@ -80,9 +80,9 @@ The view setting (`viewMode`, Klartext vs. pseudonymized, Issue #203) deliberate
 
 `ThemeContext` is created in `src/renderer/src/contexts/themeTypes.ts` with a `ThemeContextValue` interface providing `theme` (current preference) and `setTheme` (setter). Components access it via the `useTheme` hook.
 
-## Update Indicator in the Bottom Bar
+## Update Indicator in the Sidebar
 
-When an update needs attention (`updateNeedsAttention()` in `useAppUpdate.ts`: phase `ready`, `available` or `unsupported`), the bottom bar shows «Update bereit» / «Update verfügbar»; a click opens Settings → Updates (`UpdateSettings.tsx`). Otherwise it shows the current app version. An update covers the app and the models as one operation (#167); see model-management.md «Update Flow».
+When an update needs attention (`updateNeedsAttention()` in `useAppUpdate.ts`: phase `ready`, `available` or `unsupported`), the sidebar footer (`SidebarFooter.tsx`) shows «Update bereit» / «Update verfügbar»; a click opens Settings → Updates (`UpdateSettings.tsx`). Otherwise it shows the current app version next to the feedback address. An update covers the app and the models as one operation (#167); see model-management.md «Update Flow».
 
 ## electron-store Keys
 
@@ -98,6 +98,7 @@ All settings are persisted via `electron-store` in `SettingsService.ts`. The sto
 | `consentReminderShown` | `boolean` | `false` | Whether the recording consent reminder was shown |
 | `modelsDownloaded` | `boolean` | `false` | Whether all ML models have been downloaded |
 | `theme` | `ThemePreference` | `'system'` | Theme preference: `'light'`, `'system'`, or `'dark'` |
+| `sidebarOpen` | `boolean` | `true` | Sidebar of the app shown (Epic #192, title-bar button / ⌃⌘S) |
 | `installedModelVersions` | `Record<string, InstalledModelVersion>` | `{}` | Tracks installed version info per model |
 | `autoUpdate` | `boolean` | `true` | Automatic updates of app and models (#165, #167) |
 | `appUpdate` | `PersistedUpdate \| null` | `null` | Selected update (app part, models, install journal) — see model-management.md |

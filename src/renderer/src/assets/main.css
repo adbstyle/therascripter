@@ -10,6 +10,10 @@
   --color-primary-light: #dbeafe;
   --color-recording: #dc2626;
   --color-recording-hover: #b91c1c;
+  /* Gefüllte Knöpfe mit weisser Schrift (Aufnahme starten/stoppen, Löschen,
+     Fehler-Toast): in beiden Themes ≥ 4.5:1 zu Weiss (Epic #192). */
+  --color-recording-solid: #dc2626;
+  --color-recording-solid-hover: #b91c1c;
   --color-success: #16a34a;
   --color-warning: #ea580c;
 
@@ -74,7 +78,9 @@
   --color-primary-hover: #93c5fd;
   --color-primary-light: #1e3a5f;
   --color-recording: #ef4444;
-  --color-recording-hover: #fca5a5;
+  --color-recording-hover: #b91c1c;
+  --color-recording-solid: #dc2626;
+  --color-recording-solid-hover: #b91c1c;
   --color-success: #22c55e;
   --color-warning: #f97316;
 
@@ -176,7 +182,7 @@
   --tw-ring-offset-color: var(--color-surface-0);
 }
 
-/* Session card highlight after returning from review */
+/* Herkunftskarte hervorheben, wenn ‹ oder Esc zur Sitzungsliste zurückführt */
 @keyframes session-highlight {
   0% {
     background-color: var(--color-surface-3);
@@ -209,47 +215,4 @@
   content: attr(data-placeholder);
   color: var(--color-text-tertiary);
   pointer-events: none;
-}
-
-/* Bottom nav icon: spring-pop on activation, opacity transition on hover.
-   Re-keyed in React on active change so the @keyframes restarts each time. */
-.bottom-nav-icon {
-  transition:
-    transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 200ms ease-out;
-  opacity: 0.7;
-  transform: scale(1);
-}
-
-.bottom-nav-item[data-active='true'] .bottom-nav-icon {
-  opacity: 1;
-  animation: bottom-nav-icon-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-
-.bottom-nav-item[data-active='true'][data-id='settings'] .bottom-nav-icon {
-  animation: bottom-nav-gear-spin 520ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-
-@keyframes bottom-nav-icon-pop {
-  0% {
-    transform: scale(1) translateY(0);
-  }
-  55% {
-    transform: scale(1.18) translateY(-2px);
-  }
-  100% {
-    transform: scale(1.08) translateY(-1px);
-  }
-}
-
-@keyframes bottom-nav-gear-spin {
-  0% {
-    transform: scale(1) rotate(0deg);
-  }
-  60% {
-    transform: scale(1.18) rotate(50deg);
-  }
-  100% {
-    transform: scale(1.08) rotate(60deg);
-  }
 }

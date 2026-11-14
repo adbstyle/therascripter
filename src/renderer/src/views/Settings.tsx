@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { ChevronRight, Cpu, Info, Palette, RefreshCw, ShieldCheck } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import BlocklistManager, { type BlocklistManagerHandle } from '../components/BlocklistManager'
@@ -9,8 +10,11 @@ import UpdateSettings from '../components/settings/UpdateSettings'
 import { useTheme } from '../hooks/useTheme'
 import { useAppUpdate } from '../hooks/useAppUpdate'
 import { updateTitle } from '../../../shared/utils/updateTitle'
+import { PageHeader } from '../components/shell/PageHeader'
+import { useScrollRestoration } from '../navigation/useScrollRestoration'
+import type { SubPage } from '../navigation/routes'
 
-export type SubPage = 'sperrliste' | 'darstellung' | 'modelle' | 'updates' | 'ueber'
+export type { SubPage }
 
 const SUBPAGE_TITLES: Record<SubPage, string> = {
   sperrliste: 'Sperrliste',
@@ -23,20 +27,25 @@ const SUBPAGE_TITLES: Record<SubPage, string> = {
 const THEME_LABELS = { light: 'Hell', dark: 'Dunkel', system: 'System' } as const
 
 interface SettingsProps {
-  /** Direkt eine Unterseite öffnen (z. B. «Update bereit» aus der unteren Leiste). */
-  initialSubpage?: SubPage | null
+  /** Aktuelle Unterseite — Teil der Route, damit ‹ auch hier zurückführt (Epic #192). */
+  subpage: SubPage | null
+  onSubpageChange: (subpage: SubPage | null) => void
 }
 
-export default function Settings({ initialSubpage = null }: SettingsProps): React.JSX.Element {
-  const [subpage, setSubpage] = useState<SubPage | null>(initialSubpage)
+export default function Settings({ subpage, onSubpageChange }: SettingsProps): React.JSX.Element {
   const blocklistRef = useRef<BlocklistManagerHandle>(null)
+  // Nur die Übersicht stellt ihre Position wieder her: ihre Karten haben feste
+  // Höhe, auch solange die Zusammenfassungen laden. Die Unterseiten (Sperrliste,
+  // Modelle, Updates, Über) laden asynchron und wachsen erst danach — sie
+  // beginnen bewusst oben, statt an einer halb geladenen Stelle zu landen.
+  useScrollRestoration(subpage === null)
 
   let headerAction: React.ReactNode = null
   if (subpage === 'sperrliste') {
     headerAction = (
       <button
         type="button"
-        className="titlebar-no-drag rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
+        className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
         onClick={() => blocklistRef.current?.openAdd()}
       >
         + Eintrag hinzufügen
@@ -45,17 +54,17 @@ export default function Settings({ initialSubpage = null }: SettingsProps): Reac
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-1 flex-col">
       <SettingsHeader
         subpage={subpage}
-        onBackToHome={() => setSubpage(null)}
+        onBackToHome={() => onSubpageChange(null)}
         action={headerAction}
       />
 
       {subpage === null ? (
-        <SettingsHome onSelect={setSubpage} />
+        <SettingsHome onSelect={onSubpageChange} />
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="flex flex-1 flex-col">
           {subpage === 'sperrliste' && <BlocklistManager ref={blocklistRef} />}
           {subpage === 'darstellung' && <AppearanceSettings />}
           {subpage === 'modelle' && <ModelsSettings />}
@@ -74,33 +83,33 @@ interface HeaderProps {
 }
 
 function SettingsHeader({ subpage, onBackToHome, action }: HeaderProps): React.JSX.Element {
-  return (
-    <header className="flex h-[72px] shrink-0 items-center justify-between gap-2 border-b border-border px-6">
+  let title: ReactNode = 'Einstellungen'
+  if (subpage !== null) {
+    // Brotkrümel: «Einstellungen» ist die übergeordnete Seite, kein Zurück im Verlauf
+    title = (
       <div className="flex min-w-0 items-center gap-2">
-        {subpage === null ? (
-          <h2 className="text-2xl font-bold text-text-primary">Einstellungen</h2>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={onBackToHome}
-              className="titlebar-no-drag rounded-md text-2xl font-bold text-text-tertiary transition-colors hover:text-text-secondary"
-            >
-              Einstellungen
-            </button>
-            <ChevronRight
-              className="h-5 w-5 shrink-0 text-text-tertiary"
-              strokeWidth={2}
-              aria-hidden="true"
-            />
-            <h2 className="truncate text-2xl font-bold text-text-primary">
-              {SUBPAGE_TITLES[subpage]}
-            </h2>
-          </>
-        )}
+        <button
+          type="button"
+          onClick={onBackToHome}
+          className="rounded-md text-xl font-semibold leading-7 text-text-tertiary transition-colors hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          Einstellungen
+        </button>
+        <ChevronRight
+          className="h-5 w-5 shrink-0 text-text-tertiary"
+          strokeWidth={2}
+          aria-hidden="true"
+        />
+        <h1 className="truncate text-xl font-semibold leading-7 text-text-primary">
+          {SUBPAGE_TITLES[subpage]}
+        </h1>
       </div>
-      {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
-    </header>
+    )
+  }
+  return (
+    <div className="px-6 pt-6">
+      <PageHeader title={title} actions={action} />
+    </div>
   )
 }
 
@@ -204,7 +213,7 @@ function SettingsHome({ onSelect }: HomeProps): React.JSX.Element {
   ]
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-6">
+    <div className="p-6">
       <div className="mx-auto flex max-w-2xl flex-col gap-3">
         {items.map((item) => (
           <SettingsCard key={item.id} item={item} onClick={() => onSelect(item.id)} />
@@ -235,7 +244,7 @@ function SettingsCard({
     <button
       type="button"
       onClick={onClick}
-      className="titlebar-no-drag group flex w-full items-center gap-4 rounded-xl border border-border bg-surface-0 px-5 py-4 text-left transition-colors hover:border-border-strong hover:bg-surface-1"
+      className="group flex w-full items-center gap-4 rounded-xl border border-border bg-surface-0 px-5 py-4 text-left transition-colors hover:border-border-strong hover:bg-surface-1"
     >
       <Icon
         className="h-7 w-7 shrink-0 text-text-tertiary transition-colors group-hover:text-text-secondary"

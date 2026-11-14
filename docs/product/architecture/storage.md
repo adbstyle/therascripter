@@ -194,6 +194,7 @@ Stored in `~/Library/Application Support/Therascript/settings.json`.
 | `consentReminderShown` | boolean | `false` | Whether the patient consent reminder has been shown at least once |
 | `modelsDownloaded` | boolean | `false` | Whether all required models have been downloaded |
 | `theme` | `'light' \| 'dark' \| 'system'` | `'system'` | UI colour scheme preference |
+| `sidebarOpen` | boolean | `true` | Sidebar of the app shown (Epic #192); toggled via the title-bar button or ⌃⌘S |
 | `installedModelVersions` | `Record<string, InstalledModelVersion>` | `{}` | Map of model ID → `{ version, sha256, installedAt }` for update tracking |
 | `autoUpdate` | `boolean` | `true` | Automatic updates of app and models (#165, #167) |
 | `appUpdate` | `PersistedUpdate \| null` | `null` | Selected update (app part, models, install journal) — see model-management.md |

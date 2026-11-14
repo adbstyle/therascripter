@@ -5,7 +5,7 @@ import type { AppUpdateInstallResult, AppUpdateState } from '../../../shared/typ
  * Braucht das App-Update die Nutzer:in? Bereit zur Installation, nur von Hand
  * installierbar oder verfügbar, aber nicht automatisch ladbar (aus, zu wenig
  * Platz, gescheitert). Ein laufender Hintergrund-Download bleibt unsichtbar
- * (PO-Entscheid #164). Eine Stelle für untere Leiste und Einstellungen.
+ * (PO-Entscheid #164). Eine Stelle für Seitenleiste und Einstellungen.
  */
 export function updateNeedsAttention(state: AppUpdateState | null): boolean {
   return state?.phase === 'ready' || state?.phase === 'unsupported' || state?.phase === 'available'

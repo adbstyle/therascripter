@@ -14,12 +14,15 @@ import type {
   DiarizationPipeline
 } from '../validation/model-catalog-schemas'
 import type { ToolHealthState } from '../tool-blocked'
+import type { NavCommand, SessionsChangedData } from '../validation/change-event-schemas'
 import type { DossierApi } from './ipc/DossierApi'
 
 export interface SessionApi {
   list(): Promise<Session[]>
   delete(sessionId: string): Promise<boolean>
   rename(sessionId: string, title: string): Promise<Session | null>
+  /** Epic #192 — Sitzungen geändert (gebündelt); `deletedIds` nennt gelöschte. */
+  onChanged(callback: (data: SessionsChangedData) => void): () => void
 }
 
 export interface RecordingApi {
@@ -241,6 +244,13 @@ export interface MicrophoneApi {
 
 export interface NavApi {
   onOpenSettings(callback: () => void): () => void
+  /**
+   * Epic #192 — gespeicherter Zustand der Seitenleiste, vom Preload synchron
+   * gelesen (wie `viewMode.initial`): kein Aufblitzen beim Start. Fallback true.
+   */
+  initialSidebarOpen: boolean
+  /** Epic #192 — Menü «Gehe zu» (Zurück/Vorwärts) und Seitenleiste ein-/ausblenden. */
+  onCommand(callback: (command: NavCommand) => void): () => void
 }
 
 export interface ModelCatalogApi {
