@@ -30,7 +30,7 @@ export interface ReconcileEvent {
   reason: ReconcileReason
   /**
    * Lifecycle:
-   *   pending → reconciler wrote it, BottomNav shows the dot
+   *   pending → reconciler wrote it, the sidebar shows the dot
    *   seen    → renderer mounted Settings → Modelle, dot dismissed but banner still visible
    *   (deletion) → user clicked "Verstanden", entry removed from settings store
    */

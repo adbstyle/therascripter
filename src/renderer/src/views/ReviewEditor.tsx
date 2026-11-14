@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ClipboardCopy, FileText, Mic, PanelRight, Trash2, X } from 'lucide-react'
+import { ClipboardCopy, FileText, Mic, PanelRight, Trash2 } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { EditorState, NodeSelection } from '@tiptap/pm/state'
 import type { EditorProps } from '@tiptap/pm/view'
@@ -86,6 +86,7 @@ interface BlocklistUndoEntry {
 
 interface ReviewEditorProps {
   sessionId: string
+  /** Esc, «Zurück» nach einem Ladefehler und nach dem Löschen: zurück im Verlauf. */
   onBack: () => void
 }
 
@@ -678,7 +679,8 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Header */}
-      <header className="titlebar-drag flex items-center justify-between gap-4 border-b border-border px-6 py-4">
+      {/* Kein Schliessen-Knopf (Epic #192): zurück über ‹ in der Titelleiste, ⌘[ oder Esc */}
+      <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="flex min-w-0 items-center gap-3">
           {sessionType === 'audio' ? (
             <Mic className="h-5 w-5 shrink-0 text-text-tertiary" strokeWidth={1.75} aria-hidden />
@@ -730,14 +732,6 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
             title="Seitenleiste"
           >
             <PanelRight className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          </button>
-          <button
-            className="titlebar-no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface-0 text-text-secondary transition-colors hover:bg-surface-1"
-            onClick={onBack}
-            aria-label="Editor schließen"
-            title="Schließen (Esc)"
-          >
-            <X className="h-4 w-4" strokeWidth={2} aria-hidden />
           </button>
         </div>
       </header>
@@ -837,6 +831,6 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
   )
 }
 
-// memo: App rendert bei eigenen Zustandswechseln neu (Aufnahme-Start/-Stopp,
-// Update-Banner, Import) — der Editor hängt nur an sessionId und dem stabilen onBack.
+// memo: die Shell rendert bei eigenen Zustandswechseln neu (Aufnahme-Start/-Stopp,
+// Hinweise, Import) — der Editor hängt nur an sessionId und dem stabilen onBack.
 export default memo(ReviewEditor)

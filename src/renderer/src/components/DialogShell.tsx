@@ -5,8 +5,12 @@ interface DialogShellProps {
   ariaLabel: string
   /** Escape-Taste und Klick auf das Overlay. */
   onDismiss: () => void
+  /** Breite der Karte: `md` (Standard, Bestätigungen) oder `lg` (Formulare, Epic #192). */
+  size?: 'md' | 'lg'
   children: ReactNode
 }
+
+const SIZE_CLASSES = { md: 'max-w-md', lg: 'max-w-lg' } as const
 
 /**
  * Gemeinsame Modal-Hülle: Overlay, Escape-Handling, Klick-außerhalb,
@@ -18,6 +22,7 @@ interface DialogShellProps {
 export function DialogShell({
   ariaLabel,
   onDismiss,
+  size = 'md',
   children
 }: DialogShellProps): React.JSX.Element {
   useEffect(() => {
@@ -37,7 +42,7 @@ export function DialogShell({
       onClick={onDismiss}
     >
       <div
-        className="mx-4 w-full max-w-md rounded-xl bg-surface-1 p-6 shadow-xl"
+        className={`mx-4 w-full ${SIZE_CLASSES[size]} rounded-xl bg-surface-1 p-6 shadow-xl`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

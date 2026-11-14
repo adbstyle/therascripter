@@ -1,19 +1,115 @@
+import { ChevronLeft, ChevronRight, PanelLeft } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { ViewModeToggle } from './ViewModeToggle'
+import { useNavigation } from '../../navigation/navigation'
 
-export default function TitleBar(): React.JSX.Element {
+interface TitleBarProps {
+  /** `minimal`: nur die Wortmarke (Ersteinrichtung, Ladezustand). */
+  variant?: 'full' | 'minimal'
+  sidebarOpen?: boolean
+  onToggleSidebar?: () => void
+}
+
+/**
+ * Titelleiste (Epic #192): Platz für die Ampeln, Seitenleisten-Knopf, ‹ ›,
+ * Wortmarke in der Mitte, rechts die Ansicht (#203). Die ganze Leiste zieht
+ * das Fenster (`titlebar-drag`), jeder Knopf ist davon ausgenommen.
+ */
+export default function TitleBar({
+  variant = 'full',
+  sidebarOpen = true,
+  onToggleSidebar
+}: TitleBarProps): React.JSX.Element {
   return (
     <div
-      className="titlebar-drag relative flex h-9 shrink-0 select-none items-center justify-center bg-surface-0"
+      className="titlebar-drag relative flex h-11 shrink-0 select-none items-center gap-1.5 border-b border-border bg-surface-0 px-3"
       role="banner"
       aria-label="TheraScript"
     >
-      <span className="text-sm font-semibold tracking-tight text-text-primary" aria-hidden>
+      {/* Ampeln des Fensters (hiddenInset, trafficLightPosition in main/index.ts) */}
+      <span className="w-16 shrink-0" aria-hidden />
+      {variant === 'full' && (
+        <NavigationButtons sidebarOpen={sidebarOpen} onToggleSidebar={onToggleSidebar} />
+      )}
+      <span
+        className="pointer-events-none absolute inset-x-0 text-center text-sm font-semibold tracking-tight text-text-primary"
+        aria-hidden
+      >
         TheraScript
       </span>
-      {/* Issue #203 — Ansicht, von überall erreichbar */}
-      <div className="absolute inset-y-0 right-3 flex items-center">
-        <ViewModeToggle />
-      </div>
+      {variant === 'full' && (
+        <div className="relative ml-auto flex items-center">
+          <ViewModeToggle />
+        </div>
+      )}
     </div>
+  )
+}
+
+function NavigationButtons({
+  sidebarOpen,
+  onToggleSidebar
+}: Pick<TitleBarProps, 'sidebarOpen' | 'onToggleSidebar'>): React.JSX.Element {
+  const { canBack, canForward, back, forward } = useNavigation()
+  const sidebarLabel = sidebarOpen ? 'Seitenleiste ausblenden' : 'Seitenleiste einblenden'
+
+  return (
+    <div className="relative z-10 flex items-center gap-1.5">
+      <TitleBarButton
+        icon={PanelLeft}
+        label={sidebarLabel}
+        shortcut="⌃⌘S"
+        pressed={sidebarOpen}
+        onClick={() => onToggleSidebar?.()}
+      />
+      <TitleBarButton
+        icon={ChevronLeft}
+        label="Zurück"
+        shortcut="⌘["
+        disabled={!canBack}
+        onClick={() => back()}
+      />
+      <TitleBarButton
+        icon={ChevronRight}
+        label="Vorwärts"
+        shortcut="⌘]"
+        disabled={!canForward}
+        onClick={forward}
+      />
+    </div>
+  )
+}
+
+interface TitleBarButtonProps {
+  icon: LucideIcon
+  label: string
+  shortcut: string
+  pressed?: boolean
+  disabled?: boolean
+  onClick: () => void
+}
+
+function TitleBarButton({
+  icon: Icon,
+  label,
+  shortcut,
+  pressed,
+  disabled,
+  onClick
+}: TitleBarButtonProps): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      aria-pressed={pressed}
+      title={`${label} (${shortcut})`}
+      className={`titlebar-no-drag inline-flex h-[30px] w-[30px] items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-40 ${
+        pressed ? 'bg-surface-2' : ''
+      }`}
+    >
+      <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden />
+    </button>
   )
 }

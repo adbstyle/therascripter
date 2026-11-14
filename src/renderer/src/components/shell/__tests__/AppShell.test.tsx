@@ -1,0 +1,389 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { act, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { useRef } from 'react'
+import AppShell from '../AppShell'
+import { renderWithProviders } from '../../../test/renderWithProviders'
+import { createMockApi, emitApiEvent, IDLE_APP_UPDATE, makeSession } from '../../../test/mockApi'
+import { useRecordingState } from '../../../contexts/recording'
+import type { Route } from '../../../navigation/routes'
+
+// Aufnahme steuerbar ohne getUserMedia/AudioWorklet: ein kleiner Store, den
+// startRecording/stopRecording umschalten. Pegel und Dauer bleiben ValueStores.
+const rec = vi.hoisted(() => {
+  const listeners = new Set<() => void>()
+  const store = {
+    recording: false,
+    set(value: boolean) {
+      store.recording = value
+      listeners.forEach((l) => l())
+    },
+    subscribe(l: () => void) {
+      listeners.add(l)
+      return () => listeners.delete(l)
+    },
+    get: () => store.recording
+  }
+  return store
+})
+
+vi.mock('../../../hooks/useRecording', async () => {
+  const { useState, useSyncExternalStore } = await import('react')
+  const { createValueStore } = await import('../../../utils/valueStore')
+  const startRecording = vi.fn(async () => rec.set(true))
+  const stopRecording = vi.fn(async () => rec.set(false))
+  const level = createValueStore(0)
+  const duration = createValueStore(0)
+  return {
+    __mocks: { startRecording, stopRecording, level, duration },
+    useRecording: () => {
+      const isRecording = useSyncExternalStore(rec.subscribe, rec.get)
+      const [error] = useState<string | null>(null)
+      return {
+        isRecording,
+        sessionId: isRecording ? 'rec-1' : null,
+        level,
+        duration,
+        error,
+        startRecording,
+        stopRecording
+      }
+    }
+  }
+})
+
+// Editor durch eine schlanke Attrappe ersetzen: hier geht es um die Navigation
+vi.mock('../../../views/ReviewEditor', () => ({
+  default: ({ sessionId, onBack }: { sessionId: string; onBack: () => void }) => (
+    <div>
+      <p>Editor {sessionId}</p>
+      <button onClick={onBack}>Editor verlassen</button>
+    </div>
+  )
+}))
+
+const recordingMocks = async () =>
+  (
+    (await import('../../../hooks/useRecording')) as unknown as {
+      __mocks: {
+        startRecording: ReturnType<typeof vi.fn>
+        duration: { set: (v: number) => void }
+      }
+    }
+  ).__mocks
+
+const recordingSession = makeSession({ id: 'rec-1', title: 'Aufnahme', status: 'recording' })
+const reviewSession = makeSession({ id: 's1', title: 'Erstgespräch' })
+
+function renderShell(route?: Route) {
+  return renderWithProviders(<AppShell />, { route })
+}
+
+beforeEach(() => {
+  rec.set(false)
+  window.api = createMockApi({
+    sessions: { list: vi.fn().mockResolvedValue([reviewSession]) }
+  })
+  Element.prototype.scrollIntoView = vi.fn()
+})
+
+describe('AppShell — Seitenleiste und Titelleiste', () => {
+  it('zeigt die Seitenleiste als benannte Navigation mit aktivem Eintrag', async () => {
+    renderShell()
+    const nav = await screen.findByRole('navigation', { name: 'Seitenleiste' })
+    const transcriptions = within(nav).getByRole('button', { name: 'Transkriptionen' })
+    expect(transcriptions).toHaveAttribute('aria-current', 'page')
+    expect(within(nav).getByRole('button', { name: 'Einstellungen' })).not.toHaveAttribute(
+      'aria-current'
+    )
+    // Patientendossiers gibt es noch nicht — nichts verlinkt dorthin
+    expect(within(nav).queryByText(/Patientendossier/)).not.toBeInTheDocument()
+  })
+
+  it('beschriftet jeden Icon-Knopf und gibt ihm einen Tooltip', async () => {
+    renderShell()
+    const nav = await screen.findByRole('navigation', { name: 'Seitenleiste' })
+    const banner = screen.getByRole('banner', { name: 'TheraScript' })
+    const iconButtons = [
+      ...within(banner)
+        .getAllByRole('button')
+        .filter((b) => !b.closest('[role="group"]')),
+      within(nav).getByRole('button', { name: 'PDF importieren' }),
+      within(nav).getByRole('button', { name: 'Aufnahme starten' })
+    ]
+    expect(iconButtons.map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Seitenleiste ausblenden',
+      'Zurück',
+      'Vorwärts',
+      'PDF importieren',
+      'Aufnahme starten'
+    ])
+    for (const button of iconButtons) {
+      expect(button.textContent).toBe('')
+      expect(button.getAttribute('title')).toContain(button.getAttribute('aria-label'))
+    }
+  })
+
+  it('hält die Titelleiste als Zieh-Bereich und nimmt alle Knöpfe davon aus', async () => {
+    renderShell()
+    const banner = await screen.findByRole('banner', { name: 'TheraScript' })
+    expect(banner).toHaveClass('titlebar-drag')
+    const buttons = within(banner).getAllByRole('button')
+    expect(buttons.length).toBeGreaterThanOrEqual(5)
+    for (const button of buttons) {
+      expect(button.closest('.titlebar-no-drag')).not.toBeNull()
+    }
+  })
+
+  it('hält die min-h-0-Flex-Kette bis zum einzigen Scroll-Container', async () => {
+    renderShell()
+    const scroll = await screen.findByTestId('page-scroll')
+    expect(scroll).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto')
+    let node = scroll.parentElement
+    while (node && !node.classList.contains('h-screen')) {
+      expect(node).toHaveClass('min-h-0')
+      node = node.parentElement
+    }
+    expect(node).not.toBeNull()
+  })
+
+  it('blendet die Seitenleiste per Knopf und per Menübefehl aus und ein und speichert das', async () => {
+    const user = userEvent.setup()
+    renderShell()
+    await screen.findByRole('navigation', { name: 'Seitenleiste' })
+
+    await user.click(screen.getByRole('button', { name: 'Seitenleiste ausblenden' }))
+    expect(screen.queryByRole('navigation', { name: 'Seitenleiste' })).not.toBeInTheDocument()
+    expect(window.api.settings.set).toHaveBeenCalledWith('sidebarOpen', false)
+    expect(screen.getByRole('button', { name: 'Seitenleiste einblenden' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+
+    act(() => emitApiEvent(window.api, 'nav.onCommand', 'toggleSidebar'))
+    expect(screen.getByRole('navigation', { name: 'Seitenleiste' })).toBeInTheDocument()
+    expect(window.api.settings.set).toHaveBeenLastCalledWith('sidebarOpen', true)
+  })
+
+  it('startet mit der gespeicherten Seitenleisten-Einstellung', async () => {
+    window.api.settings.get = vi.fn(async (key: string) =>
+      key === 'sidebarOpen' ? false : undefined
+    )
+    renderShell()
+    await waitFor(() =>
+      expect(screen.queryByRole('navigation', { name: 'Seitenleiste' })).not.toBeInTheDocument()
+    )
+  })
+
+  it('geht mit ‹ und › durch die besuchten Seiten', async () => {
+    const user = userEvent.setup()
+    renderShell()
+    const back = await screen.findByRole('button', { name: 'Zurück' })
+    expect(back).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'Einstellungen' }))
+    expect(await screen.findByRole('heading', { name: 'Einstellungen' })).toBeInTheDocument()
+
+    await user.click(back)
+    expect(await screen.findByRole('heading', { name: 'Transkriptionen' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Vorwärts' }))
+    expect(await screen.findByRole('heading', { name: 'Einstellungen' })).toBeInTheDocument()
+  })
+
+  it('ist per Tastatur bedienbar', async () => {
+    const user = userEvent.setup()
+    renderShell()
+    await screen.findByRole('navigation', { name: 'Seitenleiste' })
+    const settings = screen.getByRole('button', { name: 'Einstellungen' })
+    settings.focus()
+    await user.keyboard('{Enter}')
+    expect(await screen.findByRole('heading', { name: 'Einstellungen' })).toBeInTheDocument()
+  })
+
+  it('zeigt für Patientendossiers vorerst einen Platzhalter', async () => {
+    renderShell({ kind: 'dossiers' })
+    expect(await screen.findByText('Diese Seite ist noch nicht verfügbar.')).toBeInTheDocument()
+  })
+})
+
+describe('AppShell — Verhalten wie vor dem Umbau', () => {
+  it('führt beim Aufnahmestart zur Sitzungsliste', async () => {
+    const user = userEvent.setup()
+    renderShell({ kind: 'settings', subpage: 'darstellung' })
+    await screen.findByRole('heading', { name: 'Darstellung' })
+
+    window.api.sessions.list = vi.fn().mockResolvedValue([recordingSession, reviewSession])
+    await user.click(screen.getByRole('button', { name: 'Aufnahme starten' }))
+
+    expect((await recordingMocks()).startRecording).toHaveBeenCalled()
+    expect(await screen.findByRole('heading', { name: 'Transkriptionen' })).toBeInTheDocument()
+  })
+
+  it('zeigt die Aufnahme-Leiste überall ausser auf der Sitzungsliste', async () => {
+    const user = userEvent.setup()
+    rec.set(true)
+    window.api.sessions.list = vi.fn().mockResolvedValue([recordingSession, reviewSession])
+    renderShell()
+    await screen.findByRole('heading', { name: 'Transkriptionen' })
+    expect(screen.queryByLabelText('Zur laufenden Aufnahme wechseln')).not.toBeInTheDocument()
+
+    // Einstellungen
+    await user.click(screen.getByRole('button', { name: 'Einstellungen' }))
+    const bar = await screen.findByLabelText('Zur laufenden Aufnahme wechseln')
+
+    // Zurück zur Liste über die Leiste
+    await user.click(bar)
+    await screen.findByRole('heading', { name: 'Transkriptionen' })
+    expect(screen.queryByLabelText('Zur laufenden Aufnahme wechseln')).not.toBeInTheDocument()
+
+    // Sitzung im Editor
+    await user.click(await screen.findByRole('button', { name: 'Erstgespräch öffnen' }))
+    await screen.findByText('Editor s1')
+    expect(screen.getByLabelText('Zur laufenden Aufnahme wechseln')).toBeInTheDocument()
+  })
+
+  it('zeigt den Consent-Hinweis einmal pro Aufnahme, auch nach einem Seitenwechsel nicht wieder', async () => {
+    const user = userEvent.setup()
+    window.api.settings.get = vi.fn(async (key: string) =>
+      key === 'consentReminderShown' ? false : undefined
+    )
+    window.api.sessions.list = vi.fn().mockResolvedValue([recordingSession])
+    renderShell()
+    await screen.findByRole('heading', { name: 'Transkriptionen' })
+
+    await user.click(screen.getAllByRole('button', { name: 'Aufnahme starten' })[0])
+    expect(await screen.findByText(/StGB/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Hinweis schliessen' }))
+    expect(screen.queryByText(/StGB/)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Einstellungen' }))
+    await screen.findByRole('heading', { name: 'Einstellungen' })
+    await user.click(screen.getByLabelText('Zur laufenden Aufnahme wechseln'))
+    await screen.findByRole('heading', { name: 'Transkriptionen' })
+    expect(screen.queryByText(/StGB/)).not.toBeInTheDocument()
+
+    // Neue Aufnahme: der Hinweis kommt wieder
+    act(() => rec.set(false))
+    await user.click(screen.getAllByRole('button', { name: 'Aufnahme starten' })[0])
+    expect(await screen.findByText(/StGB/)).toBeInTheDocument()
+  })
+
+  it('öffnet die Einstellungen über App-Menü und Tray, immer auf der Übersicht', async () => {
+    renderShell({ kind: 'settings', subpage: 'updates' })
+    await screen.findByRole('heading', { name: 'Updates' })
+    act(() => emitApiEvent(window.api, 'nav.onOpenSettings'))
+    expect(await screen.findByRole('heading', { name: 'Einstellungen' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Updates' })).not.toBeInTheDocument()
+  })
+
+  it('führt vom Update-Hinweis zu Einstellungen › Updates', async () => {
+    const user = userEvent.setup()
+    window.api.appUpdate.getState = vi
+      .fn()
+      .mockResolvedValue({ ...IDLE_APP_UPDATE, phase: 'ready', version: '0.11.0' })
+    renderShell()
+    await user.click(await screen.findByRole('button', { name: 'Update bereit' }))
+    expect(await screen.findByRole('heading', { name: 'Updates' })).toBeInTheDocument()
+  })
+
+  it('zeigt ohne Update die Versionsnummer', async () => {
+    renderShell()
+    expect(await screen.findByText('v0.10.1')).toBeInTheDocument()
+  })
+
+  it('hebt nach dem Schliessen des Editors die zuletzt geöffnete Karte hervor', async () => {
+    const user = userEvent.setup()
+    renderShell()
+    await user.click(await screen.findByRole('button', { name: 'Erstgespräch öffnen' }))
+    await user.click(await screen.findByRole('button', { name: 'Editor verlassen' }))
+
+    await screen.findByRole('heading', { name: 'Transkriptionen' })
+    await waitFor(() => {
+      const card = document.querySelector('[data-session-id="s1"]')
+      expect(card).toHaveClass('session-highlight')
+    })
+  })
+
+  it('kehrt ohne Verlauf aus dem Editor zur Sitzungsliste zurück', async () => {
+    const user = userEvent.setup()
+    renderShell({ kind: 'session', sessionId: 's1' })
+    await user.click(await screen.findByRole('button', { name: 'Editor verlassen' }))
+    expect(await screen.findByRole('heading', { name: 'Transkriptionen' })).toBeInTheDocument()
+  })
+
+  it('schliesst eine im Editor gelöschte Sitzung und entfernt sie aus dem Verlauf', async () => {
+    const user = userEvent.setup()
+    renderShell()
+    await user.click(await screen.findByRole('button', { name: 'Erstgespräch öffnen' }))
+    await screen.findByText('Editor s1')
+
+    act(() => emitApiEvent(window.api, 'sessions.onChanged', { deletedIds: ['s1'] }))
+    await screen.findByRole('heading', { name: 'Transkriptionen' })
+    expect(screen.getByRole('button', { name: 'Vorwärts' })).toBeDisabled()
+  })
+
+  it('importiert PDFs über den Knopf im Seitenkopf und in der Seitenleiste', async () => {
+    const user = userEvent.setup()
+    window.api.import.showPDFDialog = vi.fn().mockResolvedValue(['/tmp/a.pdf'])
+    renderShell()
+    await screen.findByRole('heading', { name: 'Transkriptionen' })
+
+    const [sidebarButton, headerButton] = screen.getAllByRole('button', {
+      name: 'PDF importieren'
+    })
+    await user.click(headerButton)
+    await waitFor(() => expect(window.api.import.pdf).toHaveBeenCalledWith(['/tmp/a.pdf']))
+
+    await user.click(sidebarButton)
+    await waitFor(() => expect(window.api.import.pdf).toHaveBeenCalledTimes(2))
+  })
+
+  it('zeigt die Hinweise zu blockierten Werkzeugen und zum Mikrofon in der Inhaltsspalte', async () => {
+    window.api.toolHealth.getState = vi.fn().mockResolvedValue({
+      status: 'blocked',
+      tools: ['python'],
+      bundlePath: '/Applications/Therascript.app'
+    })
+    window.api.microphone.getState = vi
+      .fn()
+      .mockResolvedValue({ status: 'not-determined', previouslyGranted: true })
+    renderShell()
+    expect(await screen.findByText(/Betroffen:/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/braucht Therascript die Mikrofon-Berechtigung/)
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Seitenleiste' })).not.toContainElement(
+      screen.getByText(/Betroffen:/)
+    )
+  })
+
+  it('rendert die Shell nicht bei jedem Pegel- oder Dauerwert neu (ValueStores)', async () => {
+    rec.set(true)
+    window.api.sessions.list = vi.fn().mockResolvedValue([recordingSession])
+    let renders = 0
+    function Probe(): null {
+      useRecordingState()
+      const count = useRef(0)
+      count.current++
+      renders = count.current
+      return null
+    }
+    renderWithProviders(
+      <>
+        <AppShell />
+        <Probe />
+      </>,
+      { route: { kind: 'settings', subpage: null } }
+    )
+    await screen.findByLabelText('Zur laufenden Aufnahme wechseln')
+    const before = renders
+    const { duration } = await recordingMocks()
+    act(() => {
+      for (let s = 1; s <= 30; s++) duration.set(s)
+    })
+    expect(screen.getByText('00:00:30')).toBeInTheDocument()
+    expect(renders).toBe(before)
+  })
+})

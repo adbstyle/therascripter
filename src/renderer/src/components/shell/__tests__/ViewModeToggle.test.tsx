@@ -2,13 +2,21 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import TitleBar from '../TitleBar'
+import { NavigationProvider } from '../../../navigation/NavigationContext'
+import { createMockApi } from '../../../test/mockApi'
 import { getViewMode, _resetViewModeStoreForTests } from '../../../viewMode/viewModeStore'
 
 function renderWith(initial: string) {
   const set = vi.fn().mockResolvedValue(undefined)
-  window.api = { viewMode: { initial, set } } as unknown as typeof window.api
+  window.api = createMockApi({
+    viewMode: { initial, set } as unknown as typeof window.api.viewMode
+  })
   _resetViewModeStoreForTests()
-  render(<TitleBar />)
+  render(
+    <NavigationProvider>
+      <TitleBar />
+    </NavigationProvider>
+  )
   return set
 }
 
@@ -41,6 +49,9 @@ describe('ViewModeToggle', () => {
   it('is operable by keyboard', async () => {
     renderWith('plain')
     const user = userEvent.setup()
+    // Erst der Seitenleisten-Knopf; ‹ › sind ohne Verlauf deaktiviert (Epic #192)
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Seitenleiste ausblenden' })).toHaveFocus()
     await user.tab()
     expect(screen.getByRole('button', { name: 'Pseudonymisiert' })).toHaveFocus()
     await user.keyboard('{Enter}')

@@ -5,6 +5,8 @@ import type { MicrophoneStatus } from '../../../shared/types/Microphone'
 
 interface UseRecordingResult {
   isRecording: boolean
+  /** Sitzung der laufenden Aufnahme (Epic #192: «Zuletzt geöffnet», Dossier-Zuordnung). */
+  sessionId: string | null
   // Pegel und Dauer liegen bewusst NICHT im React-State: sonst rendert die
   // ganze App mit jedem Wert neu (Issue #140) — beim Pegel ~60× pro Sekunde.
   // Nur die Anzeigen abonnieren sie (VUMeter, RecordingSessionCard, RecordingBar).
@@ -29,6 +31,7 @@ interface UseRecordingOptions {
 
 export function useRecording({ onMicrophoneStatus }: UseRecordingOptions = {}): UseRecordingResult {
   const [isRecording, setIsRecording] = useState(false)
+  const [sessionId, setSessionId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const recorderRef = useRef<AudioRecorder | null>(null)
   const startingRef = useRef(false)
@@ -54,6 +57,7 @@ export function useRecording({ onMicrophoneStatus }: UseRecordingOptions = {}): 
       setError(err instanceof Error ? err.message : 'Fehler beim Stoppen der Aufnahme')
     } finally {
       setIsRecording(false)
+      setSessionId(null)
       duration.set(0)
       level.set(0)
       stoppingRef.current = false
@@ -79,7 +83,8 @@ export function useRecording({ onMicrophoneStatus }: UseRecordingOptions = {}): 
 
       const recorder = new AudioRecorder()
       recorderRef.current = recorder
-      await recorder.start(level.set)
+      const id = await recorder.start(level.set)
+      setSessionId(id)
       setIsRecording(true)
     } catch (err) {
       recorderRef.current = null
@@ -132,6 +137,7 @@ export function useRecording({ onMicrophoneStatus }: UseRecordingOptions = {}): 
         recorderRef.current = null
       }
       setIsRecording(false)
+      setSessionId(null)
       duration.set(0)
       level.set(0)
       stoppingRef.current = false
@@ -149,5 +155,5 @@ export function useRecording({ onMicrophoneStatus }: UseRecordingOptions = {}): 
     }
   }, [])
 
-  return { isRecording, level, duration, error, startRecording, stopRecording }
+  return { isRecording, sessionId, level, duration, error, startRecording, stopRecording }
 }

@@ -9,7 +9,7 @@ import {
  * Renderer-facing IPC for the reconciler's pending events. The reconciler
  * itself runs at bootstrap (see `reconcileActiveModels` in
  * ModelDownloadService); these handlers expose its persisted output to the
- * BottomNav dot and the Settings → Modelle banner.
+ * sidebar dot and the Settings → Modelle banner.
  *
  * Lifecycle exposed to the renderer:
  *   getReconcileEvents()     → read all events (pending + seen)

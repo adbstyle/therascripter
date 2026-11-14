@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { Session, SessionStatus } from '../../../shared/types'
 import { useSessions } from '../hooks/useSessions'
 import { useStartOfToday } from '../hooks/useStartOfToday'
@@ -8,65 +8,42 @@ import { RecordingSessionCard, type LiveRecording } from './RecordingSessionCard
 import { DeleteSessionDialog } from './DeleteSessionDialog'
 import { useViewMode } from '../viewMode/useViewMode'
 import { sessionTitleIn } from '../viewMode/sessionText'
+import { useScrollRestoration } from '../navigation/useScrollRestoration'
+import { useWorkspaceActions } from '../contexts/workspaceActions'
 
 const PROCESSING_STATUSES: SessionStatus[] = ['queued', 'processing']
 
 interface SessionDashboardProps {
-  refreshTrigger?: number
-  isImporting?: boolean
-  onImportingChange?: (importing: boolean) => void
   onOpenReview?: (sessionId: string) => void
-  scrollToSessionId?: string | null
-  onScrollComplete?: () => void
   /** Laufende Aufnahme — die Karte mit Status 'recording' wird zur Live-Steuerung */
   liveRecording?: LiveRecording | null
 }
 
+/**
+ * Sitzungsliste nach Zeitgruppen. Scrollt nicht selbst: der einzige
+ * Scroll-Container ist `PageScroll` der Shell, der die Position pro
+ * Verlaufseintrag kennt. Nach dem Schliessen einer Sitzung stellt
+ * useScrollRestoration die Stelle wieder her und hebt die Karte hervor.
+ */
 export default function SessionDashboard({
-  refreshTrigger,
-  isImporting,
-  onImportingChange,
   onOpenReview,
-  scrollToSessionId,
-  onScrollComplete,
   liveRecording
 }: SessionDashboardProps): React.JSX.Element {
   const { sessions, loading, error, refresh, deleteSession } = useSessions()
+  const { importPdfs, isImporting } = useWorkspaceActions()
   // Rendert um Mitternacht neu: Zeitgruppen und memoisierte Karten ("Gestern")
   const today = useStartOfToday()
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
   const viewMode = useViewMode()
   const [isDragOver, setIsDragOver] = useState(false)
 
-  // Scroll to a specific session card after returning from review
-  useLayoutEffect(() => {
-    if (!scrollToSessionId || loading || sessions.length === 0) return
-    const card = scrollContainerRef.current?.querySelector<HTMLElement>(
-      `[data-session-id="${scrollToSessionId}"]`
-    )
-    if (card) {
-      card.scrollIntoView({ block: 'center', behavior: 'instant' })
-      card.classList.add('session-highlight')
-      card.addEventListener('animationend', () => card.classList.remove('session-highlight'), {
-        once: true
-      })
-      onScrollComplete?.()
-    }
-  }, [scrollToSessionId, loading, sessions.length, onScrollComplete])
+  useScrollRestoration(!loading)
 
   // Derive processing state from sessions list (avoids race with brief isProcessing=false between tasks)
   const isAnyProcessing = useMemo(
     () => sessions.some((s) => PROCESSING_STATUSES.includes(s.status)),
     [sessions]
   )
-
-  // Refresh sessions when parent triggers (e.g. after PDF import from header button)
-  useEffect(() => {
-    if (refreshTrigger && refreshTrigger > 0) {
-      refresh()
-    }
-  }, [refreshTrigger, refresh])
 
   const handleDrop = useCallback(
     async (e: React.DragEvent) => {
@@ -83,15 +60,10 @@ export default function SessionDashboard({
 
       if (pdfPaths.length === 0) return
 
-      onImportingChange?.(true)
-      try {
-        await window.api.import.pdf(pdfPaths)
-        refresh()
-      } finally {
-        onImportingChange?.(false)
-      }
+      // Die Liste lädt über sessions:changed selbst nach
+      await importPdfs(pdfPaths)
     },
-    [refresh, isImporting, onImportingChange]
+    [importPdfs, isImporting]
   )
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -187,8 +159,7 @@ export default function SessionDashboard({
   return (
     <>
       <div
-        ref={scrollContainerRef}
-        className={`relative flex-1 overflow-y-auto px-6 py-4 transition-colors ${isDragOver ? 'bg-primary-light' : ''}`}
+        className={`relative flex-1 rounded-lg transition-colors ${isDragOver ? 'bg-primary-light' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -205,7 +176,7 @@ export default function SessionDashboard({
 
           return (
             <div key={group} className="mb-6">
-              <h3 className="sticky -top-4 z-10 bg-surface-0 pb-2 pt-4 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+              <h3 className="sticky top-0 z-10 bg-surface-0 pb-2 pt-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
                 {group}
               </h3>
               <div className="flex flex-col gap-2">

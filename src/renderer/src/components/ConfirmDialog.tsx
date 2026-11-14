@@ -1,10 +1,18 @@
 import { useEffect, useRef } from 'react'
 import { DialogShell } from './DialogShell'
 
+export interface ConfirmDialogSection {
+  heading: string
+  items: string[]
+}
+
 interface ConfirmDialogProps {
   title: string
   message: string
+  /** Kurzform für einen einzigen Abschnitt «Gelöscht werden:». */
   details?: string[]
+  /** Mehrere Abschnitte, z. B. «Gelöscht werden:» und «Erhalten bleiben:» (Epic #192). */
+  sections?: ConfirmDialogSection[]
   confirmLabel: string
   destructive?: boolean
   onConfirm: () => void
@@ -15,12 +23,17 @@ export function ConfirmDialog({
   title,
   message,
   details,
+  sections,
   confirmLabel,
   destructive,
   onConfirm,
   onCancel
 }: ConfirmDialogProps): React.JSX.Element {
   const cancelRef = useRef<HTMLButtonElement>(null)
+  const allSections: ConfirmDialogSection[] = [
+    ...(details && details.length > 0 ? [{ heading: 'Gelöscht werden:', items: details }] : []),
+    ...(sections ?? []).filter((section) => section.items.length > 0)
+  ]
 
   useEffect(() => {
     cancelRef.current?.focus()
@@ -31,16 +44,16 @@ export function ConfirmDialog({
       <h3 className="mb-2 text-base font-semibold text-text-primary">{title}</h3>
       <p className="mb-4 text-sm text-text-secondary">{message}</p>
 
-      {details && details.length > 0 && (
-        <div className="mb-4">
-          <p className="mb-1 text-xs font-medium text-text-tertiary">Gelöscht werden:</p>
+      {allSections.map((section) => (
+        <div key={section.heading} className="mb-4">
+          <p className="mb-1 text-xs font-medium text-text-tertiary">{section.heading}</p>
           <ul className="list-inside list-disc text-xs text-text-tertiary">
-            {details.map((detail) => (
-              <li key={detail}>{detail}</li>
+            {section.items.map((item) => (
+              <li key={item}>{item}</li>
             ))}
           </ul>
         </div>
-      )}
+      ))}
 
       <p className="mb-4 text-xs text-text-tertiary">
         Diese Aktion kann nicht rückgängig gemacht werden.
