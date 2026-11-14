@@ -2,7 +2,10 @@ import type Database from 'better-sqlite3'
 import type { SessionType } from '../../../shared/types'
 import type { SearchField } from '../../../shared/types/Search'
 import { normalizeSearchText } from '../../../shared/utils/search-normalize'
-import { SEARCH_SEMANTIC_FIELDS } from '../../../shared/search-config'
+import {
+  SEARCH_SEMANTIC_FIELDS,
+  SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES
+} from '../../../shared/search-config'
 import { sectionIndexText, type ChunkUnitRef, type SearchSection } from '../../search/chunker'
 
 /**
@@ -228,8 +231,10 @@ export class SearchIndexRepository {
              text_rev = excluded.text_rev,
              last_error = excluded.last_error,
              doc_stat = excluded.doc_stat,
-             attempts = 0,
-             next_attempt_at = NULL`
+             next_attempt_at = CASE
+               WHEN search_index_state.attempts < ${SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES} THEN NULL
+               ELSE search_index_state.next_attempt_at
+             END`
         )
         .run(sessionId, gen, readRev, error, docStat)
       return gen

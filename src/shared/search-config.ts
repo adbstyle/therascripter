@@ -70,6 +70,17 @@ export const SEARCH_SEMANTIC_THRESHOLD = 0.71
  */
 export const SEARCH_SEMANTIC_FIELDS = ['summary', 'body'] as const
 
+/**
+ * Vektorphase nach einer Bearbeitung (#212 AK 2): Eine neue Textgeneration
+ * hebt die Wartezeit eines früheren Fehlers auf (sofortiger Neuversuch), die
+ * Zahl der Fehler bleibt aber stehen — der nächste Fehler wartet länger;
+ * zurück auf 0 erst nach einer ERFOLGREICHEN Vektorgeneration. Ab so vielen
+ * Fehlern in Folge löst eine Bearbeitung keinen sofortigen Neuversuch mehr
+ * aus (eine Sitzung, die den Suchprozess immer abstürzen lässt, startet ihn
+ * sonst bei jeder Bearbeitungspause neu).
+ */
+export const SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES = 3
+
 /** Textphase der Aufbereitung (#212): ruhiges Fenster und Takt. */
 export const SEARCH_QUIET_WINDOW_MS = 10_000
 export const SEARCH_TICK_MS = 5_000

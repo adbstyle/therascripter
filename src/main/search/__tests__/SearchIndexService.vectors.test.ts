@@ -4,6 +4,7 @@ import { SearchIndexService, type VectorPhaseDeps } from '../SearchIndexService'
 import { SearchWorkerUnavailableError } from '../SearchWorker'
 import { addIndexedSession, createSearchTestDb, indexAll, makeDoc } from './helpers'
 import { TEST_MODEL, fakeEmbed } from './semanticHelpers'
+import { SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES } from '../../../shared/search-config'
 import type { SearchModelInfo } from '../searchModel'
 
 // Vektorphase der Aufbereitung (PR S4): Batches zu 2, Commit pro Batch,
@@ -513,19 +514,73 @@ describe('SearchIndexService — Vektoren nach einer Bearbeitung binnen einer Mi
     expect(calls.flat().some((t) => t.includes('Freude'))).toBe(true)
   })
 
-  it('ein Backoff aus einem früheren Fehler hält die neue Fassung nicht auf', async () => {
+  it('ein früherer einmaliger Fehler hält die neue Fassung nicht auf', async () => {
     const { calls } = await editedSessionAfterOneMinute((d) =>
       d
         .prepare(
-          `UPDATE search_index_state SET attempts = 4, last_error = 'kaputt',
+          `UPDATE search_index_state SET attempts = 1, last_error = 'kaputt',
              next_attempt_at = ? WHERE session_id = 's1'`
         )
         .run(new Date(NOW + 6 * 3600_000).toISOString())
     )
     const after = state(db, 's1')
     expect(after.vec_gen).toBe(after.text_gen)
+    // erst der Erfolg setzt die Fehlerzahl zurück
     expect(after.attempts).toBe(0)
     expect(after.next_attempt_at).toBeNull()
     expect(calls.flat().some((t) => t.includes('Freude'))).toBe(true)
+  })
+
+  it(`ab ${SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES} Fehlern in Folge löst eine Bearbeitung keinen sofortigen Neuversuch aus`, async () => {
+    const backoff = new Date(NOW + 6 * 3600_000).toISOString()
+    const { calls } = await editedSessionAfterOneMinute((d) =>
+      d
+        .prepare(
+          `UPDATE search_index_state SET attempts = ?, last_error = 'kaputt',
+             next_attempt_at = ? WHERE session_id = 's1'`
+        )
+        .run(SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES, backoff)
+    )
+    const after = state(db, 's1')
+    expect(after.text_gen).toBeGreaterThan(after.vec_gen ?? 0)
+    expect(after.next_attempt_at).toBe(backoff)
+    expect(calls.flat().some((t) => t.includes('Freude'))).toBe(false)
+  })
+
+  it('ein Abschnitt, der den Suchprozess immer abstürzen lässt: wiederholte Bearbeitungen ergeben begrenzt viele Versuche', async () => {
+    db = createSearchTestDb()
+    const docs = new Map<string, unknown>()
+    let poisoned = 0
+    service = new SearchIndexService(db, {
+      now: () => Date.now(),
+      readDocument: (path) => docs.get(path),
+      vectors: {
+        resolveModel: () => TEST_MODEL,
+        isProcessingActive: () => false,
+        embedDocuments: async (texts) => {
+          if (texts.some((t) => t.includes('Gift'))) {
+            poisoned++
+            throw new Error('Suchdienst: Prozess abgestürzt')
+          }
+          return texts.map((t) => fakeEmbed(t))
+        }
+      }
+    })
+    addIndexedSession(db, docs, { id: 's1' }, longParagraphs(4, 'Gift'))
+    vi.useFakeTimers({ now: NOW })
+    service.start()
+    // Fünf Bearbeitungen in 100 s, jede mit dem giftigen Abschnitt
+    for (let i = 0; i < 5; i++) {
+      docs.set('/docs/s1.json', makeDoc(longParagraphs(4 + i, 'Gift')))
+      db.prepare(
+        'UPDATE sessions SET search_rev = search_rev + 1, updated_at = ? WHERE id = ?'
+      ).run(new Date(Date.now()).toISOString(), 's1')
+      await vi.advanceTimersByTimeAsync(20_000)
+    }
+    await vi.advanceTimersByTimeAsync(20_000)
+    // Erster Versuch plus höchstens bis zur Obergrenze sofortige Neuversuche
+    expect(poisoned).toBe(SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES)
+    expect(state(db, 's1').attempts).toBe(SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES)
+    expect(state(db, 's1').next_attempt_at).not.toBeNull()
   })
 })
