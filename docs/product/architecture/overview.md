@@ -72,9 +72,10 @@ All three subprocess types communicate with the Main Process only. The Renderer 
 | **Renderer** | `src/renderer/src/main.tsx` | React UI — view navigation, recording controls, review editor, settings | None |
 | **whisper.cpp subprocess** | `resources/bin/whisper-cli` | ASR: audio → raw transcript (RTTM/JSON). Runs Metal GPU acceleration. One instance at a time. | Whisper Large V3 Turbo Q5_0 (~0.6 GB) |
 | **Python sidecar** | `python_sidecar/` | Speaker diarization (pyannote.audio), alignment, and NER anonymization (flair). Shared across pipeline stages. | pyannote speaker-diarization-3.1 (~0.06 GB) + flair/ner-german-large (~1.1 GB, fp16 on disk) |
+| **Search process** (long-lived) | `python_sidecar/search_service.py serve` | Embeds search queries and transcript sections for the search by meaning (Epic #192). The only long-lived child process: started on demand (opening the search, vector phase), stopped after 5 min idle and **before every task of the queue**; JSON lines over stdin/stdout (`src/main/utils/line-process.ts`, `src/main/search/SearchWorker.ts`). Vectors stay in the Main process (`VectorStore`). | EmbeddingGemma 2 text encoder (~0.54 GB bf16, ~1.6 GiB process) |
 | **Swift Vision OCR CLI** | `resources/bin/vision-ocr` | OCR for scanned PDF pages using Apple Vision Framework. Invoked per page only when pdfjs-dist finds no text. | Apple Vision (OS-provided, no model file) |
 
-The task queue enforces strict sequential execution — only one ML executor runs at any given time, respecting the 8 GB RAM budget (~3.5 GB process peak during flair NER on 8-GB Macs).
+The task queue enforces strict sequential execution — only one ML executor runs at any given time, respecting the 8 GB RAM budget (~3.5 GB process peak during flair NER on 8-GB Macs). The search process never runs next to a pipeline step: a hook before every task stops it, and it does not start while processing runs or waits.
 
 ---
 

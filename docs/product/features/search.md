@@ -2,7 +2,7 @@
 
 Stories #209 (search), #210 (stock before the update), #211 (search within a patient dossier) and #212 (edits become searchable soon), Epic #192.
 
-This page describes the part built in PR S3: the search index, the **text phase** of the preparation (Node only, no model), the **exact search** including clear names, dossier hits and the recent searches — main process, shared code and preload. The search by meaning (model, vectors, worker; PR S4), the user interface (PR S5) and the acceptance test with the reference set (PR S6) follow.
+This page describes the main-process side: the search index, the **text phase** of the preparation (Node only, no model), the **exact search** including clear names, dossier hits and the recent searches (PR S3), and the **search process**, the **vector phase**, the **vector store** and the **search by meaning** (PR S4). The model provisioning (PR S2), the user interface (PR S5) and the acceptance test with the reference set plus threshold calibration (PR S6) follow.
 
 Nothing leaves the Mac: index, queries and recent searches live only in `~/.therascript/data/therascript.db` (#209 AK 20).
 
@@ -33,7 +33,52 @@ Tables, columns and why the FTS table is not contentless: [storage.md](../archit
 - **Recording:** never during a recording (#209 AK 19). `setRecordingPause` is called at the same places as the queue's pause (`recording:start`, `stopRecordingInternal`, cleanup on quit); afterwards the next tick catches up (#212 AK 3).
 - **Restart:** nothing is kept in memory — what is pending is in the database and indexed after the next start (#212 AK 4).
 - **Errors:** an unreadable document is logged and stored in `last_error`; title and summary are indexed anyway, the next change retries.
-- **Stopping:** own step in `runQuitCleanup` (`PendingEditsFlush.ts`) — after the renderer flush (it may still trigger a `review:save`), before `closeDatabase`; also before `closeDatabase` in the uninstall (`system-handlers.ts`). `stopForUpdate()` for the update swap (wired in PR S4 together with the worker). Every step is synchronous, so after the call nothing is written any more.
+- **Stopping:** own step in `runQuitCleanup` (`PendingEditsFlush.ts`) — after the renderer flush (it may still trigger a `review:save`), before `closeDatabase`; also before `closeDatabase` in the uninstall (`system-handlers.ts`). On quit the step first finishes pending staged deletions for at most 2 s (`finishPurgesForQuit`, `SEARCH_QUIT_PURGE_BUDGET_MS`; the rest at the next start), then stops. `stopForUpdate()` runs before an update swap (`AppUpdateService.installNow` → dep `stopBackgroundWork`, together with stopping the search process). After the call nothing is written any more; a vector batch answered afterwards is discarded.
+
+## Search process (worker)
+
+`src/main/search/SearchWorker.ts` on top of `src/main/utils/line-process.ts` — the **first long-lived child process** of the app (every other ML tool is one `runSubprocess` call per task). One Python process (`search_service.py serve`, see [ml-pipeline.md](../architecture/ml-pipeline.md) «Search Service») serves queries **and** the vector phase; two model copies would exceed 3 GiB.
+
+- **`LineProcess`:** JSON lines on stdin/stdout with request IDs, timeout per request, answers with `id: null` (`bad_json`, `too_large`) go to the oldest open request (the service answers strictly in order), stderr drained continuously into a ring buffer (contract line `Gewichte: …` recorded), start timeout until the ready line, half last line dropped at exit. Whitelist env (`buildSubprocessEnv`) plus `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, `PYTHONDONTWRITEBYTECODE=1`, 4 CPU threads. Own process group; stop = close stdin (the service exits on EOF) → 2 s → group SIGTERM → 2 s → SIGKILL. On exit every open request is rejected.
+- **States:** `stopped | starting | ready | busy | stopping`, plus the reason why the search by meaning is unavailable right now: `processing | model-missing | tool-blocked | error` (`getState()`, event `search:processStateChanged`, `search:warmup`). PR S2 merges this with the model download state into `SearchAvailability`.
+- **Never together with NER, whisper or llama** (8-GB budget): `ensureStarted` is refused while a processing step runs or waits (`TaskQueueService.hasActiveWork()` = running, or pending and not paused for a recording). A **hook before every task** (`TaskQueueService.setBeforeTaskHook`, registered in `main/index.ts`) stops the process and aborts the vector phase; the task becomes `running` only after the process has really exited (#209 AK 17). During a **recording** queries are allowed (the model may load), the preparation never.
+- **Memory freed** 5 min after the last query or batch (`SEARCH_WORKER_IDLE_MS`, #209 AK 17); the vector store is released with it.
+- **Restart after memory growth:** every answer carries `phys_footprint_bytes`; above 2.5 GiB (`SEARCH_WORKER_RESTART_FOOTPRINT_BYTES`) the process restarts once no request is open, i.e. between two batches.
+- **Unexpected end:** reason `error`; after an external SIGKILL the `throwIfToolBlocked('python')` recheck turns it into `tool-blocked`. A new start is tried at the earliest 30 s later (`SEARCH_WORKER_FAILURE_COOLDOWN_MS`), so a broken install does not spawn a process per keystroke. A request without answer in time (query 10 s, batch 60 s, start 60 s) stops the process.
+- **Single flight:** concurrent callers share one start; `stop()` is idempotent and works during startup.
+- **Quit:** `runQuitCleanup` step `stopSearchWorker` (bounded 3 s) after stopping the index, before `closeDatabase`. **Update:** stopped before the swap; the search does **not** count as work in `WorkGuard` and never delays an update (#210 AK 7).
+- **Model access** goes through one function, `resolveSearchModel()` (`src/main/search/searchModel.ts`): folder `~/.therascript/models/search-embeddinggemma-2-text-v1` with marker `READY` (top level — the update manifest schema of shipped app versions rejects archives with `/` in the path), prompts, dimension 768, 1024 tokens, padding grid 128; in development `THERASCRIPT_SEARCH_MODEL_DIR` (and `THERASCRIPT_SEARCH_PYTHON` for the interpreter). PR S2 replaces the inside with the catalog.
+
+## Vector phase
+
+Part of the background loop in `SearchIndexService`, asynchronous next to the slices:
+
+- runs only without a recording, with an empty queue and an installed model; aborted at once when processing or a recording begins (`abortVectorPhase`; an answer arriving afterwards is not written);
+- next session: text current (`text_rev = search_rev`) but no complete vector generation of the current model for `text_gen`, no running backoff; changed/new sessions (`search_rev > 0`) before the stock, newest first (#210 AK 6 — new recordings and imports win anyway because the phase only runs with an empty queue);
+- sections without vector in **batches of 2**, longest first, **commit per batch** — progress survives a restart (#210 PC 2, #212 AK 4);
+- text for the model = the section text **with** «Sprecher N: …» / «Bericht: …» per unit (`sectionEmbeddingText`), exactly what the quality target was measured on (spike `build_chunks`); the document prompt is added by the service. `embeddingText.parity.test.ts` checks it against the chunker fixture. The trigram index keeps omitting the prefixes;
+- when all sections have vectors: `vec_gen = text_gen`; until then the previous vector generation stays active (#212 AK 1), afterwards the loop removes it in slices;
+- `model_id` per session: vectors of another model are cleared before work starts and the session is embedded again (NFR-9/10);
+- errors: `attempts + 1`, `next_attempt_at` after 1 min, 5 min, 30 min, 6 h; a stopped process (processing, quit, model missing, tool blocked) is no failure of the session, a crash is (otherwise a section that kills the service every time would loop);
+- int8 quantization at one place (`quantizeVector`): symmetric, scale = max|v| / 127, stored as `vec` (768 bytes) + `vec_scale`.
+
+## Vector store
+
+`src/main/search/VectorStore.ts` — the vectors live in Node, Python stays stateless and never reads the database (deleted content never sits in a foreign process).
+
+- loaded on `search:warmup` in parallel to the model start, in slices; only the active vector generation of the current model of visible sessions; one block per session (replace/remove = one map operation);
+- released when the search process stops (idle, processing);
+- kept in sync: a completed vector generation replaces the session; a deleted or marked session is removed **synchronously** via `onSessionsDeleted` in `ChangeEvents.notifySessionsChanged` (#209 PC 1); semantic candidates are additionally checked against `SEARCH_VISIBLE_SESSION`;
+- cosine = `(q·query) / ‖q‖` (the query is normalized, the scale cancels); computed in slices of ≤ 20 ms (`SEARCH_COSINE_SLICE_MS`), sessions removed during a pause drop out.
+
+## Search by meaning and ranking
+
+`SearchService.semantic` (`search:semantic`, same payload as `search:query`):
+
+1. `search:query` answers at once with dossiers and exact hits; `semantic` is `pending` (the renderer calls `search:semantic`) or the reason it is unavailable: `unavailable-processing`, `model-missing`, `tool-blocked`, `error`.
+2. `search:semantic` embeds the query, scores every section in the vector store, keeps **all** sections with cosine ≥ `SEARCH_SEMANTIC_THRESHOLD` (0.70, provisional until PR S6; no global top-k, so #211 AK 3 holds exactly), merges them with the exact candidates in `rankDocuments` (exact first, inside by cosine), groups, builds snippets/focus like the exact search, and applies the **dossier filter after the ranking** (#211 AK 3 — test: the dossier search equals the filtered search over everything, same order and hits). `semantic: 'complete'`; when unavailable the answer carries the exact hits and the reason.
+3. Requests are superseded per window (`event.sender.id`): a newer request ends an older one at its next await (`'superseded'`, exact hits only) without keeping the process busy.
+4. `rankChunks(query, {threshold: null})` exposes the internal section ranking before the threshold for the acceptance test (PR S6).
 
 ## Exact search
 
@@ -92,8 +137,24 @@ Not measured on an 8-GB Mac (#209 AK 14 is checked in PR S6). `search.performanc
 
 ## IPC
 
-`search:query`, `search:recent:list`, `search:recent:remember`, `search:recent:clear` — see [ipc-api.md](../architecture/ipc-api.md) «Search Handlers». In the renderer: `window.api.search`. `semantic` in the answer is `'unavailable'` until PR S4.
+`search:query`, `search:semantic`, `search:warmup`, event `search:processStateChanged`, `search:recent:list`, `search:recent:remember`, `search:recent:clear` — see [ipc-api.md](../architecture/ipc-api.md) «Search Handlers». In the renderer: `window.api.search`. `search:open`, `search:retryModel` and `search:availabilityChanged` come with PR S2.
+
+## Measurements (PR S4, M5 Pro, 64 GB, real model)
+
+`src/main/search/__tests__/searchWorker.model.test.ts` with `THERASCRIPT_SEARCH_MODEL_DIR` and `THERASCRIPT_SEARCH_PYTHON` (otherwise skipped), bundled standalone Python of the main checkout, file cache probably warm:
+
+| What | Value |
+|---|---|
+| `warmup` → process ready (fresh process) | 5.3 s |
+| `warmup` → first answer by meaning | 5.4 s |
+| Restart after idle → answer | 4.5 s |
+| Further queries incl. embedding, cosine, ranking, snippets | 47–61 ms |
+| `phys_footprint` of the search process | 1.58 GiB (peak 1.59 GiB) |
+| Vector phase | ~45 ms per section (short test sessions: 6 sections, 90 ms per session) |
+| Cosine over 66'000 × 768 int8 in Node | ~30–50 ms in total, longest synchronous stretch ~20–25 ms, 50 MiB (`VectorStore.test.ts`) |
+
+The cold start is just above 5 s on this machine; preloading when the search opens (#209 AK 16) hides most of it. Not measured on an 8-GB Mac (PR S6, #209 AK 14/15/19).
 
 ## Tests
 
-`src/main/search/__tests__/`: `search.blocking.test.ts`, `chunker.test.ts`, `chunker.parity.test.ts`, `SearchIndexService.test.ts` (text phase, quiet window, recording pause, restart, generations, `search_rev` writers), `SearchService.test.ts` (exact search, snippets, focus, dossier filter, dossier hits), `ranking.test.ts`, `SearchRecentRepository.test.ts`, `search.secureDelete.test.ts` (real database file, raw bytes), `search.performance.test.ts`; `src/main/db/migrations/__tests__/021-search-index.test.ts`, `src/shared/utils/__tests__/search-normalize.test.ts`, `src/main/ipc/__tests__/search-handlers.test.ts`.
+`src/main/search/__tests__/`: `SearchWorker.test.ts` (fake service: start, single flight, idle stop, stop during start, memory restart, SIGKILL → tool-blocked, crash, timeout), `SearchIndexService.vectors.test.ts` (batches, commit per batch, backoff, restart, priority, generations, model change, abort), `VectorStore.test.ts` (int8 vs float32 ranking, deletion, 66'000-vector timing), `SearchService.semantic.test.ts` (ranking, threshold, dossier = filtered search, superseded, unavailable), `embeddingText.parity.test.ts`, `searchWorker.model.test.ts` (real model, skipped without it); `src/main/utils/__tests__/line-process.test.ts` (real processes with `fixtures/fake-line-service.mjs`); `src/main/services/__tests__/TaskQueueService.beforeTask.test.ts`; `search.blocking.test.ts`, `chunker.test.ts`, `chunker.parity.test.ts`, `SearchIndexService.test.ts` (text phase, quiet window, recording pause, restart, generations, `search_rev` writers), `SearchService.test.ts` (exact search, snippets, focus, dossier filter, dossier hits), `ranking.test.ts`, `SearchRecentRepository.test.ts`, `search.secureDelete.test.ts` (real database file, raw bytes), `search.performance.test.ts`; `src/main/db/migrations/__tests__/021-search-index.test.ts`, `src/shared/utils/__tests__/search-normalize.test.ts`, `src/main/ipc/__tests__/search-handlers.test.ts`.
