@@ -10,6 +10,7 @@ import { useNavigation } from '../../navigation/navigation'
 import { useRecordingState } from '../../contexts/recording'
 import { useToolHealth } from '../../hooks/useToolHealth'
 import { useSidebarOpen } from '../../hooks/useSidebarOpen'
+import { useRecordingDossierIds } from '../../hooks/useRecordingDossierIds'
 import { pruneScrollPositions } from '../../navigation/useScrollRestoration'
 
 /**
@@ -36,8 +37,14 @@ export default function AppShell(): React.JSX.Element {
     )
   }, [liveIds])
 
-  // Auf der Sitzungsliste zeigt die Live-Karte die Aufnahme — keine Leiste doppelt
-  const showRecordingBar = isRecording && route.kind !== 'sessions'
+  // Wo die Live-Karte die Aufnahme zeigt, keine Leiste doppelt: auf der
+  // Sitzungsliste und auf der Seite eines Dossiers, dem die Aufnahme
+  // zugeordnet ist (dessen Verlauf zeigt sie, #206)
+  const recordingDossierIds = useRecordingDossierIds()
+  const liveCardVisible =
+    route.kind === 'sessions' ||
+    (route.kind === 'dossier' && recordingDossierIds.includes(route.dossierId))
+  const showRecordingBar = isRecording && !liveCardVisible
 
   return (
     <div className="flex h-screen flex-col bg-surface-0">

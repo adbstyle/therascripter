@@ -60,7 +60,7 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
       onChanged: on('sessions.onChanged')
     },
     recording: {
-      start: vi.fn().mockResolvedValue({ sessionId: 'rec-1' }),
+      start: vi.fn().mockResolvedValue({ sessionId: 'rec-1', assignment: 'none' }),
       stop: vi.fn().mockResolvedValue({ durationSeconds: 0 }),
       sendData: vi.fn(),
       onDuration: on('recording.onDuration'),
@@ -88,7 +88,7 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
       delete: vi.fn().mockResolvedValue(true)
     },
     import: {
-      pdf: vi.fn().mockResolvedValue([]),
+      pdf: vi.fn().mockResolvedValue({ sessions: [], unassigned: [] }),
       showPDFDialog: vi.fn().mockResolvedValue([]),
       getPathForFile: vi.fn().mockReturnValue('')
     },

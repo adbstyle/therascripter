@@ -4,9 +4,11 @@ import { basename, join } from 'path'
 import { getDatabase, getDataDir } from '../db/connection'
 import { openPdfDocument, releasePdfDocument } from '../utils/pdfjs-loader'
 import { SessionService } from '../services/SessionService'
+import { SessionDossierService } from '../services/SessionDossierService'
 import { getTaskQueue } from '../services/TaskQueueService'
 import { ImportPDFSchema } from '../../shared/validation/import-schemas'
 import type { Session } from '../../shared/types'
+import type { ImportPdfResult } from '../../shared/types/IpcApi'
 
 /**
  * Issue #80 Phase G — quick scanned-pages heuristic run at PDF import time.
@@ -67,14 +69,19 @@ function generatePDFTitle(filePath: string): string {
 }
 
 export function registerPDFHandlers(): void {
-  ipcMain.handle('import:pdf', async (_event, args: unknown) => {
-    const { filePaths } = ImportPDFSchema.parse(args)
+  ipcMain.handle('import:pdf', async (_event, args: unknown): Promise<ImportPdfResult> => {
+    const { filePaths, dossierId } = ImportPDFSchema.parse(args)
     const db = getDatabase()
     const sessionService = new SessionService(db)
+    const assignments = new SessionDossierService(db)
     const taskQueue = getTaskQueue()
 
     const sessions: Session[] = []
+    const unassigned: ImportPdfResult['unassigned'] = []
 
+    // Alle Dateien vorab prüfen: eine ungültige Datei bricht den Import ab,
+    // bevor ein PDF angelegt ist — so geht keine Meldung über eine nicht
+    // gelungene Zuordnung früherer PDFs verloren (#206 AK 2).
     for (const sourcePath of filePaths) {
       if (!existsSync(sourcePath)) {
         throw new Error(`Datei nicht gefunden: ${sourcePath}`)
@@ -83,10 +90,27 @@ export function registerPDFHandlers(): void {
       if (!sourcePath.toLowerCase().endsWith('.pdf')) {
         throw new Error(`Nur PDF-Dateien werden unterstützt: ${basename(sourcePath)}`)
       }
+    }
 
+    for (const sourcePath of filePaths) {
       // Copy PDF to app data directory
       const title = generatePDFTitle(sourcePath)
       const session = sessionService.createSession(title, 'pdf')
+
+      // #206 PC 2 — Zuordnung VOR jeder Verarbeitung (enqueuePipeline unten);
+      // scheitert sie, wird das PDF trotzdem importiert und gemeldet (AK 2).
+      if (dossierId !== undefined) {
+        let assigned = false
+        try {
+          assigned = assignments.assign(session.id, dossierId).ok
+        } catch (error) {
+          console.error(
+            `[PDF-Import] Zuordnung von ${session.id} zum Dossier fehlgeschlagen:`,
+            error
+          )
+        }
+        if (!assigned) unassigned.push({ sessionId: session.id, title })
+      }
 
       const pdfDir = join(getDataDir(), 'pdf')
       const pdfPath = join(pdfDir, `${session.id}.pdf`)
@@ -124,7 +148,7 @@ export function registerPDFHandlers(): void {
       if (updated) sessions.push(updated)
     }
 
-    return sessions
+    return { sessions, unassigned }
   })
 
   ipcMain.handle('import:showPDFDialog', async () => {

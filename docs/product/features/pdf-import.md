@@ -14,18 +14,21 @@ The `SessionDashboard` component registers drag-and-drop handlers on its root co
 
 The «PDF importieren» button in the page header of «Transkriptionen» and the import icon next to «Transkriptionen» in the sidebar both call `importPdfs()` from `useWorkspaceActions()` (`src/renderer/src/contexts/WorkspaceActionsContext.tsx`, Epic #192). Without paths it calls `window.api.import.showPDFDialog()`, which opens a native macOS file dialog (`dialog.showOpenDialog`) configured for multi-selection with a `.pdf` file filter. The dialog title reads "PDF-Dokumente zum Anonymisieren auswahlen". If the user cancels, an empty array is returned and no session is created.
 
+**Import from a patient dossier (#206):** «PDF importieren» in the head of a dossier page and PDFs dropped onto its timeline call `importPdfs(paths?, { dossierId, dossierName })`. The main process assigns every PDF to the dossier right after creating its session and **before** `enqueuePipeline` — no processing step ever runs on an unassigned PDF from a dossier (PC 2). If the assignment fails (dossier deleted meanwhile, database error), the PDF is imported anyway; `import:pdf` returns it in `unassigned` and the renderer shows a 10-second error toast naming every such PDF by title and the dossier «Nachname, Vorname» (AK 2). Importing outside a dossier never asks for one (OOS 1).
+
 All entry points share one `isImporting` flag that prevents concurrent imports. The flag is cleared in a `finally` block so it resets even if the import fails. The list shows the new sessions because the main process fires `sessions:changed` on session creation — no manual refresh.
 
 ## File Handling and Session Creation
 
 For each selected file, the `import:pdf` IPC handler in `pdf-handlers.ts` performs these steps:
 
-1. **Validation** -- Checks that the file exists on disk and has a `.pdf` extension. Throws a German-language error if either check fails.
+1. **Validation** -- Checks for ALL files first that they exist on disk and have a `.pdf` extension, before any session is created (#206: otherwise a later invalid file would discard the report about earlier PDFs that could not be assigned). Throws a German-language error if a check fails.
 2. **Session creation** -- Calls `SessionService.createSession(title, 'pdf')`, which inserts a new session with status `extracting` (audio sessions start as `recording`). The session title is derived from the PDF filename; if the name is empty or literally "document", a timestamp-based fallback is used (`PDF DD.MM.YYYY HH:MM`).
+2a. **Dossier assignment (#206)** -- With `dossierId`: `SessionDossierService.assign(session.id, dossierId)`; a failure (result or exception) adds `{ sessionId, title }` to `unassigned` and the import goes on.
 3. **File copy** -- Copies the source file to `~/.therascript/pdf/<sessionId>.pdf` using `copyFileSync`. The original file is never moved or modified.
 4. **Path storage** -- Updates the session record with the `pdfPath` pointing to the copied file.
 5. **Pipeline enqueue** -- Calls `taskQueue.enqueuePipeline(sessionId, 'pdf')` to schedule the three processing tasks.
-6. **Session list refresh** -- After all files are imported, the renderer refreshes the session list.
+6. **Result** -- `{ sessions, unassigned }`; lists and timelines reload on `sessions:changed`/`dossiers:changed`.
 
 PDF import is also available while an audio recording is running; the imported session then stays in `queued` ("Wartet") until the recording stops, because the task queue is paused for the duration of the recording (see [transcription-pipeline.md](transcription-pipeline.md)).
 

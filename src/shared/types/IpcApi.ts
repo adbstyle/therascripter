@@ -31,8 +31,36 @@ export interface SessionApi {
   onChanged(callback: (data: SessionsChangedData) => void): () => void
 }
 
+/**
+ * #206 — Zuordnung einer aus einem Patientendossier heraus gestarteten
+ * Aufnahme bzw. importierten PDFs: 'none' ohne Dossier, 'failed', wenn die
+ * Zuordnung scheiterte (Aufnahme bzw. Import laufen trotzdem, PC 1/2).
+ */
+export type DossierAssignmentOutcome = 'none' | 'assigned' | 'failed'
+
+export interface RecordingStartOptions {
+  /** #206 — Patientendossier, dem die Sitzung ab Beginn zugeordnet wird. */
+  dossierId?: string
+}
+
+export interface RecordingStartResult {
+  sessionId: string
+  assignment: DossierAssignmentOutcome
+}
+
+export interface ImportPdfOptions {
+  /** #206 — Patientendossier, dem jedes PDF vor seiner Verarbeitung zugeordnet wird. */
+  dossierId?: string
+}
+
+export interface ImportPdfResult {
+  sessions: Session[]
+  /** #206 AK 2 — importiert, aber dem Patientendossier nicht zugeordnet. */
+  unassigned: Array<{ sessionId: string; title: string }>
+}
+
 export interface RecordingApi {
-  start(): Promise<{ sessionId: string }>
+  start(options?: RecordingStartOptions): Promise<RecordingStartResult>
   stop(sessionId: string): Promise<{ durationSeconds: number }>
   sendData(sessionId: string, samples: ArrayBuffer): void
   onDuration(callback: (data: { seconds: number }) => void): () => void
@@ -95,7 +123,7 @@ export interface BlocklistApi {
 }
 
 export interface ImportApi {
-  pdf(filePaths: string[]): Promise<Session[]>
+  pdf(filePaths: string[], options?: ImportPdfOptions): Promise<ImportPdfResult>
   showPDFDialog(): Promise<string[]>
   getPathForFile(file: File): string
 }

@@ -5,6 +5,10 @@ import { DossierHeader } from '../components/dossier/DossierHeader'
 import { DossierHeaderActions } from '../components/dossier/DossierHeaderActions'
 import { DossierTimeline } from '../components/dossier/DossierTimeline'
 import { DossierMasterDataForm } from '../components/dossier/DossierMasterDataForm'
+import { ConsentBanner } from '../components/ConsentBanner'
+import { useRecordingState } from '../contexts/recording'
+import { useRecordingDossierIds } from '../hooks/useRecordingDossierIds'
+import { dossierListName } from '../utils/dossierFormat'
 import type { Dossier, DossierListItem } from '../../../shared/types/Dossier'
 
 interface DossierPageProps {
@@ -37,6 +41,11 @@ export default function DossierPage({ dossierId }: DossierPageProps): React.JSX.
     null
   )
   const autosave = useDossierAutosave(dossier.data)
+  const { isRecording, consentDismissed, dismissConsent } = useRecordingState()
+  // Zeigt der Verlauf die laufende Aufnahme, gehört der Consent-Hinweis hierher
+  // wie auf die Sitzungsliste (#206)
+  const recordingDossierIds = useRecordingDossierIds()
+  const showsLiveCard = isRecording && recordingDossierIds.includes(dossierId)
 
   if (dossier.loading && !dossier.data) {
     return (
@@ -65,15 +74,17 @@ export default function DossierPage({ dossierId }: DossierPageProps): React.JSX.
     )
   }
 
+  const dossierName = dossierListName(dossier.data)
   return (
     <div className="mx-auto flex w-full max-w-[1240px] flex-col gap-5 px-6 pb-6 pt-5">
       <DossierHeader
         dossier={dossier.data}
         entryCount={summary.data?.entryCount ?? (summary.loading ? null : 0)}
-        actions={<DossierHeaderActions dossierId={dossierId} />}
+        actions={<DossierHeaderActions dossierId={dossierId} dossierName={dossierName} />}
       />
+      {showsLiveCard && !consentDismissed && <ConsentBanner onDismiss={dismissConsent} />}
       <div className="flex flex-wrap items-start gap-8">
-        <DossierTimeline dossierId={dossierId} />
+        <DossierTimeline dossierId={dossierId} dossierName={dossierName} />
         {autosave && <DossierMasterDataForm autosave={autosave} />}
       </div>
     </div>

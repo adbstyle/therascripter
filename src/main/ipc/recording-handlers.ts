@@ -1,11 +1,17 @@
 import { dialog, ipcMain, Notification, powerSaveBlocker } from 'electron'
 import { getDatabase } from '../db/connection'
 import { SessionService } from '../services/SessionService'
+import { SessionDossierService } from '../services/SessionDossierService'
 import { AudioFileService } from '../services/AudioFileService'
 import { getTray } from '../services/TrayService'
 import { getTaskQueue } from '../services/TaskQueueService'
 import { getSearchIndexService } from '../search/SearchIndexService'
-import { RecordingStopSchema, RecordingDataSchema } from '../../shared/validation/recording-schemas'
+import {
+  RecordingStartSchema,
+  RecordingStopSchema,
+  RecordingDataSchema
+} from '../../shared/validation/recording-schemas'
+import type { DossierAssignmentOutcome, RecordingStartResult } from '../../shared/types/IpcApi'
 import { AUTO_STOP_SECONDS } from '../../shared/constants/recording'
 import { sendToRenderer } from '../utils/ipc-helpers'
 
@@ -142,8 +148,32 @@ export function getActiveSessionId(): string | null {
   return activeSessionId
 }
 
+/**
+ * #206 PC 1 — ordnet die neue Sitzung dem Patientendossier zu, aus dem heraus
+ * der USER die Aufnahme startet. Scheitert die Zuordnung (Dossier inzwischen
+ * gelöscht, Datenbankfehler), läuft die Aufnahme trotzdem: das Ergebnis
+ * 'failed' meldet es dem Renderer, der es dem USER nennt (AK 2).
+ */
+function assignToDossier(
+  sessionId: string,
+  dossierId: string | undefined
+): DossierAssignmentOutcome {
+  if (dossierId === undefined) return 'none'
+  try {
+    const result = new SessionDossierService(getDatabase()).assign(sessionId, dossierId)
+    return result.ok ? 'assigned' : 'failed'
+  } catch (error) {
+    console.error(
+      `[Recording] Zuordnung der Sitzung ${sessionId} zum Dossier fehlgeschlagen:`,
+      error
+    )
+    return 'failed'
+  }
+}
+
 export function registerRecordingHandlers(): void {
-  ipcMain.handle('recording:start', () => {
+  ipcMain.handle('recording:start', (_event, args?: unknown): RecordingStartResult => {
+    const options = RecordingStartSchema.parse(args)
     if (activeSessionId) {
       throw new Error('A recording is already in progress')
     }
@@ -151,6 +181,8 @@ export function registerRecordingHandlers(): void {
     const service = new SessionService(getDatabase())
     const title = generateTitle()
     const session = service.createSession(title, 'audio')
+    // Ab Beginn der Aufnahme zugeordnet — vor der ersten Audiodatei (#206 PC 1)
+    const assignment = assignToDossier(session.id, options?.dossierId)
 
     const wavPath = audioFileService.initWavFile(session.id)
     service.updateSession(session.id, { audioPath: wavPath })
@@ -194,7 +226,7 @@ export function registerRecordingHandlers(): void {
       // Tray may not be initialized in tests
     }
 
-    return { sessionId: session.id }
+    return { sessionId: session.id, assignment }
   })
 
   ipcMain.handle('recording:stop', (_event, args: unknown) => {

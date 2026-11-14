@@ -21,6 +21,7 @@ import { makeTimelineEntry } from '../../../test/dossierFixtures'
 import { ToastProvider } from '../../../contexts/ToastContext'
 import { NavigationProvider } from '../../../navigation/NavigationContext'
 import { RecordingContext, type RecordingState } from '../../../contexts/recording'
+import { WorkspaceActionsContext } from '../../../contexts/workspaceActions'
 import { createValueStore } from '../../../utils/valueStore'
 
 const recording = {
@@ -55,7 +56,18 @@ describe('DossierTimeline — structural sharing', () => {
       wrapper: ({ children }: { children: ReactNode }) => (
         <ToastProvider>
           <NavigationProvider initialRoute={{ kind: 'dossier', dossierId: 'd1' }}>
-            <RecordingContext.Provider value={recording}>{children}</RecordingContext.Provider>
+            <RecordingContext.Provider value={recording}>
+              <WorkspaceActionsContext.Provider
+                value={{
+                  startRecording: vi.fn(),
+                  importPdfs: vi.fn(),
+                  isImporting: false,
+                  openNewDossier: vi.fn()
+                }}
+              >
+                {children}
+              </WorkspaceActionsContext.Provider>
+            </RecordingContext.Provider>
           </NavigationProvider>
         </ToastProvider>
       )

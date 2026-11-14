@@ -67,7 +67,11 @@ const api: IpcApi = {
     }
   },
   recording: {
-    start: () => ipcRenderer.invoke('recording:start'),
+    start: (options) =>
+      ipcRenderer.invoke(
+        'recording:start',
+        options?.dossierId ? { dossierId: options.dossierId } : undefined
+      ),
     stop: (sessionId) => ipcRenderer.invoke('recording:stop', { sessionId }),
     sendData: (sessionId, samples) => ipcRenderer.send('recording:data', { sessionId, samples }),
     onDuration: (callback) => {
@@ -161,7 +165,11 @@ const api: IpcApi = {
     delete: (id) => ipcRenderer.invoke('blocklist:delete', { id })
   },
   import: {
-    pdf: (filePaths) => ipcRenderer.invoke('import:pdf', { filePaths }),
+    pdf: (filePaths, options) =>
+      ipcRenderer.invoke(
+        'import:pdf',
+        options?.dossierId ? { filePaths, dossierId: options.dossierId } : { filePaths }
+      ),
     showPDFDialog: () => ipcRenderer.invoke('import:showPDFDialog'),
     getPathForFile: (file) => webUtils.getPathForFile(file)
   },

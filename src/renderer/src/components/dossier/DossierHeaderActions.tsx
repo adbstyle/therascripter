@@ -1,23 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { MoreHorizontal, Trash2 } from 'lucide-react'
+import { FileUp, Mic, MoreHorizontal, Trash2 } from 'lucide-react'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { useNavigation } from '../../navigation/navigation'
 import { useToast } from '../../hooks/useToast'
+import { useRecordingState } from '../../contexts/recording'
+import { useWorkspaceActions } from '../../contexts/workspaceActions'
 import { discardDossierDraft } from '../../stores/dossierDrafts'
 import { DeleteDossierDialog } from './DeleteDossierDialog'
 
 interface DossierHeaderActionsProps {
   dossierId: string
+  /** «Nachname, Vorname» — für den Hinweis, falls die Zuordnung scheitert (#206 AK 2). */
+  dossierName?: string
 }
 
 /**
- * Aktionen im Kopf der Dossier-Seite. In #204 nur das Menü «Weitere Aktionen»
- * mit «Patientendossier löschen» — Löschen liegt bewusst nicht als eigener
- * Knopf neben den Hauptaktionen. #206 ergänzt hier «PDF importieren» und
- * «Aufnahme starten».
+ * Aktionen im Kopf der Dossier-Seite: «PDF importieren» und «Aufnahme
+ * starten» ordnen das Neue diesem Dossier zu (#206) — die App bleibt dabei
+ * auf der Seite, der Verlauf zeigt die Live-Karte bzw. die neuen PDFs. Dazu
+ * das Menü «Weitere Aktionen» mit «Patientendossier löschen» (#204) —
+ * Löschen liegt bewusst nicht als eigener Knopf neben den Hauptaktionen.
+ * Während einer Aufnahme fehlt «Aufnahme starten» wie auf der Sitzungsliste:
+ * eine zweite Aufnahme gibt es nicht.
  */
-export function DossierHeaderActions({ dossierId }: DossierHeaderActionsProps): React.JSX.Element {
+export function DossierHeaderActions({
+  dossierId,
+  dossierName
+}: DossierHeaderActionsProps): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -25,6 +35,8 @@ export function DossierHeaderActions({ dossierId }: DossierHeaderActionsProps): 
   const itemRef = useRef<HTMLButtonElement>(null)
   const { navigate } = useNavigation()
   const toast = useToast()
+  const { isRecording } = useRecordingState()
+  const { startRecording, importPdfs, isImporting } = useWorkspaceActions()
 
   const closeMenu = useCallback(() => setMenuOpen(false), [])
   useClickOutside(menuRef, closeMenu)
@@ -59,6 +71,25 @@ export function DossierHeaderActions({ dossierId }: DossierHeaderActionsProps): 
 
   return (
     <>
+      <button
+        type="button"
+        onClick={() => void importPdfs(undefined, { dossierId, dossierName })}
+        disabled={isImporting}
+        className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface-0 px-3 py-1.5 text-sm font-medium text-text-primary transition-colors hover:bg-surface-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50"
+      >
+        <FileUp className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+        PDF importieren
+      </button>
+      {!isRecording && (
+        <button
+          type="button"
+          onClick={() => void startRecording({ dossierId, dossierName })}
+          className="flex items-center gap-1.5 rounded-lg bg-recording-solid px-3.5 py-[7px] text-sm font-medium text-white transition-colors hover:bg-recording-solid-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        >
+          <Mic className="h-4 w-4" strokeWidth={2} aria-hidden />
+          Aufnahme starten
+        </button>
+      )}
       <div ref={menuRef} className="relative" onKeyDown={onMenuKeyDown}>
         <button
           ref={triggerRef}

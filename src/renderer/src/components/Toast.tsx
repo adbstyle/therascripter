@@ -4,6 +4,8 @@ export interface ToastData {
   id: number
   message: string
   type: 'success' | 'error'
+  /** Standard 3000 ms. */
+  durationMs?: number
 }
 
 interface ToastProps {
@@ -22,10 +24,10 @@ export function Toast({ toast, onDismiss }: ToastProps): React.JSX.Element {
       setVisible(false)
       // Remove after fade-out animation
       setTimeout(() => onDismiss(toast.id), 200)
-    }, 3000)
+    }, toast.durationMs ?? 3000)
 
     return () => clearTimeout(timer)
-  }, [toast.id, onDismiss])
+  }, [toast.id, toast.durationMs, onDismiss])
 
   const bgColor = toast.type === 'success' ? 'bg-tooltip-bg' : 'bg-recording-solid'
 

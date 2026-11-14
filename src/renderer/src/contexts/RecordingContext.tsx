@@ -13,8 +13,16 @@ import { RecordingContext, type RecordingState } from './recording'
  */
 export function RecordingProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const microphone = useMicrophonePermission()
-  const { isRecording, sessionId, level, duration, error, startRecording, stopRecording } =
-    useRecording({ onMicrophoneStatus: microphone.reportStatus })
+  const {
+    isRecording,
+    sessionId,
+    dossierId,
+    level,
+    duration,
+    error,
+    startRecording,
+    stopRecording
+  } = useRecording({ onMicrophoneStatus: microphone.reportStatus })
   const toast = useToast()
   // Pro Aufnahme: wurde der Consent-Hinweis weggeklickt? Lebt hier, nicht im
   // Banner — die Seite mit dem Banner wird bei jedem Seitenwechsel neu gemountet.
@@ -37,7 +45,7 @@ export function RecordingProvider({ children }: { children: ReactNode }): React.
     () => ({
       isRecording,
       sessionId,
-      recordingDossierId: null,
+      recordingDossierId: dossierId,
       level,
       duration,
       startRecording,
@@ -49,6 +57,7 @@ export function RecordingProvider({ children }: { children: ReactNode }): React.
     [
       isRecording,
       sessionId,
+      dossierId,
       level,
       duration,
       startRecording,

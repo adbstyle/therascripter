@@ -167,10 +167,10 @@ type Route =
 | route `session` | `ReviewEditor` (own header, scrolls internally; no close button — Esc, ‹ or ⌘[ go back) |
 | route `settings` | `Settings` with the sub-page from the route |
 | route `dossiers` | `DossiersPage` (heading with count and «Neues Patientendossier», name filter, list sorted by last name; empty state with instructions) |
-| route `dossier` | `DossierPage` (`DossierHeader` + `DossierHeaderActions`, `DossierTimeline` on the left — placeholder until #205 —, `DossierMasterDataForm` with autosave on the right; wraps below ~800 px) |
+| route `dossier` | `DossierPage` (`DossierHeader` + `DossierHeaderActions` with «PDF importieren» / «Aufnahme starten» into this dossier (#206) and the menu «…», `ConsentBanner` while its timeline shows the recording, `DossierTimeline` on the left (drop PDFs to import them into the dossier), `DossierMasterDataForm` with autosave on the right; wraps below ~800 px) |
 
 **Navigation constraints:**
-- The app stays fully navigable during recording; the sessions list shows the live `RecordingSessionCard`, every other route the `RecordingBar`. Starting a recording navigates to the sessions list.
+- The app stays fully navigable during recording; the sessions list and the page of every dossier the recording is assigned to show the live `RecordingSessionCard`, every other route the `RecordingBar`. Starting a recording navigates to the sessions list — except from a dossier page, which stays (#206).
 - The sidebar can be hidden (title-bar button, ⌃⌘S); the state is stored as `sidebarOpen` in electron-store and read synchronously by the preload before the first render.
 - The app stays alive in the macOS menu bar when the window is closed (standard macOS behavior via `TrayService`).
 - Quitting the app (not closing the window, which only hides it) first asks the renderer to save pending edits (`app:flushPendingEdits`, at most 3 s, `src/main/services/PendingEditsFlush.ts`; renderer registry `src/renderer/src/services/pendingEdits.ts` with the dossier drafts and the review editor), then closes the database and, if due, swaps in the update.
