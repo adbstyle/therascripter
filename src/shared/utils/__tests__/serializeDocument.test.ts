@@ -386,4 +386,44 @@ describe('serializeDocument', () => {
       expect(serializeDocument(doc, 'audio')).toBe('Zeile zwei')
     })
   })
+
+  describe('view mode (#203)', () => {
+    const chipNode = (original: string, number = 1) => ({
+      type: 'placeholderChip' as const,
+      attrs: {
+        entityId: `person-${number}`,
+        type: 'PERSON' as const,
+        number,
+        source: 'ner' as const,
+        original
+      }
+    })
+    const doc: TipTapDocument = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'speakerLabel', attrs: { speaker: 'A', label: 'Person A' } },
+            { type: 'text', text: ' Hallo ' },
+            chipNode('Ruth Gerber'),
+            { type: 'text', text: ' und ' },
+            chipNode('', 2),
+            { type: 'text', text: '.' }
+          ]
+        }
+      ]
+    }
+
+    it('pseudonymized (default) exports tokens and never an original', () => {
+      expect(serializeDocument(doc, 'audio')).toBe('[Person A]: Hallo [PERSON 1] und [PERSON 2].')
+      expect(serializeDocument(doc, 'audio', 'pseudonymized')).not.toContain('Ruth')
+    })
+
+    it('plain exports originals, the token where no original is stored (AK 6)', () => {
+      expect(serializeDocument(doc, 'audio', 'plain')).toBe(
+        '[Person A]: Hallo Ruth Gerber und [PERSON 2].'
+      )
+    })
+  })
 })

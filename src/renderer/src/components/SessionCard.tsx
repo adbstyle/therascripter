@@ -3,6 +3,8 @@ import { FileText, Info, Mic, Trash2 } from 'lucide-react'
 import type { Session, SessionStatus } from '../../../shared/types'
 import { STEP_LABELS_DE, PIPELINE_UI_STRINGS } from '../../../shared/constants/pipelineWording'
 import { useTaskProgress } from '../hooks/useTaskProgress'
+import { useViewMode } from '../viewMode/useViewMode'
+import { sessionSummaryIn, sessionTitleIn } from '../viewMode/sessionText'
 import { startOfDay } from '../hooks/useStartOfToday'
 import { isToolBlockedMessage } from '../../../shared/tool-blocked'
 
@@ -86,9 +88,10 @@ export const SessionCard = memo(function SessionCard({
   const TypeIcon = session.type === 'audio' ? Mic : FileText
   const typeLabel = session.type === 'audio' ? 'Sprachaufnahme' : 'PDF-Dokument'
 
-  const displayTitle =
-    session.title && session.title.trim().length > 0 ? session.title : 'Unbenannte Transkription'
-  const summary = session.summary?.trim()
+  const viewMode = useViewMode()
+  const title = sessionTitleIn(session, viewMode)
+  const displayTitle = title.trim().length > 0 ? title : 'Unbenannte Transkription'
+  const summary = sessionSummaryIn(session, viewMode)?.trim()
   const hasSummary = summary != null && summary.length > 0
   const fullTimestamp = FULL_TIMESTAMP_FORMAT.format(new Date(session.createdAt))
 

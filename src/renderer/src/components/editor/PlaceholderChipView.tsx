@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { NodeViewWrapper } from '@tiptap/react'
@@ -7,6 +7,8 @@ import type { PlaceholderType, EntitySource } from '../../../../shared/types'
 import { CHIP_STYLES, SOURCE_LABELS, formatPlaceholderLabel } from '../../constants/editorConstants'
 import { ChipActionMenu } from './ChipActionMenu'
 import { useChipActions } from '../../contexts/ChipActionsContext'
+import { useIsPlainView } from '../../viewMode/useViewMode'
+import { plainChipText } from '../../extensions/viewModeClipboard'
 
 type TooltipPos = {
   x: number
@@ -22,6 +24,7 @@ export function PlaceholderChipView({ node, selected }: NodeViewProps): React.JS
     occurrenceCount: number
   } | null>(null)
   const actions = useChipActions()
+  const plain = useIsPlainView()
 
   const { entityId, type, number, source, original } = node.attrs as {
     entityId: string
@@ -132,6 +135,26 @@ export function PlaceholderChipView({ node, selected }: NodeViewProps): React.JS
   const selectedClasses = selected ? 'before:opacity-[0.12] ring-2 ring-primary ring-offset-1' : ''
 
   const menuOpen = menuAnchor !== null
+
+  // A tooltip or menu left open must not resurface after a switch back.
+  useEffect(() => {
+    if (plain) {
+      setTooltipPos(null)
+      setMenuAnchor(null)
+    }
+  }, [plain])
+
+  // Issue #203 — Klartext: ordinary running text, the original in place of
+  // the placeholder (token where none is stored). No chip styling, tooltip,
+  // menu or focus stop — and no hidden token: screen readers read exactly
+  // what is on screen (AK 3, 6, 7, 14).
+  if (plain) {
+    return (
+      <NodeViewWrapper as="span" className="inline">
+        {plainChipText(node)}
+      </NodeViewWrapper>
+    )
+  }
 
   return (
     <NodeViewWrapper as="span" className="inline">

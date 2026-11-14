@@ -1,17 +1,25 @@
 import { useRef, useEffect } from 'react'
 import type { KeyboardEvent, FocusEvent } from 'react'
+import type { SummaryRecord } from '../../../../shared/types/IpcApi'
 
 interface Props {
   sessionId: string
   title: string
+  /**
+   * Issue #203 — set in the Klartext view: shown instead of the editable
+   * title, read-only (AK 8). null/undefined: the editable title.
+   */
+  readOnlyText?: string | null
   fallback: string
-  onSaved?: (next: string) => void
+  /** `record` carries the title's new token snapshot (#203). */
+  onSaved?: (next: string, record: SummaryRecord | null) => void
   className?: string
 }
 
 export function EditableSessionTitle({
   sessionId,
   title,
+  readOnlyText,
   fallback,
   onSaved,
   className
@@ -52,7 +60,7 @@ export function EditableSessionTitle({
     originalRef.current = next
     window.api.summary
       .updateTitle(sessionId, next)
-      .then(() => onSaved?.(next))
+      .then((record) => onSaved?.(next, record ?? null))
       .catch((err) => {
         console.error('Failed to save title edit', err)
       })
@@ -80,8 +88,22 @@ export function EditableSessionTitle({
     }
   }
 
+  if (readOnlyText != null) {
+    const empty = readOnlyText.trim().length === 0
+    return (
+      <h2
+        key="read-only"
+        className={`session-title h-9 truncate rounded-lg border border-transparent px-4 leading-9 ${className ?? ''}`}
+        title={empty ? undefined : readOnlyText}
+      >
+        {empty ? <span className="text-text-tertiary">{fallback}</span> : readOnlyText}
+      </h2>
+    )
+  }
+
   return (
     <h2
+      key="editable"
       ref={setRef}
       // `titlebar-no-drag` is mandatory: the parent ReviewEditor header is a
       // macOS hiddenInset drag region (`titlebar-drag`); without this opt-out
