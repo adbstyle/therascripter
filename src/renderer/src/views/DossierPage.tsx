@@ -86,9 +86,14 @@ export default function DossierPage({ dossierId }: DossierPageProps): React.JSX.
         actions={<DossierHeaderActions dossierId={dossierId} dossierName={dossierName} />}
       />
       {showsLiveCard && !consentDismissed && <ConsentBanner onDismiss={dismissConsent} />}
-      <div className="flex flex-wrap items-start gap-8">
-        <DossierTimeline dossierId={dossierId} dossierName={dossierName} />
-        {autosave && <DossierMasterDataForm autosave={autosave} />}
+      {/* Zweispaltig (Stammdaten max. 380 px neben dem Verlauf, Prototyp),
+          sobald der Inhaltsbereich es zulässt: Verlauf mind. 480 px + Stammdaten
+          mind. 300 px + Abstand = 51rem; darunter einspaltig, Stammdaten unten */}
+      <div className="@container">
+        <div className="grid grid-cols-1 items-start gap-8 @min-[51rem]:grid-cols-[minmax(480px,1fr)_minmax(300px,380px)]">
+          <DossierTimeline dossierId={dossierId} dossierName={dossierName} />
+          {autosave && <DossierMasterDataForm autosave={autosave} />}
+        </div>
       </div>
     </div>
   )
