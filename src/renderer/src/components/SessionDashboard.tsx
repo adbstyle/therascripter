@@ -176,7 +176,10 @@ export default function SessionDashboard({
 
           return (
             <div key={group} className="mb-6">
-              <h3 className="sticky top-0 z-10 bg-surface-0 pb-2 pt-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+              {/* Deckend: z-20 liegt über den z-10-Elementen der Karten (Löschen-Knopf, Klickfläche),
+                  die sonst als Randstreifen durch die Überschrift scheinen. Die Karten sind
+                  nur `relative`, ohne eigenen Stapelkontext — z-10 gilt dort global. */}
+              <h3 className="sticky top-0 z-20 bg-surface-0 pb-2 pt-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
                 {group}
               </h3>
               <div className="flex flex-col gap-2">

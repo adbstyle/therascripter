@@ -24,18 +24,18 @@ export default function UpdateSettings(): React.JSX.Element {
   } = useAppUpdate()
 
   if (!state) {
-    return <div className="p-8 text-sm text-text-tertiary">Wird geladen…</div>
+    return <div className="text-sm text-text-tertiary">Wird geladen…</div>
   }
 
   const title = updateTitle(state)
   const size = state.sizeBytes ? formatBytes(state.sizeBytes) : null
   const busyButton =
-    'titlebar-no-drag rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:opacity-50'
+    'titlebar-no-drag rounded-lg bg-primary-solid px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-solid-hover disabled:opacity-50'
   const secondaryButton =
     'titlebar-no-drag rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-2 disabled:opacity-50'
 
   return (
-    <div className="max-w-xl space-y-8 p-8">
+    <div className="max-w-xl space-y-8">
       {/* ── Automatische Updates (#165) ── */}
       <section className="space-y-2">
         <div className="flex items-center justify-between gap-4">
