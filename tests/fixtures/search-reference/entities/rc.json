@@ -1,0 +1,185 @@
+{
+  "doc": "rc",
+  "entities": [
+    {
+      "text": "Ernährungsberatung Nährwerk",
+      "type": "ORGANISATION",
+      "canonical": "Ernährungsberatung Nährwerk"
+    },
+    {
+      "text": "Corinne Stalder",
+      "type": "PERSON",
+      "canonical": "Corinne Stalder"
+    },
+    {
+      "text": "Leimenweg 7",
+      "type": "KONTAKT",
+      "canonical": "Leimenweg 7"
+    },
+    {
+      "text": "4051 Basel",
+      "type": "KONTAKT",
+      "canonical": "4051 Basel"
+    },
+    {
+      "text": "Basel",
+      "type": "ORT",
+      "canonical": "Basel"
+    },
+    {
+      "text": "061 271 33 85",
+      "type": "KONTAKT",
+      "canonical": "061 271 33 85"
+    },
+    {
+      "text": "info@naehrwerk-basel.ch",
+      "type": "KONTAKT",
+      "canonical": "info@naehrwerk-basel.ch"
+    },
+    {
+      "text": "Barbara Huber",
+      "type": "PERSON",
+      "canonical": "Barbara Huber"
+    },
+    {
+      "text": "Huber",
+      "type": "PERSON",
+      "canonical": "Barbara Huber"
+    },
+    {
+      "text": "Klingentalgraben 22",
+      "type": "KONTAKT",
+      "canonical": "Klingentalgraben 22"
+    },
+    {
+      "text": "4057 Basel",
+      "type": "KONTAKT",
+      "canonical": "4057 Basel"
+    },
+    {
+      "text": "Nadia Ferrari",
+      "type": "PERSON",
+      "canonical": "Nadia Ferrari"
+    },
+    {
+      "text": "Ferrari",
+      "type": "PERSON",
+      "canonical": "Nadia Ferrari"
+    },
+    {
+      "text": "Hausarztpraxis am Rheinweg",
+      "type": "ORGANISATION",
+      "canonical": "Hausarztpraxis am Rheinweg"
+    },
+    {
+      "text": "4058 Basel",
+      "type": "KONTAKT",
+      "canonical": "4058 Basel"
+    },
+    {
+      "text": "061 692 40 18",
+      "type": "KONTAKT",
+      "canonical": "061 692 40 18"
+    },
+    {
+      "text": "4. März 2026",
+      "type": "DATUM",
+      "canonical": "4. März 2026"
+    },
+    {
+      "text": "Leonie Kunz",
+      "type": "PERSON",
+      "canonical": "Leonie Kunz"
+    },
+    {
+      "text": "Kunz",
+      "type": "PERSON",
+      "canonical": "Leonie Kunz"
+    },
+    {
+      "text": "23. Juni 2005",
+      "type": "DATUM",
+      "canonical": "23. Juni 2005"
+    },
+    {
+      "text": "Feldbergweg 31",
+      "type": "KONTAKT",
+      "canonical": "Feldbergweg 31"
+    },
+    {
+      "text": "076 318 92 54",
+      "type": "KONTAKT",
+      "canonical": "076 318 92 54"
+    },
+    {
+      "text": "17. Februar",
+      "type": "DATUM",
+      "canonical": "17. Februar 2026"
+    },
+    {
+      "text": "2. März 2026",
+      "type": "DATUM",
+      "canonical": "2. März 2026"
+    },
+    {
+      "text": "Universität Basel",
+      "type": "ORGANISATION",
+      "canonical": "Universität Basel"
+    },
+    {
+      "text": "Martin Kunz",
+      "type": "PERSON",
+      "canonical": "Martin Kunz"
+    },
+    {
+      "text": "Esther Kunz",
+      "type": "PERSON",
+      "canonical": "Esther Kunz"
+    },
+    {
+      "text": "Oberbaselbiet",
+      "type": "ORT",
+      "canonical": "Oberbaselbiet"
+    },
+    {
+      "text": "17. Februar 2026",
+      "type": "DATUM",
+      "canonical": "17. Februar 2026"
+    },
+    {
+      "text": "10. Februar 2026",
+      "type": "DATUM",
+      "canonical": "10. Februar 2026"
+    },
+    {
+      "text": "Eisensulfat",
+      "type": "MEDIZINISCH",
+      "canonical": "Eisensulfat"
+    },
+    {
+      "text": "Liestal",
+      "type": "ORT",
+      "canonical": "Liestal"
+    },
+    {
+      "text": "Anorexia nervosa",
+      "type": "MEDIZINISCH",
+      "canonical": "Anorexia nervosa"
+    },
+    {
+      "text": "F50.1",
+      "type": "MEDIZINISCH",
+      "canonical": "F50.1"
+    },
+    {
+      "text": "16. März",
+      "type": "DATUM",
+      "canonical": "16. März 2026"
+    },
+    {
+      "text": "30. März 2026",
+      "type": "DATUM",
+      "canonical": "30. März 2026"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "doc": "c2",
+  "entities": [
+    {
+      "text": "Kunz",
+      "type": "PERSON",
+      "canonical": "Leonie Kunz"
+    },
+    {
+      "text": "Jana",
+      "type": "PERSON",
+      "canonical": "Jana"
+    },
+    {
+      "text": "Leonie",
+      "type": "PERSON",
+      "canonical": "Leonie Kunz"
+    },
+    {
+      "text": "Mira",
+      "type": "PERSON",
+      "canonical": "Mira"
+    },
+    {
+      "text": "Instagram",
+      "type": "ORGANISATION",
+      "canonical": "Instagram"
+    },
+    {
+      "text": "Thailand",
+      "type": "ORT",
+      "canonical": "Thailand"
+    },
+    {
+      "text": "Selin",
+      "type": "PERSON",
+      "canonical": "Selin"
+    },
+    {
+      "text": "Aargau",
+      "type": "ORT",
+      "canonical": "Aargau"
+    },
+    {
+      "text": "Coop",
+      "type": "ORGANISATION",
+      "canonical": "Coop"
+    }
+  ]
+}

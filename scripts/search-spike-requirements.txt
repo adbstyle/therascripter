@@ -1,0 +1,9 @@
+# Eigenes Venv für scripts/search-spike.py — NICHT in python_sidecar/venv installieren.
+#   uv venv --python 3.12 <dir> && VIRTUAL_ENV=<dir> uv pip install -r scripts/search-spike-requirements.txt
+sentence-transformers>=6.1
+# Der Prozessor von EmbeddingGemma 2 lädt auch für reinen Text einen Bildprozessor.
+pillow
+torchvision
+transformers>=4.56
+torch
+huggingface_hub

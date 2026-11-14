@@ -1,0 +1,255 @@
+{
+  "doc": "ra",
+  "entities": [
+    {
+      "text": "Urs Vontobel",
+      "type": "PERSON",
+      "canonical": "Urs Vontobel"
+    },
+    {
+      "text": "Vontobel",
+      "type": "PERSON",
+      "canonical": "Urs Vontobel"
+    },
+    {
+      "text": "Wiesenhofweg 12",
+      "type": "KONTAKT",
+      "canonical": "Wiesenhofweg 12"
+    },
+    {
+      "text": "8050 Zürich",
+      "type": "KONTAKT",
+      "canonical": "8050 Zürich"
+    },
+    {
+      "text": "8050 Zürich-Oerlikon",
+      "type": "KONTAKT",
+      "canonical": "8050 Zürich-Oerlikon"
+    },
+    {
+      "text": "Zürich",
+      "type": "ORT",
+      "canonical": "Zürich"
+    },
+    {
+      "text": "Zürich-Oerlikon",
+      "type": "ORT",
+      "canonical": "Zürich-Oerlikon"
+    },
+    {
+      "text": "044 312 48 90",
+      "type": "KONTAKT",
+      "canonical": "044 312 48 90"
+    },
+    {
+      "text": "044 312 48 91",
+      "type": "KONTAKT",
+      "canonical": "044 312 48 91"
+    },
+    {
+      "text": "praxis.vontobel@hin.ch",
+      "type": "KONTAKT",
+      "canonical": "praxis.vontobel@hin.ch"
+    },
+    {
+      "text": "Andrea Lüthi",
+      "type": "PERSON",
+      "canonical": "Andrea Lüthi"
+    },
+    {
+      "text": "Rosenbergweg 5",
+      "type": "KONTAKT",
+      "canonical": "Rosenbergweg 5"
+    },
+    {
+      "text": "8006 Zürich",
+      "type": "KONTAKT",
+      "canonical": "8006 Zürich"
+    },
+    {
+      "text": "20. Februar 2026",
+      "type": "DATUM",
+      "canonical": "20. Februar 2026"
+    },
+    {
+      "text": "Sandra Meier",
+      "type": "PERSON",
+      "canonical": "Sandra Meier"
+    },
+    {
+      "text": "Meier",
+      "type": "PERSON",
+      "canonical": "Sandra Meier"
+    },
+    {
+      "text": "14. August 1991",
+      "type": "DATUM",
+      "canonical": "14. August 1991"
+    },
+    {
+      "text": "Am Hallwylweg 8",
+      "type": "KONTAKT",
+      "canonical": "Am Hallwylweg 8"
+    },
+    {
+      "text": "079 482 16 37",
+      "type": "KONTAKT",
+      "canonical": "079 482 16 37"
+    },
+    {
+      "text": "Helvia",
+      "type": "ORGANISATION",
+      "canonical": "Helvia"
+    },
+    {
+      "text": "80756-221-03",
+      "type": "SONSTIGES",
+      "canonical": "80756-221-03"
+    },
+    {
+      "text": "Spitals Hirschwiese",
+      "type": "ORGANISATION",
+      "canonical": "Spitals Hirschwiese"
+    },
+    {
+      "text": "Reto Imhof",
+      "type": "PERSON",
+      "canonical": "Reto Imhof"
+    },
+    {
+      "text": "22. November 2025",
+      "type": "DATUM",
+      "canonical": "22. November 2025"
+    },
+    {
+      "text": "14. Dezember 2025",
+      "type": "DATUM",
+      "canonical": "14. Dezember 2025"
+    },
+    {
+      "text": "9. Januar 2026",
+      "type": "DATUM",
+      "canonical": "9. Januar 2026"
+    },
+    {
+      "text": "Beat Inauen",
+      "type": "PERSON",
+      "canonical": "Beat Inauen"
+    },
+    {
+      "text": "Kardiologie Zürich-Nord",
+      "type": "ORGANISATION",
+      "canonical": "Kardiologie Zürich-Nord"
+    },
+    {
+      "text": "27. Januar 2026",
+      "type": "DATUM",
+      "canonical": "27. Januar 2026"
+    },
+    {
+      "text": "2. Februar 2026",
+      "type": "DATUM",
+      "canonical": "2. Februar 2026"
+    },
+    {
+      "text": "Hyperthyreose",
+      "type": "MEDIZINISCH",
+      "canonical": "Hyperthyreose"
+    },
+    {
+      "text": "Anämie",
+      "type": "MEDIZINISCH",
+      "canonical": "Anämie"
+    },
+    {
+      "text": "Sumatriptan",
+      "type": "MEDIZINISCH",
+      "canonical": "Sumatriptan"
+    },
+    {
+      "text": "Penicillin",
+      "type": "MEDIZINISCH",
+      "canonical": "Penicillin"
+    },
+    {
+      "text": "Herzinsuffizienz",
+      "type": "MEDIZINISCH",
+      "canonical": "Herzinsuffizienz"
+    },
+    {
+      "text": "dilatativer Kardiomyopathie",
+      "type": "MEDIZINISCH",
+      "canonical": "dilatativer Kardiomyopathie"
+    },
+    {
+      "text": "Elisabeth Meier",
+      "type": "PERSON",
+      "canonical": "Elisabeth Meier"
+    },
+    {
+      "text": "Winterthur",
+      "type": "ORT",
+      "canonical": "Winterthur"
+    },
+    {
+      "text": "Thomas Meier",
+      "type": "PERSON",
+      "canonical": "Thomas Meier"
+    },
+    {
+      "text": "Lausanne",
+      "type": "ORT",
+      "canonical": "Lausanne"
+    },
+    {
+      "text": "Panikstörung",
+      "type": "MEDIZINISCH",
+      "canonical": "Panikstörung"
+    },
+    {
+      "text": "F41.0",
+      "type": "MEDIZINISCH",
+      "canonical": "F41.0"
+    },
+    {
+      "text": "Agoraphobie",
+      "type": "MEDIZINISCH",
+      "canonical": "Agoraphobie"
+    },
+    {
+      "text": "F40.01",
+      "type": "MEDIZINISCH",
+      "canonical": "F40.01"
+    },
+    {
+      "text": "Nichtorganische Insomnie",
+      "type": "MEDIZINISCH",
+      "canonical": "Nichtorganische Insomnie"
+    },
+    {
+      "text": "F51.0",
+      "type": "MEDIZINISCH",
+      "canonical": "F51.0"
+    },
+    {
+      "text": "13. Februar 2026",
+      "type": "DATUM",
+      "canonical": "13. Februar 2026"
+    },
+    {
+      "text": "Sertralin",
+      "type": "MEDIZINISCH",
+      "canonical": "Sertralin"
+    },
+    {
+      "text": "Benzodiazepine",
+      "type": "MEDIZINISCH",
+      "canonical": "Benzodiazepine"
+    },
+    {
+      "text": "Corinne Bachmann",
+      "type": "PERSON",
+      "canonical": "Corinne Bachmann"
+    }
+  ]
+}

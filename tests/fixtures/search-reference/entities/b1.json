@@ -1,0 +1,55 @@
+{
+  "doc": "b1",
+  "entities": [
+    {
+      "text": "Rüegg",
+      "type": "PERSON",
+      "canonical": "Marco Rüegg"
+    },
+    {
+      "text": "Nicole",
+      "type": "PERSON",
+      "canonical": "Nicole"
+    },
+    {
+      "text": "Bern",
+      "type": "ORT",
+      "canonical": "Bern"
+    },
+    {
+      "text": "Zürich",
+      "type": "ORT",
+      "canonical": "Zürich"
+    },
+    {
+      "text": "Marco",
+      "type": "PERSON",
+      "canonical": "Marco Rüegg"
+    },
+    {
+      "text": "Lukas",
+      "type": "PERSON",
+      "canonical": "Lukas"
+    },
+    {
+      "text": "Gurten",
+      "type": "ORT",
+      "canonical": "Gurten"
+    },
+    {
+      "text": "Längenberg",
+      "type": "ORT",
+      "canonical": "Längenberg"
+    },
+    {
+      "text": "Oberland",
+      "type": "ORT",
+      "canonical": "Oberland"
+    },
+    {
+      "text": "Keller",
+      "type": "PERSON",
+      "canonical": "Keller"
+    }
+  ]
+}

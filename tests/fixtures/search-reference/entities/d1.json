@@ -1,0 +1,45 @@
+{
+  "doc": "d1",
+  "entities": [
+    {
+      "text": "Yilmaz",
+      "type": "PERSON",
+      "canonical": "Fatma Yilmaz"
+    },
+    {
+      "text": "Elif",
+      "type": "PERSON",
+      "canonical": "Elif"
+    },
+    {
+      "text": "Deniz",
+      "type": "PERSON",
+      "canonical": "Deniz"
+    },
+    {
+      "text": "Fatma",
+      "type": "PERSON",
+      "canonical": "Fatma Yilmaz"
+    },
+    {
+      "text": "Deniz'",
+      "type": "PERSON",
+      "canonical": "Deniz"
+    },
+    {
+      "text": "Töss",
+      "type": "ORT",
+      "canonical": "Töss"
+    },
+    {
+      "text": "Sandra",
+      "type": "PERSON",
+      "canonical": "Sandra"
+    },
+    {
+      "text": "Brunner",
+      "type": "PERSON",
+      "canonical": "Brunner"
+    }
+  ]
+}
