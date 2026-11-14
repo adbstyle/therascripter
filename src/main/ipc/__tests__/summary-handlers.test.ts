@@ -94,3 +94,32 @@ describe('summary:missingReason / summary:regenerate (#168)', () => {
     expect(() => handleSummaryRegenerate({ sessionId: '' }, deps)).toThrow()
   })
 })
+
+describe('#203 — edits resolve with the updated record (new token snapshot)', () => {
+  const record = {
+    title: '[PERSON 1]',
+    text: 'Mit [PERSON 1].',
+    modelId: null,
+    summarizedAt: null,
+    titleSnapshot: { '[PERSON 1]': 'Ruth Gerber' },
+    textSnapshot: { '[PERSON 1]': 'Ruth Gerber' }
+  }
+
+  it('summary:updateTitle returns the record read after the update', () => {
+    const order: string[] = []
+    const deps = makeDeps({
+      updateTitle: vi.fn(() => order.push('update')),
+      getSummary: vi.fn(() => (order.push('get'), record))
+    })
+    expect(handleSummaryUpdateTitle({ sessionId: 'abc', title: '[PERSON 1]' }, deps)).toBe(record)
+    expect(order).toEqual(['update', 'get'])
+  })
+
+  it('summary:updateText returns the record read after the update', () => {
+    const deps = makeDeps({ getSummary: vi.fn().mockReturnValue(record) })
+    expect(handleSummaryUpdateText({ sessionId: 'abc', text: 'Mit [PERSON 1].' }, deps)).toBe(
+      record
+    )
+    expect(deps.sessionService.updateSummaryText).toHaveBeenCalledWith('abc', 'Mit [PERSON 1].')
+  })
+})

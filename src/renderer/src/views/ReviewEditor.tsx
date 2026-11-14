@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ClipboardCopy, FileText, Mic, PanelRight, Trash2, X } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { EditorState, NodeSelection } from '@tiptap/pm/state'
@@ -32,9 +32,13 @@ import { serializeDocument } from '../../../shared/utils/serializeDocument'
 import { formatPlaceholderToken } from '../../../shared/utils/formatPlaceholderToken'
 import { serializeClipboardText } from '../utils/clipboardText'
 import { useAnonymizationOverview } from '../hooks/useAnonymizationOverview'
+import { useViewMode } from '../viewMode/useViewMode'
+import { getViewMode } from '../viewMode/viewModeStore'
+import { resolvePlaceholders } from '../../../shared/utils/resolvePlaceholders'
 import type {
   AudioStats,
   EntityMap,
+  PlaceholderSnapshot,
   PlaceholderType,
   ProcessedModelsSnapshot,
   ReviewData,
@@ -62,6 +66,16 @@ const EDITOR_EXTENSIONS = [
   Timestamp
 ]
 
+/**
+ * Issue #203 — the Klartext view admits no changes (AK 8). The editor is
+ * read-only there and change tools are hidden; every handler that mutates
+ * the document or the Sperrliste checks this as well, so nothing slips
+ * through a menu or dialog that was open at the moment of the switch.
+ */
+function isReadOnlyView(): boolean {
+  return getViewMode() === 'plain'
+}
+
 interface BlocklistUndoEntry {
   entryId: string
   entityId: string
@@ -77,14 +91,17 @@ interface ReviewEditorProps {
 
 function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Element {
   const toast = useToast()
+  const viewMode = useViewMode()
+  const isPlain = viewMode === 'plain'
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [sessionTitle, setSessionTitle] = useState('')
+  const [titleSnapshot, setTitleSnapshot] = useState<PlaceholderSnapshot | null>(null)
   const [sessionType, setSessionType] = useState<SessionType>('audio')
   const [provenance, setProvenance] = useState<ProcessedModelsSnapshot | null>(null)
   const [reviewAt, setReviewAt] = useState<string | null>(null)
   const [audioStats, setAudioStats] = useState<AudioStats | null>(null)
-  const [_entityMap, setEntityMap] = useState<EntityMap>({})
+  const [entityMap, setEntityMap] = useState<EntityMap>({})
   const [updateCounter, setUpdateCounter] = useState(0)
   const updateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -274,6 +291,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
         if (cancelled) return
 
         setSessionTitle(data.sessionTitle)
+        setTitleSnapshot(data.titleSnapshot ?? null)
         setSessionType(data.sessionType)
         setEntityMap(data.entityMap)
         setProvenance(data.processedWithModels)
@@ -320,6 +338,21 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
     2000
   )
 
+  // Issue #203 — Klartext is read-only. The same editor instance stays, so
+  // the undo history and autosave are untouched; emitUpdate=false because
+  // setEditable otherwise fires 'update', which would bump the autosave
+  // counter — a view switch must neither change nor save the session
+  // (Postcondition 1). Layout effect: applied before the switched view paints.
+  useLayoutEffect(() => {
+    if (!editor || editor.isDestroyed) return
+    editor.setEditable(!isPlain, false)
+  }, [editor, isPlain])
+
+  // Dialogs that would change something close with the switch to Klartext.
+  useEffect(() => {
+    if (isPlain) setBlocklistConfirm(null)
+  }, [isPlain])
+
   // Cleanup editor on unmount
   useEffect(() => {
     return () => {
@@ -330,7 +363,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
   /** Handle batch removal of all chips with the given entityId */
   const handleBatchRemove = useCallback(
     (entityId: string) => {
-      if (!editor) return
+      if (!editor || isReadOnlyView()) return
 
       // Sync blocklist undo stack: mark matching entries as undone + delete from SQLite
       for (const entry of blocklistUndoStackRef.current) {
@@ -353,7 +386,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
   /** Handle manual anonymization of the current selection with auto-propagation */
   const handleAnonymize = useCallback(
     (type: PlaceholderType) => {
-      if (!editor) return
+      if (!editor || isReadOnlyView()) return
 
       const result = anonymizeSelectionWithPropagation(editor, type, entityMapRef.current)
       if (!result) return
@@ -386,7 +419,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
   /** Handle "Zur Sperrliste hinzufügen" from context menu — extract term and show confirm dialog */
   const handleAddToBlocklist = useCallback(
     (type: PlaceholderType) => {
-      if (!editor) return
+      if (!editor || isReadOnlyView()) return
       const { from, to, empty } = editor.state.selection
       if (empty) return
 
@@ -409,7 +442,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
    */
   const handleChipChangeType = useCallback(
     (entityId: string, newType: PlaceholderType) => {
-      if (!editor) return
+      if (!editor || isReadOnlyView()) return
 
       let blocklistSourced = false
       for (const entry of blocklistUndoStackRef.current) {
@@ -447,7 +480,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
    */
   const handleChipAddToBlocklist = useCallback(
     async (entityId: string, original: string, type: PlaceholderType) => {
-      if (!editor) return
+      if (!editor || isReadOnlyView()) return
       const term = original.trim()
       if (!term) return
 
@@ -483,7 +516,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
 
   /** Handle blocklist confirm dialog — add to SQLite + retroactive scan */
   const handleBlocklistConfirm = useCallback(async () => {
-    if (!editor || !blocklistConfirm) return
+    if (!editor || !blocklistConfirm || isReadOnlyView()) return
     const { term, type } = blocklistConfirm
     setBlocklistConfirm(null)
 
@@ -541,12 +574,12 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
     }
   }, [sessionId, onBack, toast])
 
-  /** Export current editor content to clipboard (US-7) */
+  /** Export current editor content to clipboard (US-7), in the chosen view (#203 AK 9) */
   const handleExportClipboard = useCallback(async () => {
     if (!editor) return
     try {
       const doc = editor.getJSON() as TipTapDocument
-      const text = serializeDocument(doc, sessionType)
+      const text = serializeDocument(doc, sessionType, getViewMode())
       await window.api.review.exportClipboard(text)
       toast.success('In Zwischenablage kopiert')
     } catch {
@@ -590,7 +623,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
 
   const { state: selectionToolbar, hide: hideSelectionToolbar } = useSelectionToolbar({
     editor,
-    enabled: !showDeleteDialog && !blocklistConfirm && !loading && !loadError,
+    enabled: !isPlain && !showDeleteDialog && !blocklistConfirm && !loading && !loadError,
     containerRef: editorScrollRef
   })
 
@@ -612,6 +645,13 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
     }),
     [editor, handleBatchRemove, handleChipChangeType, handleChipAddToBlocklist]
   )
+
+  // Titles hold tokens as plain text; Klartext resolves those whose meaning
+  // is unchanged since the title was written (AK 4, AK 5) — against the live
+  // EntityMap, so an unsaved chip change counts immediately.
+  const displayTitle = isPlain
+    ? resolvePlaceholders(sessionTitle, entityMap, titleSnapshot)
+    : sessionTitle
 
   if (loading) {
     return (
@@ -652,8 +692,12 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
           <EditableSessionTitle
             sessionId={sessionId}
             title={sessionTitle}
+            readOnlyText={isPlain ? displayTitle : null}
             fallback="Transkription ohne Titel"
-            onSaved={setSessionTitle}
+            onSaved={(next, record) => {
+              setSessionTitle(next)
+              if (record) setTitleSnapshot(record.titleSnapshot)
+            }}
             className="min-w-0 flex-1 text-base font-semibold text-text-primary"
           />
         </div>
@@ -661,9 +705,14 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
           <button
             className="titlebar-no-drag flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface-0 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
             onClick={handleExportClipboard}
+            title={
+              isPlain
+                ? 'Kopiert den Text mit den Originalnamen'
+                : 'Kopiert den Text mit Platzhaltern'
+            }
           >
             <ClipboardCopy className="h-4 w-4" strokeWidth={2} aria-hidden />
-            Kopieren
+            {isPlain ? 'Klartext kopieren' : 'Pseudonymisiert kopieren'}
           </button>
           <button
             className="titlebar-no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface-0 text-text-secondary transition-colors hover:border-error-border hover:bg-error-bg hover:text-error-text"
@@ -707,7 +756,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
         >
           {/* Optional LLM-generated summary scrolls with the transcript */}
           <div className="px-6 pt-4 [&:empty]:p-0">
-            <SummaryPanel sessionId={sessionId} />
+            <SummaryPanel sessionId={sessionId} entityMap={entityMap} />
           </div>
           <ChipActionsContext.Provider value={chipActions}>
             <EditorContent editor={editor} />
@@ -715,6 +764,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
         </div>
         <ReviewSidePanel
           isOpen={panelOpen}
+          readOnly={isPlain}
           anonymization={overviewData}
           onRevert={handleBatchRemove}
           onChangeType={handleChipChangeType}
@@ -756,6 +806,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
       {deleteTarget && (
         <DeleteSessionDialog
           session={deleteTarget}
+          displayTitle={displayTitle}
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteTarget(null)}
         />
@@ -772,8 +823,14 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
           )}
         </div>
         <div className="flex items-center gap-3 text-xs text-text-tertiary">
-          <span>Cmd+Z Undo</span>
-          <span>Cmd+Shift+Z Redo</span>
+          {isPlain ? (
+            <span>Klartext – Bearbeiten in der pseudonymisierten Ansicht</span>
+          ) : (
+            <>
+              <span>Cmd+Z Undo</span>
+              <span>Cmd+Shift+Z Redo</span>
+            </>
+          )}
         </div>
       </footer>
     </div>

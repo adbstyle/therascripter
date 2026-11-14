@@ -256,3 +256,23 @@ describe('AnonymizationPanel', () => {
     expect(screen.getByLabelText('Sperrliste')).toBeInTheDocument()
   })
 })
+
+describe('AnonymizationPanel — originals not selectable (#203 AK 9)', () => {
+  it('excludes the originals from a native select-all copy', () => {
+    setup(makeData(makeIdentity()))
+    expect(screen.getByText(/Anna/)).toHaveClass('select-none')
+  })
+
+  it('read-only (Klartext) hides every action', () => {
+    render(
+      <AnonymizationPanel
+        data={makeData(makeIdentity())}
+        readOnly
+        onRevert={vi.fn()}
+        onChangeType={vi.fn()}
+        onAddToBlocklist={vi.fn()}
+      />
+    )
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+})

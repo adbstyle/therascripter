@@ -1,6 +1,13 @@
 export type ThemePreference = 'light' | 'system' | 'dark'
 
-export type { PlaceholderType, EntitySource, EntityMapEntry, EntityMap } from './EntityMap'
+export type {
+  PlaceholderType,
+  EntitySource,
+  EntityMapEntry,
+  EntityMap,
+  PlaceholderSnapshot
+} from './EntityMap'
+export type { ViewMode } from './ViewMode'
 
 export type {
   SessionType,

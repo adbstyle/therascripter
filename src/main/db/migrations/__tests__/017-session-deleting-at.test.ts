@@ -68,6 +68,8 @@ describe('Migration 017 — deleting_at', () => {
     expect(after.every((r) => r.deleting_at === null)).toBe(true)
     expect(db.prepare('SELECT id FROM task_queue').all()).toEqual([{ id: 't1' }])
 
+    // The repository targets the latest schema
+    migrateUpTo(db, Number.MAX_SAFE_INTEGER)
     const repo = new SessionRepository(db)
     expect(repo.findAll().map((s) => s.id)).toEqual(['pdf-error', 'old-review'])
     expect(repo.findById('old-review')?.entityMap?.e1.original).toBe('Hans')

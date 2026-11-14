@@ -4,6 +4,11 @@ import { ConfirmDialog } from './ConfirmDialog'
 
 interface DeleteSessionDialogProps {
   session: Session
+  /**
+   * Issue #203 — title as the chosen view shows it (Klartext resolves
+   * placeholders). Defaults to the stored, pseudonymized title.
+   */
+  displayTitle?: string
   onConfirm: () => void
   onCancel: () => void
 }
@@ -14,10 +19,11 @@ interface DeleteSessionDialogProps {
  */
 export function DeleteSessionDialog({
   session,
+  displayTitle,
   onConfirm,
   onCancel
 }: DeleteSessionDialogProps): React.JSX.Element {
-  const title = session.title.trim()
+  const title = (displayTitle ?? session.title).trim()
   const message =
     title.length > 0
       ? `«${title}» und alle zugehörigen Daten unwiderruflich löschen?`

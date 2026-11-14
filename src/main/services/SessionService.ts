@@ -5,7 +5,8 @@ import { SessionRepository } from '../db/repositories/SessionRepository'
 import { getDataDir } from '../db/connection'
 import { removeFile, removeFileReporting } from '../utils/file-ops'
 import { tiptapToPlainText } from '../ml/tiptap-plain-text'
-import type { Session, SessionStatus, UpdateSessionInput } from '../../shared/types'
+import type { EntityMap, Session, SessionStatus, UpdateSessionInput } from '../../shared/types'
+import { buildPlaceholderSnapshot } from '../../shared/utils/resolvePlaceholders'
 import type { SummaryRecord } from '../../shared/types/IpcApi'
 // Cyclic import: TaskQueueService imports SessionService too. The cycle is broken
 // at call-time — getTaskQueue() is only invoked inside deleteSession() at runtime,
@@ -68,7 +69,27 @@ export class SessionService {
   }
 
   renameSession(id: string, title: string): Session | null {
-    return this.repository.update(id, { title })
+    const session = this.repository.findById(id)
+    if (!session) return null
+    return this.repository.update(id, {
+      title,
+      titleEntitySnapshot: buildPlaceholderSnapshot(
+        title,
+        session.entityMap,
+        session.titleEntitySnapshot ?? null,
+        session.title
+      )
+    })
+  }
+
+  /**
+   * Issue #203 — EntityMap as persisted right now. The summarization step
+   * reads it together with the transcript text, so the meaning recorded for
+   * the summary's tokens is the one the LLM saw (the user may keep editing
+   * while the model runs).
+   */
+  getEntityMap(sessionId: string): EntityMap | null {
+    return this.repository.findById(sessionId)?.entityMap ?? null
   }
 
   /**
@@ -313,28 +334,42 @@ export class SessionService {
       title: hasTitle ? session.title : null,
       text: session.summary ?? '',
       modelId: session.summaryModelId,
-      summarizedAt: session.summarizedAt
+      summarizedAt: session.summarizedAt,
+      titleSnapshot: session.titleEntitySnapshot ?? null,
+      textSnapshot: session.summaryEntitySnapshot ?? null
     }
   }
 
-  /** Persists LLM-generated title + summary in one update. */
+  /**
+   * Persists LLM-generated title + summary in one update, together with what
+   * their placeholder tokens mean (#203). `entityMapAtRead` is the EntityMap
+   * read alongside the LLM input; without it the current one is used.
+   */
   saveGeneratedSummary(
     sessionId: string,
     title: string,
     text: string,
-    modelId: string
+    modelId: string,
+    entityMapAtRead?: EntityMap | null
   ): Session | null {
+    const entityMap = entityMapAtRead !== undefined ? entityMapAtRead : this.getEntityMap(sessionId)
+    // Fresh texts: no previous snapshot — every token means what it means now.
     return this.repository.update(sessionId, {
       title,
       summary: text,
       summaryModelId: modelId,
-      summarizedAt: new Date().toISOString()
+      summarizedAt: new Date().toISOString(),
+      titleEntitySnapshot: buildPlaceholderSnapshot(title, entityMap),
+      summaryEntitySnapshot: buildPlaceholderSnapshot(text, entityMap)
     })
   }
 
-  /** User-edited title. Empty string is rendered as a placeholder in the view layer (createdAt is shown separately). */
+  /**
+   * User-edited title. Empty string is rendered as a placeholder in the view layer (createdAt is shown separately).
+   * Tokens already in the title keep their recorded meaning; newly typed ones get the current one (#203).
+   */
   updateTitle(sessionId: string, title: string): Session | null {
-    return this.repository.update(sessionId, { title: title.trim() })
+    return this.renameSession(sessionId, title.trim())
   }
 
   /**
@@ -343,10 +378,19 @@ export class SessionService {
    * be regenerated automatically.
    */
   updateSummaryText(sessionId: string, text: string): Session | null {
+    const session = this.repository.findById(sessionId)
+    if (!session) return null
     const trimmed = text.trim()
+    const summary = trimmed.length > 0 ? trimmed : null
     return this.repository.update(sessionId, {
-      summary: trimmed.length > 0 ? trimmed : null,
-      summaryModelId: null
+      summary,
+      summaryModelId: null,
+      summaryEntitySnapshot: buildPlaceholderSnapshot(
+        summary,
+        session.entityMap,
+        session.summaryEntitySnapshot ?? null,
+        session.summary
+      )
     })
   }
 }

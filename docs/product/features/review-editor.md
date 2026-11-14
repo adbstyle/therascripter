@@ -68,7 +68,7 @@ The header bar contains:
 - **Back button** ("Zurück"): Returns to the session dashboard. Triggers a session list refresh.
 - **Session icon**: Microphone for audio sessions, document icon for PDF sessions.
 - **Session title**: Displayed as a heading.
-- **Copy button** ("Kopieren"): Exports the anonymized document to the system clipboard (see Clipboard Export below).
+- **Copy button** ("Pseudonymisiert kopieren" / "Klartext kopieren"): Exports the document in the chosen view to the system clipboard (see Clipboard Export below); the label names what is copied.
 - **Three-dot menu** ("Weitere Optionen"): A dropdown with two actions:
   - **Umbenennen** (Rename): Opens a rename dialog to change the session title.
   - **Löschen** (Delete): Opens a destructive confirmation dialog. Deleting removes the audio file, original text, anonymized text, and placeholder mapping. On confirmation, navigates back to the dashboard.
@@ -100,12 +100,22 @@ The context menu closes on Escape, on click outside, or after selecting an actio
 
 Pressing Delete or Backspace when a placeholder chip is selected (ProseMirror NodeSelection) triggers batch removal of all chips with the same `entityId`, identical to the context menu's "Rückgängig machen" action.
 
+## Klartext view (Issue #203)
+
+A global view — `'pseudonymized'` (default) or `'plain'` — chosen with `ViewModeToggle` in the `TitleBar` (segmented control «Pseudonymisiert | Klartext», `aria-pressed`, available in every screen). It applies to all sessions and survives restarts (electron-store `viewMode`).
+
+- **No flash in the wrong view:** the preload reads the saved view synchronously (`viewMode:getSync`) before any renderer code runs; `viewMode/viewModeStore.ts` starts with it. Unknown or unreadable values yield the pseudonymized view.
+- **One source:** `viewModeStore` (a `ValueStore`) — React reads it via `useViewMode()`, the ProseMirror plugin `viewModeClipboardPlugin` via `getViewMode()`. Switching is synchronous; every visible text changes in the same frame.
+- **Editor:** the same editor instance stays (undo history, autosave untouched). In Klartext it is `setEditable(false, false)` — the second argument suppresses TipTap's `update` event, which would otherwise bump the autosave counter: a view switch neither changes nor saves the session. `PlaceholderChipView` renders a chip as plain running text with its `original` (its token `[PERSON 1]` when none is stored) — no chip styling, tooltip, menu or focus stop, and no hidden token for screen readers. SelectionToolbar, chip menus, title/summary editing, «Zusammenfassung erstellen» and the side panel actions are hidden; every mutating handler in `ReviewEditor` also returns early in Klartext (`isReadOnlyView`).
+- **Title and summary:** tokens there are plain text without `entityId`. `resolvePlaceholders` (shared) replaces a token only while the current EntityMap gives it the meaning recorded when the text was written (`title_entity_snapshot`/`summary_entity_snapshot`, see storage.md) — a token whose meaning changed since (type change, number reused) stays. The editor resolves against its live EntityMap; the session list reads `title_plain`/`summary_plain`, stored on every write that can change them (no EntityMap parse, no snapshot in the renderer). In the pseudonymized view, originals shown in the side panel, the chip tooltip/menus and the Sperrliste dialog are `select-none`, so a native ⌘A + ⌘C outside the editor never copies them.
+- Word and pseudonymization counters are the same in both views.
+
 ## Clipboard Export
 
-The "Kopieren" button in the header exports the full document as anonymized plain text to the system clipboard via the `review:exportClipboard` IPC channel (which calls `clipboard.writeText` in the main process).
+The copy button in the header exports the full document in the chosen view as plain text to the system clipboard via the `review:exportClipboard` IPC channel (which calls `clipboard.writeText` in the main process).
 
 The serialization logic (`serializeDocument`) converts the TipTap JSON document to plain text:
-- **Placeholder chips** become their bracket notation: `[PERSON 1]`, `[ORT 2]`, etc.
+- **Placeholder chips** become their bracket notation: `[PERSON 1]`, `[ORT 2]`, etc. — in the Klartext view their `original` (`chips: 'original'` option of the walker; token where no original is stored).
 - **Speaker labels** become `[Person A]:` (audio sessions only; omitted for PDF sessions).
 - **Timestamps** become `[00:12:34]` (audio sessions only; omitted for PDF sessions).
 - **Regular text** is preserved as-is.
@@ -115,7 +125,9 @@ A toast notification confirms success ("In Zwischenablage kopiert") or reports f
 
 ### Copy and paste inside the editor
 
-Cmd+C / Cmd+X on a selection writes two clipboard flavors, both pseudonymized:
+**Klartext view:** `viewModeClipboardPlugin` (`extensions/viewModeClipboard.ts`) replaces every chip by plain text (`original`, else token) in ProseMirror's `transformCopied`, which runs for Cmd+C, Cmd+X and the start of a drag before both flavors are built. text/plain and text/html therefore carry the clear names as ordinary text — no chip markup, so pasting Klartext anywhere (also back into a session) yields ordinary text. The editor is read-only there; the plugin turns Cmd+X into a copy without deleting. In the pseudonymized view the slice passes unchanged and everything below holds exactly as before.
+
+Cmd+C / Cmd+X on a selection in the pseudonymized view writes two clipboard flavors, both pseudonymized:
 
 - **text/plain** — the custom `clipboardTextSerializer` (`serializeClipboardText` in `utils/clipboardText.ts`) uses the same bracket notation for chips, speaker labels, and timestamps within the copied range — copied verbatim, without trimming.
 - **text/html** — ProseMirror's default serializer over each node's `renderHTML`. Chips, speaker labels and timestamps render as `<span data-type=…>` carrying their visible token as text (`[PERSON 1]`, `[Person A]:`, `[00:12:34]`, via `clipboardNodeText`), so mail, Word or web forms show the same text as the plain flavor. The chip's `original` attribute is `rendered: false` and never appears in the HTML; `entityId`, `type`, `number` and `source` do (pseudonymous metadata, needed to rebuild the chip on paste).

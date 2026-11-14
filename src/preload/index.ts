@@ -20,6 +20,20 @@ import type { AppUpdateState } from '../shared/types/AppUpdate'
 import type { ModelGroup, DiarizationPipeline } from '../shared/validation/model-catalog-schemas'
 import { SummaryChangedSchema } from '../shared/validation/summary-schemas'
 import { ToolHealthStateSchema } from '../shared/validation/tool-health-schemas'
+import { normalizeViewMode, type ViewMode } from '../shared/types/ViewMode'
+
+/**
+ * Issue #203 — the saved view, read synchronously before any renderer code
+ * runs: the first render already knows it, so neither view ever flashes
+ * (AK 12). A failed read yields the pseudonymized view (AK 11).
+ */
+function readInitialViewMode(): ViewMode {
+  try {
+    return normalizeViewMode(ipcRenderer.sendSync('viewMode:getSync'))
+  } catch {
+    return normalizeViewMode(undefined)
+  }
+}
 import { dossierApi } from './api/dossiers'
 
 const api: IpcApi = {
@@ -229,6 +243,10 @@ const api: IpcApi = {
     ensureAccess: () => ipcRenderer.invoke('microphone:ensureAccess'),
     dismissHint: () => ipcRenderer.invoke('microphone:dismissHint'),
     openSettings: () => ipcRenderer.invoke('microphone:openSettings')
+  },
+  viewMode: {
+    initial: readInitialViewMode(),
+    set: (mode) => ipcRenderer.invoke('viewMode:set', { mode })
   },
   dossiers: dossierApi,
   nav: {

@@ -16,7 +16,7 @@ The database is opened with WAL journal mode, foreign keys enabled, `synchronous
 
 ### Migration System
 
-Migrations are numbered SQL files in `src/main/db/migrations/`. At startup, `initDatabase()` creates a `schema_version` table (if it does not exist) and runs every migration whose version number exceeds the current maximum version recorded there. Each migration runs inside a transaction; on success the version number is inserted into `schema_version`. This means migrations are applied exactly once and are never re-run.
+Migrations are numbered SQL files in `src/main/db/migrations/`. At startup, `initDatabase()` creates a `schema_version` table (if it does not exist) and runs every migration whose version is not yet recorded there, in ascending order (`runMigrations` in `connection.ts`). Each migration runs inside a transaction; on success the version number is inserted into `schema_version`. This means migrations are applied exactly once and are never re-run — and a version merged later than a higher one (e.g. 019 after a database already has 020) is still applied instead of being skipped. `migration-019.test.ts` keeps the version list unique, ascending and gap-free; `migrations.test.ts` tests the real runner.
 
 | File | Version | Change |
 |---|---|---|
@@ -26,7 +26,8 @@ Migrations are numbered SQL files in `src/main/db/migrations/`. At startup, `ini
 | … | … | (see `src/main/db/migrations/index.ts`) |
 | `017-session-deleting-at.sql` | 17 | Adds `deleting_at` to `sessions` — restart-proof deletion (#202); existing rows stay `NULL` |
 | `018-app-maintenance.sql` | 18 | Adds `app_maintenance(task, done_at)` and records the one-time `secure-delete-vacuum` as pending (#202) |
-| `020-patient-dossiers.sql` | 20 | Patient dossiers for the whole Epic #192 block: `dossiers`, `session_dossiers`, `recent_items`, `sessions.document_date`. Only `CREATE TABLE` / `ADD COLUMN`, existing rows untouched (#204 PC 6). Version 19 is reserved for a parallel story of the same epic |
+| `019-placeholder-snapshots.sql` | 19 | Adds `title_entity_snapshot`, `summary_entity_snapshot`, `title_plain`, `summary_plain` to `sessions` (#203) |
+| `020-patient-dossiers.sql` | 20 | Patient dossiers for the whole Epic #192 block: `dossiers`, `session_dossiers`, `recent_items`, `sessions.document_date`. Only `CREATE TABLE` / `ADD COLUMN`, existing rows untouched (#204 PC 6) |
 
 **Table rebuilds and foreign keys.** `task_queue`, `session_dossiers` and `recent_items` reference `sessions` with `ON DELETE CASCADE`. A rebuild of `sessions` (CREATE new → DROP old → RENAME) with foreign keys on deletes all tasks, all dossier assignments and all «recently opened» entries — `DROP TABLE` runs an implicit `DELETE FROM` whose cascade fires immediately. `PRAGMA defer_foreign_keys = ON` does **not** prevent this (it defers constraint *checks*, not `ON DELETE` *actions*; proven in `020-patient-dossiers.test.ts`). Only `PRAGMA foreign_keys = OFF` does, and it has no effect inside a transaction — the runner must be extended (FK off before the migration's transaction, `PRAGMA foreign_key_check`, FK on) before such a migration is written. See the rule comment in `src/main/db/migrations/index.ts`.
 
@@ -56,6 +57,11 @@ Tracks every transcription and PDF import session.
 | `review_at` | TEXT | nullable | ISO 8601 timestamp of when the session first reached `review` status; used for source-file cleanup |
 | `deleting_at` | TEXT | nullable | Set when the user confirmed the deletion and its files are not all removed yet (#202). Rows with a value are hidden from every read that reaches the user (`findById`, `findAll`, source-file cleanup) |
 | `document_date` | TEXT | nullable, CHECK `YYYY-MM-DD` | Date a PDF document was written (#205); `NULL` = use the local import day (migration 020) |
+| `title_entity_snapshot` | TEXT | nullable | Issue #203 (migration 019): JSON `{ "[PERSON 1]": "Ruth Gerber", … }` — meaning of the placeholder tokens in `title` when it was written. The Klartext view resolves a token only while `entity_map` still gives it this meaning (`shared/utils/resolvePlaceholders.ts`) |
+| `summary_entity_snapshot` | TEXT | nullable | Same for `summary`; written by the summarization (from the EntityMap read with the LLM input) and on user edits (only tokens absent from the old text count as newly typed and get the current meaning; tokens of the old text keep their record — or, without one, stay placeholders for good). Migration 019 backfilled existing rows with today's unambiguous meanings, reading only object entries of valid maps (never fails on malformed legacy data) |
+| `title_plain` / `summary_plain` | TEXT | nullable | Issue #203: Klartext of `title`/`summary`, computed on every write that can change it (`SessionRepository.update` → `db/plainTexts.ts`, incl. `review:save`'s entity_map). NULL = same as the raw text. The session list selects only these — never `entity_map` or the snapshots. Existing rows: one-time `placeholder-plain-backfill` in `runStartupMaintenance` (`app_maintenance`) |
+
+All four #203 columns hold clear names and are cleared by `scrubMarkedContent` together with title, summary and entity_map.
 
 Index: `idx_sessions_created_at` on `created_at`.
 

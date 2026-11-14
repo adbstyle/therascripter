@@ -1,6 +1,7 @@
 import { Node, mergeAttributes } from '@tiptap/core'
 import { clipboardNodeText } from '../utils/clipboardText'
 import { chipClipboardPlugin } from './chipClipboard'
+import { viewModeClipboardPlugin } from './viewModeClipboard'
 
 /**
  * Schema and serialization of the transcript's atom nodes, without NodeViews.
@@ -9,7 +10,9 @@ import { chipClipboardPlugin } from './chipClipboard'
  * so tests run against the production schema and clipboard behavior.
  *
  * `renderHTML` only feeds serialization — chiefly the text/html flavor of
- * Cmd+C — and renders each node as its visible text token.
+ * Cmd+C — and renders each node as its visible text token. In the Klartext
+ * view (#203) chips never reach it: viewModeClipboardPlugin turns them into
+ * plain text before serialization.
  */
 
 export const PlaceholderChipNode = Node.create({
@@ -43,7 +46,7 @@ export const PlaceholderChipNode = Node.create({
   },
 
   addProseMirrorPlugins() {
-    return [chipClipboardPlugin()]
+    return [chipClipboardPlugin(), viewModeClipboardPlugin()]
   }
 })
 

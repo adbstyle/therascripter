@@ -1,7 +1,8 @@
 import type { Session, SessionType } from './Session'
 import type { Task, TaskType } from './Task'
 import type { BlocklistEntry } from './NerTypes'
-import type { EntityMap, PlaceholderType } from './EntityMap'
+import type { EntityMap, PlaceholderSnapshot, PlaceholderType } from './EntityMap'
+import type { ViewMode } from './ViewMode'
 import type { TipTapDocument } from './TipTapDocument'
 import type { AppUpdateInstallResult, AppUpdateState } from './AppUpdate'
 import type { ReconcileEvent } from './ReconcileEvent'
@@ -95,6 +96,8 @@ export interface ReviewData {
   entityMap: EntityMap
   sessionType: SessionType
   sessionTitle: string
+  /** #203 — meaning of the tokens in `sessionTitle` when it was written. */
+  titleSnapshot: PlaceholderSnapshot | null
   /**
    * Issue #84 Story I — captured at pipeline-start. NULL for sessions that
    * reached 'review' before this column was introduced; the renderer surfaces
@@ -197,12 +200,16 @@ export interface SummaryRecord {
   text: string
   modelId: string | null
   summarizedAt: string | null
+  /** #203 — meaning of the tokens in title / text when they were written. */
+  titleSnapshot: PlaceholderSnapshot | null
+  textSnapshot: PlaceholderSnapshot | null
 }
 
 export interface SummaryApi {
   get(sessionId: string): Promise<SummaryRecord | null>
-  updateTitle(sessionId: string, title: string): Promise<void>
-  updateText(sessionId: string, text: string): Promise<void>
+  /** Resolves with the updated record (new token snapshot, #203). */
+  updateTitle(sessionId: string, title: string): Promise<SummaryRecord | null>
+  updateText(sessionId: string, text: string): Promise<SummaryRecord | null>
   /** #168 — 'tool-blocked', wenn die Zusammenfassung an einem blockierten Werkzeug scheiterte. */
   missingReason(sessionId: string): Promise<'tool-blocked' | null>
   /** #168 — Zusammenfassung nachholen; false, wenn nichts zu tun ist. */
@@ -261,6 +268,17 @@ export interface ModelReconcileApi {
   dismiss(): Promise<void>
 }
 
+/** #203 — globale Ansicht (pseudonymisiert / Klartext). */
+export interface ViewModeApi {
+  /**
+   * Saved view, read synchronously while the preload runs — known before the
+   * first render, so no content ever paints in the other view (AK 12).
+   * Falls back to 'pseudonymized' when it cannot be determined (AK 11).
+   */
+  initial: ViewMode
+  set(mode: ViewMode): Promise<void>
+}
+
 export interface IpcApi {
   sessions: SessionApi
   recording: RecordingApi
@@ -279,5 +297,6 @@ export interface IpcApi {
   microphone: MicrophoneApi
   toolHealth: ToolHealthApi
   nav: NavApi
+  viewMode: ViewModeApi
   dossiers: DossierApi
 }

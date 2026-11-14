@@ -1,9 +1,13 @@
 import type Database from 'better-sqlite3'
+import { backfillPlainTexts } from './plainTexts'
 
 // Datenbank-Wartung ausserhalb der Migrations-Transaktionen (Issue #202).
 
 /** Name des einmaligen Wartungsschritts in app_maintenance (Migration 018). */
 export const SECURE_DELETE_VACUUM = 'secure-delete-vacuum'
+
+/** Issue #203 (Migration 019): Klartext von Titel/Zusammenfassung des Bestands berechnen. */
+export const PLACEHOLDER_PLAIN_BACKFILL = 'placeholder-plain-backfill'
 
 /**
  * PRAGMA wal_checkpoint(TRUNCATE): schreibt den WAL in die Datenbankdatei und
@@ -33,6 +37,27 @@ export function runStartupMaintenance(db: Database.Database): void {
   // Beide Schritte sind nicht startkritisch: ein Fehler (z. B. Platte voll
   // beim VACUUM) wird geloggt, der Schritt bleibt offen und läuft beim
   // nächsten Start erneut — die App startet trotzdem.
+  // Issue #203 — einmalig: title_plain/summary_plain des Bestands. Läuft vor
+  // dem VACUUM; einzelne Zeilen scheitern still (bleiben Platzhalter).
+  try {
+    const pendingPlain = db
+      .prepare('SELECT 1 FROM app_maintenance WHERE task = ? AND done_at IS NULL')
+      .get(PLACEHOLDER_PLAIN_BACKFILL)
+    if (pendingPlain) {
+      const written = backfillPlainTexts(db)
+      db.prepare('UPDATE app_maintenance SET done_at = ? WHERE task = ?').run(
+        new Date().toISOString(),
+        PLACEHOLDER_PLAIN_BACKFILL
+      )
+      console.log(`[DB] Klartext für ${written} Sitzungen berechnet`)
+    }
+  } catch (error) {
+    console.error(
+      '[DB] Klartext-Backfill fehlgeschlagen — wird beim nächsten Start wiederholt:',
+      error
+    )
+  }
+
   try {
     const pending = db
       .prepare('SELECT 1 FROM app_maintenance WHERE task = ? AND done_at IS NULL')

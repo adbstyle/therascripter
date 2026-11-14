@@ -10,7 +10,9 @@ import type {
   TaskType,
   ProcessedModelsSnapshot
 } from '../../../shared/types'
+import { parsePlaceholderSnapshot } from '../../../shared/utils/resolvePlaceholders'
 import { walCheckpointTruncate } from '../maintenance'
+import { refreshPlainTexts } from '../plainTexts'
 
 interface SessionRow {
   id: string
@@ -38,7 +40,22 @@ interface SessionRow {
   retry_count: number
   pdf_has_scanned_pages: number | null
   processed_with_models: string | null
+  /** Not selected by the list projection (clear names, Issue #203). */
+  title_entity_snapshot?: string | null
+  summary_entity_snapshot?: string | null
+  /** Klartext computed on write (plainTexts.ts); NULL = same as title/summary. */
+  title_plain: string | null
+  summary_plain: string | null
 }
+
+/** Columns whose change can change the stored Klartext (Issue #203). */
+const PLAIN_SOURCE_INPUTS = [
+  'title',
+  'summary',
+  'entityMap',
+  'titleEntitySnapshot',
+  'summaryEntitySnapshot'
+] as const
 
 function parseEntityMap(json: string | null, sessionId: string): EntityMap | null {
   if (!json) return null
@@ -66,6 +83,8 @@ function parseProcessedModels(
 }
 
 function rowToSession(row: SessionRow): Session {
+  const entityMap = parseEntityMap(row.entity_map, row.id)
+  const summary = row.summary
   return {
     id: row.id,
     title: row.title,
@@ -78,20 +97,24 @@ function rowToSession(row: SessionRow): Session {
     alignedTranscriptPath: row.aligned_transcript_path,
     pdfPath: row.pdf_path,
     extractedPath: row.extracted_path,
-    entityMap: parseEntityMap(row.entity_map, row.id),
+    entityMap,
     errorMessage: row.error_message,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     reviewAt: row.review_at,
     wordCount: row.word_count,
     anonymizationCount: row.anonymization_count,
-    summary: row.summary,
+    summary,
     summaryModelId: row.summary_model_id,
     summarizedAt: row.summarized_at,
     plannedSteps: row.planned_steps ? (JSON.parse(row.planned_steps) as TaskType[]) : null,
     retryCount: row.retry_count,
     pdfHasScannedPages: row.pdf_has_scanned_pages == null ? null : row.pdf_has_scanned_pages === 1,
-    processedWithModels: parseProcessedModels(row.processed_with_models, row.id)
+    processedWithModels: parseProcessedModels(row.processed_with_models, row.id),
+    titleEntitySnapshot: parsePlaceholderSnapshot(row.title_entity_snapshot),
+    summaryEntitySnapshot: parsePlaceholderSnapshot(row.summary_entity_snapshot),
+    titlePlain: row.title_plain ?? row.title,
+    summaryPlain: summary == null ? null : (row.summary_plain ?? summary)
   }
 }
 
@@ -149,6 +172,10 @@ export class SessionRepository {
    * Blobs — der JSON-Parse pro Row und der IPC-Payload skalierten mit der
    * Library-Größe, und die Liste wird bei jedem Task-Event refetcht.
    * Detail-Reads (findById, z. B. via review:load) liefern sie weiterhin.
+   *
+   * Issue #203: Für die Klartext-Ansicht liest die Liste nur die beim
+   * Schreiben berechneten title_plain/summary_plain — weder entity_map noch
+   * die Snapshots (Token → Klarname) werden selektiert oder geparst.
    */
   findAll(): Session[] {
     const rows = this.db
@@ -159,7 +186,8 @@ export class SessionRepository {
                 created_at, updated_at, review_at, word_count,
                 anonymization_count, summary, summary_model_id, summarized_at,
                 planned_steps, retry_count, pdf_has_scanned_pages,
-                NULL AS processed_with_models
+                NULL AS processed_with_models,
+                title_plain, summary_plain
          FROM sessions WHERE deleting_at IS NULL ORDER BY created_at DESC`
       )
       .all() as SessionRow[]
@@ -259,6 +287,15 @@ export class SessionRepository {
       )
     }
 
+    if (input.titleEntitySnapshot !== undefined) {
+      sets.push('title_entity_snapshot = ?')
+      values.push(input.titleEntitySnapshot ? JSON.stringify(input.titleEntitySnapshot) : null)
+    }
+    if (input.summaryEntitySnapshot !== undefined) {
+      sets.push('summary_entity_snapshot = ?')
+      values.push(input.summaryEntitySnapshot ? JSON.stringify(input.summaryEntitySnapshot) : null)
+    }
+
     if (sets.length === 0) return this.findById(id)
 
     sets.push('updated_at = ?')
@@ -266,6 +303,12 @@ export class SessionRepository {
     values.push(id)
 
     this.db.prepare(`UPDATE sessions SET ${sets.join(', ')} WHERE id = ?`).run(...values)
+
+    // Issue #203 — keep the stored Klartext in step with every writer
+    // (summarization, title/summary edits, review:save changing entity_map)
+    if (PLAIN_SOURCE_INPUTS.some((key) => input[key] !== undefined)) {
+      refreshPlainTexts(this.db, id)
+    }
 
     return this.findById(id)
   }
@@ -295,7 +338,9 @@ export class SessionRepository {
     this.db
       .prepare(
         `UPDATE sessions
-         SET title = '', summary = NULL, entity_map = NULL, error_message = NULL
+         SET title = '', summary = NULL, entity_map = NULL, error_message = NULL,
+             title_entity_snapshot = NULL, summary_entity_snapshot = NULL,
+             title_plain = NULL, summary_plain = NULL
          WHERE id = ? AND deleting_at IS NOT NULL`
       )
       .run(id)
