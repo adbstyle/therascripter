@@ -216,7 +216,7 @@ export default function ModelsSettings(): React.JSX.Element {
           <p className="text-sm text-text-secondary">
             Erkennt Personen, Orte und andere sensible Entitäten und ersetzt sie durch typisierte
             Platzhalter (z.&nbsp;B. [PERSON&nbsp;1]). DSGVO-rechtlich Pseudonymisierung — die
-            Originale bleiben lokal und werden nach 30&nbsp;Tagen automatisch gelöscht.
+            Originale bleiben lokal gespeichert, bis Sie die Sitzung selbst löschen.
           </p>
         </div>
 
