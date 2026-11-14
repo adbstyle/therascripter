@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DossierBadges } from '../DossierBadges'
@@ -311,5 +311,74 @@ describe('DossierBadges — focus after the trigger was replaced (Review #223)',
     // versehentliches Häkchen rückgängig machen
     await user.click(screen.getByRole('checkbox', { name: /Meisser/ }))
     expect(window.api.dossiers.assign).toHaveBeenCalledWith('s1', 'd4')
+  })
+})
+
+describe('AssignDossiersPopover — Platz im Fenster (Sichtprüfung)', () => {
+  // jsdom misst nichts: das Popover ist 340 px hoch und 380 px breit
+  let sizes: Array<{ mockRestore: () => void }> = []
+  beforeEach(() => {
+    const dialogSize = (value: number) =>
+      function (this: HTMLElement) {
+        return this.getAttribute('role') === 'dialog' ? value : 0
+      }
+    sizes = [
+      vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(dialogSize(340)),
+      vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(dialogSize(380))
+    ]
+  })
+  afterEach(() => {
+    for (const s of sizes) s.mockRestore()
+  })
+
+  function rect(top: number, left: number, height = 20): DOMRect {
+    return {
+      top,
+      bottom: top + height,
+      left,
+      right: left + 200,
+      width: 200,
+      height,
+      x: left,
+      y: top,
+      toJSON: () => ({})
+    } as DOMRect
+  }
+
+  it('klappt am unteren Fensterrand nach oben und begrenzt die Höhe', async () => {
+    const { user } = setup()
+    const group = screen.getByRole('group', { name: 'Patientendossiers' })
+    group.getBoundingClientRect = () => rect(window.innerHeight - 40, 300)
+    await user.click(screen.getByRole('button', { name: 'Dossier zuordnen' }))
+    const dialog = await screen.findByRole('dialog')
+    await waitFor(() => expect(dialog).toHaveAttribute('data-placement', 'top'))
+    expect(dialog.className).toContain('bottom-full')
+    expect(dialog.style.maxHeight).toBe(`${window.innerHeight - 40 - 12}px`)
+    // «Fertig» bleibt Teil des begrenzten Popovers (kein eigener Scrollbereich)
+    expect(within(dialog).getByRole('button', { name: 'Fertig' })).toBeInTheDocument()
+  })
+
+  it('öffnet oben im Fenster nach unten und folgt einem Resize', async () => {
+    const { user } = setup()
+    const group = screen.getByRole('group', { name: 'Patientendossiers' })
+    let top = 100
+    group.getBoundingClientRect = () => rect(top, 300)
+    await user.click(screen.getByRole('button', { name: 'Dossier zuordnen' }))
+    const dialog = await screen.findByRole('dialog')
+    await waitFor(() => expect(dialog).toHaveAttribute('data-placement', 'bottom'))
+    top = window.innerHeight - 30
+    act(() => {
+      window.dispatchEvent(new Event('resize'))
+    })
+    await waitFor(() => expect(dialog).toHaveAttribute('data-placement', 'top'))
+  })
+
+  it('verschiebt das Popover nach links, wenn es rechts aus dem Fenster ragte', async () => {
+    const { user } = setup()
+    const group = screen.getByRole('group', { name: 'Patientendossiers' })
+    group.getBoundingClientRect = () => rect(100, window.innerWidth - 50)
+    await user.click(screen.getByRole('button', { name: 'Dossier zuordnen' }))
+    const dialog = await screen.findByRole('dialog')
+    await waitFor(() => expect(dialog.style.left).toBe(`${-(380 - 50 + 8)}px`))
   })
 })

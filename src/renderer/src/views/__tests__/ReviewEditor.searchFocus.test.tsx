@@ -311,9 +311,9 @@ describe('Fundstelle im Editor (#209 AK 11)', () => {
       </ToastProvider>
     )
     await waitFor(() =>
-      expect(
-        document.querySelector('p.search-hit-paragraph-semantic')?.textContent
-      ).toContain('Wie geht es')
+      expect(document.querySelector('p.search-hit-paragraph-semantic')?.textContent).toContain(
+        'Wie geht es'
+      )
     )
     expect(document.querySelector('.search-hit-term')).toBeNull()
     expect(api.review.load).toHaveBeenCalledTimes(1)

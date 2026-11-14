@@ -257,9 +257,7 @@ describe('resolveSearchFocus — robust gegen Bearbeitung', () => {
     expect(resolved.kind).toBe('body')
     if (resolved.kind !== 'body') return
     expect(resolved.spec.style).toBe('exact')
-    expect(resolved.spec.paragraphs).toEqual([
-      { from: paragraphPos(h, 1), to: paragraphPos(h, 2) }
-    ])
+    expect(resolved.spec.paragraphs).toEqual([{ from: paragraphPos(h, 1), to: paragraphPos(h, 2) }])
     expect(resolved.paragraphIndex).toBe(1)
     expect(resolved.scrollParagraphPos).toBe(paragraphPos(h, 1))
   })

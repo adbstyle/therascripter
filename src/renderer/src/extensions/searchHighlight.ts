@@ -181,9 +181,7 @@ function bodyResult(
     const marked = covered.filter((p) => marks.some((m) => contains(p, m.from)))
     // Markierungen ausserhalb des gelieferten Bereichs (sollte nicht vorkommen): deren Absätze
     covered =
-      marked.length > 0
-        ? marked
-        : paragraphs.filter((p) => marks.some((m) => contains(p, m.from)))
+      marked.length > 0 ? marked : paragraphs.filter((p) => marks.some((m) => contains(p, m.from)))
   }
   const spec: SearchHighlightSpec = {
     paragraphs: covered.map((p) => ({ from: p.pos, to: p.pos + p.node.nodeSize })),
