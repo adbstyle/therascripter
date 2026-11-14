@@ -70,7 +70,7 @@ describe('Migration 021 — search index', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM search_index_state').get()).toEqual({ n: 0 })
   })
 
-  it('stores secure-delete on the FTS table and supports contentless delete and trigram phrases', () => {
+  it('stores secure-delete on the FTS table and supports delete by rowid and trigram phrases', () => {
     migrateUpTo(db, 21)
     expect(db.prepare(`SELECT v FROM search_fts_config WHERE k = 'secure-delete'`).get()).toEqual({
       v: 1

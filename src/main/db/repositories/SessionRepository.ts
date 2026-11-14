@@ -13,6 +13,7 @@ import type {
 import { parsePlaceholderSnapshot } from '../../../shared/utils/resolvePlaceholders'
 import { walCheckpointTruncate } from '../maintenance'
 import { refreshPlainTexts } from '../plainTexts'
+import { SearchIndexRepository } from './SearchIndexRepository'
 
 export interface SessionRow {
   id: string
@@ -58,6 +59,16 @@ const PLAIN_SOURCE_INPUTS = [
   'titleEntitySnapshot',
   'summaryEntitySnapshot'
 ] as const
+
+/** Inhalte, die die Suche indexiert (search_rev, Migration 021). */
+function touchesSearchContent(input: UpdateSessionInput): boolean {
+  return (
+    input.title !== undefined ||
+    input.summary !== undefined ||
+    input.entityMap !== undefined ||
+    input.status === 'review'
+  )
+}
 
 function parseEntityMap(json: string | null, sessionId: string): EntityMap | null {
   if (!json) return null
@@ -309,6 +320,12 @@ export class SessionRepository {
 
     if (sets.length === 0) return this.findById(id)
 
+    // Epic #192 (#212) — jede inhaltliche Änderung macht die Sitzung für die
+    // Textphase der Suche «zu bearbeiten»: Titel, Zusammenfassung,
+    // Dokument/EntityMap (review:save, Pseudonymisierung) und das Erreichen
+    // von review. Reine Pfad-, Zähler- und Fortschritts-Updates nicht.
+    if (touchesSearchContent(input)) sets.push('search_rev = search_rev + 1')
+
     sets.push('updated_at = ?')
     values.push(new Date().toISOString())
     values.push(id)
@@ -355,6 +372,9 @@ export class SessionRepository {
          WHERE id = ? AND deleting_at IS NOT NULL`
       )
       .run(id)
+    // Epic #192 (#209 PC 1) — der Klartext im Suchindex geht ebenso sofort,
+    // nicht erst mit der Zeile beim nächsten Start
+    if (this.isMarkedForDeletion(id)) new SearchIndexRepository(this.db).deleteForSession(id)
   }
 
   isMarkedForDeletion(id: string): boolean {

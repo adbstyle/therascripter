@@ -20,15 +20,19 @@
 --                        `units` (JSON) maps each unit back to the TipTap
 --                        paragraph: [{p, s, e, o, pfx, spk?, ts?}].
 --                        vec/vec_scale stay NULL until PR S4 (int8[768]).
--- search_fts           — contentless trigram index over the normalized text
---                        (normalizeSearchText). contentless_delete=1 makes
---                        DELETE possible without passing the old values;
---                        detail=full (default) is required for phrase
---                        queries. 'secure-delete' (stored per table) makes FTS5
---                        overwrite deleted entries instead of writing
---                        tombstones with their trigrams into search_fts_data.
---                        Without it a deleted session's trigrams stay in the
---                        file (measured, Bauplan Befund 6).
+-- search_fts           — trigram index over the normalized text
+--                        (normalizeSearchText of the unit texts). Stores its
+--                        own copy of that normalized text (a regular,
+--                        "contentful" FTS5 table): DELETE then reads the stored
+--                        value and removes every entry from the index pages.
+--                        'secure-delete' (stored per table) makes FTS5 rewrite
+--                        those pages instead of keeping the trigrams. Measured
+--                        with the bundled SQLite 3.51.2 (PR S3): a contentless
+--                        table with contentless_delete=1 — the variant of the
+--                        Bauplan — records deletes as tombstones and keeps
+--                        every trigram of a deleted session in
+--                        search_fts_data, WITH or without 'secure-delete'.
+--                        detail=full (default) is required for phrase queries.
 -- search_recent_queries — the five last searches (#209 AK 27/28, PC 2–4).
 --
 -- Clear text in the index: every row hangs on sessions(id) ON DELETE CASCADE;
@@ -67,9 +71,7 @@ CREATE INDEX idx_search_chunks_pending ON search_chunks(session_id, gen) WHERE v
 
 CREATE VIRTUAL TABLE search_fts USING fts5(
     norm,
-    tokenize = 'trigram',
-    content = '',
-    contentless_delete = 1
+    tokenize = 'trigram'
 );
 INSERT INTO search_fts(search_fts, rank) VALUES ('secure-delete', 1);
 
