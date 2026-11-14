@@ -15,16 +15,17 @@ This page describes the backend (main process, shared code, preload). The user i
 
 | Rule | Where |
 |---|---|
-| First and last name required; whitespace only counts as empty (AK 2) | `DossierNameSchema` (`src/shared/validation/dossier-schemas.ts`), `DossierService` |
+| First and last name required; whitespace and invisible characters (U+200B–U+200D, U+FEFF) only count as empty, invisible characters are removed and ignored for equality (AK 2) | `DossierNameSchema` (`src/shared/validation/dossier-schemas.ts`), `DossierService` |
 | Names and dossier IDs are equal when they differ only in case, leading/trailing whitespace or umlaut spelling — «Müller» = « mueller » = «MÜLLER», decomposed input (NFD) included (AK 7) | `normalizeDossierKey` (`src/shared/utils/dossier-normalize.ts`), stored in the `*_norm` columns |
 | A dossier ID another dossier already has is rejected — on create and on update; the answer names the owner (AK 5) | `DossierService.create/update` → `external-id-taken`; partial unique index as backstop for concurrent requests |
 | An empty dossier ID means «no ID»; any number of dossiers may have none | `cleanExternalId` in `DossierService` |
 | Same first and last name: `create` answers `duplicate-name` with the other dossiers and creates the dossier when called again with `confirmDuplicate: true`; `update` saves and returns the other dossiers in `duplicates` (AK 6) | `DossierService` |
 | Birth date: complete, valid calendar day (29.02. only in leap years, no 31.04.), not after today in the Mac's local time (AK 8) | `PastOrTodayIsoDateSchema`, `isValidIsoDateNotAfter` / `localTodayIso` / `parseSwissDate` (`src/shared/utils/calendar-date.ts`); stored as `YYYY-MM-DD` |
 | Diagnoses, medication and note: multi-line free text up to 20 000 characters each (AK 4) | `DossierFreeTextSchema`, table CHECKs |
+| Control characters (U+0000–U+001F, U+007F) are rejected in names and dossier ID; in free text only line break (LF, CR) and tab are allowed | `hasControlChars` / `hasControlCharsExceptLineBreaks` in the schemas and in `DossierService` |
 | Changes are saved per field (autosave, AK 10); a rejected change saves nothing of that patch | `dossier:update` with a single-field patch |
 | The overview is sorted by last name, then first name, ä as ae (AK 12), and shows the number of entries and the day of the latest entry; it carries no diagnoses, medication or note | `DossierRepository.listSummaries` |
-| 500 dossiers are listed without noticeable delay (AK 15) | test with 500 rows in `DossierService.test.ts` (budget 100 ms) |
+| 500 dossiers are listed without noticeable delay (AK 15) | test with 500 rows in `DossierService.test.ts` (budget 1 s — generous so slow CI machines do not flake) |
 
 ## Deleting
 
