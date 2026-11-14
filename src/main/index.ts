@@ -75,6 +75,9 @@ import {
 import { registerSummaryHandlers } from './ipc/summary-handlers'
 import { startToolCheck } from './services/ToolHealthService'
 import { registerDossierAssignmentHandlers, registerDossierHandlers } from './ipc/dossier-handlers'
+import { registerSearchHandlers } from './ipc/search-handlers'
+import { initSearchIndexService, getSearchIndexService } from './search/SearchIndexService'
+import { getActiveSessionId } from './ipc/recording-handlers'
 
 // Set in before-quit so the close-handler can distinguish "user closed window"
 // (hide) from "app is shutting down" (allow destroy).
@@ -364,6 +367,7 @@ app.whenReady().then(() => {
   registerToolHealthHandlers()
   registerDossierHandlers()
   registerDossierAssignmentHandlers()
+  registerSearchHandlers()
   registerSummaryHandlers({
     sessionService,
     summaries: {
@@ -427,6 +431,18 @@ app.whenReady().then(() => {
   // Audio/Original-PDF 24 h nach erfolgreicher Verarbeitung löschen (beim
   // Start + alle 6 h). Sitzungen selbst bleiben bis zum manuellen Löschen (#202).
   startSourceFileCleanup()
+
+  // Epic #192 (#209/#210/#212) — Textphase der Aufbereitung für die Suche:
+  // nach Recovery und Löschabschluss, holt Ausstehendes (auch den Bestand vor
+  // dem Update) im Hintergrund nach; pausiert während einer Aufnahme.
+  const searchIndex = initSearchIndexService(getDatabase(), {
+    // Gestaffeltes Löschen: sind die Indexzeilen weg, schliesst die Sitzung ab
+    finishDeletion: (id) => {
+      new SessionService(getDatabase()).finishDeletion(id)
+    }
+  })
+  searchIndex.setRecordingPause(getActiveSessionId() !== null)
+  searchIndex.start()
 
   // Non-blocking: check for model + app updates on startup
   checkForUpdates().catch(() => {
@@ -504,6 +520,8 @@ app.on('before-quit', (event) => {
             })
           : Promise.resolve(),
       cleanupRecording: cleanupRecordingOnQuit,
+      // Epic #192 — keine Aufbereitung für die Suche mehr (nach dem Renderer-Flush)
+      stopSearchIndex: () => getSearchIndexService()?.stop(),
       stopSourceFileCleanup,
       shutdownTaskQueue: () => getTaskQueue().shutdown(8_000),
       destroyTray: () => getTray().destroy(),

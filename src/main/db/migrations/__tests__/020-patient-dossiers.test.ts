@@ -38,8 +38,8 @@ describe('Migration 020 — patient dossiers', () => {
     db.close()
   })
 
-  it('is registered as the latest migration', () => {
-    expect(migrations[migrations.length - 1].version).toBe(20)
+  it('is registered as version 20', () => {
+    expect(migrations.some((m) => m.version === 20)).toBe(true)
   })
 
   it('keeps every existing session, task and blocklist entry unchanged', () => {

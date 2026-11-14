@@ -1,0 +1,35 @@
+{
+  "doc": "xr",
+  "entities": [
+    {
+      "text": "Klinik Seeblick",
+      "type": "ORGANISATION",
+      "canonical": "Klinik Seeblick"
+    },
+    {
+      "text": "Marco Brunner",
+      "type": "PERSON",
+      "canonical": "Marco Brunner"
+    },
+    {
+      "text": "Dübendorf",
+      "type": "ORT",
+      "canonical": "Dübendorf"
+    },
+    {
+      "text": "Uster",
+      "type": "ORT",
+      "canonical": "Uster"
+    },
+    {
+      "text": "Felix Amsler",
+      "type": "PERSON",
+      "canonical": "Felix Amsler"
+    },
+    {
+      "text": "Regula Hess",
+      "type": "PERSON",
+      "canonical": "Regula Hess"
+    }
+  ]
+}

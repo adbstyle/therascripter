@@ -22,6 +22,7 @@ import { SummaryChangedSchema } from '../shared/validation/summary-schemas'
 import { ToolHealthStateSchema } from '../shared/validation/tool-health-schemas'
 import { normalizeViewMode, type ViewMode } from '../shared/types/ViewMode'
 import { NavCommandSchema, SessionsChangedSchema } from '../shared/validation/change-event-schemas'
+import { searchApi } from './api/search'
 
 /**
  * Issue #203 — the saved view, read synchronously before any renderer code
@@ -272,6 +273,7 @@ const api: IpcApi = {
     set: (mode) => ipcRenderer.invoke('viewMode:set', { mode })
   },
   dossiers: dossierApi,
+  search: searchApi,
   pendingEdits: pendingEditsApi,
   nav: {
     initialSidebarOpen: readInitialSidebarOpen(),

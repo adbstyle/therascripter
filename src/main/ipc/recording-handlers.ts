@@ -4,6 +4,7 @@ import { SessionService } from '../services/SessionService'
 import { AudioFileService } from '../services/AudioFileService'
 import { getTray } from '../services/TrayService'
 import { getTaskQueue } from '../services/TaskQueueService'
+import { getSearchIndexService } from '../search/SearchIndexService'
 import { RecordingStopSchema, RecordingDataSchema } from '../../shared/validation/recording-schemas'
 import { AUTO_STOP_SECONDS } from '../../shared/constants/recording'
 import { sendToRenderer } from '../utils/ipc-helpers'
@@ -93,6 +94,8 @@ function stopRecordingInternal(sessionId: string): { durationSeconds: number } {
     } catch {
       // TaskQueue may not be initialized in tests
     }
+    // Epic #192 (#209 AK 19, #212 AK 3) — Aufbereitung für die Suche ebenso
+    getSearchIndexService()?.setRecordingPause(false)
 
     try {
       getTray().setRecordingState(false)
@@ -163,6 +166,8 @@ export function registerRecordingHandlers(): void {
     } catch {
       // TaskQueue may not be initialized in tests
     }
+    // Epic #192 (#209 AK 19, #212 AK 3) — Aufbereitung für die Suche ebenso
+    getSearchIndexService()?.setRecordingPause(true)
 
     // Start power save blocker (NFR-24)
     startPowerBlocker()
@@ -239,6 +244,8 @@ export function cleanupRecordingOnQuit(): void {
     } catch {
       // Best effort cleanup on quit
     }
+    // Epic #192 (#209 AK 19, #212 AK 3) — Aufbereitung für die Suche ebenso
+    getSearchIndexService()?.setRecordingPause(false)
   }
 }
 

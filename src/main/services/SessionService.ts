@@ -15,6 +15,8 @@ import { getTaskQueue } from './TaskQueueService'
 import { notifyDossiersChanged, notifySessionsChanged } from './ChangeEvents'
 import { isValidIsoDateNotAfter, localTodayIso } from '../../shared/utils/calendar-date'
 import type { SetDocumentDateResult } from '../../shared/types/Dossier'
+import { getSearchIndexService } from '../search/SearchIndexService'
+import { SearchIndexRepository } from '../db/repositories/SearchIndexRepository'
 
 export type { SummaryRecord }
 
@@ -44,7 +46,7 @@ const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
 export class SessionService {
   private repository: SessionRepository
 
-  constructor(db: Database.Database) {
+  constructor(private db: Database.Database) {
     this.repository = new SessionRepository(db)
   }
 
@@ -252,13 +254,29 @@ export class SessionService {
       session.pdfPath,
       session.extractedPath
     ])
-    if (filesGone) {
+    // Epic #192 (#209 PC 1) — Indexzeilen der Suche: mit FTS5 'secure-delete'
+    // kostet jeder Abschnitt ~40 ms; die Kaskade beim Löschen der Zeile
+    // blockierte bei einer langen Sitzung Sekunden. Läuft die Schleife des
+    // Suchindex, entfernt sie die Abschnitte in Zeitscheiben und ruft danach
+    // finishDeletion — ohne weiteres Zutun, binnen Sekunden. Unsichtbar ist die
+    // Sitzung schon ab der Markierung. Ohne Schleife (Start-Pfad
+    // finishPendingDeletions, Tests) löscht die Kaskade am Stück.
+    const indexer = getSearchIndexService()
+    const stagedPurge =
+      indexer !== null &&
+      indexer.isStarted() &&
+      new SearchIndexRepository(this.db).hasChunks(session.id)
+    if (filesGone && !stagedPurge) {
       this.repository.delete(session.id)
     } else {
+      // Titel, Zusammenfassung, EntityMap, Klartexte sofort leeren
       this.repository.scrubMarkedContent(session.id)
-      console.error(
-        `[SessionService] Dateien der Sitzung ${session.id} konnten nicht alle entfernt werden — Löschen wird beim nächsten Start abgeschlossen`
-      )
+      if (stagedPurge) indexer.schedulePurge(session.id, filesGone)
+      if (!filesGone) {
+        console.error(
+          `[SessionService] Dateien der Sitzung ${session.id} konnten nicht alle entfernt werden — Löschen wird beim nächsten Start abgeschlossen`
+        )
+      }
     }
     // Ein blockierter Checkpoint (busy) wird beim nächsten Löschen und beim
     // nächsten Start nachgeholt (initDatabase checkpointet immer).

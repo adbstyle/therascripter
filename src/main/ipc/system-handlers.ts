@@ -4,6 +4,7 @@ import { rmSync, statSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { release, totalmem } from 'os'
 import { getDatabase, getDataDir, closeDatabase } from '../db/connection'
+import { getSearchIndexService } from '../search/SearchIndexService'
 import { OpenInFinderSchema } from '../../shared/validation/system-schemas'
 import type { AboutInfo } from '../../shared/types'
 
@@ -123,6 +124,8 @@ export function registerSystemHandlers(): void {
       // DB may already be in error state
     }
 
+    // Epic #192 — keine Aufbereitung für die Suche mehr auf die gelöschte DB
+    getSearchIndexService()?.stop()
     closeDatabase()
 
     const errors: string[] = []

@@ -18,6 +18,7 @@ import type { ToolHealthState } from '../tool-blocked'
 import type { NavCommand, SessionsChangedData } from '../validation/change-event-schemas'
 import type { DossierApi } from './ipc/DossierApi'
 import type { SessionListItem, SetDocumentDateResult } from './Dossier'
+import type { SearchApi } from './ipc/SearchApi'
 
 export interface SessionApi {
   /** #205 — mit den Patientendossiers jeder Sitzung (Plaketten). */
@@ -318,5 +319,6 @@ export interface IpcApi {
   nav: NavApi
   viewMode: ViewModeApi
   dossiers: DossierApi
+  search: SearchApi
   pendingEdits: PendingEditsApi
 }
