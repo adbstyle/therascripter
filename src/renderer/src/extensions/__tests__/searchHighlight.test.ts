@@ -266,6 +266,26 @@ describe('resolveSearchFocus — robust gegen Bearbeitung', () => {
     expect(resolved.scrollParagraphPos).toBe(paragraphPos(h, 1))
   })
 
+  it('ein Begriff ausserhalb von paraFrom..paraTo: auch dieser Absatz ist hinterlegt', () => {
+    const h = editorWith()
+    const inRange = hitFocus(h, 1, 'Bern')
+    const outside = hitFocus(h, 2, 'Ende')
+    const resolved = resolveSearchFocus(h.editor.state.doc, {
+      kind: 'hit',
+      paraFrom: 1,
+      paraTo: 1,
+      ranges: [...inRange.ranges!, ...outside.ranges!],
+      anchor: 'Bern'
+    })
+    expect(resolved.kind).toBe('body')
+    if (resolved.kind !== 'body') return
+    expect(resolved.spec.paragraphs.map((p) => p.from)).toEqual([
+      paragraphPos(h, 1),
+      paragraphPos(h, 2)
+    ])
+    expect(resolved.scrollParagraphPos).toBe(paragraphPos(h, 1))
+  })
+
   it('exakte Begriffe in zwei Absätzen: beide hinterlegt, gescrollt zum ersten', () => {
     const h = editorWith()
     const a = hitFocus(h, 0, 'Guten')

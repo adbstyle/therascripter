@@ -162,8 +162,9 @@ export type ResolvedFocus =
   | { kind: 'missing' }
 
 /**
- * `indices`: Absätze der Fundstelle (aufsteigend). Mit Markierungen gelten nur
- * die Absätze, die eine Markierung enthalten (exakter Treffer) — hinterlegt
+ * `indices`: Absätze der Fundstelle (aufsteigend). Mit Markierungen gelten
+ * genau die Absätze, die eine Markierung enthalten (exakter Treffer, auch
+ * ausserhalb von `indices`) — hinterlegt
  * und gescrollt wird zum ersten davon; ohne Markierungen (Treffer nach
  * Bedeutung) alle mit dezentem Randbalken, gescrollt zum ersten Absatz.
  */
@@ -176,13 +177,12 @@ function bodyResult(
 ): ResolvedFocus {
   const contains = (p: ParagraphInfo, pos: number): boolean =>
     p.pos <= pos && pos < p.pos + p.node.nodeSize
-  let covered = indices.map((i) => paragraphs[i])
-  if (marks.length > 0) {
-    const marked = covered.filter((p) => marks.some((m) => contains(p, m.from)))
-    // Markierungen ausserhalb des gelieferten Bereichs (sollte nicht vorkommen): deren Absätze
-    covered =
-      marked.length > 0 ? marked : paragraphs.filter((p) => marks.some((m) => contains(p, m.from)))
-  }
+  // Exakt: genau die Absätze mit einer Markierung — auch solche ausserhalb des
+  // gelieferten Bereichs (Regel «Absätze mit Begriff», Review #231)
+  const covered =
+    marks.length > 0
+      ? paragraphs.filter((p) => marks.some((m) => contains(p, m.from)))
+      : indices.map((i) => paragraphs[i])
   const spec: SearchHighlightSpec = {
     paragraphs: covered.map((p) => ({ from: p.pos, to: p.pos + p.node.nodeSize })),
     style: marks.length > 0 ? 'exact' : 'semantic',
