@@ -34,6 +34,8 @@ export interface AppSettings {
   modelsDownloaded: boolean
   theme: ThemePreference
   reviewPanelOpen: boolean
+  /** Epic #192 — Seitenleiste der App eingeblendet (nicht schutzbedürftig). */
+  sidebarOpen: boolean
   /** Issue #203 — zuletzt gewählte Ansicht, gilt für alle Sitzungen. */
   viewMode: ViewMode
   installedModelVersions: Record<string, InstalledModelVersion>
@@ -75,6 +77,7 @@ const defaults: AppSettings = {
   modelsDownloaded: false,
   theme: 'system',
   reviewPanelOpen: false,
+  sidebarOpen: true,
   viewMode: 'pseudonymized',
   installedModelVersions: {},
   autoUpdate: true,

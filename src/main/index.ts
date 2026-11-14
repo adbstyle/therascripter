@@ -103,7 +103,7 @@ function createWindow(): void {
     title: 'TheraScript',
     show: !startHidden,
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 15, y: 11 },
+    trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: isDark ? '#0f1117' : '#ffffff',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -397,7 +397,9 @@ app.whenReady().then(() => {
     onOpenSettings: () => {
       tray.showWindow()
       sendToRenderer('nav:openSettings')
-    }
+    },
+    // Epic #192 — Zurück/Vorwärts und Seitenleiste; der Renderer führt den Verlauf
+    onNavCommand: (command) => sendToRenderer('nav:command', command)
   })
 
   // Start task queue processing

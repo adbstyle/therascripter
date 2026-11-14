@@ -12,8 +12,20 @@ import type { SummaryRecord } from '../../shared/types/IpcApi'
 // at call-time — getTaskQueue() is only invoked inside deleteSession() at runtime,
 // not during module initialisation. Bundlers and ts-node handle this correctly.
 import { getTaskQueue } from './TaskQueueService'
+import { notifySessionsChanged } from './ChangeEvents'
 
 export type { SummaryRecord }
+
+/**
+ * Felder, die keine Liste anzeigt (Dateipfade, Herkunft). Ihre Änderung löst
+ * kein `sessions:changed` aus — sonst lüde die Sitzungsliste bei jedem
+ * Pipeline-Zwischenschritt neu (Epic #192).
+ */
+function touchesListedFields(input: UpdateSessionInput): boolean {
+  return Object.entries(input).some(
+    ([key, value]) => value !== undefined && !key.endsWith('Path') && key !== 'processedWithModels'
+  )
+}
 
 const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
   recording: ['queued', 'error'],
@@ -35,12 +47,14 @@ export class SessionService {
   }
 
   createSession(title: string, type: 'audio' | 'pdf', pdfPath?: string): Session {
-    return this.repository.create({
+    const session = this.repository.create({
       title,
       type,
       status: type === 'audio' ? 'recording' : 'queued',
       pdfPath
     })
+    notifySessionsChanged()
+    return session
   }
 
   getSession(id: string): Session | null {
@@ -65,13 +79,15 @@ export class SessionService {
         input = { ...input, reviewAt: new Date().toISOString() }
       }
     }
-    return this.repository.update(id, input)
+    const updated = this.repository.update(id, input)
+    if (updated && touchesListedFields(input)) notifySessionsChanged()
+    return updated
   }
 
   renameSession(id: string, title: string): Session | null {
     const session = this.repository.findById(id)
     if (!session) return null
-    return this.repository.update(id, {
+    return this.updateAndNotify(id, {
       title,
       titleEntitySnapshot: buildPlaceholderSnapshot(
         title,
@@ -80,6 +96,13 @@ export class SessionService {
         session.title
       )
     })
+  }
+
+  /** Update for fields every list shows (title, summary) — always notifies. */
+  private updateAndNotify(id: string, input: UpdateSessionInput): Session | null {
+    const updated = this.repository.update(id, input)
+    if (updated) notifySessionsChanged()
+    return updated
   }
 
   /**
@@ -121,6 +144,9 @@ export class SessionService {
     }
 
     this.completeDeletion(session)
+    // Ab der Markierung gilt die Sitzung als gelöscht — auch wenn Phase 2
+    // erst beim nächsten Start fertig wird.
+    notifySessionsChanged([id])
     return true
   }
 
@@ -131,9 +157,12 @@ export class SessionService {
    */
   finishPendingDeletions(): number {
     let finished = 0
+    const ids: string[] = []
     for (const session of this.repository.findMarkedForDeletion()) {
+      ids.push(session.id)
       if (this.completeDeletion(session)) finished++
     }
+    if (ids.length > 0) notifySessionsChanged(ids)
     return finished
   }
 
@@ -326,7 +355,7 @@ export class SessionService {
   ): Session | null {
     const entityMap = entityMapAtRead !== undefined ? entityMapAtRead : this.getEntityMap(sessionId)
     // Fresh texts: no previous snapshot — every token means what it means now.
-    return this.repository.update(sessionId, {
+    return this.updateAndNotify(sessionId, {
       title,
       summary: text,
       summaryModelId: modelId,
@@ -354,7 +383,7 @@ export class SessionService {
     if (!session) return null
     const trimmed = text.trim()
     const summary = trimmed.length > 0 ? trimmed : null
-    return this.repository.update(sessionId, {
+    return this.updateAndNotify(sessionId, {
       summary,
       summaryModelId: null,
       summaryEntitySnapshot: buildPlaceholderSnapshot(
