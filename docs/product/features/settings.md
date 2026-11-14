@@ -47,9 +47,10 @@ Renders the `<AboutPage />` component. Sections displayed top to bottom:
 5. **App data directory** — Shows `~/.therascript` path with an "Öffnen" button that reveals it in Finder via `window.api.system.openInFinder()`.
 6. **Storage usage** — Displays "App + Modelle" and "Sitzungsdaten" sizes formatted via `formatBytes()`.
 7. **System info** — macOS version, chip, RAM (GB), FileVault status (active / not active / unknown).
-8. **Data retention notice** — Info box «Daten»: the text of sessions and PDF documents stays until the user deletes it; recordings and original PDFs are deleted 24 hours after successful processing and kept until deleted if processing failed; content with a retention obligation belongs in the practice's legally authoritative software (#202). Same core statements as README, website (`#datenschutz`, FAQ «Wie lange bewahrt TheraScript meine Sitzungen auf?») and `impressum.html#app-datenschutz` — keep them in sync.
-9. **Acknowledgments** — Lists key open-source dependencies: Whisper.cpp, pyannote.audio, flair, TipTap, Electron, pdfjs-dist, better-sqlite3.
-10. **Uninstall** — "Therascript vollständig entfernen" button shows a `ConfirmDialog` listing what will be deleted (ML models, sessions, audio files, blocklist, settings). On confirm, calls `window.api.system.uninstall()`.
+8. **Copy notice** (Issue #203) — Info box «Kopieren»: copying always yields the chosen view (pseudonymized: pseudonymized items as placeholders like `[PERSON 1]`, anything the pseudonymization missed stays; Klartext: the originals in place of the placeholders), and copied text leaves the app via the Mac's clipboard (other apps, Universal Clipboard). Same core statements as README («Kopieren und Zwischenablage»), website FAQ `#faq-kopieren` and `impressum.html#app-datenschutz` — keep them in sync.
+9. **Data retention notice** — Info box «Daten»: the text of sessions and PDF documents stays until the user deletes it; recordings and original PDFs are deleted 24 hours after successful processing and kept until deleted if processing failed; content with a retention obligation belongs in the practice's legally authoritative software (#202). Same core statements as README, website (`#datenschutz`, FAQ «Wie lange bewahrt TheraScript meine Sitzungen auf?») and `impressum.html#app-datenschutz` — keep them in sync.
+10. **Acknowledgments** — Lists key open-source dependencies: Whisper.cpp, pyannote.audio, flair, TipTap, Electron, pdfjs-dist, better-sqlite3.
+11. **Uninstall** — "Therascript vollständig entfernen" button shows a `ConfirmDialog` listing what will be deleted (ML models, sessions, audio files, blocklist, settings). On confirm, calls `window.api.system.uninstall()`.
 
 The about info is fetched once on mount via `window.api.system.aboutInfo()` which returns an `AboutInfo` object containing `version`, `dataDir`, `storageModelsBytes`, `storageSessionsBytes`, `osVersion`, `chip`, `totalMemoryGB`, and `fileVaultActive`.
 
@@ -68,6 +69,8 @@ The theme system spans three Electron processes:
    - Calls `applyTheme()` which toggles the `dark` CSS class on `document.documentElement` based on preference and `prefers-color-scheme` media query.
    - Listens for system theme changes via `matchMedia('(prefers-color-scheme: dark)')` — only acts when preference is `'system'`.
    - `setTheme()` updates local state, applies the CSS class, and persists via `window.api.settings.set('theme', preference)`.
+
+The view setting (`viewMode`, Klartext vs. pseudonymized, Issue #203) deliberately does NOT follow this async pattern: the preload reads it synchronously (`viewMode:getSync`) so the first render already shows the chosen view — see `review-editor.md` «Klartext view».
 
 ### Type
 
