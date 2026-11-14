@@ -102,6 +102,37 @@ describe('NavigationProvider', () => {
     expect(screen.getByTestId('can').textContent).toBe('false/true')
   })
 
+  it('Dossier samt mitgelöschter Sitzung: beide verlassen Zurück UND Vorwärts sofort (#213 AK 5, PC 3; #207 PC 3)', async () => {
+    render(
+      <NavigationProvider>
+        <Probe />
+      </NavigationProvider>
+    )
+    // Verlauf: Liste → Dossier d1 → Sitzung a (nur in d1) → Sitzung b
+    await userEvent.click(screen.getByText('D1'))
+    await userEvent.click(screen.getByText('A'))
+    await userEvent.click(screen.getByText('B'))
+    // Zurück bis zur Liste: d1 und a liegen jetzt im Vorwärts-Verlauf
+    act(() => emitApiEvent(window.api, 'nav.onCommand', 'back'))
+    act(() => emitApiEvent(window.api, 'nav.onCommand', 'back'))
+    act(() => emitApiEvent(window.api, 'nav.onCommand', 'back'))
+    expect(route()).toBe('sessions')
+
+    // deleteDossier meldet im selben Tick beide Events
+    act(() => {
+      emitApiEvent(window.api, 'sessions.onChanged', { deletedIds: ['a'] })
+      emitApiEvent(window.api, 'dossiers.onChanged', { deletedIds: ['d1'] })
+    })
+    expect(route()).toBe('sessions')
+    act(() => emitApiEvent(window.api, 'nav.onCommand', 'forward'))
+    expect(route()).toBe('session:b')
+    act(() => emitApiEvent(window.api, 'nav.onCommand', 'forward'))
+    expect(route()).toBe('session:b')
+    act(() => emitApiEvent(window.api, 'nav.onCommand', 'back'))
+    expect(route()).toBe('sessions')
+    expect(screen.getByTestId('can').textContent).toBe('false/true')
+  })
+
   it('lässt den Verlauf bei Änderungen ohne Löschung unverändert', async () => {
     render(
       <NavigationProvider>

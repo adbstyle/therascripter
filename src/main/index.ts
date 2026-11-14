@@ -76,6 +76,7 @@ import { registerSummaryHandlers } from './ipc/summary-handlers'
 import { startToolCheck } from './services/ToolHealthService'
 import { registerDossierAssignmentHandlers, registerDossierHandlers } from './ipc/dossier-handlers'
 import { registerSearchHandlers } from './ipc/search-handlers'
+import { registerRecentHandlers } from './ipc/recent-handlers'
 import { initSearchIndexService, getSearchIndexService } from './search/SearchIndexService'
 import { getActiveSessionId } from './ipc/recording-handlers'
 
@@ -368,6 +369,7 @@ app.whenReady().then(() => {
   registerDossierHandlers()
   registerDossierAssignmentHandlers()
   registerSearchHandlers()
+  registerRecentHandlers()
   registerSummaryHandlers({
     sessionService,
     summaries: {

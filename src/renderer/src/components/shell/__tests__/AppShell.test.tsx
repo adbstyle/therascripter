@@ -581,3 +581,33 @@ describe('AppShell — Befunde aus dem Review', () => {
     }
   })
 })
+
+describe('AppShell — Zuletzt geöffnet (#213)', () => {
+  it('zeigt «Zuletzt geöffnet» in der Seitenleiste und merkt eine geöffnete Sitzung', async () => {
+    const user = userEvent.setup()
+    window.api.recent.list = vi
+      .fn()
+      .mockResolvedValue([{ kind: 'session', recording: false, session: reviewSession }])
+    renderShell()
+    const nav = await screen.findByRole('navigation', { name: 'Seitenleiste' })
+    const recent = within(nav).getByRole('region', { name: 'Zuletzt geöffnet' })
+    await user.click(await within(recent).findByRole('button', { name: 'Sitzung Erstgespräch' }))
+    expect(await screen.findByText('Editor s1')).toBeInTheDocument()
+    expect(window.api.recent.touch).toHaveBeenCalledWith({ kind: 'session', id: 's1' })
+  })
+
+  it('merkt auch bei ausgeblendeter Seitenleiste', async () => {
+    window.api = createMockApi({
+      nav: {
+        initialSidebarOpen: false,
+        onOpenSettings: vi.fn(() => () => {}),
+        onCommand: vi.fn(() => () => {})
+      }
+    })
+    renderShell({ kind: 'session', sessionId: 's1' })
+    expect(screen.queryByRole('navigation', { name: 'Seitenleiste' })).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(window.api.recent.touch).toHaveBeenCalledWith({ kind: 'session', id: 's1' })
+    )
+  })
+})

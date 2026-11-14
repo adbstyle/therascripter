@@ -189,6 +189,11 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
       recentRemember: vi.fn().mockResolvedValue(undefined),
       recentClear: vi.fn().mockResolvedValue(undefined)
     },
+    recent: {
+      list: vi.fn().mockResolvedValue([]),
+      touch: vi.fn().mockResolvedValue(undefined),
+      onChanged: on('recent.onChanged')
+    },
     pendingEdits: {
       onFlushRequest: on('pendingEdits.onFlushRequest')
     },

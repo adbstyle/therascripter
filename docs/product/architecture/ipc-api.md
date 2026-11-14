@@ -49,6 +49,7 @@ The `api` object contains the following namespaces:
 | `api.appUpdate` | `getState()`, `check()`, `download()`, `cancelDownload()`, `install()`, `setAutoUpdate(enabled)`, `openInstallGuide()`, `onState(cb)` |
 | `api.dossiers` | `list()`, `get(dossierId)`, `create(input)`, `update(dossierId, patch)`, `deletePreview(dossierId)`, `delete(dossierId, fingerprint)`, `timeline(dossierId)`, `listForSession(sessionId)`, `assign(sessionId, dossierId)`, `unassign(sessionId, dossierId)`, `onChanged(cb)` — preload in `src/preload/api/dossiers.ts` |
 | `api.search` | `query(input)`, `recentList()`, `recentRemember(query)`, `recentClear()` — preload in `src/preload/api/search.ts` |
+| `api.recent` | `list()`, `touch(target)`, `onChanged(cb)` — «Zuletzt geöffnet» (#213), preload in `src/preload/api/recent.ts` |
 
 All `on*` listener methods return an unsubscribe function `() => void`.
 
@@ -189,6 +190,16 @@ Source: `src/main/ipc/search-handlers.ts`, service `src/main/search/SearchServic
 | `search:recent:remember` | invoke | `SearchRecentRememberSchema` — `{ query }` | `void` | Put a query on top (deduplicated by its normalized form, at most five). Only from the search over everything (#211 OOS 3) |
 | `search:recent:clear` | invoke | _(none)_ | `void` | Delete all recent searches, then WAL checkpoint (#209 PC 3) |
 
+### Recent Handlers (Epic #192, #213)
+
+`src/main/ipc/recent-handlers.ts`, service `src/main/services/RecentService.ts`, repository `src/main/db/repositories/RecentRepository.ts`.
+
+| Channel | Type | Payload | Returns | Description |
+|---|---|---|---|---|
+| `recent:list` | invoke | _(none)_ | `RecentEntry[]` | At most eight entries, newest first; the running recording (`getActiveSessionId`) always first, even if it fell out of the eight. `{kind:'dossier', dossier: DossierRef}` or `{kind:'session', session: Session (list projection incl. `titlePlain`), recording}`. Sessions with `deleting_at` are never listed |
+| `recent:touch` | invoke | `RecentTouchSchema` — `{kind:'dossier'\|'session', id}` (strict, discriminated) | `void` | Put an opened dossier or session on top (upsert, strictly increasing `opened_at`), keep eight; unknown or deleting targets are ignored. Sent by the renderer on every dossier/session route (`useRememberOpenedRoute` in `AppShell`); `recording:start` touches the new session itself. Imported PDFs are not touched (not opened) |
+| `recent:changed` | event | `RecentChangedSchema` — `{ deletedIds: [] }` | – | After a touch; `RecentList` also reloads on `sessions:changed`/`dossiers:changed` (titles, status, deletions) |
+
 ### Model Download Handlers
 
 Source: `src/main/ipc/model-download-handlers.ts`
@@ -297,6 +308,8 @@ Source: `src/main/ipc/system-handlers.ts`
 | `search:recent:list` | search |
 | `search:recent:remember` | search |
 | `search:recent:clear` | search |
+| `recent:list` | recent |
+| `recent:touch` | recent |
 
 ### All send channels (renderer -> main, fire-and-forget)
 
@@ -317,6 +330,7 @@ Source: `src/main/ipc/system-handlers.ts`
 | `modelDownload:status` | model-download |
 | `appUpdate:state` | app-update |
 | `sessions:changed` | session (ChangeEvents) |
+| `recent:changed` | recent (ChangeEvents) |
 | `nav:command` | app menu |
 | `nav:openSettings` | app menu / tray |
 

@@ -23,6 +23,7 @@ import { ToolHealthStateSchema } from '../shared/validation/tool-health-schemas'
 import { normalizeViewMode, type ViewMode } from '../shared/types/ViewMode'
 import { NavCommandSchema, SessionsChangedSchema } from '../shared/validation/change-event-schemas'
 import { searchApi } from './api/search'
+import { recentApi } from './api/recent'
 
 /**
  * Issue #203 — the saved view, read synchronously before any renderer code
@@ -282,6 +283,7 @@ const api: IpcApi = {
   },
   dossiers: dossierApi,
   search: searchApi,
+  recent: recentApi,
   pendingEdits: pendingEditsApi,
   nav: {
     initialSidebarOpen: readInitialSidebarOpen(),

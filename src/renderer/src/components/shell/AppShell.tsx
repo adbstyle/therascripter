@@ -11,6 +11,7 @@ import { useRecordingState } from '../../contexts/recording'
 import { useToolHealth } from '../../hooks/useToolHealth'
 import { useSidebarOpen } from '../../hooks/useSidebarOpen'
 import { useRecordingDossierIds } from '../../hooks/useRecordingDossierIds'
+import { useRememberOpenedRoute } from '../../hooks/useRememberOpenedRoute'
 import { pruneScrollPositions } from '../../navigation/useScrollRestoration'
 
 /**
@@ -25,6 +26,8 @@ export default function AppShell(): React.JSX.Element {
   const { isRecording, duration, microphone } = useRecordingState()
   const toolHealth = useToolHealth()
   const { sidebarOpen, toggleSidebar } = useSidebarOpen()
+  // «Zuletzt geöffnet» (#213) — auch bei ausgeblendeter Seitenleiste
+  useRememberOpenedRoute()
   // Pro App-Lauf ausgeblendet; nach dem nächsten Start kommt der Hinweis wieder
   const [toolsHintDismissed, setToolsHintDismissed] = useState(false)
   const scrollPositions = useRef(new Map<number, number>())

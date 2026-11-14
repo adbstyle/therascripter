@@ -2,6 +2,7 @@ import { dialog, ipcMain, Notification, powerSaveBlocker } from 'electron'
 import { getDatabase } from '../db/connection'
 import { SessionService } from '../services/SessionService'
 import { SessionDossierService } from '../services/SessionDossierService'
+import { RecentService } from '../services/RecentService'
 import { AudioFileService } from '../services/AudioFileService'
 import { getTray } from '../services/TrayService'
 import { getTaskQueue } from '../services/TaskQueueService'
@@ -183,6 +184,12 @@ export function registerRecordingHandlers(): void {
     const session = service.createSession(title, 'audio')
     // Ab Beginn der Aufnahme zugeordnet — vor der ersten Audiodatei (#206 PC 1)
     const assignment = assignToDossier(session.id, options?.dossierId)
+    // «Zuletzt geöffnet» (#213 AK 2): die gestartete Aufnahme gehört dazu
+    try {
+      new RecentService(getDatabase()).touch({ kind: 'session', id: session.id })
+    } catch (error) {
+      console.error('[Recording] «Zuletzt geöffnet» nicht aktualisiert:', error)
+    }
 
     const wavPath = audioFileService.initWavFile(session.id)
     service.updateSession(session.id, { audioPath: wavPath })

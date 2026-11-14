@@ -97,3 +97,7 @@ The head of a dossier page offers «PDF importieren» and «Aufnahme starten» (
 - Outside a dossier nothing asks for a dossier (OOS 1).
 
 Tests: `recording-handlers.dossier.test.ts`, `pdf-handlers.dossier.test.ts` (main), `DossierStartFromDossier.test.tsx`, `DossierTimeline.test.tsx` (drop), `useRecording.test.ts` (renderer).
+
+## Recently opened (#213)
+
+«Zuletzt geöffnet» in the sidebar lists the eight most recently opened dossiers, sessions and PDF documents (table `recent_items`, survives restarts). Saved when a dossier or session page opens and when a recording starts (also from a dossier); imported PDFs are not added — they were not opened. The running recording always comes first. Each entry shows its kind as an icon with an accessible name and its name in the chosen view (dossier names are not hidden by the pseudonymized view, Epic OOS 16). Deleted dossiers, sessions and PDFs disappear at once — also while the physical deletion of a session still runs — and their rows are gone from the files (PC 2). Back and forward (‹ ›, ⌘[ / ⌘]) walk the pages visited in this run; deleted objects leave that history immediately (PC 3), the history is not kept across restarts (OOS 1). Details: [overview.md](../architecture/overview.md) «Navigation», [storage.md](../architecture/storage.md) «`recent_items`», [ipc-api.md](../architecture/ipc-api.md) «Recent Handlers».

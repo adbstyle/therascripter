@@ -120,7 +120,7 @@ n:m assignment of sessions to dossiers (#205). `WITHOUT ROWID`, primary key `(se
 
 ### `recent_items`
 
-«Recently opened» (#213): `id` INTEGER PRIMARY KEY, exactly one of `dossier_id` / `session_id` (CHECK), each `ON DELETE CASCADE` and unique where not `NULL`, `opened_at` ISO UTC, index on `(opened_at DESC, id DESC)`.
+«Recently opened» (#213): `id` INTEGER PRIMARY KEY, exactly one of `dossier_id` / `session_id` (CHECK), each `ON DELETE CASCADE` and unique where not `NULL`, `opened_at` ISO UTC, index on `(opened_at DESC, id DESC)`. Written only by `RecentRepository.touch` (upsert, `opened_at` strictly increasing, then everything beyond the eight newest is deleted); survives restarts (PC 1). Deletion (PC 2): deleting a dossier removes its row via the cascade inside the delete transaction; marking a session for deletion (`SessionRepository.markDeleting`, also from the dossier delete) deletes its row **at once** — not only with the final `DELETE FROM sessions`, which may wait for the staged index purge or the next start — and `scrubMarkedContent` repeats it; the delete paths' `secure_delete` + `wal_checkpoint(TRUNCATE)` remove the bytes. `RecentRepository.list` additionally filters `deleting_at IS NULL`. `RecentService.test.ts` scans `.db` and `-wal` for the IDs after deleting a dossier, its exclusive session and a single session.
 
 ---
 

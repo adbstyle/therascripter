@@ -127,6 +127,18 @@ describe('recording:start aus einem Patientendossier (#206)', () => {
     expect(handlers.getActiveSessionId()).toBe(sessionId)
   })
 
+  it('nimmt die gestartete Aufnahme in «Zuletzt geöffnet» auf (#213 AK 2)', async () => {
+    const { sessionId } = await start()
+    expect(testDb.prepare('SELECT session_id FROM recent_items').all()).toEqual([
+      { session_id: sessionId }
+    ])
+    const { RecentService } = await import('../../services/RecentService')
+    const list = new RecentService(testDb, {
+      getActiveSessionId: handlers.getActiveSessionId
+    }).list()
+    expect(list[0]).toMatchObject({ kind: 'session', recording: true })
+  })
+
   it('ohne Dossier: keine Zuordnung, Ergebnis «none» (OOS 1)', async () => {
     const { sessionId, assignment } = await start()
     expect(assignment).toBe('none')

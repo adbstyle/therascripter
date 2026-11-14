@@ -19,6 +19,7 @@ import type { NavCommand, SessionsChangedData } from '../validation/change-event
 import type { DossierApi } from './ipc/DossierApi'
 import type { SessionListItem, SetDocumentDateResult } from './Dossier'
 import type { SearchApi } from './ipc/SearchApi'
+import type { RecentApi } from './ipc/RecentApi'
 
 export interface SessionApi {
   /** #205 — mit den Patientendossiers jeder Sitzung (Plaketten). */
@@ -348,5 +349,6 @@ export interface IpcApi {
   viewMode: ViewModeApi
   dossiers: DossierApi
   search: SearchApi
+  recent: RecentApi
   pendingEdits: PendingEditsApi
 }

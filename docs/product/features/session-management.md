@@ -135,7 +135,7 @@ Sessions are kept until the user deletes them — there is no automatic deletion
 
 The Review Editor fetches the current session when the trash button is clicked, so the list reflects a summary that arrived or a recording that was removed after the editor opened.
 
-When confirmed, `SessionService.deleteSession()` marks the session (`deleting_at`), aborts its tasks, removes all its files and the row, and checkpoints the WAL. An interrupted or incomplete deletion is finished at the next start. Details, including why nothing is recoverable from the app's files: [storage.md — Deleting a session](../architecture/storage.md#deleting-a-session).
+When confirmed, `SessionService.deleteSession()` marks the session (`deleting_at`) — which also removes it from «Zuletzt geöffnet» at once (#213 PC 2) —, aborts its tasks, removes all its files and the row, and checkpoints the WAL. An interrupted or incomplete deletion is finished at the next start. Details, including why nothing is recoverable from the app's files: [storage.md — Deleting a session](../architecture/storage.md#deleting-a-session).
 
 ## Source-File Cleanup
 
