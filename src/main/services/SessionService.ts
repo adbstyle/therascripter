@@ -12,7 +12,9 @@ import type { SummaryRecord } from '../../shared/types/IpcApi'
 // at call-time — getTaskQueue() is only invoked inside deleteSession() at runtime,
 // not during module initialisation. Bundlers and ts-node handle this correctly.
 import { getTaskQueue } from './TaskQueueService'
-import { notifySessionsChanged } from './ChangeEvents'
+import { notifyDossiersChanged, notifySessionsChanged } from './ChangeEvents'
+import { isValidIsoDateNotAfter, localTodayIso } from '../../shared/utils/calendar-date'
+import type { SetDocumentDateResult } from '../../shared/types/Dossier'
 import { getSearchIndexService } from '../search/SearchIndexService'
 import { SearchIndexRepository } from '../db/repositories/SearchIndexRepository'
 
@@ -98,6 +100,26 @@ export class SessionService {
         session.title
       )
     })
+  }
+
+  /**
+   * #205 AK 18–22 — document date of a PDF (ISO day, not after today in local
+   * time). Changes neither text, pseudonymization, title nor summary (PC 2).
+   * Throws on an invalid date (the IPC schema rejects it before).
+   */
+  setDocumentDate(id: string, documentDate: string): SetDocumentDateResult {
+    if (!isValidIsoDateNotAfter(documentDate, localTodayIso())) {
+      throw new Error('Ungültiges Dokumentdatum')
+    }
+    const session = this.repository.findById(id)
+    if (!session) return { ok: false, reason: 'not-found' }
+    if (session.type !== 'pdf') return { ok: false, reason: 'not-pdf' }
+    if (!this.repository.setDocumentDate(id, documentDate))
+      return { ok: false, reason: 'not-found' }
+    // Liste und Verlauf zeigen das Datum, die Dossier-Übersicht den jüngsten Tag
+    notifySessionsChanged()
+    notifyDossiersChanged()
+    return { ok: true }
   }
 
   /** Update for fields every list shows (title, summary) — always notifies. */

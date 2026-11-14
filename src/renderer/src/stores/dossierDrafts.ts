@@ -1,5 +1,7 @@
 import {
   formatSwissDate,
+  BEFORE_MIN_YEAR_MESSAGE,
+  isBeforeMinYear,
   isValidIsoDateNotAfter,
   localTodayIso,
   parseSwissDate
@@ -159,6 +161,7 @@ export function validateDossierField(field: DossierField, value: string): Valida
     case 'birthDate': {
       if (value.trim() === '') return { ok: true, patch: { birthDate: null } }
       const iso = parseSwissDate(value)
+      if (iso && isBeforeMinYear(iso)) return { ok: false, message: BEFORE_MIN_YEAR_MESSAGE }
       if (!iso || !isValidIsoDateNotAfter(iso, localTodayIso())) {
         return { ok: false, message: BIRTH_DATE_ERROR }
       }

@@ -141,6 +141,16 @@ describe('dossierDrafts — Autosave (#204 AK 10/11)', () => {
     expect(update).toHaveBeenLastCalledWith('d1', { birthDate: null })
   })
 
+  it('lehnt ein Geburtsdatum vor 1900 als Tippfehler ab (Review #223)', async () => {
+    const update = vi.fn<UpdateDossier>().mockResolvedValue(ok())
+    const editor = acquireDossierEditor(makeDossier(), update)
+    editor.change('birthDate', '03.02.0978')
+    vi.advanceTimersByTime(AUTOSAVE_DELAY_MS)
+    await settle()
+    expect(update).not.toHaveBeenCalled()
+    expect(editor.getState().errors.birthDate).toMatch(/^Bitte ein Datum ab 1900 eingeben\./)
+  })
+
   it('zeigt eine vergebene Dossier-ID am Feld, behält die Eingabe und sendet sie nicht erneut (AK 5/11)', async () => {
     const update = vi
       .fn<UpdateDossier>()

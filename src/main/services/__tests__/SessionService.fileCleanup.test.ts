@@ -147,6 +147,31 @@ describe('SessionService file cleanup', () => {
       expect(row.audio_path).toBe('/mock/home/.therascript/audio/locked.wav')
     })
 
+    it('drops document date and dossier assignments right away, too (#205 PC 5/6)', () => {
+      const pdf = service.createSession('Bericht', 'pdf')
+      service.updateSession(pdf.id, { pdfPath: '/mock/home/.therascript/pdf/locked.pdf' })
+      service.setDocumentDate(pdf.id, '2024-01-02')
+      db.prepare(
+        `INSERT INTO dossiers (id, first_name, last_name, first_name_norm, last_name_norm,
+           created_at, updated_at) VALUES ('d1', 'A', 'B', 'a', 'b', 'x', 'x')`
+      ).run()
+      db.prepare(
+        "INSERT INTO session_dossiers (session_id, dossier_id, assigned_at) VALUES (?, 'd1', 'x')"
+      ).run(pdf.id)
+      mockRemoveFileReporting.mockImplementation((p) => !p.endsWith('locked.pdf'))
+
+      expect(service.deleteSession(pdf.id)).toBe(true)
+
+      expect(rowExists(pdf.id)).toBe(true)
+      const row = db.prepare('SELECT document_date FROM sessions WHERE id = ?').get(pdf.id) as {
+        document_date: string | null
+      }
+      expect(row.document_date).toBeNull()
+      expect(
+        db.prepare('SELECT COUNT(*) AS n FROM session_dossiers WHERE session_id = ?').get(pdf.id)
+      ).toEqual({ n: 0 })
+    })
+
     it('finishPendingDeletions completes a deletion once the files can be removed', () => {
       const session = service.createSession('Test', 'audio')
       service.updateSession(session.id, { audioPath: '/mock/home/.therascript/audio/locked.wav' })

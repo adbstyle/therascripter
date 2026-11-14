@@ -7,6 +7,8 @@ import type { ValueStore } from '../utils/valueStore'
 import { formatTime } from '../utils/formatTime'
 import { useViewMode } from '../viewMode/useViewMode'
 import { sessionTitleIn } from '../viewMode/sessionText'
+import { DossierBadges } from './dossier/DossierBadges'
+import type { DossierRef } from '../../../shared/types/Dossier'
 
 export interface LiveRecording {
   /** Pegel und Dauer als Store statt Wert — siehe useRecording (Issue #140) */
@@ -16,7 +18,8 @@ export interface LiveRecording {
 }
 
 interface RecordingSessionCardProps {
-  session: Session
+  /** Mit `dossiers` zeigt die Karte die Plaketten — Zuordnen auch während der Aufnahme (#205 AK 3). */
+  session: Session & { dossiers?: DossierRef[] }
   live: LiveRecording
   'data-session-id'?: string
 }
@@ -76,6 +79,17 @@ export function RecordingSessionCard({
       </div>
 
       <p className="mt-2 text-xs text-text-tertiary">Auto-Stop nach {formatTime(remaining)}</p>
+
+      {session.dossiers !== undefined && (
+        <div className="mt-2">
+          <DossierBadges
+            sessionId={session.id}
+            sessionLabel={displayTitle}
+            dossiers={session.dossiers}
+            variant="list"
+          />
+        </div>
+      )}
     </div>
   )
 }

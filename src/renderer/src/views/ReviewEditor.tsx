@@ -18,6 +18,9 @@ import { EditableSessionTitle } from '../components/review/EditableSessionTitle'
 import { SummaryPanel } from '../components/review/SummaryPanel'
 import { ReviewSidePanel } from '../components/review/ReviewSidePanel'
 import { SaveStatus } from '../components/review/SaveStatus'
+import { DossierBadges } from '../components/dossier/DossierBadges'
+import { DocumentDateButton } from '../components/session/DocumentDateButton'
+import { useLiveQuery } from '../hooks/useLiveQuery'
 import { ChipActionsContext, type ChipActions } from '../contexts/ChipActionsContext'
 import {
   batchRemovePlaceholder,
@@ -43,10 +46,10 @@ import type {
   PlaceholderType,
   ProcessedModelsSnapshot,
   ReviewData,
-  Session,
   SessionType
 } from '../../../shared/types'
 import type { TipTapDocument } from '../../../shared/types/TipTapDocument'
+import type { DossierRef, SessionListItem } from '../../../shared/types/Dossier'
 import type { Editor } from '@tiptap/core'
 
 // Modulweit statt inline: useEditor vergleicht Extensions per Identität und
@@ -99,9 +102,11 @@ interface ReviewEditorProps {
   sessionId: string
   /** Esc, «Zurück» nach einem Ladefehler und nach dem Löschen: zurück im Verlauf. */
   onBack: () => void
+  /** #205 — Klick auf eine Dossier-Plakette im Kopf öffnet das Patientendossier. */
+  onOpenDossier?: (dossierId: string) => void
 }
 
-function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Element {
+function ReviewEditor({ sessionId, onBack, onOpenDossier }: ReviewEditorProps): React.JSX.Element {
   const toast = useToast()
   const viewMode = useViewMode()
   const isPlain = viewMode === 'plain'
@@ -113,6 +118,12 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
   const [provenance, setProvenance] = useState<ProcessedModelsSnapshot | null>(null)
   const [reviewAt, setReviewAt] = useState<string | null>(null)
   const [audioStats, setAudioStats] = useState<AudioStats | null>(null)
+  // #205 — Importzeitpunkt und Dokumentdatum (PDF) für den Kopf
+  const [createdAt, setCreatedAt] = useState('')
+  const [documentDate, setDocumentDate] = useState<string | null>(null)
+  // Auswahl der Dossiers bzw. Datumsdialog offen: Esc gehört dann ihnen
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [dateDialogOpen, setDateDialogOpen] = useState(false)
   const [entityMap, setEntityMap] = useState<EntityMap>({})
   const [updateCounter, setUpdateCounter] = useState(0)
   const updateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -128,7 +139,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
     term: string
     type: PlaceholderType
   } | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<SessionListItem | null>(null)
   const showDeleteDialog = deleteTarget !== null
   // Sichtbarer Zustand der Übersicht. Er bleibt beim Wechsel zwischen «daneben»
   // und «Überlagerung» erhalten; gespeichert wird nur, wenn der Nutzer daneben
@@ -349,6 +360,16 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
     }
   })
 
+  // #205 AK 5 — Patientendossiers dieser Sitzung, aktuell über die Änderungs-Events
+  const dossiers = useLiveQuery<DossierRef[]>(
+    () => window.api.dossiers.listForSession(sessionId),
+    [
+      (cb) => window.api.sessions.onChanged(() => cb()),
+      (cb) => window.api.dossiers.onChanged(() => cb())
+    ],
+    []
+  )
+
   // Keep editorRef in sync (needed for handleKeyDown closure)
   editorRef.current = editor
 
@@ -368,6 +389,8 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
         setProvenance(data.processedWithModels)
         setReviewAt(data.reviewAt)
         setAudioStats(data.audioStats)
+        setCreatedAt(data.createdAt)
+        setDocumentDate(data.documentDate)
         entityMapRef.current = data.entityMap
 
         // emitUpdate false: das Laden ist keine Bearbeitung — sonst feuert
@@ -697,7 +720,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (showDeleteDialog || blocklistConfirm) return
+      if (showDeleteDialog || blocklistConfirm || assignOpen || dateDialogOpen) return
       // Die Überlagerung schliesst zuerst; erst ein zweites Esc geht zurück.
       if (overlay && panelShown) {
         closeOverlay()
@@ -707,7 +730,16 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onBack, showDeleteDialog, blocklistConfirm, overlay, panelShown, closeOverlay])
+  }, [
+    onBack,
+    showDeleteDialog,
+    blocklistConfirm,
+    assignOpen,
+    dateDialogOpen,
+    overlay,
+    panelShown,
+    closeOverlay
+  ])
 
   // Direkt über den ProseMirror-Doc statt countWords(editor.getJSON()):
   // getJSON() serialisierte das GESAMTE Transkript pro Neuberechnung —
@@ -859,6 +891,26 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
             </button>
           </div>
         </header>
+        {/* #205 — Patientendossiers (AK 5) und beim PDF das Dokumentdatum (AK 18/20).
+            Eingerückt auf die Titelspalte (Symbol 20 px + Abstand 12 px). */}
+        <div className="-mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 pb-3 pl-14 pr-6">
+          {sessionType === 'pdf' && createdAt && (
+            <DocumentDateButton
+              session={{ id: sessionId, createdAt, documentDate }}
+              sessionLabel={displayTitle.trim() || 'Transkription ohne Titel'}
+              onSaved={setDocumentDate}
+              onOpenChange={setDateDialogOpen}
+            />
+          )}
+          <DossierBadges
+            sessionId={sessionId}
+            sessionLabel={displayTitle.trim() || 'Transkription ohne Titel'}
+            dossiers={dossiers.data}
+            variant="editor"
+            onOpenDossier={onOpenDossier}
+            onOpenChange={setAssignOpen}
+          />
+        </div>
       </div>
 
       {/* Editor + Panel row */}
@@ -929,6 +981,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
         <DeleteSessionDialog
           session={deleteTarget}
           displayTitle={displayTitle}
+          dossiers={deleteTarget.dossiers}
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteTarget(null)}
         />

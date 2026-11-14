@@ -85,6 +85,10 @@ The same NER anonymization pipeline used for audio sessions runs on the PDF tran
 
 Not supported. When `pdfjs-dist` encounters an encrypted/password-protected PDF, the error message is detected (checking for "password" or "encrypted" in the error string) and a clear German-language error is thrown: "Passwortgeschutzte PDFs werden nicht unterstutzt."
 
+## Document Date (#205)
+
+A PDF document carries exactly one document date (OOS 6), which places it in the timeline of every patient dossier it is assigned to (`sessions.document_date`, ISO day). As long as the user has not set one, the local day of the import counts; cards, the timeline and the Review Editor header then show «08.11.2026 · Importdatum» (AK 19/20). Clicking the date opens «Dokumentdatum festlegen» (`DocumentDateDialog`): input `TT.MM.JJJJ`, only a complete, valid calendar day from 1900 on and not after today is accepted (AK 21, checked in the renderer and again in the main process). A set date can be changed but not reset to the import date (OOS 3). Therascript does not read or suggest a date from the PDF (OOS 5). Setting the date changes neither text, pseudonymization, title nor summary, and neither the order nor the groups of the session list. Channel: `session:setDocumentDate`.
+
 ## PDF Session vs. Audio Session
 
 | Aspect | Audio Session | PDF Session |
@@ -93,6 +97,7 @@ Not supported. When `pdfjs-dist` encounters an encrypted/password-protected PDF,
 | Source file location | `~/.therascript/audio/` | `~/.therascript/pdf/` |
 | Pipeline steps | transcription, diarization, alignment, anonymization | extraction, ocr, anonymization |
 | Session title | Date/time of recording | PDF filename (or date/time fallback) |
+| Place in a dossier timeline (#205) | Local day of the recording | Document date, else local day of the import |
 | Speaker labels | Yes (from diarization) | No |
 | Timestamps | Yes (from ASR) | No |
 

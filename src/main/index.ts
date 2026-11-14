@@ -74,7 +74,7 @@ import {
 } from './services/ModelDownloadService'
 import { registerSummaryHandlers } from './ipc/summary-handlers'
 import { startToolCheck } from './services/ToolHealthService'
-import { registerDossierHandlers } from './ipc/dossier-handlers'
+import { registerDossierAssignmentHandlers, registerDossierHandlers } from './ipc/dossier-handlers'
 import { registerSearchHandlers } from './ipc/search-handlers'
 import { initSearchIndexService, getSearchIndexService } from './search/SearchIndexService'
 import { getActiveSessionId } from './ipc/recording-handlers'
@@ -366,6 +366,7 @@ app.whenReady().then(() => {
   registerMicrophoneHandlers()
   registerToolHealthHandlers()
   registerDossierHandlers()
+  registerDossierAssignmentHandlers()
   registerSearchHandlers()
   registerSummaryHandlers({
     sessionService,
