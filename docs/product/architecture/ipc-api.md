@@ -37,7 +37,7 @@ The `api` object contains the following namespaces:
 
 | Namespace | Methods |
 |---|---|
-| `api.sessions` | `list()`, `delete(sessionId)`, `rename(sessionId, title)` |
+| `api.sessions` | `list()`, `delete(sessionId)`, `rename(sessionId, title)`, `setDocumentDate(sessionId, documentDate)`, `onChanged(cb)` |
 | `api.recording` | `start()`, `stop(sessionId)`, `sendData(sessionId, samples)`, `onDuration(cb)`, `onError(cb)`, `onAutoStopped(cb)` |
 | `api.settings` | `get(key)`, `set(key, value)` |
 | `api.tasks` | `getSessionTasks(sessionId)`, `isProcessing()`, `onProgress(cb)`, `onCompleted(cb)`, `onError(cb)` |
@@ -47,7 +47,7 @@ The `api` object contains the following namespaces:
 | `api.system` | `aboutInfo()`, `uninstall()`, `openInFinder(path)` |
 | `api.modelDownload` | `status()`, `checkDiskSpace()`, `start()`, `onStatus(cb)` |
 | `api.appUpdate` | `getState()`, `check()`, `download()`, `cancelDownload()`, `install()`, `setAutoUpdate(enabled)`, `openInstallGuide()`, `onState(cb)` |
-| `api.dossiers` | `list()`, `get(dossierId)`, `create(input)`, `update(dossierId, patch)`, `deletePreview(dossierId)`, `delete(dossierId, fingerprint)`, `onChanged(cb)` — preload in `src/preload/api/dossiers.ts` |
+| `api.dossiers` | `list()`, `get(dossierId)`, `create(input)`, `update(dossierId, patch)`, `deletePreview(dossierId)`, `delete(dossierId, fingerprint)`, `timeline(dossierId)`, `listForSession(sessionId)`, `assign(sessionId, dossierId)`, `unassign(sessionId, dossierId)`, `onChanged(cb)` — preload in `src/preload/api/dossiers.ts` |
 
 All `on*` listener methods return an unsubscribe function `() => void`.
 
@@ -63,7 +63,8 @@ Source: `src/main/ipc/session-handlers.ts`
 
 | Channel | Direction | Input Schema | Return Type | Description |
 |---|---|---|---|---|
-| `session:list` | invoke | _(none)_ | `Session[]` | List all sessions ordered by creation date |
+| `session:list` | invoke | _(none)_ | `SessionListItem[]` | All sessions (list projection) ordered by creation date, each with `dossiers: DossierRef[]` (alphabetical) for the badges (#205 AK 5) — a second query over all assignments, merged in `SessionDossierService.listSessions` |
+| `session:setDocumentDate` | invoke | `SessionDocumentDateSchema` — `{ sessionId, documentDate: IsoDate }` (valid day, not after today, never `null`) | `{ok:true} \| {ok:false, reason:'not-found' \| 'not-pdf'}` | Document date of a PDF (#205 AK 18–22); sends `sessions:changed` and `dossiers:changed` |
 | `session:delete` | invoke | `SessionDeleteSchema` — `{ sessionId: string }` | `void` | Delete a session and its associated files |
 | `session:rename` | invoke | `SessionRenameSchema` — `{ sessionId: string, title: string(1..200) }` | `void` | Rename a session title |
 
@@ -162,13 +163,16 @@ Source: `src/main/ipc/dossier-handlers.ts`, service `src/main/services/DossierSe
 | `dossier:create` | invoke | `DossierCreateSchema` — `{ firstName, lastName, externalId?: string \| null, birthDate?: IsoDate \| null, confirmDuplicate?: boolean }` | `CreateDossierResult` | `{ok:true, dossier}` · `{ok:false, reason:'external-id-taken', ownerName}` (owner as «Nachname, Vorname») · `{ok:false, reason:'duplicate-name', duplicates: DossierRef[]}` until called again with `confirmDuplicate: true` |
 | `dossier:update` | invoke | `DossierUpdateSchema` — `{ dossierId, patch }`, patch = at least one of `firstName, lastName, externalId (string \| null), birthDate (IsoDate \| null), diagnoses, medication, note` | `UpdateDossierResult` | Autosave per field. `{ok:true, dossier, duplicates}` — a duplicate name is saved and only reported · `{ok:false, reason:'external-id-taken', ownerName}` (nothing saved) · `{ok:false, reason:'not-found'}` |
 | `dossier:deletePreview` | invoke | `DossierIdInputSchema` | `DossierDeletePreview \| null` | `{dossierId, displayName, exclusive:{sessions, pdfs}, shared:{sessions, pdfs, otherDossiers}, blockedByRecording, fingerprint}` |
+| `dossier:timeline` | invoke | `DossierIdInputSchema` | `TimelineEntry[]` | Timeline (#205): list projection + `dossiers` + `sortDay` (`YYYY-MM-DD`, local day: session = recording, PDF = document date or import day). Order: `sortDay` DESC, sessions before PDFs, `created_at` DESC, `id` DESC. Sessions being deleted are left out |
+| `dossier:listForSession` | invoke | `SessionIdInputSchema` — `{ sessionId }` | `DossierRef[]` | Dossiers of one session, alphabetical (editor header) |
+| `dossier:assign` / `dossier:unassign` | invoke | `DossierAssignmentSchema` — `{ sessionId, dossierId }` | `{ok:true} \| {ok:false, reason:'not-found'}` | No status check (assign also while recording/processing/after an error); assign is idempotent; unassign is followed by a WAL checkpoint. Both send `sessions:changed` and `dossiers:changed` when something changed |
 | `dossier:delete` | invoke | `DossierDeleteSchema` — `{ dossierId, fingerprint: string(≤128) }` | `DeleteDossierResult` | `{ok:true, deletedSessionIds, incomplete}` · `{ok:false, reason:'changed', preview}` (nothing deleted) · `{ok:false, reason:'blocked-recording' \| 'not-found'}` — see storage.md «Deleting a patient dossier» |
 
 **Events (main → renderer):**
 
 | Channel | Payload | Description |
 |---|---|---|
-| `dossiers:changed` | `{ deletedIds: string[] }` (≤ 1000, parsed with `DossiersChangedSchema` in the preload) | After create, after an update of name, dossier ID or birth date (not for free text — it is shown nowhere else), after a deletion with the deleted ID |
+| `dossiers:changed` | `{ deletedIds: string[] }` (≤ 1000, parsed with `DossiersChangedSchema` in the preload) | After create, after an update of name, dossier ID or birth date (not for free text — it is shown nowhere else), after a deletion with the deleted ID, after assigning/unassigning and after setting a document date (#205) |
 | `sessions:changed` | `{ deletedIds: string[] }` | Also sent by the dossier deletion with the IDs of the sessions it deleted (via `DossierService`; `SessionService.finishDeletion` itself does not notify, so nothing is sent twice). All other triggers: see «Session Handlers» |
 
 Both events go through `src/main/services/ChangeEvents.ts` (`notifyDossiersChanged`, `notifySessionsChanged`): bundled with `setImmediate`, so one tick yields at most one event per channel with the union of deleted IDs; more than 1000 IDs are split. Without a window nothing is sent. Limit and schemas: `src/shared/validation/change-event-schemas.ts`. The renderer removes deleted dossiers from its page history (current page → `dossiers` overview).

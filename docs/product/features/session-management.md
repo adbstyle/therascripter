@@ -101,6 +101,8 @@ A three-dot context menu appears on hover with two actions: **Umbenennen** (rena
 
 Sessions in `review` status are clickable and open the review editor.
 
+**Patient dossiers (#205).** Below the status row each card shows the dossiers the session is assigned to as badges «Nachname, Vorname», or a dashed chip «Dossier zuordnen» without assignment (`DossierBadges`). Both open the selection to assign and unassign — on every card, whatever its state, also on the live recording card. PDF cards additionally show their document date («02.11.2026» or «08.11.2026 · Importdatum»), which opens the dialog to set or change it. The document date changes neither the order nor the time groups of the list (#205 OOS 4); the list is not filtered by dossier (OOS 7). `session:list` returns the badges with every session (`SessionListItem`), and the list reloads on `sessions:changed` and `dossiers:changed`. Status row, progress bar and error with «Erneut versuchen» live in `components/session/SessionStatusBlock.tsx`, shared with the dossier timeline. Details: [patient-dossiers.md](patient-dossiers.md).
+
 ## Rename
 
 Renaming is available for any session regardless of status. The rename dialog (`RenameDialog.tsx`):
@@ -126,6 +128,7 @@ Sessions are kept until the user deletes them — there is no automatic deletion
   - «Zwischenergebnisse der Verarbeitung» — raw transcript, speaker assignment, extracted text, if present
   - «Titel» or «Titel und Zusammenfassung»
   - Blocklist entries and backups of the Mac are not mentioned: deleting a session does not touch them
+- «Verschwindet aus den Patientendossiers:» — the dossiers the session is assigned to, with ID and birth date where present (#205 AK 23); omitted without assignment. In the list the dialog reads the current list item (it reloads on every change), in the Review Editor the state when the trash button was clicked
 - Warning: «Diese Aktion kann nicht rückgängig gemacht werden.»
 - Focus defaults to «Abbrechen» to prevent accidental deletion
 
