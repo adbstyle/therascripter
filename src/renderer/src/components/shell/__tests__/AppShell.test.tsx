@@ -96,8 +96,9 @@ describe('AppShell — Seitenleiste und Titelleiste', () => {
     expect(within(nav).getByRole('button', { name: 'Einstellungen' })).not.toHaveAttribute(
       'aria-current'
     )
-    // Patientendossiers gibt es noch nicht — nichts verlinkt dorthin
-    expect(within(nav).queryByText(/Patientendossier/)).not.toBeInTheDocument()
+    expect(within(nav).getByRole('button', { name: 'Alle Patientendossiers' })).not.toHaveAttribute(
+      'aria-current'
+    )
   })
 
   it('beschriftet jeden Icon-Knopf und gibt ihm einen Tooltip', async () => {
@@ -109,14 +110,16 @@ describe('AppShell — Seitenleiste und Titelleiste', () => {
         .getAllByRole('button')
         .filter((b) => !b.closest('[role="group"]')),
       within(nav).getByRole('button', { name: 'PDF importieren' }),
-      within(nav).getByRole('button', { name: 'Aufnahme starten' })
+      within(nav).getByRole('button', { name: 'Aufnahme starten' }),
+      within(nav).getByRole('button', { name: 'Neues Patientendossier' })
     ]
     expect(iconButtons.map((b) => b.getAttribute('aria-label'))).toEqual([
       'Seitenleiste',
       'Zurück',
       'Vorwärts',
       'PDF importieren',
-      'Aufnahme starten'
+      'Aufnahme starten',
+      'Neues Patientendossier'
     ])
     for (const button of iconButtons) {
       expect(button.textContent).toBe('')
@@ -214,9 +217,81 @@ describe('AppShell — Seitenleiste und Titelleiste', () => {
     expect(await screen.findByRole('heading', { name: 'Einstellungen' })).toBeInTheDocument()
   })
 
-  it('zeigt für Patientendossiers vorerst einen Platzhalter', async () => {
-    renderShell({ kind: 'dossiers' })
-    expect(await screen.findByText('Diese Seite ist noch nicht verfügbar.')).toBeInTheDocument()
+  it('führt über «Alle Patientendossiers» zur Übersicht und hält den Eintrag auf der Dossier-Seite aktiv (#204)', async () => {
+    const user = userEvent.setup()
+    window.api = createMockApi({
+      dossiers: {
+        list: vi.fn().mockResolvedValue([
+          {
+            id: 'd1',
+            firstName: 'Lukas',
+            lastName: 'Hofer',
+            externalId: 'PD-1188',
+            birthDate: '1978-02-03',
+            entryCount: 0,
+            lastEntryDay: null
+          }
+        ]),
+        get: vi.fn().mockResolvedValue({
+          id: 'd1',
+          firstName: 'Lukas',
+          lastName: 'Hofer',
+          externalId: 'PD-1188',
+          birthDate: '1978-02-03',
+          diagnoses: '',
+          medication: '',
+          note: '',
+          createdAt: '2026-11-01T10:00:00.000Z',
+          updatedAt: '2026-11-01T10:00:00.000Z'
+        })
+      }
+    })
+    renderShell()
+    const nav = await screen.findByRole('navigation', { name: 'Seitenleiste' })
+    const entry = within(nav).getByRole('button', { name: 'Alle Patientendossiers' })
+    await user.click(entry)
+    expect(await screen.findByRole('heading', { name: 'Patientendossiers' })).toBeInTheDocument()
+    expect(entry).toHaveAttribute('aria-current', 'page')
+    expect(entry.parentElement).toHaveClass('bg-surface-2')
+
+    await user.click(await screen.findByRole('button', { name: /Hofer, Lukas/ }))
+    expect(await screen.findByRole('heading', { name: 'Lukas Hofer' })).toBeInTheDocument()
+    // Auf der Dossier-Seite bleibt der Bereich hervorgehoben, ist aber nicht «die» Seite
+    expect(entry.parentElement).toHaveClass('bg-surface-2')
+    expect(entry).not.toHaveAttribute('aria-current')
+  })
+
+  it('öffnet «Neues Patientendossier» über das + in der Seitenleiste und führt danach zum Dossier (#204)', async () => {
+    const user = userEvent.setup()
+    const created = {
+      id: 'd-new',
+      firstName: 'Anna',
+      lastName: 'Meier',
+      externalId: null,
+      birthDate: null,
+      diagnoses: '',
+      medication: '',
+      note: '',
+      createdAt: '2026-11-01T10:00:00.000Z',
+      updatedAt: '2026-11-01T10:00:00.000Z'
+    }
+    window.api = createMockApi({
+      dossiers: {
+        create: vi.fn().mockResolvedValue({ ok: true, dossier: created }),
+        get: vi.fn().mockResolvedValue(created)
+      }
+    })
+    renderShell()
+    const nav = await screen.findByRole('navigation', { name: 'Seitenleiste' })
+    await user.click(within(nav).getByRole('button', { name: 'Neues Patientendossier' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Neues Patientendossier' })
+    await user.type(within(dialog).getByLabelText(/Vorname/), 'Anna')
+    await user.type(within(dialog).getByLabelText(/Nachname/), 'Meier')
+    await user.click(within(dialog).getByRole('button', { name: 'Anlegen' }))
+
+    expect(await screen.findByRole('heading', { name: 'Anna Meier' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(await screen.findByText('Patientendossier angelegt')).toBeInTheDocument()
   })
 })
 
