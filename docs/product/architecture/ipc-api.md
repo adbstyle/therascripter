@@ -20,6 +20,7 @@ All incoming IPC arguments are typed as `unknown` and parsed through Zod schemas
 | import (pdf) | `src/shared/validation/import-schemas.ts` |
 | settings | `src/shared/validation/settings-schemas.ts` |
 | system | `src/shared/validation/system-schemas.ts` |
+| dossier | `src/shared/validation/dossier-schemas.ts` |
 | model-update, app-update | `src/shared/validation/model-update-schemas.ts` |
 | model-download | _(no input schemas — all channels are parameterless)_ |
 
@@ -46,6 +47,7 @@ The `api` object contains the following namespaces:
 | `api.system` | `aboutInfo()`, `uninstall()`, `openInFinder(path)` |
 | `api.modelDownload` | `status()`, `checkDiskSpace()`, `start()`, `onStatus(cb)` |
 | `api.appUpdate` | `getState()`, `check()`, `download()`, `cancelDownload()`, `install()`, `setAutoUpdate(enabled)`, `openInstallGuide()`, `onState(cb)` |
+| `api.dossiers` | `list()`, `get(dossierId)`, `create(input)`, `update(dossierId, patch)`, `deletePreview(dossierId)`, `delete(dossierId, fingerprint)`, `onChanged(cb)` — preload in `src/preload/api/dossiers.ts` |
 
 All `on*` listener methods return an unsubscribe function `() => void`.
 
@@ -133,6 +135,28 @@ Source: `src/main/ipc/pdf-handlers.ts`
 |---|---|---|---|---|
 | `import:pdf` | invoke | `ImportPDFSchema` — `{ filePaths: string[](1..20) }` | `Session[]` | Import one or more PDF files. Copies each to `~/.therascript/pdf/`, creates a session, and enqueues the PDF processing pipeline. Rolls back on copy failure. |
 | `import:showPDFDialog` | invoke | _(none)_ | `string[]` | Open a native file picker dialog for PDF selection. Returns selected file paths, or empty array if canceled. |
+
+### Dossier Handlers
+
+Source: `src/main/ipc/dossier-handlers.ts`, service `src/main/services/DossierService.ts`, types `src/shared/types/Dossier.ts` and `src/shared/types/ipc/DossierApi.ts`. Every handler validates with `validateIpc`; all objects are `.strict()`. Results are typed unions instead of exceptions, because Electron mangles error messages of `invoke`. Conventions: `Id` = string 1–64, names 1–100 (whitespace only counts as empty), dossier ID ≤ 50, free text ≤ 20 000, dates `YYYY-MM-DD` and a valid calendar day not after today (local time, checked on every call).
+
+| Channel | Direction | Input Schema | Return Type | Description |
+|---|---|---|---|---|
+| `dossier:list` | invoke | _(none)_ | `DossierListItem[]` | Overview sorted by last name, first name (normalized). Each item: `id, firstName, lastName, externalId, birthDate, entryCount, lastEntryDay` — no diagnoses, medication or note |
+| `dossier:get` | invoke | `DossierIdInputSchema` — `{ dossierId }` | `Dossier \| null` | All fields of one dossier |
+| `dossier:create` | invoke | `DossierCreateSchema` — `{ firstName, lastName, externalId?: string \| null, birthDate?: IsoDate \| null, confirmDuplicate?: boolean }` | `CreateDossierResult` | `{ok:true, dossier}` · `{ok:false, reason:'external-id-taken', ownerName}` (owner as «Nachname, Vorname») · `{ok:false, reason:'duplicate-name', duplicates: DossierRef[]}` until called again with `confirmDuplicate: true` |
+| `dossier:update` | invoke | `DossierUpdateSchema` — `{ dossierId, patch }`, patch = at least one of `firstName, lastName, externalId (string \| null), birthDate (IsoDate \| null), diagnoses, medication, note` | `UpdateDossierResult` | Autosave per field. `{ok:true, dossier, duplicates}` — a duplicate name is saved and only reported · `{ok:false, reason:'external-id-taken', ownerName}` (nothing saved) · `{ok:false, reason:'not-found'}` |
+| `dossier:deletePreview` | invoke | `DossierIdInputSchema` | `DossierDeletePreview \| null` | `{dossierId, displayName, exclusive:{sessions, pdfs}, shared:{sessions, pdfs, otherDossiers}, blockedByRecording, fingerprint}` |
+| `dossier:delete` | invoke | `DossierDeleteSchema` — `{ dossierId, fingerprint: string(≤128) }` | `DeleteDossierResult` | `{ok:true, deletedSessionIds, incomplete}` · `{ok:false, reason:'changed', preview}` (nothing deleted) · `{ok:false, reason:'blocked-recording' \| 'not-found'}` — see storage.md «Deleting a patient dossier» |
+
+**Events (main → renderer):**
+
+| Channel | Payload | Description |
+|---|---|---|
+| `dossiers:changed` | `{ deletedIds: string[] }` (≤ 1000, parsed with `DossiersChangedSchema` in the preload) | After create, after an update of name, dossier ID or birth date (not for free text — it is shown nowhere else), after a deletion with the deleted ID |
+| `sessions:changed` | `{ deletedIds: string[] }` | Sent by the dossier deletion with the IDs of the sessions it deleted. Wiring into the other session paths and the preload listener come with the shell rework of Epic #192 |
+
+Both events go through `src/main/services/ChangeEvents.ts` (`notifyDossiersChanged`, `notifySessionsChanged`): bundled with `setImmediate`, so one tick yields at most one event per channel with the union of deleted IDs.
 
 ### Model Download Handlers
 

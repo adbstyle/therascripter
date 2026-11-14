@@ -2,7 +2,7 @@ import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { join } from 'path'
 import { chmodSync, existsSync, mkdirSync } from 'fs'
-import { migrations } from './migrations'
+import { migrations, type Migration } from './migrations'
 import { runStartupMaintenance } from './maintenance'
 
 let db: Database.Database | null = null
@@ -78,7 +78,20 @@ export function closeDatabase(): void {
   }
 }
 
-function runMigrations(database: Database.Database): void {
+/**
+ * Applies every migration whose version is not yet recorded in schema_version,
+ * in ascending order, each in its own transaction (Epic #192 review of #217).
+ *
+ * Earlier versions only ran migrations ABOVE the highest recorded version. A
+ * migration number that was merged later than a higher one (e.g. 019 landing
+ * after a database already had 020) was then skipped forever. Checking each
+ * version individually closes that gap; already applied versions never run
+ * twice.
+ */
+export function runMigrations(
+  database: Database.Database,
+  list: readonly Migration[] = migrations
+): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS schema_version (
       version INTEGER PRIMARY KEY,
@@ -86,14 +99,15 @@ function runMigrations(database: Database.Database): void {
     )
   `)
 
-  const row = database.prepare('SELECT MAX(version) as version FROM schema_version').get() as
-    | { version: number | null }
-    | undefined
-  const currentVersion = row?.version ?? 0
+  const applied = new Set(
+    (database.prepare('SELECT version FROM schema_version').all() as { version: number }[]).map(
+      (r) => r.version
+    )
+  )
 
-  for (const migration of migrations) {
-    if (migration.version <= currentVersion) continue
+  const pending = list.filter((m) => !applied.has(m.version)).sort((a, b) => a.version - b.version)
 
+  for (const migration of pending) {
     database.transaction(() => {
       database.exec(migration.sql)
       database.prepare('INSERT INTO schema_version (version) VALUES (?)').run(migration.version)

@@ -14,6 +14,7 @@ import type {
   DiarizationPipeline
 } from '../validation/model-catalog-schemas'
 import type { ToolHealthState } from '../tool-blocked'
+import type { DossierApi } from './ipc/DossierApi'
 
 export interface SessionApi {
   list(): Promise<Session[]>
@@ -297,4 +298,5 @@ export interface IpcApi {
   toolHealth: ToolHealthApi
   nav: NavApi
   viewMode: ViewModeApi
+  dossiers: DossierApi
 }

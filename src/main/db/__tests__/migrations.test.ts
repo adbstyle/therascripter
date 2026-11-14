@@ -1,35 +1,27 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import type { Migration } from '../migrations'
+import { migrations as productionMigrations, type Migration } from '../migrations'
+
+vi.mock('electron', () => ({
+  app: { getPath: () => '/mock/home' }
+}))
+
+// Tests the real runner from connection.ts (no inline copy).
+import { runMigrations } from '../connection'
 
 function loadMigrations(): Migration[] {
   const sql = readFileSync(join(__dirname, '..', 'migrations', '001-initial-schema.sql'), 'utf-8')
   return [{ version: 1, sql }]
 }
 
-function runMigrations(database: Database.Database, migrations: Migration[]): void {
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS schema_version (
-      version INTEGER PRIMARY KEY,
-      applied_at TEXT DEFAULT (datetime('now'))
-    )
-  `)
-
-  const row = database.prepare('SELECT MAX(version) as version FROM schema_version').get() as
-    | { version: number | null }
-    | undefined
-  const currentVersion = row?.version ?? 0
-
-  for (const migration of migrations) {
-    if (migration.version <= currentVersion) continue
-
-    database.transaction(() => {
-      database.exec(migration.sql)
-      database.prepare('INSERT INTO schema_version (version) VALUES (?)').run(migration.version)
-    })()
-  }
+function appliedVersions(db: Database.Database): number[] {
+  return (
+    db.prepare('SELECT version FROM schema_version ORDER BY version').all() as {
+      version: number
+    }[]
+  ).map((r) => r.version)
 }
 
 describe('migrations', () => {
@@ -116,5 +108,57 @@ describe('migrations', () => {
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='good_table'")
       .all()
     expect(tables).toHaveLength(0)
+  })
+
+  // Review #217: a version merged after a higher one must still be applied.
+  describe('versions missing below the maximum', () => {
+    it('back-fills 19 into a database that has 1..18 and 20', () => {
+      const without19 = productionMigrations.filter((m) => m.version !== 19)
+      runMigrations(db, without19)
+      expect(appliedVersions(db)).not.toContain(19)
+      expect(
+        (db.prepare("SELECT name FROM pragma_table_info('sessions')").all() as { name: string }[])
+          .map((c) => c.name)
+          .includes('title_plain')
+      ).toBe(false)
+
+      runMigrations(db, productionMigrations)
+
+      expect(appliedVersions(db)).toEqual(productionMigrations.map((m) => m.version))
+      expect(
+        (db.prepare("SELECT name FROM pragma_table_info('sessions')").all() as { name: string }[])
+          .map((c) => c.name)
+          .includes('title_plain')
+      ).toBe(true)
+    })
+
+    it('leaves a fully migrated database unchanged and never runs a version twice', () => {
+      runMigrations(db, productionMigrations)
+      const schemaBefore = db
+        .prepare('SELECT type, name, sql FROM sqlite_master ORDER BY name')
+        .all()
+      const versionsBefore = appliedVersions(db)
+
+      // A re-run of any applied migration would fail (CREATE TABLE without IF NOT EXISTS)
+      expect(() => runMigrations(db, productionMigrations)).not.toThrow()
+
+      expect(db.prepare('SELECT type, name, sql FROM sqlite_master ORDER BY name').all()).toEqual(
+        schemaBefore
+      )
+      expect(appliedVersions(db)).toEqual(versionsBefore)
+    })
+
+    it('applies pending migrations in ascending order, whatever the list order', () => {
+      runMigrations(db, loadMigrations())
+      const order: number[] = []
+      const log = (v: number): Migration => ({
+        version: v,
+        sql: `CREATE TABLE IF NOT EXISTS run_log (v INTEGER); INSERT INTO run_log VALUES (${v});`
+      })
+      runMigrations(db, [log(5), log(3), log(4)])
+      for (const r of db.prepare('SELECT v FROM run_log ORDER BY rowid').all() as { v: number }[])
+        order.push(r.v)
+      expect(order).toEqual([3, 4, 5])
+    })
   })
 })

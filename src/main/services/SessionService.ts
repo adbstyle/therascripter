@@ -110,18 +110,46 @@ export class SessionService {
     if (!session) return false
 
     this.repository.markDeleting(id)
+    this.finishMarkedDeletion(session)
+    return true
+  }
 
+  /**
+   * Phase 1 for several sessions at once (#204/#207: deleting a patient dossier
+   * takes its exclusively assigned sessions along). Only marks the rows — call
+   * it inside the caller's transaction so the marks commit together with the
+   * caller's own change; then run finishDeletion() per id after the commit.
+   * Unknown ids are ignored.
+   */
+  markForDeletion(ids: string[]): void {
+    for (const id of ids) this.repository.markDeleting(id)
+  }
+
+  /**
+   * Phase 2 for a session marked via markForDeletion(): aborts its tasks,
+   * removes its files and its row, checkpoints the WAL. Returns true if the
+   * session is completely gone (also if it no longer exists), false if
+   * something is left — the mark then stays and finishPendingDeletions()
+   * completes it at the next start. An unmarked session is never touched.
+   */
+  finishDeletion(id: string): boolean {
+    const session = this.repository.findByIdIncludingDeleting(id)
+    if (!session) return true
+    if (!this.repository.isMarkedForDeletion(id)) return false
+    return this.finishMarkedDeletion(session)
+  }
+
+  private finishMarkedDeletion(session: Session): boolean {
     // Issue #80 DR-6: abort any running pipeline + cancel pending tasks BEFORE
     // file cleanup, so the executor's writes don't race the unlink calls.
     // getTaskQueue() returns the singleton or throws if not initialised — guard.
     try {
-      getTaskQueue().abortRunningForSession(id)
+      getTaskQueue().abortRunningForSession(session.id)
     } catch {
       // TaskQueue not initialised (e.g. during isolated SessionService tests) — skip
     }
 
-    this.completeDeletion(session)
-    return true
+    return this.completeDeletion(session)
   }
 
   /**
