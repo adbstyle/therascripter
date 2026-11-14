@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 import type { ModelCatalogEntry } from '../../../../shared/validation/model-catalog-schemas'
 import { formatBytes } from '../../utils/formatBytes'
 import ModelStatusBadge, { deriveModelStatus } from './ModelStatusBadge'
+import { formatModelLanguage as formatLanguage } from '../../utils/modelLanguage'
 
 interface Props {
   model: ModelCatalogEntry
@@ -27,17 +28,6 @@ interface Props {
 function formatModelSize(bytes: number): string {
   if (bytes === 0) return '—'
   return formatBytes(bytes)
-}
-
-function formatLanguage(code: string): string {
-  switch (code) {
-    case 'multi':
-      return 'Multilingual'
-    case 'de':
-      return 'Hochdeutsch'
-    default:
-      return code
-  }
 }
 
 function Chip({ children }: { children: React.ReactNode }): React.JSX.Element {
