@@ -103,11 +103,44 @@ describe('buildPlaceholderSnapshot', () => {
       'ort-1': entry('[ORT 1]', 'Thun', 'ORT')
     }
     // The user edited the summary and typed a new token
-    const edited = buildPlaceholderSnapshot('[PERSON 1] zog nach [ORT 1].', later, previous)
+    const edited = buildPlaceholderSnapshot(
+      '[PERSON 1] zog nach [ORT 1].',
+      later,
+      previous,
+      '[PERSON 1] erzählt.'
+    )
     expect(edited).toEqual({ '[PERSON 1]': 'Ruth Gerber', '[ORT 1]': 'Thun' })
     expect(resolvePlaceholders('[PERSON 1] zog nach [ORT 1].', later, edited)).toBe(
       '[PERSON 1] zog nach Thun.'
     )
+  })
+
+  it('an edit never gives a token of the old text a meaning it had no record of (AK 5)', () => {
+    // [PERSON 3] was hallucinated by the LLM (no entity) and [PERSON 2] was
+    // ambiguous when the summary was written: neither was recorded.
+    const atCreation: EntityMap = {
+      a: entry('[PERSON 2]', 'Max'),
+      b: entry('[PERSON 2]', 'Moritz')
+    }
+    const summary = '[PERSON 2] und [PERSON 3] kamen.'
+    const created = buildPlaceholderSnapshot(summary, atCreation)
+    expect(created).toBeNull()
+
+    // Later both numbers denote real, unambiguous people
+    const later: EntityMap = {
+      a: entry('[PERSON 2]', 'Max'),
+      c: entry('[PERSON 3]', 'Lea Keller')
+    }
+    const editedText = '[PERSON 2] und [PERSON 3] kamen gestern.'
+    const edited = buildPlaceholderSnapshot(editedText, later, created, summary)
+    expect(edited).toBeNull()
+    expect(resolvePlaceholders(editedText, later, edited)).toBe(editedText)
+  })
+
+  it('without a previous text (fresh summary) every token gets its current meaning', () => {
+    expect(buildPlaceholderSnapshot('[PERSON 1]', MAP, { '[PERSON 1]': 'Alt' })).toEqual({
+      '[PERSON 1]': 'Ruth Gerber'
+    })
   })
 
   it('drops tokens that left the text', () => {

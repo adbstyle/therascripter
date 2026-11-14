@@ -87,7 +87,20 @@ function makeApi(initial: ViewMode) {
     },
     tasks: { onCompleted: vi.fn(() => () => {}) },
     blocklist: { add: vi.fn(), delete: vi.fn() },
-    sessions: { delete: vi.fn() }
+    sessions: {
+      delete: vi.fn(),
+      list: vi.fn().mockResolvedValue([
+        {
+          id: 's1',
+          title: 'Gespräch mit [PERSON 1]',
+          type: 'audio',
+          status: 'review',
+          audioPath: null,
+          pdfPath: null,
+          summary: null
+        }
+      ])
+    }
   }
 }
 
@@ -204,5 +217,17 @@ describe('ReviewEditor — pseudonymized view (#203)', () => {
     expect(getViewModeStore().get()).toBe('pseudonymized')
     expect(api.viewMode.set).toHaveBeenNthCalledWith(1, 'plain')
     expect(api.viewMode.set).toHaveBeenNthCalledWith(2, 'pseudonymized')
+  })
+})
+
+describe('ReviewEditor — delete dialog in the chosen view (#203 AK 12)', () => {
+  it.each([
+    ['plain' as const, '«Gespräch mit Ruth Gerber»'],
+    ['pseudonymized' as const, '«Gespräch mit [PERSON 1]»']
+  ])('%s', async (mode, expected) => {
+    await openEditor(mode)
+    fireEvent.click(screen.getByRole('button', { name: 'Transkription löschen' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent(expected)
   })
 })

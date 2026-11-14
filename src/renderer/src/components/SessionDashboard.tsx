@@ -5,7 +5,7 @@ import { useStartOfToday } from '../hooks/useStartOfToday'
 import { groupSessionsByTime, GROUP_ORDER } from '../utils/groupSessionsByTime'
 import { SessionCard } from './SessionCard'
 import { RecordingSessionCard, type LiveRecording } from './RecordingSessionCard'
-import { ConfirmDialog } from './ConfirmDialog'
+import { DeleteSessionDialog } from './DeleteSessionDialog'
 import { useViewMode } from '../viewMode/useViewMode'
 import { sessionTitleIn } from '../viewMode/sessionText'
 
@@ -237,12 +237,9 @@ export default function SessionDashboard({
       </div>
 
       {deleteTarget && (
-        <ConfirmDialog
-          title="Transkription löschen"
-          message={`„${sessionTitleIn(deleteTarget, viewMode)}“ und alle zugehörigen Daten unwiderruflich löschen?`}
-          details={['Audiodatei', 'Originaltext', 'Pseudonymisierter Text', 'Platzhalter-Mapping']}
-          confirmLabel="Löschen"
-          destructive
+        <DeleteSessionDialog
+          session={deleteTarget}
+          displayTitle={sessionTitleIn(deleteTarget, viewMode)}
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
         />

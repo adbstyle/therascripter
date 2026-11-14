@@ -47,7 +47,7 @@ Renders the `<AboutPage />` component. Sections displayed top to bottom:
 5. **App data directory** — Shows `~/.therascript` path with an "Öffnen" button that reveals it in Finder via `window.api.system.openInFinder()`.
 6. **Storage usage** — Displays "App + Modelle" and "Sitzungsdaten" sizes formatted via `formatBytes()`.
 7. **System info** — macOS version, chip, RAM (GB), FileVault status (active / not active / unknown).
-8. **Data retention notice** — Info box explaining 30-day auto-deletion and user responsibility for exported text.
+8. **Data retention notice** — Info box «Daten»: the text of sessions and PDF documents stays until the user deletes it; recordings and original PDFs are deleted 24 hours after successful processing and kept until deleted if processing failed; content with a retention obligation belongs in the practice's legally authoritative software (#202). Same core statements as README, website (`#datenschutz`, FAQ «Wie lange bewahrt TheraScript meine Sitzungen auf?») and `impressum.html#app-datenschutz` — keep them in sync.
 9. **Acknowledgments** — Lists key open-source dependencies: Whisper.cpp, pyannote.audio, flair, TipTap, Electron, pdfjs-dist, better-sqlite3.
 10. **Uninstall** — "Therascript vollständig entfernen" button shows a `ConfirmDialog` listing what will be deleted (ML models, sessions, audio files, blocklist, settings). On confirm, calls `window.api.system.uninstall()`.
 

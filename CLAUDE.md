@@ -163,7 +163,7 @@ Dev-Läufe mit dem ausgelieferten Python-Interpreter: `THERASCRIPT_USE_STANDALON
 - **Sperrliste (blocklist):** 7 user-visible entity types, bidirectional Umlaut normalization, longest-match-first replacement. CRUD via Settings UI ✓ implemented
 - **Placeholder format:** `[PERSON 1]`, `[ORT 1]`, etc. — numeric, type-specific
 - **flair ORG entities:** Ignored (institutions only via Sperrliste/manual)
-- **Auto-deletion:** Sessions deleted 30 days after creation, silent
+- **Retention (#202):** Sessions are kept until the user deletes them — no age-based deletion. Only the source file (audio/original PDF) is deleted 24 h after successful processing (`SourceFileCleanupService`); failed sessions keep it. Deletion is two-phase and restart-proof (`deleting_at` mark → files → row → `wal_checkpoint(TRUNCATE)`, `secure_delete = ON`, one-time `VACUUM` + checkpoint on every start via `runStartupMaintenance`; startup finishes marked rows and sweeps orphaned `<uuid>…` files; TaskQueue removes files written by an executor after the deletion). Rows with `deleting_at` are hidden in `SessionRepository` — new session queries must filter them too. Delete dialog: one `DeleteSessionDialog` + `sessionDeletionDetails` (lists only what exists). Retention statements in AboutPage, README, website and `impressum.html#app-datenschutz` must stay in sync
 - **Auto-stop recording:** 2 hours max
 - **Clipboard export:** Anonymized text can be exported to clipboard from Review Editor (toast confirmation)
 - **Quick-add to Sperrliste:** Selected text in Review Editor can be added to blocklist with retroactive re-anonymization

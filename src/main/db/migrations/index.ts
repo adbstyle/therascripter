@@ -14,7 +14,9 @@ import pdfHasScannedPages from './013-pdf-has-scanned-pages.sql?raw'
 import processedWithModels from './014-processed-with-models.sql?raw'
 import addAnonymizationCount from './015-add-anonymization-count.sql?raw'
 import taskAttempts from './016-task-attempts.sql?raw'
-import placeholderSnapshots from './018-placeholder-snapshots.sql?raw'
+import sessionDeletingAt from './017-session-deleting-at.sql?raw'
+import appMaintenance from './018-app-maintenance.sql?raw'
+import placeholderSnapshots from './019-placeholder-snapshots.sql?raw'
 
 // REGEL für Table-Rebuild-Migrationen (CREATE new → DROP old → RENAME):
 // Der Migration-Runner läuft mit PRAGMA foreign_keys = ON. Ein
@@ -47,6 +49,7 @@ export const migrations: Migration[] = [
   { version: 14, sql: processedWithModels },
   { version: 15, sql: addAnonymizationCount },
   { version: 16, sql: taskAttempts },
-  // 17 vergibt Story #202 parallel (Epic #192)
-  { version: 18, sql: placeholderSnapshots }
+  { version: 17, sql: sessionDeletingAt },
+  { version: 18, sql: appMaintenance },
+  { version: 19, sql: placeholderSnapshots }
 ]

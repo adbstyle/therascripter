@@ -10,10 +10,9 @@ import type {
   TaskType,
   ProcessedModelsSnapshot
 } from '../../../shared/types'
-import {
-  parsePlaceholderSnapshot,
-  resolvePlaceholders
-} from '../../../shared/utils/resolvePlaceholders'
+import { parsePlaceholderSnapshot } from '../../../shared/utils/resolvePlaceholders'
+import { walCheckpointTruncate } from '../maintenance'
+import { refreshPlainTexts } from '../plainTexts'
 
 interface SessionRow {
   id: string
@@ -41,19 +40,22 @@ interface SessionRow {
   retry_count: number
   pdf_has_scanned_pages: number | null
   processed_with_models: string | null
-  title_entity_snapshot: string | null
-  summary_entity_snapshot: string | null
-  /**
-   * Only in the list projection: entity_map of rows whose title or summary
-   * contains a token, used solely to resolve them for the Klartext view.
-   */
-  entity_map_for_plain?: string | null
+  /** Not selected by the list projection (clear names, Issue #203). */
+  title_entity_snapshot?: string | null
+  summary_entity_snapshot?: string | null
+  /** Klartext computed on write (plainTexts.ts); NULL = same as title/summary. */
+  title_plain: string | null
+  summary_plain: string | null
 }
 
-/** Cheap pre-check: without a `[` no placeholder token can be in the text. */
-function mayHoldToken(text: string | null): boolean {
-  return text != null && text.includes('[')
-}
+/** Columns whose change can change the stored Klartext (Issue #203). */
+const PLAIN_SOURCE_INPUTS = [
+  'title',
+  'summary',
+  'entityMap',
+  'titleEntitySnapshot',
+  'summaryEntitySnapshot'
+] as const
 
 function parseEntityMap(json: string | null, sessionId: string): EntityMap | null {
   if (!json) return null
@@ -82,24 +84,7 @@ function parseProcessedModels(
 
 function rowToSession(row: SessionRow): Session {
   const entityMap = parseEntityMap(row.entity_map, row.id)
-  const titleEntitySnapshot = parsePlaceholderSnapshot(row.title_entity_snapshot)
-  const summaryEntitySnapshot = parsePlaceholderSnapshot(row.summary_entity_snapshot)
-
-  // Issue #203 — Klartext title/summary. The EntityMap is parsed only when a
-  // text can hold a token at all (list: SQL already nulls it otherwise).
-  let titlePlain = row.title
-  let summaryPlain = row.summary
-  if (mayHoldToken(row.title) || mayHoldToken(row.summary)) {
-    const mapForPlain =
-      entityMap ??
-      (row.entity_map_for_plain ? parseEntityMap(row.entity_map_for_plain, row.id) : null)
-    titlePlain = resolvePlaceholders(row.title, mapForPlain, titleEntitySnapshot)
-    summaryPlain =
-      row.summary == null
-        ? null
-        : resolvePlaceholders(row.summary, mapForPlain, summaryEntitySnapshot)
-  }
-
+  const summary = row.summary
   return {
     id: row.id,
     title: row.title,
@@ -119,17 +104,17 @@ function rowToSession(row: SessionRow): Session {
     reviewAt: row.review_at,
     wordCount: row.word_count,
     anonymizationCount: row.anonymization_count,
-    summary: row.summary,
+    summary,
     summaryModelId: row.summary_model_id,
     summarizedAt: row.summarized_at,
     plannedSteps: row.planned_steps ? (JSON.parse(row.planned_steps) as TaskType[]) : null,
     retryCount: row.retry_count,
     pdfHasScannedPages: row.pdf_has_scanned_pages == null ? null : row.pdf_has_scanned_pages === 1,
     processedWithModels: parseProcessedModels(row.processed_with_models, row.id),
-    titleEntitySnapshot,
-    summaryEntitySnapshot,
-    titlePlain,
-    summaryPlain
+    titleEntitySnapshot: parsePlaceholderSnapshot(row.title_entity_snapshot),
+    summaryEntitySnapshot: parsePlaceholderSnapshot(row.summary_entity_snapshot),
+    titlePlain: row.title_plain ?? row.title,
+    summaryPlain: summary == null ? null : (row.summary_plain ?? summary)
   }
 }
 
@@ -160,7 +145,19 @@ export class SessionRepository {
     return this.findById(id)!
   }
 
+  /**
+   * Sessions marked for deletion (deleting_at, Issue #202) count as gone:
+   * neither the UI nor a still-running executor may read or update them.
+   * Only the deletion itself reads them via findByIdIncludingDeleting.
+   */
   findById(id: string): Session | null {
+    const row = this.db
+      .prepare('SELECT * FROM sessions WHERE id = ? AND deleting_at IS NULL')
+      .get(id) as SessionRow | undefined
+    return row ? rowToSession(row) : null
+  }
+
+  findByIdIncludingDeleting(id: string): Session | null {
     const row = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as
       | SessionRow
       | undefined
@@ -176,9 +173,9 @@ export class SessionRepository {
    * Library-Größe, und die Liste wird bei jedem Task-Event refetcht.
    * Detail-Reads (findById, z. B. via review:load) liefern sie weiterhin.
    *
-   * Issue #203: Für die Klartext-Ansicht löst rowToSession Titel und
-   * Zusammenfassung auf; dafür liest die Liste entity_map nur bei Zeilen,
-   * deren Titel oder Zusammenfassung überhaupt ein `[` enthält.
+   * Issue #203: Für die Klartext-Ansicht liest die Liste nur die beim
+   * Schreiben berechneten title_plain/summary_plain — weder entity_map noch
+   * die Snapshots (Token → Klarname) werden selektiert oder geparst.
    */
   findAll(): Session[] {
     const rows = this.db
@@ -190,10 +187,8 @@ export class SessionRepository {
                 anonymization_count, summary, summary_model_id, summarized_at,
                 planned_steps, retry_count, pdf_has_scanned_pages,
                 NULL AS processed_with_models,
-                title_entity_snapshot, summary_entity_snapshot,
-                CASE WHEN instr(title, '[') > 0 OR instr(COALESCE(summary, ''), '[') > 0
-                     THEN entity_map END AS entity_map_for_plain
-         FROM sessions ORDER BY created_at DESC`
+                title_plain, summary_plain
+         FROM sessions WHERE deleting_at IS NULL ORDER BY created_at DESC`
       )
       .all() as SessionRow[]
     return rows.map(rowToSession)
@@ -309,6 +304,12 @@ export class SessionRepository {
 
     this.db.prepare(`UPDATE sessions SET ${sets.join(', ')} WHERE id = ?`).run(...values)
 
+    // Issue #203 — keep the stored Klartext in step with every writer
+    // (summarization, title/summary edits, review:save changing entity_map)
+    if (PLAIN_SOURCE_INPUTS.some((key) => input[key] !== undefined)) {
+      refreshPlainTexts(this.db, id)
+    }
+
     return this.findById(id)
   }
 
@@ -317,14 +318,62 @@ export class SessionRepository {
     return result.changes > 0
   }
 
-  findOlderThan(days: number): Session[] {
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - days)
+  /**
+   * Phase 1 of a restart-proof deletion (Issue #202): durable before any file
+   * is touched. Keeps an existing mark (a repeated delete does not reset it).
+   */
+  markDeleting(id: string): boolean {
+    const result = this.db
+      .prepare('UPDATE sessions SET deleting_at = COALESCE(deleting_at, ?) WHERE id = ?')
+      .run(new Date().toISOString(), id)
+    return result.changes > 0
+  }
 
+  /**
+   * Removes the content of a marked row while its files could not be removed
+   * yet: the paths stay (the next start needs them), title, summary, entity
+   * map (originals of every placeholder) and error message go immediately.
+   */
+  scrubMarkedContent(id: string): void {
+    this.db
+      .prepare(
+        `UPDATE sessions
+         SET title = '', summary = NULL, entity_map = NULL, error_message = NULL,
+             title_entity_snapshot = NULL, summary_entity_snapshot = NULL,
+             title_plain = NULL, summary_plain = NULL
+         WHERE id = ? AND deleting_at IS NOT NULL`
+      )
+      .run(id)
+  }
+
+  isMarkedForDeletion(id: string): boolean {
+    const row = this.db.prepare('SELECT deleting_at FROM sessions WHERE id = ?').get(id) as
+      | { deleting_at: string | null }
+      | undefined
+    return row?.deleting_at != null
+  }
+
+  findMarkedForDeletion(): Session[] {
     const rows = this.db
-      .prepare('SELECT * FROM sessions WHERE created_at < ? ORDER BY created_at ASC')
-      .all(cutoff.toISOString()) as SessionRow[]
+      .prepare('SELECT * FROM sessions WHERE deleting_at IS NOT NULL ORDER BY deleting_at ASC')
+      .all() as SessionRow[]
     return rows.map(rowToSession)
+  }
+
+  /** IDs of every row, including rows marked for deletion. */
+  findAllIds(): string[] {
+    const rows = this.db.prepare('SELECT id FROM sessions').all() as { id: string }[]
+    return rows.map((r) => r.id)
+  }
+
+  /**
+   * Moves the WAL content into the database file and truncates the WAL.
+   * Together with PRAGMA secure_delete (initDatabase) this leaves no copy of
+   * a deleted row in either file (Issue #202, Postcondition 1). Returns false
+   * if the checkpoint was blocked (busy) and did not complete.
+   */
+  checkpoint(): boolean {
+    return walCheckpointTruncate(this.db)
   }
 
   findReadyForSourceFileDeletion(): Session[] {
@@ -335,6 +384,7 @@ export class SessionRepository {
       .prepare(
         `SELECT * FROM sessions
          WHERE status = 'review'
+           AND deleting_at IS NULL
            AND review_at < ?
            AND (audio_path IS NOT NULL OR pdf_path IS NOT NULL)
          ORDER BY review_at ASC`

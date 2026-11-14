@@ -12,7 +12,7 @@ import { useSelectionToolbar } from '../hooks/useSelectionToolbar'
 import { useToast } from '../hooks/useToast'
 import { SelectionToolbar } from '../components/editor/SelectionToolbar'
 import { BlocklistConfirmDialog } from '../components/editor/BlocklistConfirmDialog'
-import { ConfirmDialog } from '../components/ConfirmDialog'
+import { DeleteSessionDialog } from '../components/DeleteSessionDialog'
 import { EditableSessionTitle } from '../components/review/EditableSessionTitle'
 import { SummaryPanel } from '../components/review/SummaryPanel'
 import { ReviewSidePanel } from '../components/review/ReviewSidePanel'
@@ -42,6 +42,7 @@ import type {
   PlaceholderType,
   ProcessedModelsSnapshot,
   ReviewData,
+  Session,
   SessionType
 } from '../../../shared/types'
 import type { TipTapDocument } from '../../../shared/types/TipTapDocument'
@@ -115,7 +116,8 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
     term: string
     type: PlaceholderType
   } | null>(null)
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
+  const showDeleteDialog = deleteTarget !== null
   const [panelOpen, setPanelOpen] = useState(false)
   const entityMapRef = useRef<EntityMap>({})
   const editorRef = useRef<Editor | null>(null)
@@ -537,7 +539,26 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
     }
   }, [editor, blocklistConfirm, updateEntityMap])
 
-  /** Handle delete confirmation from 3-dot menu */
+  /**
+   * Opens the delete dialog with the current state of the session: the summary
+   * may have arrived and the recording may have been removed since the editor
+   * loaded, and the dialog must list what is deleted now (Issue #202, AK 3).
+   */
+  const handleDeleteRequest = useCallback(async () => {
+    try {
+      const sessions = await window.api.sessions.list()
+      const current = sessions.find((s) => s.id === sessionId)
+      if (current) {
+        setDeleteTarget(current)
+      } else {
+        toast.error('Löschen fehlgeschlagen')
+      }
+    } catch {
+      toast.error('Löschen fehlgeschlagen')
+    }
+  }, [sessionId, toast])
+
+  /** Handle delete confirmation */
   const handleDeleteConfirm = useCallback(async () => {
     try {
       const ok = await window.api.sessions.delete(sessionId)
@@ -545,11 +566,11 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
         onBack()
       } else {
         toast.error('Löschen fehlgeschlagen')
-        setShowDeleteDialog(false)
+        setDeleteTarget(null)
       }
     } catch {
       toast.error('Löschen fehlgeschlagen')
-      setShowDeleteDialog(false)
+      setDeleteTarget(null)
     }
   }, [sessionId, onBack, toast])
 
@@ -695,7 +716,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
           </button>
           <button
             className="titlebar-no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface-0 text-text-secondary transition-colors hover:border-error-border hover:bg-error-bg hover:text-error-text"
-            onClick={() => setShowDeleteDialog(true)}
+            onClick={handleDeleteRequest}
             aria-label="Transkription löschen"
             title="Löschen"
           >
@@ -782,15 +803,12 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
       )}
 
       {/* Delete confirm dialog */}
-      {showDeleteDialog && (
-        <ConfirmDialog
-          title="Transkription löschen"
-          message={`„${displayTitle}" und alle zugehörigen Daten unwiderruflich löschen?`}
-          details={['Audiodatei', 'Originaltext', 'Pseudonymisierter Text', 'Platzhalter-Mapping']}
-          confirmLabel="Löschen"
-          destructive
+      {deleteTarget && (
+        <DeleteSessionDialog
+          session={deleteTarget}
+          displayTitle={displayTitle}
           onConfirm={handleDeleteConfirm}
-          onCancel={() => setShowDeleteDialog(false)}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
 

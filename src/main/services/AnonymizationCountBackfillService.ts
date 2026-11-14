@@ -19,6 +19,7 @@ export function backfillAnonymizationCounts(db: Database.Database): number {
     .prepare(
       `SELECT id, anonymized_path FROM sessions
        WHERE status = 'review'
+         AND deleting_at IS NULL
          AND anonymization_count IS NULL
          AND anonymized_path IS NOT NULL`
     )

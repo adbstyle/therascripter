@@ -17,7 +17,7 @@ Anforderungen:
 
 Eine Suche lohnt sich erst, wenn es etwas zu durchsuchen gibt:
 1. Sitzungen lassen sich zu Patientendossiers zusammenfassen (Klient-Entität), sonst gibt es keine sitzungsübergreifende Suche pro Person.
-2. Die 30-Tage-Auto-Löschung (`SessionService.cleanupOldSessions`) ist entfernt oder ersetzt, sonst ist der Index nie älter als 30 Tage.
+2. Die 30-Tage-Auto-Löschung (`SessionService.cleanupOldSessions`) ist entfernt oder ersetzt, sonst ist der Index nie älter als 30 Tage. *Erfüllt mit #202: Sitzungen bleiben bis zum manuellen Löschen erhalten.*
 
 ## Entscheidung
 

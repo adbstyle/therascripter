@@ -50,26 +50,34 @@ function tokensOf(text: string): Set<string> {
 }
 
 /**
- * Snapshot for a freshly written text: the current meaning of each token it
- * contains. Tokens already in `previous` keep their recorded meaning — an
- * edit of the text must not "refresh" a token whose meaning drifted since
- * the text was first written. Returns null when nothing can be recorded.
+ * Snapshot for a written text: the meaning of each token it contains.
+ *
+ * Fresh text (`previousText` null, e.g. a new summary): every token gets its
+ * current meaning. Edited text: only tokens that did NOT occur in the old
+ * text count as newly typed and get the current meaning; a token from the old
+ * text keeps exactly what was recorded for it — and if nothing was recorded
+ * (hallucinated number, ambiguous at creation, legacy text), it stays
+ * unresolved for good. An edit must never "refresh" a drifted meaning.
+ * Returns null when nothing can be recorded.
  */
 export function buildPlaceholderSnapshot(
   text: string | null | undefined,
   entityMap: EntityMap | null | undefined,
-  previous: PlaceholderSnapshot | null = null
+  previous: PlaceholderSnapshot | null = null,
+  previousText: string | null = null
 ): PlaceholderSnapshot | null {
   if (!text) return null
   const current = uniqueOriginalsByToken(entityMap)
+  const oldTokens = previousText ? tokensOf(previousText) : new Set<string>()
   const snapshot: PlaceholderSnapshot = {}
   for (const token of tokensOf(text)) {
-    const recorded = previous?.[token]
-    if (typeof recorded === 'string') snapshot[token] = recorded
-    else {
-      const original = current.get(token)
-      if (original !== undefined) snapshot[token] = original
+    if (oldTokens.has(token)) {
+      const recorded = previous?.[token]
+      if (typeof recorded === 'string') snapshot[token] = recorded
+      continue
     }
+    const original = current.get(token)
+    if (original !== undefined) snapshot[token] = original
   }
   return Object.keys(snapshot).length > 0 ? snapshot : null
 }

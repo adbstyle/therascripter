@@ -10,7 +10,7 @@
 
 **Cold-start behavior:** If no classifier file is present, `ner_service.py` logs an info line and passes flair's output through unchanged. This makes Phase 1 of a user's lifetime identical to today's pipeline. The classifier only kicks in once training has produced `correction-classifier-v1.pkl`.
 
-**Privacy:** All feedback records are stored locally in SQLite alongside sessions and are **cascade-deleted with the session they came from** (Auto-Deletion after 30 days applies). A "Persönliches Modell zurücksetzen" button wipes both the feedback table and the trained model file. Context tokens (the ±3-token window around each candidate) are stored raw — this is the same sensitivity class as the transcript itself, which is why feedback must follow the same deletion rules.
+**Privacy:** All feedback records are stored locally in SQLite alongside sessions and are **cascade-deleted with the session they came from** (sessions are kept until the user deletes them, #202). A "Persönliches Modell zurücksetzen" button wipes both the feedback table and the trained model file. Context tokens (the ±3-token window around each candidate) are stored raw — this is the same sensitivity class as the transcript itself, which is why feedback must follow the same deletion rules.
 
 **Drift-Pattern-Parallele.** The architecture is a direct analog to Drift's `suggestion.service.ts` + `classifier.ts` + `trainer.ts` pattern (see `/Users/adrianbader/Dev/drift/src/main/services/ml/`): logistic classifier, local features, user-in-the-loop labels, inkrementelles Retraining. Der wesentliche Unterschied: Therascript hat eine **starke Baseline** (flair + Sperrliste), der Classifier muss also nichts von Grund auf lernen — er lernt nur die *Korrekturen* des Users zur Baseline.
 
@@ -125,7 +125,7 @@ Files modified:
 
   Two constraints of note:
 
-  - `ON DELETE CASCADE` to `sessions` is how we honor the 30-day auto-deletion rule for feedback.
+  - `ON DELETE CASCADE` to `sessions` is how feedback follows the deletion of its session (manual deletion since #202; there is no age-based deletion any more).
   - `UNIQUE(session_id, surface, segment_index, decision)` is the defense against duplicate insertions — specifically the retention-recording case, where re-opening a session and saving it again unmounts/remounts `ReviewEditor` and would otherwise re-emit "keep" records for every surviving chip. SQLite will enforce this regardless of whether the renderer remembers what it already sent. The repository in Task 2 uses `INSERT OR IGNORE` so duplicates fail silently, which is the desired behavior.
 
   Note that the tuple `(session_id, surface, segment_index, decision)` can legitimately appear twice if a user deletes a chip (`decision = 'drop'`), undoes, then adds the same term via Sperrliste (`decision = 'blocklist_add'`) — those have different `decision` values so the constraint permits it. Conversely, if a user deletes the same chip twice (delete → undo → delete → save), the second insert is a no-op, which is correct: the signal is "user rejected this entity" and it doesn't matter how often they did it.
@@ -862,7 +862,7 @@ Files modified:
   - **Buttons:**
     - "Jetzt neu trainieren" (disabled when `sampleCount < 50` or a training task is already running).
     - "Zurücksetzen" (destructive, confirm dialog: "Alle Rückmeldungen und das persönliche Modell löschen?").
-  - **Privacy note:** Small italic text below the card: "Alle Daten bleiben auf Ihrem Gerät. Rückmeldungen werden zusammen mit der Sitzung nach 30 Tagen gelöscht."
+  - **Privacy note:** Small italic text below the card: "Alle Daten bleiben auf Ihrem Gerät. Rückmeldungen werden zusammen mit der Sitzung gelöscht, wenn Sie diese löschen."
   - **Scope note (neben der Status-Zeile, grau/klein):** "Lernt aus Ihren Korrekturen in Audio- und PDF-Sitzungen."
 
 - [ ] **Step 2: Data wiring**
@@ -951,7 +951,7 @@ Files modified:
     - ✅ Personalization without touching the base model (no catastrophic forgetting, no RAM pressure).
     - ✅ Respects NFR-1 (fully local), NFR-9/10 (plugin architecture — classifier is swappable per-user).
     - ⚠️ Cold-start period of ~50 sessions before the classifier activates.
-    - ⚠️ Feedback context tokens are sensitive — must cascade-delete with sessions (addressed by DB CASCADE + 30-day rule).
+    - ⚠️ Feedback context tokens are sensitive — must cascade-delete with sessions (addressed by DB CASCADE + the session deletion, #202).
   - **Alternatives considered:**
     - Fine-tuning flair / LoRA adapters → rejected (RAM, data volume, complexity).
     - Pure rule-based Sperrliste extension → insufficient for FP correction.
@@ -1000,7 +1000,7 @@ Files modified:
 These are requirements-level questions that came out of the reverse-engineering discussion. They are **not implementation blockers** — the plan can be executed end-to-end without answers — but they should be resolved before the feature is declared "done" for product acceptance.
 
 1. **@Produkt:** What is the quantitative target for success criterion 3 ("manuelle Chip-Löschungen sinken in Folge-Sessions")? Needs a concrete number (e.g. "30% fewer deletions after 90 days of active use") so Task 11 can validate against a threshold instead of an aspirational trend.
-2. **@Privacy:** May feedback records be deleted earlier than the 30-day session-cascade rule — e.g. immediately after a successful training run — or must raw context-token storage persist for the full session lifetime so retraining after a schema bump remains possible? This is a privacy/retrainability trade-off. Current plan keeps the cascade rule (maximum retrainability); switching to early deletion would shrink the privacy surface but prevent re-training older feedback after feature-schema changes.
+2. **@Privacy:** May feedback records be deleted earlier than the session-cascade rule (sessions are kept until manual deletion since #202) — e.g. immediately after a successful training run — or must raw context-token storage persist for the full session lifetime so retraining after a schema bump remains possible? This is a privacy/retrainability trade-off. Current plan keeps the cascade rule (maximum retrainability); switching to early deletion would shrink the privacy surface but prevent re-training older feedback after feature-schema changes.
 
 ---
 
