@@ -8,7 +8,13 @@ export interface TimelineMonth {
   entries: TimelineEntry[]
 }
 
-const MONTH_FORMAT = new Intl.DateTimeFormat('de-CH', { month: 'long', year: 'numeric' })
+// Zeitzone fest auf UTC: `sortDay` ist ein Kalendertag ohne Uhrzeit. Mit der lokalen Zone
+// hinge die Beschriftung davon ab, welche Zone beim Laden des Moduls galt.
+const MONTH_FORMAT = new Intl.DateTimeFormat('de-CH', {
+  month: 'long',
+  year: 'numeric',
+  timeZone: 'UTC'
+})
 
 /**
  * Gliedert den Verlauf nach Monaten (#205). Grundlage ist allein `sortDay` aus
@@ -22,9 +28,10 @@ export function groupTimelineByMonth(entries: readonly TimelineEntry[]): Timelin
     const key = entry.sortDay.slice(0, 7)
     if (!current || current.key !== key) {
       const [year, month] = key.split('-').map(Number)
-      // setFullYear statt new Date(y, m, d): der Konstruktor deutet 0–99 als 1900–1999
-      const first = new Date(2000, 0, 1)
-      first.setFullYear(year, month - 1, 1)
+      // setUTCFullYear statt Date.UTC(y, m, d): dort gelten 0–99 als 1900–1999.
+      // Monatsmitte, damit keine Zeitzone den Monat verschieben kann.
+      const first = new Date(Date.UTC(2000, 0, 15, 12))
+      first.setUTCFullYear(year, month - 1, 15)
       current = { key, label: MONTH_FORMAT.format(first), entries: [] }
       months.push(current)
     }
