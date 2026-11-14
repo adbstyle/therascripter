@@ -111,7 +111,63 @@ Die erste Suche besteht fast ganz aus dem Laden des Modells (5.3 s bzw. 4.4 s); 
 - sentence-transformers lädt den Prozessor des Modells mit Bildprozessor; dafür braucht es
   Pillow und torchvision, auch für reinen Text.
 
-## Messung wiederholen
+## Abnahme der Implementierung (PR S6, #209 AK 13 und AK 6)
+
+Gemessen am 2026-11-14 auf einem Mac mit M5 Pro und 64 GB RAM — **nicht auf einem 8-GB-Mac**.
+Die echte Suche der App: Fixtures → TipTap-Dokumente, wie die App sie nach der Pseudonymisierung
+speichert (ein Absatz pro Beitrag, Sprecher- und Zeit-Knoten, Chips mit `original` aus
+`entities/*.json`) → Datei-DB mit den echten Repositories → Textphase → `SearchWorker` mit
+`python_sidecar/search_service.py` (Nachbau des Text-Encoders in reinem torch, ADR-010; bf16 auf
+MPS; Artefakt `embeddinggemma-2-text`) → Vektorphase (int8) → `SearchService.rankChunks` vor der
+Schwelle → Abbildung der Abschnitte über `units[]` auf die Unit-IDs dieses Sets. Metriken als
+Port von `query_metrics`/`bootstrap_ci`/`auc` (`src/main/search/__tests__/referenceSet.ts`;
+`referenceMetrics.test.ts` reproduziert aus `results/quality-run1.json` die Werte von
+`results/quality.json` auf 12 Stellen, inklusive CI). Versionen: torch 2.10.0, tokenizers 0.22.2,
+safetensors 0.7.0 (gebündeltes Standalone-Python), Node 24.19.
+
+| | Implementierung | Spike (sentence-transformers, bf16) |
+|---|---|---|
+| nDCG@10 gesamt (vor der Schwelle) | **0.568** (95 %-CI 0.519–0.615) | 0.570 (0.521–0.617) |
+| Hit@5 | 0.79 (0.72–0.87) | 0.79 |
+| Unit-Recall@10 | 0.63 | – |
+| Trennung Anfragen ohne Treffer (AUC) | 0.70 | 0.70 |
+| Wiederholung (frische DB, frischer Suchprozess) | 0.568, gleich auf zwei Nachkommastellen | gleich |
+| gleicher bester Abschnitt wie im Spike | 131 von 136 Anfragen | – |
+
+Je Anfrageart (nDCG@10): Klarname 0.66 · Bericht 0.63 · Fakten 0.63 · Stichwort 0.61 ·
+thematisch 0.54 · Paraphrase 0.53 · Umgangssprache 0.47 · übergreifend 0.40 — wie im Spike.
+**Zielwert 0.52 erreicht.** Abweichung zum Spike −0.002 (bf16-Rauschen und int8, Bauplan: Nachbau
+allein 0.573); die grössten Abweichungen einzelner Anfragen liegen bei ±0.15 (q250, q229, q238).
+
+Zusätzlich gemessen (nicht Teil des Zielwerts):
+
+- **Produktiv-Rangfolge** (exakte Treffer zuerst, Schwelle, je Dokument einmal mit bis zu drei
+  Fundstellen; nDCG@10 über die angezeigten Fundstellen): 0.380 (0.332–0.428), Hit@5 0.62 bei der
+  Schwelle 0.71; 0.398 bei 0.70; 0.498 ohne Schwelle. Tiefer als der Zielwert, weil die Schwelle
+  Treffer weglässt und die Gruppierung (#209 AK 7) pro Dokument höchstens drei Abschnitte zeigt.
+- **Exakte zuerst, ungruppiert, vor der Schwelle:** 0.626 (0.579–0.670) — die Messung des Bauplans
+  (0.636 mit sentence-transformers-Vektoren).
+- **Titel-Abschnitte:** Mit den Titeln aus den Kopfzeilen («Sitzung 1», «Zuweisungsschreiben
+  Hausarzt») als eigene Abschnitte fiele der Wert auf 0.461: kurze, allgemeine Titel erreichen
+  hohe Kosinuswerte (Median des besten Titels 0.68) und schlagen bei 37 von 136 Anfragen (36 davon mit Urteilen) jeden
+  Text-Abschnitt. Der Zielwert ist auf den 148 Text-Abschnitten definiert; in der Produktiv-Rangfolge
+  ändern die Titel bei 0.71 kaum etwas (0.380 gegenüber 0.382 ohne Titel-Abschnitte; ohne Schwelle 0.498 gegenüber 0.540), weil die Schwelle die
+  meisten wegfiltert. Echte Titel stammen von der Zusammenfassung und sind inhaltlich — mit diesem
+  Set nicht messbar.
+
+Die Kalibriertabelle der Schwelle steht in `docs/product/features/search.md` («Threshold»).
+
+Wiederholen (Voraussetzungen: entpacktes Suchmodell-Artefakt, ein Python mit torch, tokenizers und
+safetensors, z. B. das gebündelte Standalone-Python des Haupt-Checkouts):
+
+```bash
+export THERASCRIPT_SEARCH_MODEL_DIR=<entpacktes Artefakt> THERASCRIPT_SEARCH_PYTHON=<python3> PYTHONDONTWRITEBYTECODE=1
+THERASCRIPT_SEARCH_QUALITY_OUT=<Messdaten.json> npm run test:search-quality  # ~2 min; ohne Modell/Python: rot mit Meldung
+npx tsx scripts/search-calibrate.ts <Messdaten.json>
+npm run bench:search                                  # Antwortzeit und Speicher, 2'000 Einträge, ~3–5 min
+```
+
+## Messung wiederholen (Spike)
 
 ```bash
 uv venv --python 3.12 <dir> && VIRTUAL_ENV=<dir> uv pip install -r scripts/search-spike-requirements.txt
