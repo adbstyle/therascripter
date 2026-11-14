@@ -1,3 +1,5 @@
+import type { RecordingStartOptions, RecordingStartResult } from '../../../shared/types/IpcApi'
+
 const SAMPLE_RATE = 48000
 const BUFFER_TARGET = SAMPLE_RATE // ~1 second of audio before flushing to main
 
@@ -12,7 +14,10 @@ export class AudioRecorder {
   private bufferSampleCount = 0
   private onLevel: LevelCallback | null = null
 
-  async start(onLevel: LevelCallback): Promise<string> {
+  async start(
+    onLevel: LevelCallback,
+    options?: RecordingStartOptions
+  ): Promise<RecordingStartResult> {
     this.onLevel = onLevel
 
     // Request microphone access (mono, raw — no processing)
@@ -28,7 +33,11 @@ export class AudioRecorder {
     })
 
     // Create session in main process
-    const { sessionId } = await window.api.recording.start()
+    // #206: mit Dossier ordnet der Main-Prozess die Sitzung sofort zu
+    const result = options?.dossierId
+      ? await window.api.recording.start({ dossierId: options.dossierId })
+      : await window.api.recording.start()
+    const { sessionId } = result
     this.sessionId = sessionId
 
     // Set up AudioContext + WorkletNode
@@ -49,7 +58,7 @@ export class AudioRecorder {
     source.connect(this.workletNode)
     // Don't connect worklet to destination (no playback / feedback)
 
-    return sessionId
+    return result
   }
 
   async stop(): Promise<void> {

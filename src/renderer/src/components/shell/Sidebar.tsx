@@ -4,12 +4,13 @@ import { useNavigation } from '../../navigation/navigation'
 import { useRecordingState } from '../../contexts/recording'
 import { useWorkspaceActions } from '../../contexts/workspaceActions'
 import SidebarFooter from './SidebarFooter'
+import RecentList from './RecentList'
 
 /**
  * Seitenleiste der App (Epic #192, ersetzt die frühere untere Leiste).
  * Reihenfolge wie im abgenommenen Prototyp: (Suchen, ab #209) —
  * Transkriptionen mit PDF-Import und Aufnahme — Alle Patientendossiers mit
- * «Neues Patientendossier» (#204) — (Zuletzt geöffnet, ab #213) — unten
+ * «Neues Patientendossier» (#204) — Zuletzt geöffnet (#213) — unten
  * Einstellungen, Update, Feedback.
  */
 export default function Sidebar(): React.JSX.Element {
@@ -55,7 +56,7 @@ export default function Sidebar(): React.JSX.Element {
       >
         <SidebarIconButton icon={Plus} label="Neues Patientendossier" onClick={openNewDossier} />
       </SidebarRow>
-      {/* Platz für «Zuletzt geöffnet» (#213) */}
+      <RecentList />
       <span className="flex-1" />
       <SidebarFooter />
     </nav>

@@ -1,13 +1,17 @@
 import { createContext, useContext } from 'react'
 
 export interface StartRecordingOptions {
-  /** Ab #206: Aufnahme direkt einem Patientendossier zuordnen (noch ignoriert). */
+  /** #206: Aufnahme ab Beginn diesem Patientendossier zuordnen; die App bleibt auf seiner Seite. */
   dossierId?: string
+  /** «Nachname, Vorname» — für den Hinweis, falls die Zuordnung scheitert (AK 2). */
+  dossierName?: string
 }
 
 export interface ImportPdfOptions {
-  /** Ab #206: importierte PDFs direkt einem Patientendossier zuordnen (noch ignoriert). */
+  /** #206: jedes importierte PDF vor seiner Verarbeitung diesem Patientendossier zuordnen. */
   dossierId?: string
+  /** «Nachname, Vorname» — für den Hinweis, falls die Zuordnung scheitert (AK 2). */
+  dossierName?: string
 }
 
 export interface WorkspaceActions {

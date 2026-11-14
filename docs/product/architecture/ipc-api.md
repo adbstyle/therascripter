@@ -38,17 +38,18 @@ The `api` object contains the following namespaces:
 | Namespace | Methods |
 |---|---|
 | `api.sessions` | `list()`, `delete(sessionId)`, `rename(sessionId, title)`, `setDocumentDate(sessionId, documentDate)`, `onChanged(cb)` |
-| `api.recording` | `start()`, `stop(sessionId)`, `sendData(sessionId, samples)`, `onDuration(cb)`, `onError(cb)`, `onAutoStopped(cb)` |
+| `api.recording` | `start(options?)` (`{ dossierId? }`, #206), `stop(sessionId)`, `sendData(sessionId, samples)`, `onDuration(cb)`, `onError(cb)`, `onAutoStopped(cb)` |
 | `api.settings` | `get(key)`, `set(key, value)` |
 | `api.tasks` | `getSessionTasks(sessionId)`, `isProcessing()`, `onProgress(cb)`, `onCompleted(cb)`, `onError(cb)` |
 | `api.blocklist` | `list()`, `add(term, placeholderType)`, `update(id, term, placeholderType)`, `delete(id)` |
-| `api.import` | `pdf(filePaths)`, `showPDFDialog()`, `getPathForFile(file)` |
+| `api.import` | `pdf(filePaths, options?)` (`{ dossierId? }`, #206), `showPDFDialog()`, `getPathForFile(file)` |
 | `api.review` | `load(sessionId)`, `save(sessionId, document, entityMap)`, `exportClipboard(text)` |
 | `api.system` | `aboutInfo()`, `uninstall()`, `openInFinder(path)` |
 | `api.modelDownload` | `status()`, `checkDiskSpace()`, `start()`, `onStatus(cb)` |
 | `api.appUpdate` | `getState()`, `check()`, `download()`, `cancelDownload()`, `install()`, `setAutoUpdate(enabled)`, `openInstallGuide()`, `onState(cb)` |
 | `api.dossiers` | `list()`, `get(dossierId)`, `create(input)`, `update(dossierId, patch)`, `deletePreview(dossierId)`, `delete(dossierId, fingerprint)`, `timeline(dossierId)`, `listForSession(sessionId)`, `assign(sessionId, dossierId)`, `unassign(sessionId, dossierId)`, `onChanged(cb)` — preload in `src/preload/api/dossiers.ts` |
 | `api.search` | `query(input)`, `semantic(input)`, `recentList()`, `recentRemember(query)`, `recentClear()` — preload in `src/preload/api/search.ts` |
+| `api.recent` | `list()`, `touch(target)`, `onChanged(cb)` — «Zuletzt geöffnet» (#213), preload in `src/preload/api/recent.ts` |
 
 All `on*` listener methods return an unsubscribe function `() => void`.
 
@@ -90,7 +91,7 @@ Source: `src/main/ipc/recording-handlers.ts`
 
 | Channel | Direction | Input Schema | Return Type | Description |
 |---|---|---|---|---|
-| `recording:start` | invoke | _(none)_ | `{ sessionId: string }` | Create a new audio session and begin recording. Starts duration timer, power save blocker, 2h auto-stop timer, and tray indicator. Throws if a recording is already active. |
+| `recording:start` | invoke | `RecordingStartSchema` — none or `{ dossierId? }` (strict) | `RecordingStartResult` — `{ sessionId, assignment: 'none' \| 'assigned' \| 'failed', title, createdAt }` | Create a new audio session and begin recording. With `dossierId` the session is assigned to that dossier once the WAV file exists and the session is active — before any audio arrives (#206 PC 1); a failing `initWavFile` leaves neither an assignment nor a «Zuletzt» entry; a failed assignment does not stop the recording (`'failed'`, AK 2). Starts duration timer, power save blocker, 2h auto-stop timer, and tray indicator. Throws if a recording is already active. |
 | `recording:stop` | invoke | `RecordingStopSchema` — `{ sessionId: string }` | `{ durationSeconds: number }` | Stop the active recording, finalize WAV file, set session status to `transcribing`, and enqueue ML pipeline. Throws if sessionId does not match the active recording. |
 | `recording:data` | send (one-way) | `RecordingDataSchema` — `{ sessionId: string, samples: ArrayBuffer }` | _(none)_ | Stream raw audio samples from the renderer's MediaRecorder to the main process for WAV writing. Uses `ipcMain.on` (fire-and-forget). |
 
@@ -150,7 +151,7 @@ Source: `src/main/ipc/pdf-handlers.ts`
 
 | Channel | Direction | Input Schema | Return Type | Description |
 |---|---|---|---|---|
-| `import:pdf` | invoke | `ImportPDFSchema` — `{ filePaths: string[](1..20) }` | `Session[]` | Import one or more PDF files. Copies each to `~/.therascript/pdf/`, creates a session, and enqueues the PDF processing pipeline. Rolls back on copy failure. |
+| `import:pdf` | invoke | `ImportPDFSchema` — `{ filePaths: string[](1..20), dossierId? }` (strict) | `ImportPdfResult` — `{ sessions: Session[], unassigned: {sessionId, title}[], failed: {title, reason}[] }` | Import one or more PDF files, each in its own try/catch (missing file, copy failure → `failed`; a PDF deleted while its scanned-pages check runs is skipped silently). Copies each to `~/.therascript/pdf/`, creates a session, assigns it to `dossierId` (if given) BEFORE enqueuing the PDF processing pipeline (#206 PC 2); PDFs whose assignment failed are imported anyway and listed in `unassigned` (AK 2). Rolls back on copy failure. |
 | `import:showPDFDialog` | invoke | _(none)_ | `string[]` | Open a native file picker dialog for PDF selection. Returns selected file paths, or empty array if canceled. |
 
 ### Dossier Handlers
@@ -163,7 +164,7 @@ Source: `src/main/ipc/dossier-handlers.ts`, service `src/main/services/DossierSe
 | `dossier:get` | invoke | `DossierIdInputSchema` — `{ dossierId }` | `Dossier \| null` | All fields of one dossier |
 | `dossier:create` | invoke | `DossierCreateSchema` — `{ firstName, lastName, externalId?: string \| null, birthDate?: IsoDate \| null, confirmDuplicate?: boolean }` | `CreateDossierResult` | `{ok:true, dossier}` · `{ok:false, reason:'external-id-taken', ownerName}` (owner as «Nachname, Vorname») · `{ok:false, reason:'duplicate-name', duplicates: DossierRef[]}` until called again with `confirmDuplicate: true` |
 | `dossier:update` | invoke | `DossierUpdateSchema` — `{ dossierId, patch }`, patch = at least one of `firstName, lastName, externalId (string \| null), birthDate (IsoDate \| null), diagnoses, medication, note` | `UpdateDossierResult` | Autosave per field. `{ok:true, dossier, duplicates}` — a duplicate name is saved and only reported · `{ok:false, reason:'external-id-taken', ownerName}` (nothing saved) · `{ok:false, reason:'not-found'}` |
-| `dossier:deletePreview` | invoke | `DossierIdInputSchema` | `DossierDeletePreview \| null` | `{dossierId, displayName, exclusive:{sessions, pdfs}, shared:{sessions, pdfs, otherDossiers}, blockedByRecording, fingerprint}` |
+| `dossier:deletePreview` | invoke | `DossierIdInputSchema` | `DossierDeletePreview \| null` | `{dossierId, displayName, exclusive:{sessions, pdfs}, shared:{sessions, pdfs, otherDossiers}, search:{exclusiveSearchable, recentQueries}, blockedByRecording, fingerprint}` — `search` names the search data the dialog lists (#207) |
 | `dossier:timeline` | invoke | `DossierIdInputSchema` | `TimelineEntry[]` | Timeline (#205): list projection + `dossiers` + `sortDay` (`YYYY-MM-DD`, local day: session = recording, PDF = document date or import day). Order: `sortDay` DESC, sessions before PDFs, `created_at` DESC, `id` DESC. Sessions being deleted are left out |
 | `dossier:listForSession` | invoke | `SessionIdInputSchema` — `{ sessionId }` | `DossierRef[]` | Dossiers of one session, alphabetical (editor header) |
 | `dossier:assign` / `dossier:unassign` | invoke | `DossierAssignmentSchema` — `{ sessionId, dossierId }` | `{ok:true} \| {ok:false, reason:'not-found'}` | No status check (assign also while recording/processing/after an error); assign is idempotent; unassign is followed by a WAL checkpoint. Both send `sessions:changed` and `dossiers:changed` when something changed |
@@ -192,6 +193,16 @@ Source: `src/main/ipc/search-handlers.ts`, service `src/main/search/SearchServic
 | `search:open` | invoke | _(none)_ | `SearchAvailability` | Starts preloading the search model and vectors when the search by meaning is possible (#209 AK 16) and answers at once. `{ model: SearchModelState, semantic }` — `semantic`: `ready` · `loading` · `unavailable-processing` · `model-missing` · `tool-blocked` · `error`; `model`: `ready` · `downloading {progress}` · `retry-scheduled {reason, nextAttemptAt}` · `failed {reason}` · `unpublished`; reasons `network \| disk-space \| checksum \| extract \| unknown` (#210 AK 4/5) |
 | `search:retryModel` | invoke | _(none)_ | `SearchAvailability` | «Erneut versuchen»: download the search model now, resolves after the attempt |
 | `search:availabilityChanged` | send (main → renderer) | — | `SearchAvailability` | Every change of the model (including download progress, whole percent) or of the search process / processing |
+
+### Recent Handlers (Epic #192, #213)
+
+`src/main/ipc/recent-handlers.ts`, service `src/main/services/RecentService.ts`, repository `src/main/db/repositories/RecentRepository.ts`.
+
+| Channel | Type | Payload | Returns | Description |
+|---|---|---|---|---|
+| `recent:list` | invoke | _(none)_ | `RecentEntry[]` | At most eight entries, newest first; the running recording (`getActiveSessionId`) always first, even if it fell out of the eight. `{kind:'dossier', dossier: DossierRef}` or `{kind:'session', session: Session (list projection incl. `titlePlain`), recording}`. Sessions with `deleting_at` are never listed |
+| `recent:touch` | invoke | `RecentTouchSchema` — `{kind:'dossier'\|'session', id}` (strict, discriminated) | `void` | Put an opened dossier or session on top (upsert, strictly increasing `opened_at`), keep eight; unknown or deleting targets are ignored. Sent by the renderer on every dossier/session route (`useRememberOpenedRoute` in `AppShell`); `recording:start` touches the new session itself. Imported PDFs are not touched (not opened) |
+| `recent:changed` | event | `RecentChangedSchema` — `{ deletedIds: [] }` | – | After a touch; `RecentList` also reloads on `sessions:changed`/`dossiers:changed` (titles, status, deletions) |
 
 ### Model Download Handlers
 
@@ -304,6 +315,8 @@ Source: `src/main/ipc/system-handlers.ts`
 | `search:recent:clear` | search |
 | `search:open` | search |
 | `search:retryModel` | search |
+| `recent:list` | recent |
+| `recent:touch` | recent |
 
 ### All send channels (renderer -> main, fire-and-forget)
 
@@ -324,6 +337,7 @@ Source: `src/main/ipc/system-handlers.ts`
 | `modelDownload:status` | model-download |
 | `appUpdate:state` | app-update |
 | `sessions:changed` | session (ChangeEvents) |
+| `recent:changed` | recent (ChangeEvents) |
 | `nav:command` | app menu |
 | `nav:openSettings` | app menu / tray |
 | `search:availabilityChanged` | search (SearchModelProvisioner, SearchWorker) |

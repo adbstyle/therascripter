@@ -13,7 +13,7 @@ import { MAX_CHANGED_IDS } from '../../shared/validation/change-event-schemas'
  * MAX_CHANGED_IDS IDs gehen in Teilen hinaus (Schema-Grenze).
  */
 
-type Channel = 'sessions:changed' | 'dossiers:changed'
+type Channel = 'sessions:changed' | 'dossiers:changed' | 'recent:changed'
 type Sender = (channel: Channel, data: { deletedIds: string[] }) => void
 
 /** Ohne Fenster (Start, Tests ohne Electron) wird still nichts gesendet. */
@@ -97,6 +97,11 @@ export function onSessionsDeleted(listener: (deletedIds: readonly string[]) => v
 /** Patientendossiers haben sich geändert; `deletedIds` nennt gelöschte. */
 export function notifyDossiersChanged(deletedIds: readonly string[] = []): void {
   enqueue('dossiers:changed', deletedIds)
+}
+
+/** «Zuletzt geöffnet» hat sich geändert (#213): geöffnet oder Aufnahme gestartet. */
+export function notifyRecentChanged(): void {
+  enqueue('recent:changed', [])
 }
 
 /** Nur für Tests: Empfänger ersetzen (null = Fenster). */

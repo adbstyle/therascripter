@@ -4,9 +4,11 @@ import { basename, join } from 'path'
 import { getDatabase, getDataDir } from '../db/connection'
 import { openPdfDocument, releasePdfDocument } from '../utils/pdfjs-loader'
 import { SessionService } from '../services/SessionService'
+import { SessionDossierService } from '../services/SessionDossierService'
 import { getTaskQueue } from '../services/TaskQueueService'
 import { ImportPDFSchema } from '../../shared/validation/import-schemas'
 import type { Session } from '../../shared/types'
+import type { ImportPdfResult } from '../../shared/types/IpcApi'
 
 /**
  * Issue #80 Phase G — quick scanned-pages heuristic run at PDF import time.
@@ -67,64 +69,105 @@ function generatePDFTitle(filePath: string): string {
 }
 
 export function registerPDFHandlers(): void {
-  ipcMain.handle('import:pdf', async (_event, args: unknown) => {
-    const { filePaths } = ImportPDFSchema.parse(args)
+  ipcMain.handle('import:pdf', async (_event, args: unknown): Promise<ImportPdfResult> => {
+    const { filePaths, dossierId } = ImportPDFSchema.parse(args)
     const db = getDatabase()
     const sessionService = new SessionService(db)
+    const assignments = new SessionDossierService(db)
     const taskQueue = getTaskQueue()
 
     const sessions: Session[] = []
+    const unassigned: ImportPdfResult['unassigned'] = []
+    const failed: ImportPdfResult['failed'] = []
 
+    // Jede Datei für sich: ein Fehler (fehlende Datei, Kopierfehler, ein
+    // während des Wartens gelöschtes Dossier oder PDF) bricht nie den ganzen
+    // Import ab — frühere und spätere PDFs bleiben importiert und gemeldet
+    // (#206 AK 2, Review #225).
     for (const sourcePath of filePaths) {
+      const name = basename(sourcePath)
       if (!existsSync(sourcePath)) {
-        throw new Error(`Datei nicht gefunden: ${sourcePath}`)
+        failed.push({ title: name, reason: 'Datei nicht gefunden' })
+        continue
       }
-
       if (!sourcePath.toLowerCase().endsWith('.pdf')) {
-        throw new Error(`Nur PDF-Dateien werden unterstützt: ${basename(sourcePath)}`)
+        failed.push({ title: name, reason: 'Keine PDF-Datei' })
+        continue
       }
 
-      // Copy PDF to app data directory
       const title = generatePDFTitle(sourcePath)
-      const session = sessionService.createSession(title, 'pdf')
-
-      const pdfDir = join(getDataDir(), 'pdf')
-      const pdfPath = join(pdfDir, `${session.id}.pdf`)
-
+      let sessionId: string | null = null
       try {
-        copyFileSync(sourcePath, pdfPath)
-      } catch (err) {
-        // Rollback: remove orphaned session and partial file
-        sessionService.deleteSession(session.id)
-        try {
-          unlinkSync(pdfPath)
-        } catch {
-          // File may not have been created
+        const session = sessionService.createSession(title, 'pdf')
+        sessionId = session.id
+
+        // #206 PC 2 — Zuordnung VOR jeder Verarbeitung (enqueuePipeline unten);
+        // scheitert sie, wird das PDF trotzdem importiert und gemeldet (AK 2).
+        let notAssigned = false
+        if (dossierId !== undefined) {
+          let assigned = false
+          try {
+            assigned = assignments.assign(session.id, dossierId).ok
+          } catch (error) {
+            console.error(
+              `[PDF-Import] Zuordnung von ${session.id} zum Dossier fehlgeschlagen:`,
+              error
+            )
+          }
+          notAssigned = !assigned
         }
-        const msg = err instanceof Error ? err.message : String(err)
-        throw new Error(
-          `PDF konnte nicht kopiert werden. Bitte stellen Sie sicher, dass die Datei lokal verfügbar ist.\n${basename(sourcePath)}: ${msg}`
-        )
+
+        const pdfPath = join(getDataDir(), 'pdf', `${session.id}.pdf`)
+        try {
+          copyFileSync(sourcePath, pdfPath)
+        } catch (err) {
+          // Rollback: remove orphaned session and partial file
+          sessionService.deleteSession(session.id)
+          try {
+            unlinkSync(pdfPath)
+          } catch {
+            // File may not have been created
+          }
+          sessionId = null
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error(`[PDF-Import] ${name} konnte nicht kopiert werden: ${msg}`)
+          failed.push({
+            title,
+            reason: 'Die Datei konnte nicht kopiert werden. Ist sie lokal verfügbar?'
+          })
+          continue
+        }
+
+        // Phase G — quick OCR-needed detection before enqueue so plannedSteps
+        // can include the OCR step (or not) from the very first task:started.
+        const hasScannedPages = await detectScannedPages(pdfPath)
+
+        // Während des Wartens kann der USER das PDF (oder sein einziges
+        // Dossier samt PDF) gelöscht haben: dann still überspringen — es ist
+        // gewollt weg, kein Fehler
+        if (!sessionService.getSession(session.id)) continue
+
+        sessionService.updateSession(session.id, {
+          pdfPath,
+          pdfHasScannedPages: hasScannedPages
+        })
+        taskQueue.enqueuePipeline(session.id, 'pdf')
+
+        const updated = sessionService.getSession(session.id)
+        if (updated) {
+          sessions.push(updated)
+          if (notAssigned) unassigned.push({ sessionId: session.id, title })
+        }
+      } catch (error) {
+        // Unerwartet (z. B. Sitzung genau zwischen Prüfung und Einreihen
+        // gelöscht, Datenbankfehler): gelöscht → still, sonst melden
+        if (sessionId !== null && !sessionService.getSession(sessionId)) continue
+        console.error(`[PDF-Import] ${name} fehlgeschlagen:`, error)
+        failed.push({ title, reason: 'Der Import ist fehlgeschlagen.' })
       }
-
-      // Phase G — quick OCR-needed detection before enqueue so plannedSteps
-      // can include the OCR step (or not) from the very first task:started.
-      const hasScannedPages = await detectScannedPages(pdfPath)
-
-      sessionService.updateSession(session.id, {
-        pdfPath,
-        pdfHasScannedPages: hasScannedPages
-      })
-
-      // Enqueue PDF processing pipeline
-      taskQueue.enqueuePipeline(session.id, 'pdf')
-
-      // Re-fetch session to get updated state
-      const updated = sessionService.getSession(session.id)
-      if (updated) sessions.push(updated)
     }
 
-    return sessions
+    return { sessions, unassigned, failed }
   })
 
   ipcMain.handle('import:showPDFDialog', async () => {

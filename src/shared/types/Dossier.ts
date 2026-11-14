@@ -90,6 +90,13 @@ export interface DossierDeletePreview {
   exclusive: { sessions: number; pdfs: number }
   /** Auch anderen Dossiers zugeordnet — bleibt erhalten. */
   shared: { sessions: number; pdfs: number; otherDossiers: DossierRef[] }
+  /**
+   * Suchdaten, die mitgelöscht werden (#207, Epic EK 22): wie viele der
+   * mitgelöschten Inhalte für die Suche aufbereitete Texte haben (bzw. gleich
+   * bekommen), und wie viele letzte Suchanfragen Namen oder ID des Dossiers
+   * enthalten.
+   */
+  search: { exclusiveSearchable: number; recentQueries: number }
   /** Eine exklusiv zugeordnete Sitzung wird gerade aufgenommen — Löschen gesperrt (#207 AK 2). */
   blockedByRecording: boolean
   /** Stand der Vorschau; `dossier:delete` löscht nur, wenn er noch stimmt (#207 AK 1). */

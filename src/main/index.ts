@@ -76,6 +76,7 @@ import { registerSummaryHandlers } from './ipc/summary-handlers'
 import { startToolCheck } from './services/ToolHealthService'
 import { registerDossierAssignmentHandlers, registerDossierHandlers } from './ipc/dossier-handlers'
 import { registerSearchHandlers } from './ipc/search-handlers'
+import { registerRecentHandlers } from './ipc/recent-handlers'
 import {
   getSearchAvailability,
   getSearchModelProvisioner,
@@ -388,6 +389,7 @@ app.whenReady().then(() => {
       return getSearchAvailability()
     }
   })
+  registerRecentHandlers()
   registerSummaryHandlers({
     sessionService,
     summaries: {

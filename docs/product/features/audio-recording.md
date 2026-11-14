@@ -42,9 +42,11 @@ The `VUMeter` component provides real-time audio level feedback during recording
 
 The `RecordingSessionCard` also displays a monospace duration timer in `HH:MM:SS` format, updated every second; the `RecordingBar` shows the same timer on every other page (Settings, the editor). Starting a recording — from the page header or the record icon in the sidebar — navigates to the sessions list, where the live card lives (Epic #192).
 
+**Recording from a patient dossier (#206):** «Aufnahme starten» in the head of a dossier page calls `startRecording({ dossierId, dossierName })`. `recording:start` receives `{ dossierId }` and assigns the new session to the dossier once the WAV file exists and the session is the active recording — before the first audio chunk, so the session belongs to the dossier from the start (PC 1); if `initWavFile` throws, no assignment and no «Zuletzt» entry is left behind. If the assignment fails (dossier deleted meanwhile, database error), the recording starts anyway and the result says `assignment: 'failed'`; the renderer then shows an error toast with the session's own time (`createdAt` from `recording:start`, matching its title — not the moment before the microphone prompt) «Die Aufnahme vom 14.11.2026, 10:05 läuft, konnte dem Patientendossier «Hofer, Lukas» aber nicht zugeordnet werden. …» (AK 2). The app stays on the dossier page; its timeline shows the live card, the `ConsentBanner` appears above it and the `RecordingBar` is hidden there. The assignment is never removed by how the recording ends — stop, auto-stop, tray stop, a failing stop, quitting the app, crash recovery (restore or discard) only change the status (PC 3; `recording-handlers.dossier.test.ts`). «Aufnahme starten» is hidden in the dossier head while recording, like on the sessions list. After «Aufnahme starten» (dossier head, sessions list, sidebar) the focus moves to «Aufnahme stoppen» of the live card as soon as it appears (`stores/liveCardFocus.ts`, one-shot request valid for 5 s).
+
 ## Consent Banner
 
-The `ConsentBanner` is a warning shown above the sessions list while a recording is active. It reminds the therapist to obtain patient consent before recording.
+The `ConsentBanner` is a warning shown above the sessions list — and on the page of a patient dossier whose timeline shows the running recording (#206) — while a recording is active. It reminds the therapist to obtain patient consent before recording.
 
 - **When shown**: On every recording start until the user dismisses it with the "Nicht mehr anzeigen" checkbox checked.
 - **Content**: "Bitte stellen Sie sicher, dass die aufgenommene Person der Aufnahme zugestimmt hat (StGB Art. 179bis)." -- a reference to the Swiss criminal code provision on unauthorized audio recording.
@@ -86,7 +88,7 @@ The main process activates Electron's `powerSaveBlocker` with type `prevent-app-
 
 Recording is a status, not a mode: the full app stays navigable while a recording is active. The session card with status `recording` becomes the live recording control (`RecordingSessionCard`): pulsing REC indicator, live timer, compact VU meter, stop button, and auto-stop countdown live directly in the sessions list. There is no separate fullscreen recording view.
 
-In views where that card is not visible (Settings, Review), a slim red `RecordingBar` appears directly below the title bar showing the pulsing dot, "Aufnahme läuft", and the live timer; clicking it navigates back to the sessions list. The bar and the card are mutually exclusive so the same information is never shown twice.
+In views where that card is not visible (Settings, Review, the dossier overview, the page of a dossier the recording is not assigned to), a slim red `RecordingBar` appears directly below the title bar showing the pulsing dot, "Aufnahme läuft", and the live timer; clicking it navigates back to the sessions list. The bar and the card are mutually exclusive so the same information is never shown twice: `AppShell` hides the bar on the sessions list and on the page of every dossier the recording is currently assigned to (`hooks/useRecordingDossierIds.ts` — `dossier:listForSession` of the recording, refreshed on `sessions:changed`/`dossiers:changed`, so an assignment made during the recording via the badges counts too; until the first answer the dossier the recording was started from).
 
 Only two actions remain blocked while recording: starting a second recording (button hidden, main process throws) and the model-update restart (gated in `model-update-handlers.ts`). PDF import is allowed, but the task queue is paused for the duration of the recording — see the queue pause section in [transcription-pipeline.md](transcription-pipeline.md). Recording errors surface as an error toast — except a missing microphone permission, see below.
 
@@ -113,7 +115,8 @@ The banner never appears during a recording. The check is a non-blocking rendere
 | File | Purpose |
 |---|---|
 | `src/renderer/src/components/RecordingSessionCard.tsx` | Live recording control in the sessions list: timer, compact VU meter, stop button, auto-stop countdown |
-| `src/renderer/src/components/shell/RecordingBar.tsx` | Slim recording status bar shown in Settings/Review |
+| `src/renderer/src/components/shell/RecordingBar.tsx` | Slim recording status bar on every page that does not show the live card |
+| `src/renderer/src/hooks/useRecordingDossierIds.ts` | Dossiers the running recording is assigned to (their timeline shows the live card, #206) |
 | `src/renderer/src/components/VUMeter.tsx` | Audio level visualization (6-bar symmetric meter, subscribes to the level itself) |
 | `src/renderer/src/components/ConsentBanner.tsx` | First-recording consent reminder |
 | `src/renderer/src/components/MicrophoneBanner.tsx` | Microphone hints: permission lost (e.g. after an update) or denied at recording start |

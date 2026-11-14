@@ -101,10 +101,33 @@ export class SearchRecentRepository {
    * zurück.
    */
   forgetContaining(names: string[], ids: Array<string | null | undefined> = []): number {
+    const match = this.containingClause(names, ids)
+    if (!match) return 0
+    return this.db
+      .prepare(`DELETE FROM search_recent_queries WHERE ${match.where}`)
+      .run(...match.keys).changes
+  }
+
+  /**
+   * Wie viele Anfragen `forgetContaining` mit denselben Begriffen entfernen
+   * würde — der Löschdialog eines Dossiers nennt sie (#207, Epic EK 22).
+   */
+  countContaining(names: string[], ids: Array<string | null | undefined> = []): number {
+    const match = this.containingClause(names, ids)
+    if (!match) return 0
+    const row = this.db
+      .prepare(`SELECT COUNT(*) AS n FROM search_recent_queries WHERE ${match.where}`)
+      .get(...match.keys) as { n: number }
+    return row.n
+  }
+
+  private containingClause(
+    names: string[],
+    ids: Array<string | null | undefined>
+  ): { where: string; keys: string[] } | null {
     const keys = [...new Set(forgetKeys(names, ids))]
-    if (keys.length === 0) return 0
-    const where = keys.map(() => 'instr(query_norm, ?) > 0').join(' OR ')
-    return this.db.prepare(`DELETE FROM search_recent_queries WHERE ${where}`).run(...keys).changes
+    if (keys.length === 0) return null
+    return { where: keys.map(() => 'instr(query_norm, ?) > 0').join(' OR '), keys }
   }
 
   private checkpoint(): void {

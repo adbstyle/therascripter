@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { DossierTimeline } from '../DossierTimeline'
@@ -14,6 +14,7 @@ import { ToastProvider } from '../../../contexts/ToastContext'
 import { NavigationProvider } from '../../../navigation/NavigationContext'
 import { useNavigation } from '../../../navigation/navigation'
 import { RecordingContext, type RecordingState } from '../../../contexts/recording'
+import { WorkspaceActionsContext, type WorkspaceActions } from '../../../contexts/workspaceActions'
 import { PageScroll } from '../../shell/PageScroll'
 import { createValueStore } from '../../../utils/valueStore'
 import { getViewModeStore, _resetViewModeStoreForTests } from '../../../viewMode/viewModeStore'
@@ -52,8 +53,20 @@ function RouteProbe(): React.JSX.Element {
 
 function renderTimeline(
   entries: TimelineEntry[] | (() => Promise<TimelineEntry[]>),
-  options: { recording?: RecordingState; anchorId?: string; probe?: boolean } = {}
+  options: {
+    recording?: RecordingState
+    anchorId?: string
+    probe?: boolean
+    workspace?: Partial<WorkspaceActions>
+  } = {}
 ) {
+  const workspace: WorkspaceActions = {
+    startRecording: vi.fn().mockResolvedValue(undefined),
+    importPdfs: vi.fn().mockResolvedValue(undefined),
+    isImporting: false,
+    openNewDossier: vi.fn(),
+    ...options.workspace
+  }
   const timeline =
     typeof entries === 'function' ? vi.fn(entries) : vi.fn().mockResolvedValue(entries)
   window.api = createMockApi({ dossiers: { timeline } })
@@ -61,16 +74,18 @@ function renderTimeline(
     <ToastProvider>
       <NavigationProvider initialRoute={{ kind: 'dossier', dossierId: 'd1' }}>
         <RecordingContext.Provider value={options.recording ?? recordingState()}>
-          <PageScroll entryId={1} anchorId={options.anchorId} positions={new Map()}>
-            {children}
-            {options.probe && <RouteProbe />}
-          </PageScroll>
+          <WorkspaceActionsContext.Provider value={workspace}>
+            <PageScroll entryId={1} anchorId={options.anchorId} positions={new Map()}>
+              {children}
+              {options.probe && <RouteProbe />}
+            </PageScroll>
+          </WorkspaceActionsContext.Provider>
         </RecordingContext.Provider>
       </NavigationProvider>
     </ToastProvider>
   )
-  const view = render(<DossierTimeline dossierId="d1" />, { wrapper })
-  return { ...view, timeline, user: userEvent.setup() }
+  const view = render(<DossierTimeline dossierId="d1" dossierName="Hofer, Lukas" />, { wrapper })
+  return { ...view, timeline, workspace, user: userEvent.setup() }
 }
 
 beforeEach(() => {
@@ -81,16 +96,37 @@ afterEach(() => {
 })
 
 describe('DossierTimeline (#205)', () => {
-  it('explains how to assign when the dossier is empty (AK 17)', async () => {
+  it('explains recording, import and assigning when the dossier is empty (AK 17, #206)', async () => {
     const { user } = renderTimeline([], { probe: true })
     expect(await screen.findByText('Noch keine Sitzungen oder PDF-Dokumente')).toBeInTheDocument()
     expect(
       screen.getByText(
-        'Ordnen Sie bestehende Transkriptionen in der Liste «Transkriptionen» über «Dossier zuordnen» diesem Patientendossier zu.'
+        'Starten Sie oben eine Aufnahme oder importieren Sie ein PDF – oder ziehen Sie ein PDF hierher. Bestehende Transkriptionen ordnen Sie in der Liste «Transkriptionen» über «Dossier zuordnen» zu.'
       )
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Zu den Transkriptionen' }))
     expect(screen.getByTestId('route')).toHaveTextContent('sessions')
+  })
+
+  it('imports PDFs dropped onto the timeline into this dossier (#206)', async () => {
+    const { workspace } = renderTimeline([])
+    await screen.findByText('Noch keine Sitzungen oder PDF-Dokumente')
+    window.api.import.getPathForFile = vi.fn((file: File) => `/tmp/${file.name}`)
+    const section = screen.getByRole('region', { name: 'Verlauf' })
+    const files = [
+      new File(['%PDF'], 'bericht.pdf', { type: 'application/pdf' }),
+      new File(['x'], 'notiz.txt', { type: 'text/plain' })
+    ]
+    fireEvent.dragOver(section, { dataTransfer: { files } })
+    expect(screen.getByText('Es wird diesem Patientendossier zugeordnet.')).toBeInTheDocument()
+    fireEvent.drop(section, { dataTransfer: { files } })
+    await waitFor(() =>
+      expect(workspace.importPdfs).toHaveBeenCalledWith(['/tmp/bericht.pdf'], {
+        dossierId: 'd1',
+        dossierName: 'Hofer, Lukas'
+      })
+    )
+    expect(screen.queryByText('Es wird diesem Patientendossier zugeordnet.')).toBeNull()
   })
 
   it('groups the entries by month in the order of the main process (AK 6)', async () => {
@@ -157,7 +193,16 @@ describe('DossierTimeline (#205)', () => {
         <ToastProvider>
           <NavigationProvider initialRoute={{ kind: 'dossier', dossierId: 'd1' }}>
             <RecordingContext.Provider value={recordingState()}>
-              {children}
+              <WorkspaceActionsContext.Provider
+                value={{
+                  startRecording: vi.fn(),
+                  importPdfs: vi.fn(),
+                  isImporting: false,
+                  openNewDossier: vi.fn()
+                }}
+              >
+                {children}
+              </WorkspaceActionsContext.Provider>
             </RecordingContext.Provider>
           </NavigationProvider>
         </ToastProvider>

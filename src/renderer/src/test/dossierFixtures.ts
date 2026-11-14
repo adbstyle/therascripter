@@ -44,6 +44,7 @@ export function makeDeletePreview(
     displayName: 'Lukas Hofer',
     exclusive: { sessions: 0, pdfs: 0 },
     shared: { sessions: 0, pdfs: 0, otherDossiers: [] },
+    search: { exclusiveSearchable: 0, recentQueries: 0 },
     blockedByRecording: false,
     fingerprint: 'fp-1',
     ...overrides

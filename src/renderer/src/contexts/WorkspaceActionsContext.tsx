@@ -5,6 +5,13 @@ import { useRecordingState } from './recording'
 import { useToast } from '../hooks/useToast'
 import { NewDossierDialog } from '../components/dossier/NewDossierDialog'
 import type { Dossier } from '../../../shared/types/Dossier'
+import { dossierListName } from '../utils/dossierFormat'
+import { cancelLiveCardFocus, requestLiveCardFocus } from '../stores/liveCardFocus'
+import {
+  PDF_IMPORT_FAILED,
+  pdfImportNotice,
+  recordingNotAssignedNotice
+} from '../utils/dossierAssignmentNotice'
 import {
   WorkspaceActionsContext,
   type ImportPdfOptions,
@@ -25,15 +32,42 @@ export function WorkspaceActionsProvider({ children }: { children: ReactNode }):
   const [newDossierOpen, setNewDossierOpen] = useState(false)
   const importingRef = useRef(false)
   // Ohne Dossier führt der Aufnahmestart zur Sitzungsliste, dort lebt die
-  // Live-Karte. Mit Dossier (ab #206) bleibt die App auf dessen Seite.
+  // Live-Karte. Mit Dossier (#206) bleibt die App auf dessen Seite, deren
+  // Verlauf die Live-Karte zeigt.
   const navigateOnStart = useRef(true)
+
+  /** Name für einen Hinweis: vom Aufrufer, sonst nachgeschlagen (null, wenn gelöscht). */
+  const nameOf = useCallback(
+    async (dossierId: string, known: string | undefined): Promise<string | null> => {
+      if (known) return known
+      try {
+        const dossier = await window.api.dossiers.get(dossierId)
+        return dossier ? dossierListName(dossier) : null
+      } catch {
+        return null
+      }
+    },
+    []
+  )
 
   const startRecording = useCallback(
     async (options: StartRecordingOptions = {}) => {
-      navigateOnStart.current = options.dossierId === undefined
-      await start()
+      const { dossierId, dossierName } = options
+      navigateOnStart.current = dossierId === undefined
+      // Fokus auf «Aufnahme stoppen», sobald die Live-Karte erscheint
+      requestLiveCardFocus()
+      const result = dossierId ? await start({ dossierId }) : await start()
+      if (!result) cancelLiveCardFocus()
+      // #206 AK 2 — die Aufnahme läuft, aber ohne Zuordnung: sagen, welche
+      // (Zeitpunkt der Sitzung aus dem Main-Prozess, wie in ihrem Titel)
+      if (dossierId && result?.assignment === 'failed') {
+        const startedAt = new Date(result.createdAt)
+        toast.error(recordingNotAssignedNotice(startedAt, await nameOf(dossierId, dossierName)), {
+          durationMs: 10_000
+        })
+      }
     },
-    [start]
+    [start, toast, nameOf]
   )
 
   const wasRecording = useRef(isRecording)
@@ -44,19 +78,39 @@ export function WorkspaceActionsProvider({ children }: { children: ReactNode }):
     wasRecording.current = isRecording
   }, [isRecording, navigate])
 
-  const importPdfs = useCallback(async (filePaths?: string[], _options?: ImportPdfOptions) => {
-    if (importingRef.current) return
-    importingRef.current = true
-    try {
-      const paths = filePaths ?? (await window.api.import.showPDFDialog())
-      if (paths.length === 0) return
-      setIsImporting(true)
-      await window.api.import.pdf(paths)
-    } finally {
-      importingRef.current = false
-      setIsImporting(false)
-    }
-  }, [])
+  const importPdfs = useCallback(
+    async (filePaths?: string[], options: ImportPdfOptions = {}) => {
+      if (importingRef.current) return
+      importingRef.current = true
+      const { dossierId, dossierName } = options
+      try {
+        const paths = filePaths ?? (await window.api.import.showPDFDialog())
+        if (paths.length === 0) return
+        setIsImporting(true)
+        const result = dossierId
+          ? await window.api.import.pdf(paths, { dossierId })
+          : await window.api.import.pdf(paths)
+        // #206 AK 2, Review #225 — nicht zugeordnete PDFs beim Titel nennen,
+        // fehlgeschlagene samt Grund; ohne Dossier gibt es kein «nicht zugeordnet»
+        const unassignedTitles = dossierId ? result.unassigned.map((u) => u.title) : []
+        const notice = pdfImportNotice({
+          importedCount: result.sessions.length,
+          unassignedTitles,
+          failed: result.failed,
+          dossierName:
+            dossierId && unassignedTitles.length > 0 ? await nameOf(dossierId, dossierName) : null
+        })
+        if (notice) toast.error(notice, { durationMs: 10_000 })
+      } catch (error) {
+        console.error('[Import] PDF-Import fehlgeschlagen:', error)
+        toast.error(PDF_IMPORT_FAILED)
+      } finally {
+        importingRef.current = false
+        setIsImporting(false)
+      }
+    },
+    [toast, nameOf]
+  )
 
   const openNewDossier = useCallback(() => setNewDossierOpen(true), [])
   const closeNewDossier = useCallback(() => setNewDossierOpen(false), [])
