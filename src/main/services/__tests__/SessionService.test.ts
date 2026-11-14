@@ -220,33 +220,50 @@ describe('SessionService', () => {
     })
   })
 
-  describe('cleanupOldSessions', () => {
-    it('deletes sessions older than 30 days', () => {
-      const oldDate = new Date()
-      oldDate.setDate(oldDate.getDate() - 31)
-
+  describe('retention (Issue #202)', () => {
+    function insertOld(id: string, type: 'audio' | 'pdf', status: string, days: number): void {
+      const date = new Date()
+      date.setDate(date.getDate() - days)
       db.prepare(
-        `INSERT INTO sessions (id, title, type, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      ).run('old-1', 'Old 1', 'audio', 'review', oldDate.toISOString(), oldDate.toISOString())
+        `INSERT INTO sessions (id, title, type, status, audio_path, pdf_path, review_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        id,
+        id,
+        type,
+        status,
+        type === 'audio' ? `/audio/${id}.wav` : null,
+        type === 'pdf' ? `/pdf/${id}.pdf` : null,
+        status === 'review' ? date.toISOString() : null,
+        date.toISOString(),
+        date.toISOString()
+      )
+    }
 
-      db.prepare(
-        `INSERT INTO sessions (id, title, type, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      ).run('old-2', 'Old 2', 'pdf', 'review', oldDate.toISOString(), oldDate.toISOString())
-
+    it('keeps sessions of every age and status — only cleanupSourceFiles runs periodically', () => {
+      insertOld('review-old', 'audio', 'review', 400)
+      insertOld('error-old', 'audio', 'error', 45)
+      insertOld('pdf-old', 'pdf', 'review', 31)
       service.createSession('Recent', 'audio')
 
-      const deleted = service.cleanupOldSessions()
+      service.cleanupSourceFiles()
 
-      expect(deleted).toBe(2)
-      expect(service.getAllSessions()).toHaveLength(1)
+      const ids = service.getAllSessions().map((s) => s.id)
+      expect(ids).toEqual(expect.arrayContaining(['review-old', 'error-old', 'pdf-old']))
+      expect(ids).toHaveLength(4)
+      // Text side of a processed session stays; only its source file goes
+      expect(service.getSession('review-old')?.audioPath).toBeNull()
+      expect(service.getSession('pdf-old')?.pdfPath).toBeNull()
     })
 
-    it('returns 0 when no old sessions exist', () => {
-      service.createSession('Recent', 'audio')
+    it('never removes the source file of a failed session, whatever its age', () => {
+      insertOld('error-audio', 'audio', 'error', 45)
+      insertOld('error-pdf', 'pdf', 'error', 45)
 
-      expect(service.cleanupOldSessions()).toBe(0)
+      expect(service.cleanupSourceFiles()).toBe(0)
+
+      expect(service.getSession('error-audio')?.audioPath).toBe('/audio/error-audio.wav')
+      expect(service.getSession('error-pdf')?.pdfPath).toBe('/pdf/error-pdf.pdf')
     })
   })
 

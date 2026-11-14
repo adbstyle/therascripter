@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { groupSessionsByTime } from '../../utils/groupSessionsByTime'
 import SessionDashboard from '../SessionDashboard'
@@ -286,5 +286,39 @@ describe('SessionDashboard', () => {
     await user.click(screen.getByLabelText('Transkription löschen'))
 
     expect(screen.getByText('Transkription löschen')).toBeInTheDocument()
+  })
+
+  // Issue #202, AK 3: the list names what exists for this session
+  it('lists exactly the data of this session in the delete dialog', async () => {
+    const user = userEvent.setup()
+    const sessions = [
+      makeSession({
+        id: '1',
+        title: 'Meine Sitzung',
+        audioPath: null,
+        transcriptPath: '/t.json',
+        anonymizedPath: '/a.json',
+        summary: 'Zusammenfassung'
+      })
+    ]
+    mockSessions.list.mockResolvedValue(sessions)
+    render(<SessionDashboard />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Meine Sitzung')).toBeInTheDocument()
+    })
+    await user.click(screen.getByLabelText('Transkription löschen'))
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent('«Meine Sitzung» und alle zugehörigen Daten')
+    const items = within(dialog)
+      .getAllByRole('listitem')
+      .map((li) => li.textContent)
+    expect(items).toEqual([
+      'Transkript inklusive Ihrer Bearbeitungen',
+      'Pseudonymisierung samt den Originaltexten aller Platzhalter',
+      'Zwischenergebnisse der Verarbeitung',
+      'Titel und Zusammenfassung'
+    ])
   })
 })

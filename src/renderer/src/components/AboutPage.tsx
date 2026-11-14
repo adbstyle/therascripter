@@ -149,10 +149,16 @@ export default function AboutPage(): React.JSX.Element {
         <div className="rounded-lg border border-border bg-surface-1 p-4">
           <h4 className="mb-1 text-sm font-medium text-text-secondary">Daten</h4>
           <p className="text-sm text-text-secondary">
-            Transkriptionen werden automatisch 30 Tage nach Erstellung gelöscht.
+            Der Text Ihrer Sitzungen und PDF-Dokumente bleibt erhalten, bis Sie ihn selbst löschen.
           </p>
           <p className="mt-1 text-sm text-text-secondary">
-            Sie sind verantwortlich, den kopierten Text extern zu sichern.
+            Audioaufnahmen und Original-PDFs werden 24&nbsp;Stunden nach erfolgreicher Verarbeitung
+            gelöscht. Schlägt die Verarbeitung fehl, bleiben sie erhalten, bis Sie die Sitzung
+            selbst löschen.
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
+            Inhalte mit Aufbewahrungspflicht gehören weiterhin in Ihre rechtlich führende
+            Praxissoftware.
           </p>
         </div>
 

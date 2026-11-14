@@ -116,41 +116,29 @@ Renaming calls `SessionService.renameSession()` which updates only the `title` f
 
 ## Delete
 
-Deleting a session shows a confirmation dialog (`ConfirmDialog.tsx`) with:
+Sessions are kept until the user deletes them — there is no automatic deletion by age (#202). Deleting a session (card menu in the list, trash button in the Review Editor) shows `DeleteSessionDialog.tsx`, the one delete dialog for both places, built on `ConfirmDialog.tsx`:
 
-- Title: "Sitzung loschen"
-- Message: the session title in quotes, asking for confirmation
-- A details list of what will be deleted:
-  - Audiodatei (audio file)
-  - Originaltext (transcript)
-  - Anonymisierter Text (anonymized text)
-  - Platzhalter-Mapping (entity mapping)
-- Warning: "Diese Aktion kann nicht ruckgangig gemacht werden."
-- Focus defaults to the "Abbrechen" (cancel) button to prevent accidental deletion
-- Dismissed via Escape key or clicking the backdrop
+- Title: «Transkription löschen»
+- Message: the session title in guillemets, asking for confirmation
+- «Gelöscht werden:» — a list of exactly what exists for this session (`sessionDeletionDetails` in `src/shared/utils/`):
+  - «Audioaufnahme» / «Original-PDF» — only while the source file still exists (until 24 h after successful processing, for failed sessions until deleted)
+  - «Transkript inklusive Ihrer Bearbeitungen» / «Text des PDF-Dokuments inklusive Ihrer Bearbeitungen» and «Pseudonymisierung samt den Originaltexten aller Platzhalter» — once processing finished
+  - «Zwischenergebnisse der Verarbeitung» — raw transcript, speaker assignment, extracted text, if present
+  - «Titel» or «Titel und Zusammenfassung»
+  - Blocklist entries and backups of the Mac are not mentioned: deleting a session does not touch them
+- Warning: «Diese Aktion kann nicht rückgängig gemacht werden.»
+- Focus defaults to «Abbrechen» to prevent accidental deletion
 
-When confirmed, `SessionService.deleteSession()` removes:
+The Review Editor fetches the current session when the trash button is clicked, so the list reflects a summary that arrived or a recording that was removed after the editor opened.
 
-1. The audio file (`audioPath`)
-2. The transcript file (`transcriptPath`)
-3. The anonymized document file (`anonymizedPath`)
-4. The diarization file (`diarizationPath`)
-5. The PDF file (`pdfPath`)
-6. The extracted text file (`extracted/<id>.json`)
-7. The PCM recovery file (`recovery/<id>.pcm`)
-8. The session row in the database (which cascade-deletes associated task rows)
+When confirmed, `SessionService.deleteSession()` marks the session (`deleting_at`), aborts its tasks, removes all its files and the row, and checkpoints the WAL. An interrupted or incomplete deletion is finished at the next start. Details, including why nothing is recoverable from the app's files: [storage.md — Deleting a session](../architecture/storage.md#deleting-a-session).
 
-All file deletions are best-effort -- missing files are silently skipped.
+## Source-File Cleanup
 
-## Auto-Deletion
+`SourceFileCleanupService` deletes the source file (audio WAV or imported PDF) of sessions that have been in `review` status for more than 24 hours and sets its path to `null`. Text, pseudonymization, title and summary stay. Failed sessions keep their source file until the user deletes them, so a retry works at any age.
 
-The `AutoDeletionService` automatically deletes sessions that are older than 30 days (based on `createdAt`).
-
-- **Interval:** Runs immediately at app startup, then every 6 hours (`CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000`)
-- **What is deleted:** Same as manual deletion -- all associated files and the database row
-- **Database maintenance:** After deleting expired sessions, the service runs `PRAGMA wal_checkpoint(TRUNCATE)` and `VACUUM` to reclaim disk space
-- **Source file cleanup:** The same cleanup cycle also deletes source files (audio WAV or imported PDF) for sessions that have been in `review` status for more than 24 hours. This reduces disk usage while preserving the anonymized output. The source file path in the database is set to `null` after deletion.
-- **Spotlight exclusion:** The service ensures a `.metadata_never_index` marker file exists in the data directory to prevent macOS Spotlight from indexing sensitive session data.
+- **Interval:** runs immediately at app startup, then every 6 hours (`CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000`)
+- **Spotlight exclusion:** at startup `ensureSpotlightExclusion()` (`StartupCleanupService`) makes sure a `.metadata_never_index` marker file exists in the data directory to keep Spotlight from indexing session data.
 
 ## Orphaned Session Recovery
 

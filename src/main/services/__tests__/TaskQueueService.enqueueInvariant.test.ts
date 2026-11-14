@@ -4,6 +4,7 @@ import { TaskQueueService } from '../TaskQueueService'
 import { SessionRepository } from '../../db/repositories/SessionRepository'
 import { TaskRepository } from '../../db/repositories/TaskRepository'
 import { applyTestSchema } from '../../db/__tests__/test-utils'
+import { SessionService } from '../SessionService'
 
 vi.mock('../../utils/ipc-helpers', () => ({
   sendToRenderer: vi.fn()
@@ -206,6 +207,45 @@ describe('TaskQueueService — enqueue + plannedSteps invariant', () => {
       // Assert: plannedSteps gets frozen now (no model active → 4 audio steps)
       const reloaded = sessionRepo.findById(session.id)
       expect(reloaded?.plannedSteps).toEqual([
+        'diarization',
+        'transcription',
+        'alignment',
+        'anonymization'
+      ])
+    })
+
+    // Issue #202, AK 2: no age limit — a session that failed more than 30 days
+    // ago keeps its recording and can still be processed again.
+    it('retries a failed session older than 30 days with its recording intact', () => {
+      const created = new Date()
+      created.setDate(created.getDate() - 45)
+      db.prepare(
+        `INSERT INTO sessions (id, title, type, status, audio_path, error_message, planned_steps, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        'old-failed',
+        'Alt',
+        'audio',
+        'error',
+        '/mock/audio/old-failed.wav',
+        'Fehler',
+        JSON.stringify(['diarization', 'transcription', 'alignment', 'anonymization']),
+        created.toISOString(),
+        created.toISOString()
+      )
+      taskRepo.create({ sessionId: 'old-failed', type: 'diarization' })
+
+      // The periodic cleanup never touches a failed session …
+      new SessionService(db).cleanupSourceFiles()
+      expect(sessionRepo.findById('old-failed')?.audioPath).toBe('/mock/audio/old-failed.wav')
+
+      // … and retry does not look at its age
+      queue.retrySession('old-failed')
+
+      const reloaded = sessionRepo.findById('old-failed')
+      expect(reloaded?.status).toBe('queued')
+      expect(reloaded?.audioPath).toBe('/mock/audio/old-failed.wav')
+      expect(taskRepo.findBySession('old-failed').map((t) => t.type)).toEqual([
         'diarization',
         'transcription',
         'alignment',

@@ -629,6 +629,17 @@ export class TaskQueueService {
     } finally {
       watchdog.stop()
       this.runningController = null
+
+      // Issue #202: wurde die Sitzung während des Laufs gelöscht, kann ein
+      // Executor, der den Abbruch nicht sofort beachtet, danach noch Dateien
+      // geschrieben haben — diese hier mit demselben Code wie beim Löschen
+      // erneut entfernen.
+      try {
+        this.sessionService.removeFilesIfDeleted(task.sessionId)
+      } catch (cleanupErr) {
+        console.error('[TaskQueue] Nachräumen einer gelöschten Sitzung fehlgeschlagen:', cleanupErr)
+      }
+
       this.processing = false
 
       // Phase D.4 — task ended (success or fail), queue positions may have shifted

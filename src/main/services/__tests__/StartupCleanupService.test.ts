@@ -1,8 +1,19 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'fs'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, statSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { sweepStaleArtifacts } from '../StartupCleanupService'
+
+const home = vi.hoisted(() => ({ path: '/mock/home' }))
+vi.mock('electron', () => ({
+  app: { getPath: () => home.path }
+}))
+
+import {
+  ensureSpotlightExclusion,
+  sweepOrphanedSessionFiles,
+  sweepStaleArtifacts,
+  SESSION_FILE_DIRS
+} from '../StartupCleanupService'
 
 describe('sweepStaleArtifacts', () => {
   let base: string
@@ -69,5 +80,110 @@ describe('sweepStaleArtifacts', () => {
         dataDir: join(base, 'missing-c')
       })
     ).not.toThrow()
+  })
+})
+
+describe('sweepOrphanedSessionFiles (Issue #202)', () => {
+  const KNOWN = '11111111-2222-4333-8444-555555555555'
+  const GONE = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+  let dataDir: string
+
+  beforeEach(() => {
+    dataDir = mkdtempSync(join(tmpdir(), 'orphan-sweep-test-'))
+    for (const dir of SESSION_FILE_DIRS) mkdirSync(join(dataDir, dir))
+  })
+
+  afterEach(() => {
+    rmSync(dataDir, { recursive: true, force: true })
+  })
+
+  function put(dir: string, name: string): string {
+    const full = join(dataDir, dir, name)
+    writeFileSync(full, 'PHI')
+    return full
+  }
+
+  it('removes every file of a session that no longer exists in the database', () => {
+    const orphans = [
+      put('audio', `${GONE}.wav`),
+      put('transcripts', `${GONE}.json`),
+      put('transcripts', `${GONE}-aligned.json`),
+      put('diarization', `${GONE}.json`),
+      put('anonymized', `${GONE}.json`),
+      put('pdf', `${GONE}.pdf`),
+      put('extracted', `${GONE}.json`),
+      put('recovery', `${GONE}.pcm`)
+    ]
+
+    const removed = sweepOrphanedSessionFiles(dataDir, new Set([KNOWN]))
+
+    expect(removed).toBe(orphans.length)
+    for (const file of orphans) expect(existsSync(file)).toBe(false)
+  })
+
+  it('keeps the files of existing sessions (case-insensitive id match)', () => {
+    const kept = [
+      put('audio', `${KNOWN}.wav`),
+      put('transcripts', `${KNOWN}-aligned.json`),
+      put('anonymized', `${KNOWN.toUpperCase()}.json`)
+    ]
+
+    expect(sweepOrphanedSessionFiles(dataDir, new Set([KNOWN]))).toBe(0)
+    for (const file of kept) expect(existsSync(file)).toBe(true)
+  })
+
+  it('leaves files alone whose name does not follow the session pattern', () => {
+    const foreign = [
+      put('audio', 'notes.txt'),
+      put('pdf', 'Arztbericht.pdf'),
+      put('transcripts', `${GONE}.json.1234-abcd.tmp`),
+      put('transcripts', `prefix-${GONE}.json`),
+      put('audio', '.DS_Store')
+    ]
+
+    expect(sweepOrphanedSessionFiles(dataDir, new Set())).toBe(0)
+    for (const file of foreign) expect(existsSync(file)).toBe(true)
+  })
+
+  it('does not descend into or remove directories', () => {
+    mkdirSync(join(dataDir, 'audio', GONE + '.wav'))
+
+    expect(sweepOrphanedSessionFiles(dataDir, new Set())).toBe(0)
+    expect(statSync(join(dataDir, 'audio', GONE + '.wav')).isDirectory()).toBe(true)
+  })
+
+  it('tolerates missing session dirs', () => {
+    rmSync(join(dataDir, 'recovery'), { recursive: true })
+    put('audio', `${GONE}.wav`)
+
+    expect(sweepOrphanedSessionFiles(dataDir, new Set())).toBe(1)
+  })
+})
+
+describe('ensureSpotlightExclusion', () => {
+  beforeEach(() => {
+    home.path = mkdtempSync(join(tmpdir(), 'spotlight-test-'))
+    mkdirSync(join(home.path, '.therascript'))
+  })
+
+  afterEach(() => {
+    rmSync(home.path, { recursive: true, force: true })
+  })
+
+  it('creates .metadata_never_index with mode 0600 if not present', () => {
+    ensureSpotlightExclusion()
+
+    const marker = join(home.path, '.therascript', '.metadata_never_index')
+    expect(existsSync(marker)).toBe(true)
+    expect(statSync(marker).mode & 0o777).toBe(0o600)
+  })
+
+  it('leaves an existing marker untouched', () => {
+    const marker = join(home.path, '.therascript', '.metadata_never_index')
+    writeFileSync(marker, 'existing')
+
+    ensureSpotlightExclusion()
+
+    expect(statSync(marker).size).toBe('existing'.length)
   })
 })

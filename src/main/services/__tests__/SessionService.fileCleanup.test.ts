@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { SessionService } from '../SessionService'
 import { applyTestSchema } from '../../db/__tests__/test-utils'
+import { TaskRepository } from '../../db/repositories/TaskRepository'
 
 vi.mock('electron', () => ({
   app: {
@@ -10,9 +11,15 @@ vi.mock('electron', () => ({
 }))
 
 const mockRemoveFile = vi.fn()
+const mockRemoveFileReporting = vi.fn((_path: string) => true)
 vi.mock('../../utils/file-ops', () => ({
-  removeFile: (...args: unknown[]) => mockRemoveFile(...args)
+  removeFile: (...args: unknown[]) => mockRemoveFile(...args),
+  removeFileReporting: (path: string) => mockRemoveFileReporting(path)
 }))
+
+function deletedPaths(): string[] {
+  return mockRemoveFileReporting.mock.calls.map((c) => c[0])
+}
 
 describe('SessionService file cleanup', () => {
   let db: Database.Database
@@ -24,6 +31,8 @@ describe('SessionService file cleanup', () => {
     applyTestSchema(db)
     service = new SessionService(db)
     mockRemoveFile.mockClear()
+    mockRemoveFileReporting.mockReset()
+    mockRemoveFileReporting.mockImplementation(() => true)
   })
 
   afterEach(() => {
@@ -41,34 +50,42 @@ describe('SessionService file cleanup', () => {
 
     expect(result).toBe(true)
     expect(service.getSession(session.id)).toBeNull()
-    const calledPaths = mockRemoveFile.mock.calls.map((c: unknown[]) => c[0] as string)
+    const calledPaths = deletedPaths()
     expect(calledPaths).toContain('/mock/home/.therascript/audio/test.wav')
     expect(calledPaths).toContain('/mock/home/.therascript/transcripts/test.json')
   })
 
-  it('always attempts to delete convention-based paths (recovery for audio)', () => {
+  it('always attempts to delete every convention-based path of the session', () => {
     const session = service.createSession('Test', 'audio')
 
     service.deleteSession(session.id)
 
-    const calledPaths = mockRemoveFile.mock.calls.map((c: unknown[]) => c[0] as string)
-    expect(calledPaths.some((p: string) => p.includes('recovery'))).toBe(true)
-    // extracted fallback only applies to PDF sessions
-    expect(calledPaths.some((p: string) => p.includes('extracted'))).toBe(false)
+    const id = session.id
+    expect(deletedPaths()).toEqual(
+      expect.arrayContaining([
+        `/mock/home/.therascript/audio/${id}.wav`,
+        `/mock/home/.therascript/transcripts/${id}.json`,
+        `/mock/home/.therascript/transcripts/${id}-aligned.json`,
+        `/mock/home/.therascript/diarization/${id}.json`,
+        `/mock/home/.therascript/anonymized/${id}.json`,
+        `/mock/home/.therascript/pdf/${id}.pdf`,
+        `/mock/home/.therascript/extracted/${id}.json`,
+        `/mock/home/.therascript/recovery/${id}.pcm`
+      ])
+    )
   })
 
-  it('deletes convention-based extracted path for PDF sessions without extractedPath in DB', () => {
-    const session = service.createSession('Test', 'pdf')
+  it('deletes the stored PDF path even if it differs from the convention', () => {
+    const session = service.createSession('Test', 'pdf', '/elsewhere/report.pdf')
 
     service.deleteSession(session.id)
 
-    const calledPaths = mockRemoveFile.mock.calls.map((c: unknown[]) => c[0] as string)
-    expect(calledPaths.some((p: string) => p.includes('extracted'))).toBe(true)
+    expect(deletedPaths()).toContain('/elsewhere/report.pdf')
   })
 
   it('returns false for non-existent session', () => {
     expect(service.deleteSession('non-existent')).toBe(false)
-    expect(mockRemoveFile).not.toHaveBeenCalled()
+    expect(mockRemoveFileReporting).not.toHaveBeenCalled()
   })
 
   it('deletes only the source file during cleanupSourceFiles', () => {
@@ -101,27 +118,88 @@ describe('SessionService file cleanup', () => {
     expect(service.getSession('source-cleanup')?.audioPath).toBeNull()
   })
 
-  it('cleans up files during cleanupOldSessions', () => {
-    const oldDate = new Date()
-    oldDate.setDate(oldDate.getDate() - 31)
+  describe('restart-proof deletion (Issue #202, Postcondition 2)', () => {
+    function rowExists(id: string): boolean {
+      return db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(id) !== undefined
+    }
 
-    db.prepare(
-      `INSERT INTO sessions (id, title, type, status, audio_path, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      'old-1',
-      'Old Session',
-      'audio',
-      'review',
-      '/mock/home/.therascript/audio/old-1.wav',
-      oldDate.toISOString(),
-      oldDate.toISOString()
-    )
+    it('keeps the mark and scrubs the content when a file cannot be removed', () => {
+      const session = service.createSession('Hans Muster', 'audio')
+      service.updateSession(session.id, {
+        audioPath: '/mock/home/.therascript/audio/locked.wav',
+        summary: 'Vertrauliche Zusammenfassung'
+      })
+      mockRemoveFileReporting.mockImplementation((p) => !p.endsWith('locked.wav'))
 
-    const deleted = service.cleanupOldSessions()
+      expect(service.deleteSession(session.id)).toBe(true)
 
-    expect(deleted).toBe(1)
-    const calledPaths = mockRemoveFile.mock.calls.map((c: unknown[]) => c[0] as string)
-    expect(calledPaths).toContain('/mock/home/.therascript/audio/old-1.wav')
+      // The user no longer sees the session …
+      expect(service.getSession(session.id)).toBeNull()
+      expect(service.getAllSessions()).toEqual([])
+      // … the row stays marked for the next start, without its text content
+      expect(rowExists(session.id)).toBe(true)
+      const row = db
+        .prepare('SELECT title, summary, deleting_at, audio_path FROM sessions WHERE id = ?')
+        .get(session.id) as Record<string, string | null>
+      expect(row.deleting_at).not.toBeNull()
+      expect(row.title).toBe('')
+      expect(row.summary).toBeNull()
+      expect(row.audio_path).toBe('/mock/home/.therascript/audio/locked.wav')
+    })
+
+    it('finishPendingDeletions completes a deletion once the files can be removed', () => {
+      const session = service.createSession('Test', 'audio')
+      service.updateSession(session.id, { audioPath: '/mock/home/.therascript/audio/locked.wav' })
+      mockRemoveFileReporting.mockImplementation((p) => !p.endsWith('locked.wav'))
+      service.deleteSession(session.id)
+
+      // Still locked at the next start: stays marked
+      expect(service.finishPendingDeletions()).toBe(0)
+      expect(rowExists(session.id)).toBe(true)
+
+      // Removable at the start after that: done
+      mockRemoveFileReporting.mockImplementation(() => true)
+      mockRemoveFileReporting.mockClear()
+      expect(service.finishPendingDeletions()).toBe(1)
+      expect(rowExists(session.id)).toBe(false)
+      expect(deletedPaths()).toContain('/mock/home/.therascript/audio/locked.wav')
+    })
+
+    it('finishPendingDeletions completes a deletion interrupted after the mark (crash)', () => {
+      const session = service.createSession('Test', 'pdf', '/mock/home/.therascript/pdf/x.pdf')
+      new TaskRepository(db).create({ sessionId: session.id, type: 'extraction' })
+      // Simulates a crash right after phase 1
+      db.prepare('UPDATE sessions SET deleting_at = ? WHERE id = ?').run(
+        new Date().toISOString(),
+        session.id
+      )
+      expect(service.getAllSessions()).toEqual([])
+
+      expect(service.finishPendingDeletions()).toBe(1)
+
+      expect(rowExists(session.id)).toBe(false)
+      expect(deletedPaths()).toContain('/mock/home/.therascript/pdf/x.pdf')
+      const tasks = db.prepare('SELECT * FROM task_queue WHERE session_id = ?').all(session.id)
+      expect(tasks).toEqual([])
+    })
+
+    it('a repeated delete of a marked session finishes it instead of failing', () => {
+      const session = service.createSession('Test', 'audio')
+      db.prepare('UPDATE sessions SET deleting_at = ? WHERE id = ?').run(
+        new Date().toISOString(),
+        session.id
+      )
+
+      expect(service.deleteSession(session.id)).toBe(true)
+      expect(rowExists(session.id)).toBe(false)
+    })
+
+    it('finishPendingDeletions leaves unmarked sessions untouched', () => {
+      const session = service.createSession('Bleibt', 'audio')
+
+      expect(service.finishPendingDeletions()).toBe(0)
+      expect(service.getSession(session.id)?.title).toBe('Bleibt')
+      expect(mockRemoveFileReporting).not.toHaveBeenCalled()
+    })
   })
 })

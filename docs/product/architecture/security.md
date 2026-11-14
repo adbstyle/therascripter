@@ -170,5 +170,5 @@ All IPC channels use Zod schema validation on the main process side (schemas in 
 ## Additional Measures
 
 - **Spotlight exclusion** — `ensureSpotlightExclusion()` runs at startup to prevent macOS Spotlight from indexing the app's data directory (`~/.therascript/`), keeping session content out of system-wide search.
-- **Auto-deletion** — Sessions are automatically deleted 30 days after creation, reducing the window of exposure for stored patient data.
+- **Retention and deletion** — Sessions are kept until the user deletes them (#202); recordings and original PDFs are deleted 24 hours after successful processing. A confirmed deletion leaves nothing recoverable in the app's files: `secure_delete = ON` plus a WAL checkpoint after every deletion, and an interrupted deletion is finished at the next start (details: [storage.md](storage.md#deleting-a-session)). Copies in backups of the Mac are out of scope; FileVault (checked at startup) protects freed disk blocks.
 - **App category** — Registered as `public.app-category.medical` in `electron-builder.yml`, signaling to macOS that the app handles sensitive health data.

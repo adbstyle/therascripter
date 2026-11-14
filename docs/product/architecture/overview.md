@@ -21,7 +21,7 @@ Therascript is an Electron-based macOS desktop application for on-device transcr
 │  │  Tailwind CSS v4     │      │  better-sqlite3 (WAL)     │   │
 │  └──────────────────────┘      │  electron-store           │   │
 │                                │  TrayService              │   │
-│         Preload Script         │  AutoDeletionService      │   │
+│         Preload Script         │  SourceFileCleanupService │   │
 │   (Context Bridge / Zod IPC)   │  UpdateCheckService       │   │
 │                                └──────────┬────────────────┘   │
 └───────────────────────────────────────────│────────────────────┘
@@ -67,7 +67,7 @@ All three subprocess types communicate with the Main Process only. The Renderer 
 
 | Process | Entry Point | Responsibility | ML Load |
 |---|---|---|---|
-| **Main** | `src/main/index.ts` | App lifecycle, window creation, CSP injection, SQLite database, task queue, IPC handler registration, tray, auto-deletion, update checks | None directly — orchestrates subprocess ML executors |
+| **Main** | `src/main/index.ts` | App lifecycle, window creation, CSP injection, SQLite database, task queue, IPC handler registration, tray, source-file cleanup and completion of interrupted deletions, update checks | None directly — orchestrates subprocess ML executors |
 | **Preload** | `src/preload/index.ts` | Exposes typed `window.api` surface via `contextBridge`; all channels pass through Zod schema validation | None |
 | **Renderer** | `src/renderer/src/main.tsx` | React UI — view navigation, recording controls, review editor, settings | None |
 | **whisper.cpp subprocess** | `resources/bin/whisper-cli` | ASR: audio → raw transcript (RTTM/JSON). Runs Metal GPU acceleration. One instance at a time. | Whisper Large V3 Turbo Q5_0 (~0.6 GB) |
