@@ -53,7 +53,7 @@ export function BlocklistConfirmDialog({
         </button>
         <button
           ref={confirmRef}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover"
+          className="rounded-lg bg-primary-solid px-4 py-2 text-sm font-medium text-white hover:bg-primary-solid-hover"
           onClick={onConfirm}
         >
           Hinzufügen

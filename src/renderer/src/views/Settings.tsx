@@ -10,7 +10,7 @@ import UpdateSettings from '../components/settings/UpdateSettings'
 import { useTheme } from '../hooks/useTheme'
 import { useAppUpdate } from '../hooks/useAppUpdate'
 import { updateTitle } from '../../../shared/utils/updateTitle'
-import { PageHeader } from '../components/shell/PageHeader'
+import { PageContainer, PageHeader } from '../components/shell/PageHeader'
 import { useScrollRestoration } from '../navigation/useScrollRestoration'
 import type { SubPage } from '../navigation/routes'
 
@@ -45,7 +45,7 @@ export default function Settings({ subpage, onSubpageChange }: SettingsProps): R
     headerAction = (
       <button
         type="button"
-        className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
+        className="rounded-lg bg-primary-solid px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-solid-hover"
         onClick={() => blocklistRef.current?.openAdd()}
       >
         + Eintrag hinzufügen
@@ -54,7 +54,7 @@ export default function Settings({ subpage, onSubpageChange }: SettingsProps): R
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    <PageContainer>
       <SettingsHeader
         subpage={subpage}
         onBackToHome={() => onSubpageChange(null)}
@@ -69,10 +69,15 @@ export default function Settings({ subpage, onSubpageChange }: SettingsProps): R
           {subpage === 'darstellung' && <AppearanceSettings />}
           {subpage === 'modelle' && <ModelsSettings />}
           {subpage === 'updates' && <UpdateSettings />}
-          {subpage === 'ueber' && <AboutPage />}
+          {/* AboutPage bringt ein eigenes p-8 mit; der gemeinsame Rahmen gibt den Rand vor */}
+          {subpage === 'ueber' && (
+            <div className="-m-8">
+              <AboutPage />
+            </div>
+          )}
         </div>
       )}
-    </div>
+    </PageContainer>
   )
 }
 
@@ -106,11 +111,7 @@ function SettingsHeader({ subpage, onBackToHome, action }: HeaderProps): React.J
       </div>
     )
   }
-  return (
-    <div className="px-6 pt-6">
-      <PageHeader title={title} actions={action} />
-    </div>
-  )
+  return <PageHeader title={title} actions={action} />
 }
 
 interface HomeProps {
@@ -213,8 +214,8 @@ function SettingsHome({ onSelect }: HomeProps): React.JSX.Element {
   ]
 
   return (
-    <div className="p-6">
-      <div className="mx-auto flex max-w-2xl flex-col gap-3">
+    <div>
+      <div className="flex flex-col gap-3">
         {items.map((item) => (
           <SettingsCard key={item.id} item={item} onClick={() => onSelect(item.id)} />
         ))}
@@ -255,7 +256,7 @@ function SettingsCard({
         <div className="flex items-center gap-2">
           <span className="text-base font-semibold text-text-primary">{title}</span>
           {badge && (
-            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
+            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary-hover">
               {badge}
             </span>
           )}
