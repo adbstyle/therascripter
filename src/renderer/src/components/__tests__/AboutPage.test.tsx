@@ -48,4 +48,21 @@ describe('AboutPage', () => {
       screen.getByText(/verlässt Therascript über die Zwischenablage Ihres Macs/)
     ).toBeInTheDocument()
   })
+
+  it('sagt, dass Patientendossiers lokal bleiben, bis man sie löscht oder TheraScript entfernt (#204 AK 19)', () => {
+    render(<AboutPage />)
+    expect(
+      screen.getByText(/Patientendossiers mit Stammdaten, Diagnosen, Medikation und Notiz/)
+    ).toHaveTextContent(
+      'bleiben lokal gespeichert, bis Sie sie löschen oder TheraScript vollständig entfernen'
+    )
+  })
+
+  it('nennt die Patientendossiers vor dem vollständigen Entfernen (#204 AK 18)', () => {
+    render(<AboutPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'TheraScript vollständig entfernen' }))
+    expect(
+      screen.getByText('Alle Patientendossiers (Stammdaten, Diagnosen, Medikation, Notizen)')
+    ).toBeInTheDocument()
+  })
 })

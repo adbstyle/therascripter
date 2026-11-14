@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 
 interface DialogShellProps {
@@ -25,9 +25,19 @@ export function DialogShell({
   size = 'md',
   children
 }: DialogShellProps): React.JSX.Element {
+  const cardRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const previous = document.activeElement
+    return () => {
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus()
+    }
+  }, [])
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {
       if (e.key === 'Escape') onDismiss()
+      if (e.key === 'Tab') trapFocus(e, cardRef.current)
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
@@ -42,6 +52,7 @@ export function DialogShell({
       onClick={onDismiss}
     >
       <div
+        ref={cardRef}
         className={`mx-4 w-full ${SIZE_CLASSES[size]} rounded-xl bg-surface-1 p-6 shadow-xl`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -49,4 +60,30 @@ export function DialogShell({
       </div>
     </div>
   )
+}
+
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/** Tab am Ende springt an den Anfang der Karte, Shift-Tab am Anfang ans Ende. */
+function trapFocus(e: KeyboardEvent, card: HTMLElement | null): void {
+  if (!card) return
+  const focusable = Array.from(card.querySelectorAll<HTMLElement>(FOCUSABLE))
+  if (focusable.length === 0) {
+    e.preventDefault()
+    return
+  }
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  const active = document.activeElement
+  // Liegt der Fokus in einem anderen (darüber geöffneten) Dialog, ist der zuständig
+  const owner = active instanceof HTMLElement ? active.closest('[role="dialog"]') : null
+  if (owner && !owner.contains(card)) return
+  if (e.shiftKey && (active === first || !card.contains(active))) {
+    e.preventDefault()
+    last.focus()
+  } else if (!e.shiftKey && (active === last || !card.contains(active))) {
+    e.preventDefault()
+    first.focus()
+  }
 }

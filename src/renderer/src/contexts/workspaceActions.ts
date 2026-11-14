@@ -17,6 +17,8 @@ export interface WorkspaceActions {
   importPdfs: (filePaths?: string[], options?: ImportPdfOptions) => Promise<void>
   /** Gemeinsam für Knopf, Seitenleiste und Ziehen und Ablegen. */
   isImporting: boolean
+  /** Öffnet «Neues Patientendossier»; danach führt die App zum neuen Dossier (#204). */
+  openNewDossier: () => void
 }
 
 export const WorkspaceActionsContext = createContext<WorkspaceActions | null>(null)

@@ -8,6 +8,7 @@ import { PlaceholderChip } from '../extensions/placeholderChip'
 import { SpeakerLabel } from '../extensions/speakerLabel'
 import { Timestamp } from '../extensions/timestamp'
 import { useAutoSave } from '../hooks/useAutoSave'
+import { registerPendingEditsFlusher } from '../services/pendingEdits'
 import { useSelectionToolbar } from '../hooks/useSelectionToolbar'
 import { useToast } from '../hooks/useToast'
 import { SelectionToolbar } from '../components/editor/SelectionToolbar'
@@ -433,6 +434,10 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
       flushRef.current().catch((err) => console.error('Flush on close failed:', err))
     }
   }, [])
+
+  // Beenden der App: der Main-Prozess fragt vor dem Schliessen der Datenbank
+  // nach (services/pendingEdits.ts) — derselbe Pfad, speichert nur bei Änderung
+  useEffect(() => registerPendingEditsFlusher(() => flushRef.current()), [])
 
   const { saving, lastSavedAt } = useAutoSave(
     editor && !loading ? handleSave : null,

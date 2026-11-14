@@ -36,6 +36,7 @@ function readInitialViewMode(): ViewMode {
   }
 }
 import { dossierApi } from './api/dossiers'
+import { pendingEditsApi } from './api/pendingEdits'
 
 /** Epic #192 — gespeicherte Seitenleiste vor dem ersten Render; im Zweifel eingeblendet. */
 function readInitialSidebarOpen(): boolean {
@@ -269,6 +270,7 @@ const api: IpcApi = {
     set: (mode) => ipcRenderer.invoke('viewMode:set', { mode })
   },
   dossiers: dossierApi,
+  pendingEdits: pendingEditsApi,
   nav: {
     initialSidebarOpen: readInitialSidebarOpen(),
     onOpenSettings: (callback) => {
