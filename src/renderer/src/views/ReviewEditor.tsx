@@ -91,6 +91,8 @@ interface BlocklistUndoEntry {
  * die Seitenleiste ist ein- und ausklappbar.
  */
 const PANEL_OVERLAY_BELOW_PX = 720
+/** Hysterese: erst ab dieser Breite wird die Überlagerung wieder zur Spalte daneben (kein Flattern beim Ziehen). */
+const PANEL_OVERLAY_ABOVE_PX = 760
 
 interface ReviewEditorProps {
   sessionId: string
@@ -127,16 +129,19 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
   } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
   const showDeleteDialog = deleteTarget !== null
-  const [panelOpen, setPanelOpen] = useState(false)
-  // Schmale Textspalte: die Übersicht ist eine Überlagerung mit eigenem,
-  // nicht gespeichertem Zustand (die gespeicherte Vorgabe gilt für den Platz daneben).
-  const [overlayOpen, setOverlayOpen] = useState(false)
-  const [rowWidth, setRowWidth] = useState<number | null>(null)
-  const overlay = rowWidth !== null && rowWidth < PANEL_OVERLAY_BELOW_PX
+  // Sichtbarer Zustand der Übersicht. Er bleibt beim Wechsel zwischen «daneben»
+  // und «Überlagerung» erhalten; gespeichert wird nur, wenn der Nutzer daneben
+  // selbst umschaltet.
+  const [panelShown, setPanelShown] = useState(false)
+  const [overlay, setOverlay] = useState(false)
+  const overlayRef = useRef(false)
+  const measuredRef = useRef(false)
+  const focusAfterPanelRef = useRef<'panel' | 'toggle' | null>(null)
   const panelRowRef = useRef<HTMLDivElement | null>(null)
   const panelToggleRef = useRef<HTMLButtonElement | null>(null)
   const panelFocusRef = useRef<HTMLDivElement | null>(null)
-  const overlayWasOpenRef = useRef(false)
+  const saveVersionRef = useRef({ changed: 0, saved: 0 })
+  const saveInflightRef = useRef<{ version: number; promise: Promise<void> } | null>(null)
   const entityMapRef = useRef<EntityMap>({})
   const editorRef = useRef<Editor | null>(null)
   const editorScrollRef = useRef<HTMLDivElement | null>(null)
@@ -147,23 +152,24 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
 
   useEffect(() => {
     window.api.settings.get('reviewPanelOpen').then((val) => {
-      if (typeof val === 'boolean') setPanelOpen(val)
+      // In schmaler Spalte beginnt die Überlagerung geschlossen
+      if (typeof val === 'boolean' && !overlayRef.current) setPanelShown(val)
     })
   }, [])
 
   const togglePanel = useCallback(() => {
+    const next = !panelShown
+    setPanelShown(next)
     if (overlay) {
-      setOverlayOpen((prev) => !prev)
-      return
-    }
-    setPanelOpen((prev) => {
-      const next = !prev
+      focusAfterPanelRef.current = next ? 'panel' : 'toggle'
+    } else {
       window.api.settings.set('reviewPanelOpen', next)
-      return next
-    })
-  }, [overlay])
-  const closeOverlay = useCallback(() => setOverlayOpen(false), [])
-  const panelShown = overlay ? overlayOpen : panelOpen
+    }
+  }, [overlay, panelShown])
+  const closeOverlay = useCallback(() => {
+    focusAfterPanelRef.current = 'toggle'
+    setPanelShown(false)
+  }, [])
 
   // Der Platz neben der Textspalte wird gemessen; erst nach dem Laden ist die
   // Zeile im DOM.
@@ -172,29 +178,36 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
     if (!el || typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width
-      if (typeof width === 'number') setRowWidth(width)
+      if (typeof width !== 'number') return
+      const next =
+        width < PANEL_OVERLAY_BELOW_PX
+          ? true
+          : width >= PANEL_OVERLAY_ABOVE_PX
+            ? false
+            : overlayRef.current
+      const first = !measuredRef.current
+      measuredRef.current = true
+      overlayRef.current = next
+      setOverlay(next)
+      // Erste Messung schmal: die gespeicherte Vorgabe «offen» würde sonst den Text verdecken
+      if (first && next) setPanelShown(false)
     })
     observer.observe(el)
     return () => observer.disconnect()
   }, [loading, loadError])
 
-  // Wird der Platz wieder gross, gilt die gespeicherte Vorgabe; die
-  // Überlagerung beginnt beim nächsten Mal geschlossen.
+  // Fokus nur nach Nutzeraktion (Knopf, Esc), nicht beim Überschreiten der Schwelle.
   useEffect(() => {
-    if (!overlay) setOverlayOpen(false)
-  }, [overlay])
-
-  // Fokus: beim Öffnen der Überlagerung hinein, beim Schliessen zurück auf den Knopf.
-  useEffect(() => {
-    const open = overlay && overlayOpen
-    if (open && !overlayWasOpenRef.current) panelFocusRef.current?.focus()
-    if (!open && overlayWasOpenRef.current && overlay) panelToggleRef.current?.focus()
-    overlayWasOpenRef.current = open
-  }, [overlay, overlayOpen])
+    const target = focusAfterPanelRef.current
+    focusAfterPanelRef.current = null
+    if (target === 'panel') panelFocusRef.current?.focus()
+    if (target === 'toggle') panelToggleRef.current?.focus()
+  }, [panelShown])
 
   /** Update entityMap in both state and ref, and trigger auto-save */
   const updateEntityMap = useCallback((updated: EntityMap) => {
     entityMapRef.current = updated
+    saveVersionRef.current.changed++
     setEntityMap(updated)
     setUpdateCounter((c) => c + 1)
   }, [])
@@ -254,6 +267,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
                   delete updated[stackEntry.entityId]
                   entityMapRef.current = updated
                   setEntityMap(updated)
+                  saveVersionRef.current.changed++
                   setUpdateCounter((c) => c + 1)
                 } else if (!snap.hadChips && hasChipsNow && stackEntry.undone) {
                   // Redo: chips reappeared → re-add blocklist entry to SQLite
@@ -276,6 +290,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
                       }
                       entityMapRef.current = updated
                       setEntityMap(updated)
+                      saveVersionRef.current.changed++
                       setUpdateCounter((c) => c + 1)
                     })
                 }
@@ -310,6 +325,8 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
     extensions: EDITOR_EXTENSIONS,
     editorProps,
     onUpdate: ({ editor: current, transaction }) => {
+      // Echte Dokumentänderung (das Laden feuert wegen emitUpdate: false nicht)
+      saveVersionRef.current.changed++
       // Eingefügte Chips können Entitäten zurückbringen, die seit dem Copy
       // aus der EntityMap entfernt wurden — ohne Eintrag vergäbe
       // getNextNumber ihre Nummer neu (entityId-Kollision).
@@ -322,8 +339,10 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
       // Debounced: updateCounter treibt Wortzählung + Anonymisierungs-
       // Übersicht (voller Doc-Walk) — pro Tastendruck ausgeführt machte das
       // Tippen in langen Transkripten spürbar zäh. Der Autosave hängt
-      // ebenfalls am Counter und debounct selbst nochmals (2 s); der
-      // Unmount-Flush liest direkt aus dem Editor und verliert nichts.
+      // ebenfalls am Counter und debounct selbst nochmals (2 s). Dass eine
+      // Änderung vor Ablauf beider Timer nicht verloren geht, sichert der
+      // Änderungszähler (saveVersionRef): der Unmount-Flush speichert, solange
+      // geänderter und gespeicherter Stand abweichen.
       if (updateDebounceRef.current !== null) clearTimeout(updateDebounceRef.current)
       updateDebounceRef.current = setTimeout(() => setUpdateCounter((c) => c + 1), 250)
     }
@@ -380,11 +399,40 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
   }, [sessionId, editor])
 
   // Auto-save callback
-  const handleSave = useCallback(async () => {
-    if (!editor) return
+  // Speichert nur bei echter Änderung und höchstens einmal je Stand: Autosave-
+  // Timer und Unmount-Flush dürfen beide anklopfen. Erst nach Erfolg gilt der
+  // Stand als gespeichert; Änderungen während des Speicherns bleiben offen.
+  const handleSave = useCallback((): Promise<void> => {
+    if (!editor || editor.isDestroyed) return Promise.resolve()
+    const versions = saveVersionRef.current
+    const version = versions.changed
+    if (version === versions.saved) return Promise.resolve()
+    const inflight = saveInflightRef.current
+    if (inflight && inflight.version === version) return inflight.promise
     const doc = editor.getJSON() as TipTapDocument
-    await window.api.review.save(sessionId, doc, entityMapRef.current)
+    const promise: Promise<void> = Promise.resolve(
+      window.api.review.save(sessionId, doc, entityMapRef.current)
+    )
+      .then(() => {
+        versions.saved = Math.max(versions.saved, version)
+      })
+      .finally(() => {
+        if (saveInflightRef.current?.promise === promise) saveInflightRef.current = null
+      })
+    saveInflightRef.current = { version, promise }
+    return promise
   }, [editor, sessionId])
+
+  // Schliessen oder Wegnavigieren mit ungespeicherter Änderung (auch innerhalb
+  // des 250-ms-Debounce): genau ein Flush. Deklariert vor dem destroy-Effekt,
+  // damit der Editor beim Lesen noch lebt.
+  const flushRef = useRef(handleSave)
+  flushRef.current = handleSave
+  useEffect(() => {
+    return () => {
+      flushRef.current().catch((err) => console.error('Flush on close failed:', err))
+    }
+  }, [])
 
   const { saving, lastSavedAt } = useAutoSave(
     editor && !loading ? handleSave : null,
@@ -646,15 +694,15 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
       if (e.key !== 'Escape') return
       if (showDeleteDialog || blocklistConfirm) return
       // Die Überlagerung schliesst zuerst; erst ein zweites Esc geht zurück.
-      if (overlay && overlayOpen) {
-        setOverlayOpen(false)
+      if (overlay && panelShown) {
+        closeOverlay()
         return
       }
       onBack()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onBack, showDeleteDialog, blocklistConfirm, overlay, overlayOpen])
+  }, [onBack, showDeleteDialog, blocklistConfirm, overlay, panelShown, closeOverlay])
 
   // Direkt über den ProseMirror-Doc statt countWords(editor.getJSON()):
   // getJSON() serialisierte das GESAMTE Transkript pro Neuberechnung —
@@ -678,7 +726,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [updateCounter, loading, editor])
 
-  const overviewData = useAnonymizationOverview(editor, updateCounter)
+  const overviewData = useAnonymizationOverview(loading ? null : editor, updateCounter)
 
   const { state: selectionToolbar, hide: hideSelectionToolbar } = useSelectionToolbar({
     editor,

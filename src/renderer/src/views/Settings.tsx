@@ -69,12 +69,7 @@ export default function Settings({ subpage, onSubpageChange }: SettingsProps): R
           {subpage === 'darstellung' && <AppearanceSettings />}
           {subpage === 'modelle' && <ModelsSettings />}
           {subpage === 'updates' && <UpdateSettings />}
-          {/* AboutPage bringt ein eigenes p-8 mit; der gemeinsame Rahmen gibt den Rand vor */}
-          {subpage === 'ueber' && (
-            <div className="-m-8">
-              <AboutPage />
-            </div>
-          )}
+          {subpage === 'ueber' && <AboutPage />}
         </div>
       )}
     </PageContainer>

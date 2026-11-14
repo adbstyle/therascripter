@@ -74,7 +74,10 @@ describe('Kontrast von Text auf Primärfarben und Links (WCAG AA, 4.5:1)', () =>
     })
   }
 
-  it('kein gefüllter Knopf nutzt mehr bg-primary mit weisser Schrift', () => {
+  it('kein className-Ausdruck kombiniert bg-primary mit weisser Schrift', () => {
+    // Pro className-Ausdruck, nicht pro Zeile: mehrzeilige Ternaries (ConfirmDialog)
+    // und Template-Strings zählen als Ganzes. Ausdruck = ab `className=` bis zum
+    // nächsten `className=` bzw. höchstens 700 Zeichen.
     const root = join(__dirname, '..')
     const hits: string[] = []
     const walk = (dir: string): void => {
@@ -83,17 +86,26 @@ describe('Kontrast von Text auf Primärfarben und Links (WCAG AA, 4.5:1)', () =>
         if (entry.isDirectory()) {
           if (entry.name !== '__tests__') walk(full)
         } else if (entry.name.endsWith('.tsx')) {
-          readFileSync(full, 'utf-8')
-            .split('\n')
-            .forEach((line, i) => {
-              if (/\bbg-primary\b(?![-/])/.test(line) && line.includes('text-white')) {
-                hits.push(`${entry.name}:${i + 1}`)
-              }
-            })
+          const source = readFileSync(full, 'utf-8')
+          const starts = [...source.matchAll(/className=/g)].map((m) => m.index!)
+          starts.forEach((start, n) => {
+            const end = Math.min(starts[n + 1] ?? source.length, start + 700)
+            const expression = source.slice(start, end)
+            if (/\bbg-primary\b(?![-/])/.test(expression) && expression.includes('text-white')) {
+              hits.push(`${entry.name}:${source.slice(0, start).split('\n').length}`)
+            }
+          })
         }
       }
     }
     walk(root)
     expect(hits).toEqual([])
+  })
+
+  it('der Scan erkennt mehrzeilige Ausdrücke', () => {
+    const expression = `className={\`px-4 text-white \${\n  d ? 'bg-recording-solid'\n  : 'bg-primary hover:bg-primary-hover'\n}\`}`
+    expect(/\bbg-primary\b(?![-/])/.test(expression) && expression.includes('text-white')).toBe(
+      true
+    )
   })
 })

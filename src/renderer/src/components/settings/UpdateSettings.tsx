@@ -24,7 +24,7 @@ export default function UpdateSettings(): React.JSX.Element {
   } = useAppUpdate()
 
   if (!state) {
-    return <div className="p-8 text-sm text-text-tertiary">Wird geladen…</div>
+    return <div className="text-sm text-text-tertiary">Wird geladen…</div>
   }
 
   const title = updateTitle(state)
