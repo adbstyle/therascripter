@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { Session, SessionStatus } from '../../../shared/types'
+import type { Session } from '../../../shared/types'
+import { isAnyInPipeline } from '../hooks/useAnyInPipeline'
 import type { SessionListItem } from '../../../shared/types/Dossier'
 import { useSessions } from '../hooks/useSessions'
 import { useStartOfToday } from '../hooks/useStartOfToday'
@@ -11,8 +12,6 @@ import { useViewMode } from '../viewMode/useViewMode'
 import { sessionTitleIn } from '../viewMode/sessionText'
 import { useScrollRestoration } from '../navigation/useScrollRestoration'
 import { useWorkspaceActions } from '../contexts/workspaceActions'
-
-const PROCESSING_STATUSES: SessionStatus[] = ['queued', 'processing']
 
 interface SessionDashboardProps {
   onOpenReview?: (sessionId: string) => void
@@ -47,10 +46,7 @@ export default function SessionDashboard({
   useScrollRestoration(!loading)
 
   // Derive processing state from sessions list (avoids race with brief isProcessing=false between tasks)
-  const isAnyProcessing = useMemo(
-    () => sessions.some((s) => PROCESSING_STATUSES.includes(s.status)),
-    [sessions]
-  )
+  const isAnyProcessing = useMemo(() => isAnyInPipeline(sessions), [sessions])
 
   const handleDrop = useCallback(
     async (e: React.DragEvent) => {

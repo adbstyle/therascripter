@@ -313,6 +313,22 @@ describe('SessionDashboard — Patientendossiers (#205)', () => {
     expect(within(dialog).getByText('Hofer, Maria (03.02.1978)')).toBeInTheDocument()
   })
 
+  it('uses the singular for exactly one dossier', async () => {
+    const user = userEvent.setup()
+    window.api = createMockApi({
+      sessions: {
+        list: vi
+          .fn()
+          .mockResolvedValue([{ ...makeSession({ id: 'a', title: 'Einzeln' }), dossiers: [hofer] }])
+      }
+    })
+    render(<SessionDashboard />)
+    await screen.findByText('Einzeln')
+    await user.click(screen.getByRole('button', { name: 'Transkription löschen' }))
+    expect(screen.getByText('Verschwindet aus dem Patientendossier:')).toBeInTheDocument()
+    expect(screen.queryByText('Verschwindet aus den Patientendossiers:')).not.toBeInTheDocument()
+  })
+
   it('omits the section for a session without dossier (AK 23)', async () => {
     const user = userEvent.setup()
     window.api = createMockApi({

@@ -1,11 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { DossierTimeline } from '../DossierTimeline'
 import { TimelineEntryCard } from '../TimelineEntryCard'
 import { createMockApi, emitApiEvent } from '../../../test/mockApi'
-import { makeDossierRef, makeTimelineEntry } from '../../../test/dossierFixtures'
+import {
+  makeDossierListItem,
+  makeDossierRef,
+  makeTimelineEntry
+} from '../../../test/dossierFixtures'
 import { ToastProvider } from '../../../contexts/ToastContext'
 import { NavigationProvider } from '../../../navigation/NavigationContext'
 import { useNavigation } from '../../../navigation/navigation'
@@ -101,14 +105,101 @@ describe('DossierTimeline (#205)', () => {
       }),
       makeTimelineEntry({ id: 'c', title: 'Paargespräch', sortDay: '2026-10-30' })
     ])
-    const november = (await screen.findByRole('heading', { name: 'November 2026' })).parentElement!
-    expect(
-      within(november)
-        .getAllByRole('article')
-        .map((a) => a.getAttribute('data-session-id'))
-    ).toEqual(['a', 'b'])
-    const october = screen.getByRole('heading', { name: 'Oktober 2026' }).parentElement!
-    expect(within(october).getByText('Paargespräch')).toBeInTheDocument()
+    await screen.findByRole('heading', { name: 'November 2026' })
+    // Flache Folge: Monatskopf, dann seine Einträge (Karten bleiben beim Monatswechsel erhalten)
+    const sequence = Array.from(screen.getByRole('region', { name: 'Verlauf' }).children).map(
+      (el) => (el.tagName === 'H2' ? el.textContent : el.getAttribute('data-session-id'))
+    )
+    expect(sequence).toEqual(['November 2026', 'a', 'b', 'Oktober 2026', 'c'])
+  })
+
+  it('keeps the card and its focus when a new document date moves it to another month', async () => {
+    let documentDate = '2026-11-02'
+    const pdf = () =>
+      makeTimelineEntry({
+        id: 'p',
+        title: 'Bericht',
+        type: 'pdf',
+        documentDate,
+        sortDay: documentDate
+      })
+    renderTimeline(async () => [
+      makeTimelineEntry({ id: 'a', title: 'Rückfall', sortDay: '2026-11-06' }),
+      pdf()
+    ])
+    const button = await screen.findByRole('button', { name: 'Dokumentdatum 02.11.2026 ändern' })
+    const card = button.closest('article')!
+    button.focus()
+    documentDate = '2026-10-15'
+    await act(async () => emitApiEvent(window.api, 'sessions.onChanged', { deletedIds: [] }))
+    await screen.findByRole('heading', { name: 'Oktober 2026' })
+    expect(document.querySelector('[data-session-id="p"]')).toBe(card)
+    expect(document.activeElement).toBe(button)
+  })
+
+  it('locks «Erneut versuchen» while any session is processing — same source as the list', async () => {
+    window.api = createMockApi()
+    const timeline = vi
+      .fn()
+      .mockResolvedValue([makeTimelineEntry({ id: 'f', status: 'error', errorMessage: 'Kaputt' })])
+    window.api = createMockApi({
+      dossiers: { timeline },
+      sessions: {
+        list: vi
+          .fn()
+          .mockResolvedValue([
+            { ...makeTimelineEntry({ id: 'other', status: 'processing' }), dossiers: [] }
+          ])
+      }
+    })
+    render(<DossierTimeline dossierId="d1" />, {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <ToastProvider>
+          <NavigationProvider initialRoute={{ kind: 'dossier', dossierId: 'd1' }}>
+            <RecordingContext.Provider value={recordingState()}>
+              {children}
+            </RecordingContext.Provider>
+          </NavigationProvider>
+        </ToastProvider>
+      )
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Erneut versuchen' })).toBeDisabled()
+    )
+  })
+
+  it('keeps an entry and its selection while the user unassigns this dossier', async () => {
+    let assigned = [makeDossierRef(), makeDossierRef({ id: 'd2', firstName: 'Maria' })]
+    const { user } = renderTimeline(async () =>
+      assigned.some((d) => d.id === 'd1')
+        ? [makeTimelineEntry({ id: 'e1', title: 'Paargespräch', dossiers: assigned })]
+        : []
+    )
+    window.api.dossiers.list = vi
+      .fn()
+      .mockResolvedValue([
+        makeDossierListItem(),
+        makeDossierListItem({ id: 'd2', firstName: 'Maria' })
+      ])
+    window.api.dossiers.unassign = vi.fn(async (_s: string, d: string) => {
+      assigned = assigned.filter((x) => x.id !== d)
+      emitApiEvent(window.api, 'sessions.onChanged', { deletedIds: [] })
+      return { ok: true as const }
+    })
+    await user.click(await screen.findByRole('button', { name: /Auch in Hofer, Maria/ }))
+    // die letzte «Auch in»-Zuordnung lösen: Auswahl bleibt offen und umkehrbar
+    await user.click(await screen.findByRole('checkbox', { name: /Hofer, Maria/ }))
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: /Hofer, Maria/ })).not.toBeChecked()
+    )
+    // jetzt das Dossier dieser Seite lösen: Eintrag bleibt, bis die Auswahl schliesst
+    await user.click(screen.getByRole('checkbox', { name: /Hofer, Lukas/ }))
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: /Hofer, Lukas/ })).not.toBeChecked()
+    )
+    expect(screen.getByText('Paargespräch')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Fertig' }))
+    expect(await screen.findByText('Noch keine Sitzungen oder PDF-Dokumente')).toBeInTheDocument()
   })
 
   it('opens a processed entry and finds the place again after closing (AK 15/16)', async () => {

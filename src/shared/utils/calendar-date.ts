@@ -30,9 +30,27 @@ export function isValidIsoDate(iso: string): boolean {
   return isRealDate(Number(match[1]), Number(match[2]), Number(match[3]))
 }
 
-/** Gültiger ISO-Tag, der nicht nach `todayIso` liegt (ISO-Tage sind lexikografisch sortierbar). */
+/**
+ * Frühestes Jahr für Geburts- und Dokumentdatum: schützt vor Tippfehlern wie
+ * «03.02.0978» oder «02.11.26» → Jahr 0026 (Epic #192, Review #223).
+ */
+export const MIN_CALENDAR_YEAR = 1900
+const MIN_ISO_DATE = `${MIN_CALENDAR_YEAR}-01-01`
+
+/** Meldung für ein Datum vor MIN_CALENDAR_YEAR — Renderer und Main sagen dasselbe. */
+export const BEFORE_MIN_YEAR_MESSAGE = `Bitte ein Datum ab ${MIN_CALENDAR_YEAR} eingeben.`
+
+/** true für einen gültigen ISO-Tag vor MIN_CALENDAR_YEAR (für die passende Meldung). */
+export function isBeforeMinYear(iso: string): boolean {
+  return isValidIsoDate(iso) && iso < MIN_ISO_DATE
+}
+
+/**
+ * Gültiger ISO-Tag ab MIN_CALENDAR_YEAR, der nicht nach `todayIso` liegt
+ * (ISO-Tage sind lexikografisch sortierbar).
+ */
 export function isValidIsoDateNotAfter(iso: string, todayIso: string): boolean {
-  return isValidIsoDate(iso) && iso <= todayIso
+  return isValidIsoDate(iso) && iso >= MIN_ISO_DATE && iso <= todayIso
 }
 
 /** Heutiger Tag in der lokalen Zeitzone als `YYYY-MM-DD`. */

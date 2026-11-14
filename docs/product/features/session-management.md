@@ -128,7 +128,7 @@ Sessions are kept until the user deletes them — there is no automatic deletion
   - «Zwischenergebnisse der Verarbeitung» — raw transcript, speaker assignment, extracted text, if present
   - «Titel» or «Titel und Zusammenfassung»
   - Blocklist entries and backups of the Mac are not mentioned: deleting a session does not touch them
-- «Verschwindet aus den Patientendossiers:» — the dossiers the session is assigned to, with ID and birth date where present (#205 AK 23); omitted without assignment. In the list the dialog reads the current list item (it reloads on every change), in the Review Editor the state when the trash button was clicked
+- «Verschwindet aus den Patientendossiers:» (with exactly one: «Verschwindet aus dem Patientendossier:») — the dossiers the session is assigned to, with ID and birth date where present (#205 AK 23); omitted without assignment. In the list the dialog reads the current list item (it reloads on every change), in the Review Editor the state when the trash button was clicked
 - Warning: «Diese Aktion kann nicht rückgängig gemacht werden.»
 - Focus defaults to «Abbrechen» to prevent accidental deletion
 

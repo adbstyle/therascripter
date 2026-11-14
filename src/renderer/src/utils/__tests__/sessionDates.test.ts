@@ -55,6 +55,14 @@ describe('validateDocumentDate (#205 AK 21)', () => {
     expect(validateDocumentDate('2026-11-01', today)).toHaveProperty('error')
   })
 
+  it('rejects years before 1900 (Review #223)', () => {
+    expect(validateDocumentDate('02.11.0026', today)).toEqual({
+      error: 'Bitte ein Datum ab 1900 eingeben.'
+    })
+    expect(validateDocumentDate('31.12.1899', today)).toHaveProperty('error')
+    expect(validateDocumentDate('01.01.1900', today)).toEqual({ iso: '1900-01-01' })
+  })
+
   it('rejects a date after today', () => {
     expect(validateDocumentDate('15.11.2026', today)).toEqual({
       error: 'Das Dokumentdatum darf nicht nach dem heutigen Tag liegen.'
@@ -76,6 +84,12 @@ describe('groupTimelineByMonth', () => {
       ['Oktober 2026', ['c']],
       ['Dezember 2025', ['d']]
     ])
+  })
+
+  it('labels years below 100 correctly instead of as 19xx', () => {
+    const months = groupTimelineByMonth([makeTimelineEntry({ sortDay: '0026-11-02' })])
+    expect(months[0].label).toMatch(/26$/)
+    expect(months[0].label).not.toContain('1926')
   })
 
   it('returns no month for an empty timeline', () => {

@@ -52,9 +52,7 @@ export function DossierBadges({
   onOpenDossier,
   onOpenChange
 }: DossierBadgesProps): React.JSX.Element | null {
-  // Welche Plakette die Auswahl geöffnet hat (Dossier-ID bzw. 'assign')
-  const [openFor, setOpenFor] = useState<string | null>(null)
-  const open = openFor !== null
+  const [open, setOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
 
@@ -63,17 +61,29 @@ export function DossierBadges({
   }, [open, onOpenChange])
 
   const close = useCallback((returnFocus: boolean) => {
-    setOpenFor(null)
-    if (returnFocus) triggerRef.current?.focus()
+    setOpen(false)
+    if (!returnFocus) return
+    // Der Auslöser kann inzwischen ersetzt sein (erste Zuordnung: «Dossier
+    // zuordnen» → Plakette; letzte gelöst: umgekehrt) — dann den ersten Knopf
+    // der Plaketten fokussieren statt eines entfernten Elements
+    const trigger = triggerRef.current
+    if (trigger?.isConnected) trigger.focus()
+    else {
+      const wrapper = wrapperRef.current
+      const fallback =
+        wrapper?.querySelector<HTMLButtonElement>(':scope > button') ??
+        wrapper?.closest('[data-session-id]')?.querySelector<HTMLButtonElement>('button')
+      fallback?.focus()
+    }
   }, [])
   const closeOnOutside = useCallback(() => {
     if (open) close(false)
   }, [open, close])
   useClickOutside(wrapperRef, closeOnOutside)
 
-  function toggleFrom(button: HTMLButtonElement, key: string): void {
+  function toggleFrom(button: HTMLButtonElement): void {
     triggerRef.current = button
-    setOpenFor((current) => (current === null ? key : null))
+    setOpen((current) => !current)
   }
 
   // Fokus verlässt die Plaketten samt Auswahl (Tab) — die Auswahl schliesst
@@ -84,7 +94,9 @@ export function DossierBadges({
 
   const shown =
     variant === 'timeline' ? dossiers.filter((d) => d.id !== currentDossierId) : dossiers
-  if (variant === 'timeline' && shown.length === 0) return null
+  // Bei offener Auswahl bleibt sie stehen, auch wenn gerade die letzte «Auch
+  // in»-Zuordnung gelöst wurde — ein versehentliches Häkchen bleibt umkehrbar
+  if (variant === 'timeline' && shown.length === 0 && !open) return null
 
   return (
     <div
@@ -111,9 +123,9 @@ export function DossierBadges({
             key={dossier.id}
             type="button"
             className={SOLID_CHIP}
-            onClick={(e) => toggleFrom(e.currentTarget, dossier.id)}
+            onClick={(e) => toggleFrom(e.currentTarget)}
             aria-haspopup="dialog"
-            aria-expanded={openFor === dossier.id}
+            aria-expanded={open}
             aria-label={`${variant === 'timeline' ? 'Auch in ' : 'Zugeordnet: '}${described(dossier)} – Zuordnungen bearbeiten`}
             title={described(dossier)}
           >
@@ -125,13 +137,13 @@ export function DossierBadges({
           </button>
         )
       )}
-      {(variant === 'editor' || shown.length === 0) && (
+      {(variant === 'editor' || (variant === 'list' && shown.length === 0)) && (
         <button
           type="button"
           className={DASHED_CHIP}
-          onClick={(e) => toggleFrom(e.currentTarget, 'assign')}
+          onClick={(e) => toggleFrom(e.currentTarget)}
           aria-haspopup="dialog"
-          aria-expanded={openFor === 'assign'}
+          aria-expanded={open}
         >
           <Plus className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
           {variant === 'editor' ? 'Zuordnen' : 'Dossier zuordnen'}

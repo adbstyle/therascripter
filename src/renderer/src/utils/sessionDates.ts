@@ -1,6 +1,8 @@
 import { startOfDay } from '../hooks/useStartOfToday'
 import {
+  BEFORE_MIN_YEAR_MESSAGE,
   formatSwissDate,
+  isBeforeMinYear,
   isValidIsoDateNotAfter,
   localTodayIso,
   parseSwissDate
@@ -80,6 +82,7 @@ export function validateDocumentDate(
   if (!iso) {
     return { error: 'Bitte ein vollständiges, gültiges Datum im Format TT.MM.JJJJ angeben.' }
   }
+  if (isBeforeMinYear(iso)) return { error: BEFORE_MIN_YEAR_MESSAGE }
   if (!isValidIsoDateNotAfter(iso, todayIso)) {
     return { error: 'Das Dokumentdatum darf nicht nach dem heutigen Tag liegen.' }
   }

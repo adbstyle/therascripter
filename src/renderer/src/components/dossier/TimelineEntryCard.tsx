@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useCallback } from 'react'
 import { FileText, Mic } from 'lucide-react'
 import type { TimelineEntry } from '../../../../shared/types/Dossier'
 import { useViewMode } from '../../viewMode/useViewMode'
@@ -19,6 +19,8 @@ interface TimelineEntryCardProps {
   retryDisabled?: boolean
   /** Beginn des aktuellen Tags (ms), siehe SessionCard. */
   today?: number
+  /** Meldet, ob die Auswahl der Dossiers dieses Eintrags offen ist. */
+  onSelectionOpenChange?: (entryId: string, open: boolean) => void
 }
 
 /**
@@ -34,8 +36,14 @@ export const TimelineEntryCard = memo(function TimelineEntryCard({
   onOpen,
   onRetry,
   retryDisabled,
-  today
+  today,
+  onSelectionOpenChange
 }: TimelineEntryCardProps): React.JSX.Element {
+  const entryId = entry.id
+  const reportOpen = useCallback(
+    (open: boolean) => onSelectionOpenChange?.(entryId, open),
+    [entryId, onSelectionOpenChange]
+  )
   const viewMode = useViewMode()
   const isPdf = entry.type === 'pdf'
   const isReview = entry.status === 'review'
@@ -109,6 +117,7 @@ export const TimelineEntryCard = memo(function TimelineEntryCard({
             dossiers={entry.dossiers}
             variant="timeline"
             currentDossierId={dossierId}
+            onOpenChange={reportOpen}
           />
         </div>
       </div>

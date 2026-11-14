@@ -220,6 +220,18 @@ describe('SessionDocumentDateSchema (#205 AK 21)', () => {
     expect(parse('14.11.2026')).toBe(false)
   })
 
+  it('rejects years before 1900 with the German message (Review #223)', () => {
+    expect(parse('1899-12-31')).toBe(false)
+    expect(parse('0026-11-02')).toBe(false)
+    const result = SessionDocumentDateSchema.safeParse({
+      sessionId: 's1',
+      documentDate: '0026-11-02'
+    })
+    expect(result.success).toBe(false)
+    expect(JSON.stringify(result.error?.issues)).toContain('Bitte ein Datum ab 1900 eingeben.')
+    expect(PastOrTodayIsoDateSchema.safeParse('1850-01-01').success).toBe(false)
+  })
+
   it('never accepts null — a document date cannot be reset (OOS 3)', () => {
     expect(parse(null)).toBe(false)
     expect(parse(undefined)).toBe(false)

@@ -22,7 +22,10 @@ export function groupTimelineByMonth(entries: readonly TimelineEntry[]): Timelin
     const key = entry.sortDay.slice(0, 7)
     if (!current || current.key !== key) {
       const [year, month] = key.split('-').map(Number)
-      current = { key, label: MONTH_FORMAT.format(new Date(year, month - 1, 1)), entries: [] }
+      // setFullYear statt new Date(y, m, d): der Konstruktor deutet 0–99 als 1900–1999
+      const first = new Date(2000, 0, 1)
+      first.setFullYear(year, month - 1, 1)
+      current = { key, label: MONTH_FORMAT.format(first), entries: [] }
       months.push(current)
     }
     current.entries.push(entry)

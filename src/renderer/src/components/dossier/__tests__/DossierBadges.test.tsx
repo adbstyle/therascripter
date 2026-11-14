@@ -253,3 +253,63 @@ describe('AssignDossiersPopover (#205 AK 1–3, 24)', () => {
     ).toBeInTheDocument()
   })
 })
+
+describe('DossierBadges — focus after the trigger was replaced (Review #223)', () => {
+  function badges(dossiers: DossierRef[], variant: 'list' | 'timeline' = 'list') {
+    return (
+      <DossierBadges
+        sessionId="s1"
+        sessionLabel="Supervision Fallbesprechung"
+        dossiers={dossiers}
+        variant={variant}
+        currentDossierId="d1"
+      />
+    )
+  }
+
+  it('focuses the new badge after the first assignment and Esc', async () => {
+    const { user, rerender } = setup()
+    const trigger = screen.getByRole('button', { name: 'Dossier zuordnen' })
+    await user.click(trigger)
+    await user.click(await screen.findByRole('checkbox', { name: /Hofer/ }))
+    // Die Liste lädt nach: «Dossier zuordnen» wird durch die Plakette ersetzt
+    rerender(badges([ref(HOFER)]))
+    expect(trigger.isConnected).toBe(false)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Zugeordnet: Hofer, Lukas/ })).toHaveFocus()
+  })
+
+  it('focuses «Dossier zuordnen» after the last one was unassigned and «Fertig»', async () => {
+    const { user, rerender } = setup({ assigned: [ref(HOFER)] })
+    await user.click(screen.getByRole('button', { name: /Zugeordnet: Hofer/ }))
+    await user.click(await screen.findByRole('checkbox', { name: /Hofer/ }))
+    rerender(badges([]))
+    await user.click(screen.getByRole('button', { name: 'Fertig' }))
+    expect(screen.getByRole('button', { name: 'Dossier zuordnen' })).toHaveFocus()
+  })
+
+  it('marks every trigger expanded while the selection is open', async () => {
+    const { user } = setup({ assigned: [ref(HOFER), ref(MEISSER)] })
+    await user.click(screen.getByRole('button', { name: /Zugeordnet: Hofer/ }))
+    for (const button of screen.getAllByRole('button', { name: /Zugeordnet/ })) {
+      expect(button).toHaveAttribute('aria-expanded', 'true')
+    }
+    await user.keyboard('{Escape}')
+    for (const button of screen.getAllByRole('button', { name: /Zugeordnet/ })) {
+      expect(button).toHaveAttribute('aria-expanded', 'false')
+    }
+  })
+
+  it('keeps the timeline selection open after the last «Auch in» was unassigned', async () => {
+    const { user, rerender } = setup({ variant: 'timeline', assigned: [ref(HOFER), ref(MEISSER)] })
+    await user.click(screen.getByRole('button', { name: /Auch in Meisser/ }))
+    await user.click(await screen.findByRole('checkbox', { name: /Meisser/ }))
+    rerender(badges([ref(HOFER)], 'timeline'))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    // versehentliches Häkchen rückgängig machen
+    await user.click(screen.getByRole('checkbox', { name: /Meisser/ }))
+    expect(window.api.dossiers.assign).toHaveBeenCalledWith('s1', 'd4')
+  })
+})

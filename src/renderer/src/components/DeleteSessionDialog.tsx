@@ -45,7 +45,10 @@ export function DeleteSessionDialog({
       details={sessionDeletionDetails(session)}
       sections={[
         {
-          heading: 'Verschwindet aus den Patientendossiers:',
+          heading:
+            dossiers.length === 1
+              ? 'Verschwindet aus dem Patientendossier:'
+              : 'Verschwindet aus den Patientendossiers:',
           items: dossiers.map((d) => {
             const identification = dossierIdentification(d)
             return identification ? `${dossierListName(d)} (${identification})` : dossierListName(d)

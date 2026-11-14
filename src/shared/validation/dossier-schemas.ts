@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { isValidIsoDateNotAfter, localTodayIso } from '../utils/calendar-date'
+import {
+  BEFORE_MIN_YEAR_MESSAGE,
+  isBeforeMinYear,
+  isValidIsoDateNotAfter,
+  localTodayIso
+} from '../utils/calendar-date'
 import {
   hasControlChars,
   hasControlCharsExceptLineBreaks,
@@ -43,6 +48,7 @@ export const DossierExternalIdSchema = z
 export const PastOrTodayIsoDateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((d) => !isBeforeMinYear(d), { message: BEFORE_MIN_YEAR_MESSAGE })
   .refine((d) => isValidIsoDateNotAfter(d, localTodayIso()), {
     message: 'Kein gültiges Datum oder in der Zukunft'
   })
