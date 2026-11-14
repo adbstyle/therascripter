@@ -28,6 +28,7 @@ Gegen stille Abweichungen sichern **Goldvektoren** ab: `scripts/make-search-gold
 | Import bis bereit | ~3–7 s je nach Datei-Cache und Last (Import ~1–2 s) |
 | phys_footprint nach Laden | ~1.5 GiB; beim Aufbereiten kurzer Läufe (≤ 148 Abschnitte) ~2.1 GiB |
 | Dauerlauf 2000 Anfragen auf MPS | +827 Bytes pro Forward-Pass (ohne Autorelease-Pool ~100 KiB) |
+| Abnahme auf dem Referenz-Set (PR S6, mit int8-Vektoren der App) | nDCG@10 0.568 gegenüber 0.570 mit sentence-transformers; bester Abschnitt bei 131 von 136 Anfragen gleich |
 
 Die Gewichte kommen als eigenes Text-Artefakt (`scripts/export-search-model.py`, `scripts/package-models.sh search`): nur die 413 Tensoren `language_model.*` in bf16, 542 MB statt 1.49 GB, reproduzierbar gepackt.
 

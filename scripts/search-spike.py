@@ -3,6 +3,10 @@
 Spike #208: Speicherbedarf und Antwortzeit der Suche messen, Trefferqualität auf dem
 fiktiven Referenz-Set als Zielwert festlegen.
 
+Historisches Messskript: Die Abnahme der Implementierung (#209 AK 13, Schwelle AK 6) läuft
+seit PR S6 über `npm run test:search-quality` (src/main/search/__tests__/reference-set.model.test.ts,
+dieselben Metriken als Port in referenceSet.ts) und `scripts/search-calibrate.ts`.
+
 Referenz-Set: tests/fixtures/search-reference/ (README.md dort). Alles fiktiv, eingecheckt.
 Suchmodell: google/embeddinggemma-2 (Apache 2.0, Epic #192 statt embeddinggemma-300m aus ADR-008),
 nur der Text-Teil, bf16, Prompts der Model Card.

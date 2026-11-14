@@ -2,7 +2,7 @@
 
 Stories #209 (search), #210 (stock before the update), #211 (search within a patient dossier) and #212 (edits become searchable soon), Epic #192.
 
-This page describes the main-process side: the search index, the **text phase** of the preparation (Node only, no model), the **exact search** including clear names, dossier hits and the recent searches (PR S3), and the **search process**, the **vector phase**, the **vector store** and the **search by meaning** (PR S4). The model provisioning (PR S2), the user interface (PR S5) and the acceptance test with the reference set plus threshold calibration (PR S6) follow.
+This page describes the main-process side: the search index, the **text phase** of the preparation (Node only, no model), the **exact search** including clear names, dossier hits and the recent searches (PR S3), and the **search process**, the **vector phase**, the **vector store** and the **search by meaning** (PR S4). The model provisioning (PR S2) and the user interface (PR S5) are described in their own pages; the acceptance test with the reference set, the threshold calibration and the measurements of the real implementation (PR S6) are at the end of this page.
 
 Nothing leaves the Mac: index, queries and recent searches live only in `~/.therascript/data/therascript.db` (#209 AK 20).
 
@@ -79,7 +79,7 @@ Part of the background loop in `SearchIndexService`, asynchronous next to the sl
 `SearchService.semantic` (`search:semantic`, same payload as `search:query`):
 
 1. `search:query` answers at once with dossiers and exact hits; `semantic` is `pending` (the renderer calls `search:semantic`) or the reason it is unavailable: `unavailable-processing`, `model-missing`, `tool-blocked`, `error`.
-2. `search:semantic` embeds the query, scores every section in the vector store, keeps **all** sections with cosine ≥ `SEARCH_SEMANTIC_THRESHOLD` (0.70, provisional until PR S6; no global top-k, so #211 AK 3 holds exactly), merges them with the exact candidates in `rankDocuments` (exact first, inside by cosine), groups, builds snippets/focus like the exact search, and applies the **dossier filter after the ranking** (#211 AK 3 — test: the dossier search equals the filtered search over everything, same order and hits). `semantic: 'complete'`; when unavailable the answer carries the exact hits and the reason.
+2. `search:semantic` embeds the query, scores every section in the vector store, keeps **all** sections with cosine ≥ `SEARCH_SEMANTIC_THRESHOLD` (0.71, calibrated in PR S6, see «Threshold» below; no global top-k, so #211 AK 3 holds exactly), merges them with the exact candidates in `rankDocuments` (exact first, inside by cosine), groups, builds snippets/focus like the exact search, and applies the **dossier filter after the ranking** (#211 AK 3 — test: the dossier search equals the filtered search over everything, same order and hits). `semantic: 'complete'`; when unavailable the answer carries the exact hits and the reason.
 3. Requests are superseded per window **and scope** (`event.sender.id` plus overall search / dossier ID): a newer request ends an older one of the same scope at its next await (`'superseded'`, exact hits only) without keeping the process busy; the overall search and a dossier search of the same window do not replace each other.
 4. Hits from the previous vector generation (after an edit, until the new vectors are complete — #212 AK 1) carry `fromEarlierVersion: true`: their paragraph numbers belong to the old version, so the interface finds the place by `anchor` in the current document.
 5. `rankChunks(query, {threshold: null})` exposes the internal section ranking before the threshold for the acceptance test (PR S6).
@@ -137,7 +137,7 @@ A deleted session or PDF leaves nothing for the search in the app's files (#209 
 
 Before the review: exact queries 133–337 ms («und» 268, «Anna Beispiel» 337, scan «xq» 170); deleting/re-indexing blocked the main process for seconds in one piece.
 
-Not measured on an 8-GB Mac (#209 AK 14 is checked in PR S6). `search.performance.test.ts` guards the order of magnitude of queries, `search.blocking.test.ts` the slices of re-indexing and deleting a two-hour session (150 sessions, generous budget).
+Not measured on an 8-GB Mac; the measurement of the real search incl. the search by meaning is in «Measurements (PR S6)» below. `search.performance.test.ts` guards the order of magnitude of queries, `search.blocking.test.ts` the slices of re-indexing and deleting a two-hour session (150 sessions, generous budget).
 
 ## Search model availability (PR S2)
 
@@ -163,8 +163,67 @@ Disk space for the search index: up to ~0.6 GB at 2'000 sessions (measured ~0.55
 | Vector phase | ~45 ms per section (short test sessions: 6 sections, 90 ms per session) |
 | Cosine over 66'000 × 768 int8 in Node | ~30–50 ms in total, longest synchronous stretch ~20–25 ms, 50 MiB (`VectorStore.test.ts`) |
 
-The cold start is just above 5 s on this machine (the import of torch alone took 2.5–3 s in these runs); preloading when the search opens (#209 AK 16) hides most of it. Tried after the review: loading the tokenizer and reading `model.safetensors` in a thread while torch imports — 4.69–4.78 s to the ready line against 4.70–5.12 s without (4 runs each, warm file cache): no measurable gain, not adopted (a cold file cache cannot be produced without `sudo purge`). Not measured on an 8-GB Mac (PR S6, #209 AK 14/15/19).
+The cold start is just above 5 s on this machine (the import of torch alone took 2.5–3 s in these runs); preloading when the search opens (#209 AK 16) hides most of it. Tried after the review: loading the tokenizer and reading `model.safetensors` in a thread while torch imports — 4.69–4.78 s to the ready line against 4.70–5.12 s without (4 runs each, warm file cache): no measurable gain, not adopted (a cold file cache cannot be produced without `sudo purge`). Not measured on an 8-GB Mac; see «Measurements (PR S6)» below for the 2'000-entry stock.
+
+## Quality (acceptance test, PR S6)
+
+`npm run test:search-quality` (`src/main/search/__tests__/reference-set.model.test.ts`) runs the **real** search against the fictional reference set (`tests/fixtures/search-reference`, Spike #208): fixtures → TipTap documents as the app stores them after pseudonymization (one paragraph per turn, speaker and timestamp nodes, chips with `original`) → database file with the real repositories → text phase → `SearchWorker` with `search_service.py` → vector phase (int8) → `rankChunks` before the threshold → sections mapped via `units[]` onto the unit IDs of the set. Metrics are a line-by-line port of `scripts/search-spike.py` (`referenceSet.ts`; `referenceMetrics.test.ts` reproduces the spike's stored result incl. the bootstrap CI and runs in `npm test`). Only with `THERASCRIPT_SEARCH_MODEL_DIR` + `THERASCRIPT_SEARCH_PYTHON`, never in `npm test`/CI.
+
+| What (M5 Pro, 2026-11-14) | Value |
+|---|---|
+| nDCG@10 by meaning before the threshold (#209 AK 13, target ≥ 0.52) | **0.568** (95 % CI 0.519–0.615); spike 0.570 |
+| Repetition (fresh database, fresh search process) | 0.568, same to two decimals |
+| Hit@5 / unit recall@10 / separation of queries without hits (AUC) | 0.79 (0.72–0.87) / 0.63 / 0.70 |
+| Per query type | clear name 0.66 · report 0.63 · facts 0.63 · keyword 0.61 · thematic 0.54 · paraphrase 0.53 · colloquial/dialect 0.47 · cross-session 0.40 |
+| Production order (exact first, threshold 0.71, grouped, nDCG@10 over the shown hits) | 0.380 (0.332–0.428), Hit@5 0.62 — 0.398 at 0.70, 0.498 without threshold |
+| Exact first, ungrouped, before the threshold | 0.626 (0.579–0.670) |
+
+The test also asserts that the production order it evaluates is exactly what `SearchService.semantic` returns (documents, hits, kinds, paragraphs) at T = 0.65 / 0.71 / 0.75. Details, versions and how to repeat: reference set README, «Abnahme der Implementierung».
+
+**Limits.** The set is small (14 documents, 148 sections, 126 queries with hits, 10 without) and fictional. Titles in the set are generic («Sitzung 1»); such short titles reach high cosine values (best title median 0.68) and would push the value down to 0.46 if counted — the target is defined on the text sections. Real titles come from the summary; their effect is not measurable with this set.
+
+## Threshold (#209 AK 6)
+
+Calibrated from the acceptance test (`npx tsx scripts/search-calibrate.ts <data.json>`). «By meaning» = all text sections with cosine ≥ T; «production» = the order the user sees (exact hits first, each document once with up to three hits). Recall grade 2 = (query, section with grade 2) pairs that are shown.
+
+| T | by meaning: query with hits shows a relevant hit | by meaning: query without hits shows nothing | by meaning: recall grade 2 | documents by meaning (with / without hits) | production: relevant hit | production: without hits empty | production: recall grade 2 | production: documents (with / without) |
+|---|---|---|---|---|---|---|---|---|
+| 0.66 | 89 % | 0 % | 76 % | 6.7 / 5.4 | 93 % | 0 % | 59 % | 9.7 / 7.4 |
+| 0.67 | 85 % | 0 % | 71 % | 5.3 / 4.2 | 89 % | 0 % | 56 % | 8.0 / 5.8 |
+| 0.68 | 77 % | 20 % | 61 % | 4.2 / 3.2 | 83 % | 10 % | 50 % | 6.2 / 3.5 |
+| 0.69 | 73 % | 30 % | 55 % | 3.3 / 2.2 | 82 % | 30 % | 49 % | 4.5 / 2.2 |
+| 0.70 | 63 % | 40 % | 44 % | 2.5 / 1.4 | 77 % | 40 % | 44 % | 3.4 / 1.4 |
+| **0.71** | **60 %** | **80 %** | **36 %** | **1.9 / 0.3** | **75 %** | **80 %** | **40 %** | **2.6 / 0.3** |
+| 0.72 | 50 % | 90 % | 26 % | 1.3 / 0.1 | 67 % | 90 % | 36 % | 1.9 / 0.1 |
+| 0.73 | 44 % | 100 % | 20 % | 0.9 / 0.0 | 63 % | 100 % | 32 % | 1.4 / 0.0 |
+| 0.74 | 31 % | 100 % | 13 % | 0.5 / 0.0 | 53 % | 100 % | 27 % | 1.1 / 0.0 |
+| 0.75 | 21 % | 100 % | 7 % | 0.4 / 0.0 | 45 % | 100 % | 23 % | 0.8 / 0.0 |
+
+(0.60–0.65: no query without hits stays empty; 0.76–0.80: by meaning ≤ 17 % of the queries with hits still show a relevant hit.)
+
+**Set to 0.71** (`SEARCH_SEMANTIC_THRESHOLD`; provisional value was 0.70): from 0.70 to 0.71 the queries without hits that show nothing double (4 → 8 of 10) while the queries with hits that still show a relevant hit drop only slightly (production 77 → 75 %, by meaning 63 → 60 %); above 0.72 the loss of relevant hits grows quickly. Caveats: the top cosine of the 10 queries without hits lies between 0.671 and 0.730, four of them between 0.700 and 0.708 — the step from 0.70 to 0.71 rests on these four queries. In a large stock (66'000 sections instead of 148) the top values of unrelated sections rise (more chances), so the share of empty answers for unrelated queries will be lower than here; this cannot be measured with fictional data (the benchmark vectors are copies of the 148 reference vectors). The top cosine of queries with hits has median 0.725 (p25 0.692), the overlap with the negatives is the measured AUC of 0.70. **The final choice is the product owner's**, based on this table.
+
+## Measurements (PR S6, real implementation, M5 Pro, 64 GB — not measured on an 8-GB Mac)
+
+`npm run bench:search` (`src/main/search/__tests__/search.bench.model.test.ts`, real model, ~3 min): 2'000 entries (every tenth a 1'500-word PDF report, the rest 50-minute sessions with 7'550 words) composed of whole paragraphs of the reference set incl. speaker nodes and chips — real sentences and names in the trigram index; vectors synthetic as in the spike (the real vectors of the 148 reference sections plus noise, int8). 71'958 sections incl. titles, database file 634 MB.
+
+| What | Value | Limit |
+|---|---|---|
+| Exact search (`search:query` incl. snippets), 30 queries | median 4 ms, 95 % 9 ms, max 39 ms | 2 s |
+| Search by meaning with loaded model (`search:semantic` incl. exact hits, cosine over all sections, ranking, snippets; on average 88 documents), 30 queries | median 130 ms, 95 % 149 ms, max 165 ms | 2 s |
+| `search:open` → first answer by meaning (fresh search process, warm file cache) | 4.64 s (first run 4.94 s) | 5 s |
+| `phys_footprint` search process: queries / preparation | 1.56 GiB / 1.73 GiB peak | 3.5 GiB |
+| Additional memory of the main process for the vector store | 54 MiB (ArrayBuffers +58 MiB, `footprint` of the Node process +89 MiB) | – |
+| Preparation of one 50-minute session (39 sections) | text phase 18 ms; vector phase 7.5 s (193 ms per section, model already loaded) | – |
+| Text phase per entry while building the stock | median 6 ms, 95 % 23 ms, max 28 ms | – |
+
+**For a Mac with 8 GB RAM** (derived, assumptions in brackets):
+
+- **Memory ≤ 3.5 GiB (#209 AK 15): expected to hold.** Search process 1.56–1.73 GiB plus ~0.1 GiB in the main process [the footprint depends on model and stock, not on the RAM of the device; measured without memory pressure; the restart at 2.5 GiB caps growth].
+- **Further searches < 2 s (#209 AK 14): expected to hold.** Slowest of 30 searches 165 ms [an M1 computes at most ~4× slower than the M5 Pro; even 10× stays below 2 s; the cosine part runs in Node, independent of the GPU].
+- **First search < 5 s when the model must load (#209 AK 14): at risk.** Already 4.6–4.9 s on the M5 Pro with a warm file cache; an 8-GB Mac with a cold cache or swap loads the 0.54-GB weights and torch more slowly [loading depends on disk and memory pressure]. Preloading on `search:open` (#209 AK 16) and the instant exact hits hide part of it. Needs a measurement on a real 8-GB Mac (Bauplan decision 10).
+- **Not measured:** on a real 8-GB Mac, next to a running processing step or a recording (#209 AK 19), cold file cache, the first preparation of a whole stock (at ~0.2 s per section ≈ 4 h for 72'000 sections on the M5 Pro, spread over idle times; an M1 slower).
 
 ## Tests
 
-`src/main/search/__tests__/`: `SearchWorker.idle.test.ts` (fake timers: idle rule, preparation, memory restart, start gate), `search.dossierEquivalence.test.ts` (random: dossier search == filtered overall search), `search.earlierVersion.test.ts`, `searchAvailability.test.ts` (event dedupe, provisioner glue, hook factory), `SearchWorker.test.ts` (fake service: start, single flight, idle stop, stop during start, memory restart, SIGKILL → tool-blocked, crash, timeout), `SearchIndexService.vectors.test.ts` (batches, commit per batch, backoff, restart, priority, generations, model change, abort), `VectorStore.test.ts` (int8 vs float32 ranking, deletion, 66'000-vector timing), `SearchService.semantic.test.ts` (ranking, threshold, dossier = filtered search, superseded, unavailable), `embeddingText.parity.test.ts`, `searchWorker.model.test.ts` (real model, skipped without it); `src/main/utils/__tests__/line-process.test.ts` (real processes with `fixtures/fake-line-service.mjs`); `src/main/services/__tests__/TaskQueueService.beforeTask.test.ts`; `search.blocking.test.ts`, `chunker.test.ts`, `chunker.parity.test.ts`, `SearchIndexService.test.ts` (text phase, quiet window, recording pause, restart, generations, `search_rev` writers), `SearchService.test.ts` (exact search, snippets, focus, dossier filter, dossier hits), `ranking.test.ts`, `SearchRecentRepository.test.ts`, `search.secureDelete.test.ts` (real database file, raw bytes), `search.performance.test.ts`; `src/main/db/migrations/__tests__/021-search-index.test.ts`, `src/shared/utils/__tests__/search-normalize.test.ts`, `src/main/ipc/__tests__/search-handlers.test.ts`.
+`src/main/search/__tests__/`: `SearchWorker.idle.test.ts` (fake timers: idle rule, preparation, memory restart, start gate), `search.dossierEquivalence.test.ts` (random: dossier search == filtered overall search), `search.earlierVersion.test.ts`, `searchAvailability.test.ts` (event dedupe, provisioner glue, hook factory), `SearchWorker.test.ts` (fake service: start, single flight, idle stop, stop during start, memory restart, SIGKILL → tool-blocked, crash, timeout), `SearchIndexService.vectors.test.ts` (batches, commit per batch, backoff, restart, priority, generations, model change, abort), `VectorStore.test.ts` (int8 vs float32 ranking, deletion, 66'000-vector timing), `SearchService.semantic.test.ts` (ranking, threshold, dossier = filtered search, superseded, unavailable), `embeddingText.parity.test.ts`, `searchWorker.model.test.ts` (real model, skipped without it), `reference-set.model.test.ts` (acceptance test, only via `npm run test:search-quality`), `search.bench.model.test.ts` (only via `npm run bench:search`), `referenceMetrics.test.ts` (metric port); `src/main/utils/__tests__/line-process.test.ts` (real processes with `fixtures/fake-line-service.mjs`); `src/main/services/__tests__/TaskQueueService.beforeTask.test.ts`; `search.blocking.test.ts`, `chunker.test.ts`, `chunker.parity.test.ts`, `SearchIndexService.test.ts` (text phase, quiet window, recording pause, restart, generations, `search_rev` writers), `SearchService.test.ts` (exact search, snippets, focus, dossier filter, dossier hits), `ranking.test.ts`, `SearchRecentRepository.test.ts`, `search.secureDelete.test.ts` (real database file, raw bytes), `search.performance.test.ts`; `src/main/db/migrations/__tests__/021-search-index.test.ts`, `src/shared/utils/__tests__/search-normalize.test.ts`, `src/main/ipc/__tests__/search-handlers.test.ts`.
