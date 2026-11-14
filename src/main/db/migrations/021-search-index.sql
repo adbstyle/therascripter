@@ -11,7 +11,9 @@
 --                        filled from PR S4 on). A session is "to be indexed"
 --                        while text_rev < search_rev (or no row exists — the
 --                        stock before the update falls under the same rule,
---                        #210 AK 1).
+--                        #210 AK 1). doc_stat = size:mtime of the document
+--                        file when it was indexed (startup check against a
+--                        crash between file write and DB update).
 -- search_chunks        — sections of ~200 words in CLEAR TEXT (chips as their
 --                        original). Two generations per session may coexist:
 --                        the new text generation is active for the exact
@@ -50,7 +52,8 @@ CREATE TABLE search_index_state (
     dirty_since     TEXT,
     attempts        INTEGER NOT NULL DEFAULT 0,
     last_error      TEXT,
-    next_attempt_at TEXT
+    next_attempt_at TEXT,
+    doc_stat        TEXT
 ) WITHOUT ROWID;
 
 CREATE TABLE search_chunks (

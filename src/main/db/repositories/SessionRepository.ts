@@ -13,7 +13,6 @@ import type {
 import { parsePlaceholderSnapshot } from '../../../shared/utils/resolvePlaceholders'
 import { walCheckpointTruncate } from '../maintenance'
 import { refreshPlainTexts } from '../plainTexts'
-import { SearchIndexRepository } from './SearchIndexRepository'
 
 export interface SessionRow {
   id: string
@@ -372,9 +371,6 @@ export class SessionRepository {
          WHERE id = ? AND deleting_at IS NOT NULL`
       )
       .run(id)
-    // Epic #192 (#209 PC 1) — der Klartext im Suchindex geht ebenso sofort,
-    // nicht erst mit der Zeile beim nächsten Start
-    if (this.isMarkedForDeletion(id)) new SearchIndexRepository(this.db).deleteForSession(id)
   }
 
   isMarkedForDeletion(id: string): boolean {

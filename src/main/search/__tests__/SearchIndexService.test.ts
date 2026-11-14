@@ -6,6 +6,7 @@ import { join } from 'path'
 import { SearchIndexRepository } from '../../db/repositories/SearchIndexRepository'
 import { SessionRepository } from '../../db/repositories/SessionRepository'
 import { SessionService } from '../../services/SessionService'
+import { SearchIndexService } from '../SearchIndexService'
 import { ReviewService } from '../../services/ReviewService'
 import { SearchService } from '../SearchService'
 import { SEARCH_QUIET_WINDOW_MS, SEARCH_TICK_MS } from '../../../shared/search-config'
@@ -93,7 +94,7 @@ describe('SearchIndexService — text phase', () => {
     expect(state(db, 'quiet')).toBeDefined()
   })
 
-  it('replaces the text generation in one step and removes the old one (#212 AK 1)', () => {
+  it('replaces the text generation in one step; the loop removes the old one later (#212 AK 1)', () => {
     addIndexedSession(db, docs, { id: 's1' }, [
       { speaker: 'A', text: 'Alter Stand mit Velofahrt.' }
     ])
@@ -111,8 +112,15 @@ describe('SearchIndexService — text phase', () => {
     expect(hitIds(db, 'velofahrt')).toEqual([])
     expect(hitIds(db, 'zugfahrt')).toEqual(['s1'])
     expect(state(db, 's1')).toMatchObject({ text_gen: 2, text_rev: 2 })
-    const gens = db.prepare('SELECT DISTINCT gen FROM search_chunks WHERE session_id = ?').all('s1')
-    expect(gens).toEqual([{ gen: 2 }])
+    const gens = (): unknown[] =>
+      db
+        .prepare('SELECT DISTINCT gen FROM search_chunks WHERE session_id = ? ORDER BY gen')
+        .all('s1')
+    // Die alte Generation ist unsichtbar, aber noch da — die Schleife räumt sie weg
+    expect(gens()).toEqual([{ gen: 1 }, { gen: 2 }])
+    service.drain()
+    expect(gens()).toEqual([{ gen: 2 }])
+    expect(hitIds(db, 'zugfahrt')).toEqual(['s1'])
   })
 
   it('keeps the generation an active vector generation points at (two-generation model)', () => {
@@ -125,6 +133,7 @@ describe('SearchIndexService — text phase', () => {
     indexAll(service)
     db.prepare('UPDATE sessions SET search_rev = search_rev + 1 WHERE id = ?').run('s1')
     indexAll(service)
+    service.drain()
     const gens = db
       .prepare('SELECT DISTINCT gen FROM search_chunks WHERE session_id = ? ORDER BY gen')
       .all('s1')
@@ -203,7 +212,7 @@ describe('SearchIndexService — text phase', () => {
     expect(hitIds(db, 'geheimes')).toEqual([])
     indexAll(service)
     expect(hitIds(db, 'geheimes')).toEqual([])
-    expect(new SearchIndexRepository(db).writeTextGeneration('s1', 2, [], null)).toBe(false)
+    expect(new SearchIndexRepository(db).writeTextGeneration('s1', 2, [], null)).toBeNull()
   })
 })
 
@@ -266,18 +275,62 @@ describe('search_rev — every content write path makes a session pending (#212)
     expect(rev(db, id)).toBe(before)
   })
 
-  it('removes the index immediately when a marked session is scrubbed', () => {
+  it('hides a marked session at once and purges its index in slices (#209 PC 1)', () => {
     insertSession(db, { id: 's1', title: 'Sitzung Wolkenkratzer' })
-    const docs = new Map<string, unknown>()
-    indexAll(createIndexService(db, docs))
+    const finished: string[] = []
+    const service = new SearchIndexService(db, {
+      now: () => Date.parse('2026-06-01T00:00:00.000Z'),
+      readDocument: () => {
+        throw new Error('ENOENT')
+      },
+      finishDeletion: (id) => finished.push(id)
+    })
+    indexAll(service)
     expect(db.prepare('SELECT COUNT(*) AS n FROM search_chunks').get()).toEqual({ n: 1 })
     db.prepare(`UPDATE sessions SET deleting_at = 'x' WHERE id = 's1'`).run()
     // Markiert: sofort unsichtbar, auch bevor Phase 2 läuft
     expect(hitIds(db, 'wolkenkratzer')).toEqual([])
-    // Phase 2 konnte Dateien nicht entfernen (completeDeletion → scrubMarkedContent):
-    // der Klartext im Index geht trotzdem sofort
     new SessionRepository(db).scrubMarkedContent('s1')
+    expect(db.prepare(`SELECT title FROM sessions WHERE id = 's1'`).get()).toEqual({ title: '' })
+    service.schedulePurge('s1', true)
+    service.drain()
     expect(db.prepare('SELECT COUNT(*) AS n FROM search_chunks').get()).toEqual({ n: 0 })
-    expect(state(db, 's1')).toBeUndefined()
+    expect(finished).toEqual(['s1'])
+  })
+
+  it('re-indexes after a restart when the document changed without a DB update (crash in review:save)', () => {
+    const docs = new Map<string, unknown>()
+    addIndexedSession(db, docs, { id: 's1' }, [{ speaker: 'A', text: 'Alter Text.' }])
+    const stats = new Map([['/docs/s1.json', '100:1']])
+    const make = (): SearchIndexService =>
+      new SearchIndexService(db, {
+        now: () => Date.parse('2026-06-01T00:00:00.000Z'),
+        readDocument: (path) => docs.get(path),
+        statDocument: (path) => stats.get(path) ?? null
+      })
+    make().drain()
+    expect(state(db, 's1')).toMatchObject({ text_rev: 1, doc_stat: '100:1' })
+    // Datei neu geschrieben, Absturz vor dem DB-Update: search_rev unverändert
+    docs.set('/docs/s1.json', makeDoc([{ speaker: 'A', text: 'Neuer Text mit Zugfahrt.' }]))
+    stats.set('/docs/s1.json', '120:2')
+    make().drain()
+    expect(state(db, 's1')).toMatchObject({ text_rev: 2, doc_stat: '120:2' })
+    expect(hitIds(db, 'zugfahrt')).toEqual(['s1'])
+  })
+
+  it('finds unfinished cleanup after a restart: stale generations and marked sessions', () => {
+    insertSession(db, { id: 'stale' })
+    insertSession(db, { id: 'marked' })
+    const docs = new Map<string, unknown>()
+    indexAll(createIndexService(db, docs))
+    db.prepare(`UPDATE sessions SET search_rev = search_rev + 1 WHERE id = 'stale'`).run()
+    indexAll(createIndexService(db, docs))
+    db.prepare(`UPDATE sessions SET deleting_at = 'x' WHERE id = 'marked'`).run()
+    // «Neustart»: neue Instanz ohne Gedächtnis
+    const afterRestart = createIndexService(db, docs)
+    afterRestart.drain()
+    const left = db.prepare('SELECT session_id, gen FROM search_chunks ORDER BY session_id').all()
+    expect(left).toEqual([{ session_id: 'stale', gen: 2 }])
+    expect(state(db, 'marked')).toBeUndefined()
   })
 })

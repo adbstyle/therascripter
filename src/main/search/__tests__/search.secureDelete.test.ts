@@ -18,7 +18,11 @@ vi.mock('electron', () => ({
 import { initDatabase, getDatabase, closeDatabase } from '../../db/connection'
 import { SessionService } from '../../services/SessionService'
 import { DossierService } from '../../services/DossierService'
-import { SearchIndexService } from '../SearchIndexService'
+import {
+  SearchIndexService,
+  initSearchIndexService,
+  resetSearchIndexServiceForTests
+} from '../SearchIndexService'
 import { SearchService } from '../SearchService'
 import { SearchRecentRepository } from '../../db/repositories/SearchRecentRepository'
 import { normalizeSearchText } from '../../../shared/utils/search-normalize'
@@ -70,14 +74,26 @@ describe('search index — nothing recoverable after deletion (#209 PC 1)', () =
   let dbPath: string
   let dataDir: string
 
+  let indexer: SearchIndexService
+
   beforeEach(() => {
     home.path = mkdtempSync(join(tmpdir(), 'search-secure-delete-'))
     dataDir = join(home.path, '.therascript')
     dbPath = join(home.path, 'therascript.db')
     initDatabase(dbPath)
+    // Wie in der App: laufende Schleife mit gestaffeltem Löschen. Ruhiges
+    // Fenster überspringen: «jetzt» liegt eine Minute in der Zukunft.
+    indexer = initSearchIndexService(getDatabase(), {
+      now: () => Date.now() + 60_000,
+      finishDeletion: (id) => {
+        new SessionService(getDatabase()).finishDeletion(id)
+      }
+    })
+    indexer.start()
   })
 
   afterEach(() => {
+    resetSearchIndexServiceForTests()
     closeDatabase()
     rmSync(home.path, { recursive: true, force: true })
   })
@@ -98,8 +114,6 @@ describe('search index — nothing recoverable after deletion (#209 PC 1)', () =
     sessions.updateSession(session.id, { status: 'queued' })
     sessions.updateSession(session.id, { status: 'processing' })
     sessions.updateSession(session.id, { anonymizedPath, status: 'review' })
-    // Ruhiges Fenster überspringen: «jetzt» liegt eine Minute in der Zukunft
-    const indexer = new SearchIndexService(getDatabase(), { now: () => Date.now() + 60_000 })
     expect(indexer.runTextPhase().indexed).toBe(1)
 
     const search = new SearchService(getDatabase())
@@ -117,13 +131,45 @@ describe('search index — nothing recoverable after deletion (#209 PC 1)', () =
     return session.id
   }
 
-  it('SessionService.deleteSession leaves no marker, normalized form or trigram in .db or -wal', () => {
+  function hits(marker: string): number {
+    return new SearchService(getDatabase()).query({
+      requestId: 1,
+      query: marker,
+      scope: { kind: 'all' }
+    }).results.length
+  }
+
+  it('SessionService.deleteSession: unfindable at once, nothing in .db or -wal once the staged purge is done', () => {
     const id = indexedSession()
     expect(new SessionService(getDatabase()).deleteSession(id)).toBe(true)
+    // Sofort unauffindbar; Titel/Zusammenfassung schon geleert, Zeile noch markiert
+    for (const marker of MARKERS) expect(hits(marker), marker).toBe(0)
+    expect(
+      getDatabase().prepare('SELECT title, summary FROM sessions WHERE id = ?').get(id)
+    ).toEqual({
+      title: '',
+      summary: null
+    })
+    expect(getDatabase().prepare('SELECT COUNT(*) AS n FROM sessions').get()).toEqual({ n: 1 })
+
+    indexer.drain()
+    expect(getDatabase().prepare('SELECT COUNT(*) AS n FROM sessions').get()).toEqual({ n: 0 })
     expect(getDatabase().prepare('SELECT COUNT(*) AS n FROM search_chunks').get()).toEqual({
       n: 0
     })
     expect(trigramsInFtsData()).toEqual([])
+    expect(filesContaining(dbPath, NEEDLES)).toEqual([])
+  })
+
+  it('an interrupted staged purge is completed at the next start, in one piece', () => {
+    const id = indexedSession()
+    new SessionService(getDatabase()).deleteSession(id)
+    // «Absturz» vor dem Aufräumen: Schleife weg, beim Start läuft sie noch nicht
+    resetSearchIndexServiceForTests()
+    expect(new SessionService(getDatabase()).finishPendingDeletions()).toBe(1)
+    expect(getDatabase().prepare('SELECT COUNT(*) AS n FROM search_chunks').get()).toEqual({
+      n: 0
+    })
     expect(filesContaining(dbPath, NEEDLES)).toEqual([])
   })
 
@@ -154,6 +200,9 @@ describe('search index — nothing recoverable after deletion (#209 PC 1)', () =
       deletedSessionIds: [id],
       incomplete: false
     })
+    for (const marker of MARKERS) expect(hits(marker), marker).toBe(0)
+    expect(filesContaining(dbPath, queryNeedles)).toEqual([])
+    indexer.drain()
     expect(trigramsInFtsData()).toEqual([])
     expect(filesContaining(dbPath, NEEDLES)).toEqual([])
     expect(filesContaining(dbPath, queryNeedles)).toEqual([])
@@ -167,6 +216,7 @@ describe('search index — nothing recoverable after deletion (#209 PC 1)', () =
       .run()
     const id = indexedSession()
     expect(new SessionService(getDatabase()).deleteSession(id)).toBe(true)
+    indexer.drain()
     expect(trigramsInFtsData().length).toBeGreaterThan(0)
     expect(filesContaining(dbPath, NEEDLES).length).toBeGreaterThan(0)
   })

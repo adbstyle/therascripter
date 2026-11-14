@@ -126,8 +126,8 @@ export class SearchIndexRepository {
     }))
   }
 
-  /** true, solange mindestens eine Sitzung auf ihre Textphase wartet (ohne Fenster). */
-  hasPendingText(): boolean {
+  /** true, solange mindestens eine Sitzung ausserhalb des ruhigen Fensters auf ihre Textphase wartet. */
+  hasPendingText(quietBefore: string): boolean {
     return (
       this.db
         .prepare(
@@ -135,35 +135,39 @@ export class SearchIndexRepository {
            LEFT JOIN search_index_state st ON st.session_id = s.id
            WHERE ${SEARCH_VISIBLE_SESSION}
              AND (st.session_id IS NULL OR st.text_rev < s.search_rev)
+             AND s.updated_at <= ?
            LIMIT 1`
         )
-        .get() !== undefined
+        .get(quietBefore) !== undefined
     )
   }
 
   /**
    * Schreibt eine neue Textgeneration samt FTS-Einträgen und macht sie aktiv —
-   * alles in EINER Transaktion: die exakte Suche sieht entweder den alten oder
-   * den neuen Stand, nie einen halben (#212 AK 1). Danach werden ältere
-   * Generationen gelöscht, ausser der, auf die eine aktive Vektorgeneration
-   * zeigt (ab PR S4; bis dahin ist vec_gen immer NULL).
+   * in EINER Transaktion: die exakte Suche sieht entweder den alten oder den
+   * neuen Stand, nie einen halben (#212 AK 1). Ältere Generationen löscht
+   * diese Methode NICHT: Löschen im FTS-Index mit 'secure-delete' kostet
+   * ~40 ms pro Abschnitt, eine 2-Stunden-Sitzung blockierte sonst Sekunden.
+   * Über den Join auf `text_gen` sind sie sofort unsichtbar; die
+   * Hintergrundschleife entfernt sie abschnittweise (`findStaleChunk`).
    *
-   * Gibt false zurück (und schreibt nichts), wenn die Sitzung inzwischen
-   * gelöscht, markiert oder nicht mehr fertig verarbeitet ist, oder wenn ihr
-   * Inhalt seit dem Lesen erneut geändert wurde — dann holt der nächste Takt
-   * sie mit dem neuen Stand.
+   * Gibt die neue Generation zurück, oder null (und schreibt nichts), wenn die
+   * Sitzung inzwischen gelöscht, markiert oder nicht mehr fertig verarbeitet
+   * ist, oder wenn ihr Inhalt seit dem Lesen erneut geändert wurde — dann holt
+   * der nächste Takt sie mit dem neuen Stand.
    */
   writeTextGeneration(
     sessionId: string,
     readRev: number,
     sections: SearchSection[],
-    error: string | null
-  ): boolean {
-    return this.db.transaction((): boolean => {
+    error: string | null,
+    docStat: string | null = null
+  ): number | null {
+    return this.db.transaction((): number | null => {
       const current = this.db
         .prepare(`SELECT s.search_rev FROM sessions s WHERE s.id = ? AND ${SEARCH_VISIBLE_SESSION}`)
         .get(sessionId) as { search_rev: number } | undefined
-      if (!current || current.search_rev !== readRev) return false
+      if (!current || current.search_rev !== readRev) return null
 
       const state = this.db
         .prepare('SELECT vec_gen FROM search_index_state WHERE session_id = ?')
@@ -196,35 +200,111 @@ export class SearchIndexRepository {
 
       this.db
         .prepare(
-          `INSERT INTO search_index_state (session_id, text_gen, text_rev, last_error)
-           VALUES (?, ?, ?, ?)
+          `INSERT INTO search_index_state (session_id, text_gen, text_rev, last_error, doc_stat)
+           VALUES (?, ?, ?, ?, ?)
            ON CONFLICT(session_id) DO UPDATE SET
              text_gen = excluded.text_gen,
              text_rev = excluded.text_rev,
-             last_error = excluded.last_error`
+             last_error = excluded.last_error,
+             doc_stat = excluded.doc_stat`
         )
-        .run(sessionId, gen, readRev, error)
-
-      // Alte Textgenerationen weg — die Trigger entfernen ihre FTS-Einträge
-      this.db
-        .prepare(
-          `DELETE FROM search_chunks
-           WHERE session_id = ? AND gen <> ? AND gen IS NOT COALESCE(?, -1)`
-        )
-        .run(sessionId, gen, state?.vec_gen ?? null)
-      return true
+        .run(sessionId, gen, readRev, error, docStat)
+      return gen
     })()
   }
 
   /**
-   * Entfernt alles, was der Index zu einer Sitzung hält (Abschnitte, FTS,
-   * Zustand). Für den Löschpfad, wenn Phase 2 erst später fertig wird
-   * (SessionRepository.scrubMarkedContent): der Klartext soll nicht bis zum
-   * nächsten Start in der Datei bleiben.
+   * Ein Abschnitt einer veralteten Generation der Sitzung (weder `text_gen`
+   * noch `vec_gen`; ohne Zustandszeile jeder), oder null. Über den Index
+   * (session_id, gen).
    */
-  deleteForSession(sessionId: string): void {
-    this.db.prepare('DELETE FROM search_chunks WHERE session_id = ?').run(sessionId)
+  findStaleChunk(sessionId: string): number | null {
+    const row = this.db
+      .prepare(
+        `SELECT c.id FROM search_chunks c
+         LEFT JOIN search_index_state st ON st.session_id = c.session_id
+         WHERE c.session_id = ?
+           AND (st.session_id IS NULL OR (c.gen <> st.text_gen AND c.gen IS NOT st.vec_gen))
+         LIMIT 1`
+      )
+      .get(sessionId) as { id: number } | undefined
+    return row?.id ?? null
+  }
+
+  /**
+   * Sitzungen mit veralteten Generationen oder mit Abschnitten ohne Zustand —
+   * einmal beim Start (Aufräumen überlebt einen Neustart). Ein Durchgang über
+   * search_chunks, danach arbeitet die Schleife pro Sitzung über den Index.
+   */
+  findSessionsWithStaleChunks(): string[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT DISTINCT c.session_id FROM search_chunks c
+           LEFT JOIN search_index_state st ON st.session_id = c.session_id
+           WHERE st.session_id IS NULL OR (c.gen <> st.text_gen AND c.gen IS NOT st.vec_gen)`
+        )
+        .all() as Array<{ session_id: string }>
+    ).map((r) => r.session_id)
+  }
+
+  /** Markierte Sitzungen (deleting_at), die noch Indexzeilen haben — Start der Schleife. */
+  findMarkedSessionsWithChunks(): string[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT s.id FROM sessions s
+           WHERE s.deleting_at IS NOT NULL
+             AND EXISTS (SELECT 1 FROM search_chunks c WHERE c.session_id = s.id)`
+        )
+        .all() as Array<{ id: string }>
+    ).map((r) => r.id)
+  }
+
+  /** Irgendein Abschnitt der Sitzung (alle Generationen), oder null. */
+  findAnyChunk(sessionId: string): number | null {
+    const row = this.db
+      .prepare('SELECT id FROM search_chunks WHERE session_id = ? LIMIT 1')
+      .get(sessionId) as { id: number } | undefined
+    return row?.id ?? null
+  }
+
+  hasChunks(sessionId: string): boolean {
+    return this.findAnyChunk(sessionId) !== null
+  }
+
+  /** Löscht einen Abschnitt; der Trigger entfernt seinen FTS-Eintrag. */
+  deleteChunk(id: number): void {
+    this.db.prepare('DELETE FROM search_chunks WHERE id = ?').run(id)
+  }
+
+  /** Zustand einer Sitzung ohne Abschnitte entfernen (Löschpfad mit Dateirest). */
+  deleteState(sessionId: string): void {
     this.db.prepare('DELETE FROM search_index_state WHERE session_id = ?').run(sessionId)
+  }
+
+  /**
+   * Fertig indexierte Sitzungen mit Dokumentpfad und dem beim Indexieren
+   * gemerkten Dateistand — für die Prüfung beim Start (ReviewService.save
+   * schreibt erst die Datei, dann die DB; ein Absturz dazwischen hinterliesse
+   * sonst einen veralteten Index).
+   */
+  findIndexedDocStats(): Array<{ id: string; path: string; docStat: string | null }> {
+    return (
+      this.db
+        .prepare(
+          `SELECT s.id, s.anonymized_path AS path, st.doc_stat
+           FROM sessions s JOIN search_index_state st ON st.session_id = s.id
+           WHERE ${SEARCH_VISIBLE_SESSION} AND s.anonymized_path IS NOT NULL
+             AND st.text_rev = s.search_rev`
+        )
+        .all() as Array<{ id: string; path: string; doc_stat: string | null }>
+    ).map((r) => ({ id: r.id, path: r.path, docStat: r.doc_stat }))
+  }
+
+  /** Sitzung wieder «zu bearbeiten» machen, ohne `updated_at` zu ändern. */
+  markTextStale(sessionId: string): void {
+    this.db.prepare('UPDATE sessions SET search_rev = search_rev + 1 WHERE id = ?').run(sessionId)
   }
 
   /** Abschnitte per ID (für Ausschnitte der gewählten Fundstellen). */

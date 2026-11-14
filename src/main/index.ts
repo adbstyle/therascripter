@@ -434,7 +434,12 @@ app.whenReady().then(() => {
   // Epic #192 (#209/#210/#212) — Textphase der Aufbereitung für die Suche:
   // nach Recovery und Löschabschluss, holt Ausstehendes (auch den Bestand vor
   // dem Update) im Hintergrund nach; pausiert während einer Aufnahme.
-  const searchIndex = initSearchIndexService(getDatabase())
+  const searchIndex = initSearchIndexService(getDatabase(), {
+    // Gestaffeltes Löschen: sind die Indexzeilen weg, schliesst die Sitzung ab
+    finishDeletion: (id) => {
+      new SessionService(getDatabase()).finishDeletion(id)
+    }
+  })
   searchIndex.setRecordingPause(getActiveSessionId() !== null)
   searchIndex.start()
 
