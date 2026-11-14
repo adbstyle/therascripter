@@ -10,6 +10,7 @@ import { dossierListName, pluralize } from '../utils/dossierFormat'
 import { SearchResultsList } from '../components/search/SearchResultsList'
 import { SemanticNoticeBox } from '../components/search/SemanticNoticeBox'
 import {
+  hitRouteFocus,
   moveActive,
   optionId,
   resultOptions,
@@ -68,7 +69,7 @@ export default function DossierSearchPage({
         navigate({ kind: 'session', sessionId: option.doc.sessionId }, { anchorId: option.key })
       } else if (option.kind === 'hit') {
         navigate(
-          { kind: 'session', sessionId: option.doc.sessionId, focus: option.hit.focus },
+          { kind: 'session', sessionId: option.doc.sessionId, focus: hitRouteFocus(option.hit) },
           { anchorId: option.key }
         )
       }

@@ -5,6 +5,7 @@ import type {
   SearchHit,
   SearchQueryResult
 } from '../../../../shared/types/Search'
+import type { SessionFocus } from '../../navigation/routes'
 
 /**
  * Einträge der Trefferliste in Anzeigereihenfolge (#209): ↑/↓ gehen durch
@@ -69,4 +70,11 @@ export function hitLabel(hit: SearchHit, type: 'audio' | 'pdf'): string {
   const parts = [hit.label.speaker, hit.label.timestamp].filter(Boolean)
   if (parts.length > 0) return parts.join(' · ')
   return type === 'pdf' ? 'Textstelle' : 'Transkript'
+}
+
+/** Ziel einer Fundstelle in der Route; Treffer alter Fassungen suchen über den Anker (#212). */
+export function hitRouteFocus(hit: SearchHit): SessionFocus {
+  return hit.fromEarlierVersion && hit.focus.kind === 'hit'
+    ? { ...hit.focus, fromEarlierVersion: true }
+    : hit.focus
 }

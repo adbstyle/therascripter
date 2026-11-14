@@ -215,7 +215,9 @@ export function resolveSearchFocus(doc: PMNode, focus: SessionFocus): ResolvedFo
   const anchor = focus.anchor ?? ''
   const normalizedAnchor = normalizeSearchText(anchor).trim()
 
-  if (inBounds) {
+  // Treffer aus einer früheren Fassung: Absatzbereich gilt nicht, gleich über den Anker suchen
+  const earlier = 'fromEarlierVersion' in focus && focus.fromEarlierVersion === true
+  if (inBounds && !earlier) {
     const ranges = (focus.ranges ?? []).filter(
       (r) => r.p >= 0 && r.p < total && r.e > r.s && r.e <= mapOf(r.p).text.length
     )

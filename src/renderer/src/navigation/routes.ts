@@ -13,7 +13,15 @@ import type { SearchFocus } from '../../../shared/types/Search'
  * Fundstelle der Suche (Titel, Zusammenfassung oder Absätze mit Markierungen)
  * oder ein Absatz.
  */
-export type SessionFocus = SearchFocus | { kind: 'paragraph'; index: number }
+export type SessionFocus =
+  | SearchFocus
+  /**
+   * Treffer aus einem früheren Stand der Sitzung (#212 AK 1): Absätze und
+   * Bereiche gelten für die alte Fassung — die Stelle wird über den Anker im
+   * aktuellen Dokument gesucht.
+   */
+  | (Extract<SearchFocus, { kind: 'hit' }> & { fromEarlierVersion: true })
+  | { kind: 'paragraph'; index: number }
 
 export type Route =
   | { kind: 'sessions' }

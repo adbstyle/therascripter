@@ -67,8 +67,12 @@ export function semanticNotice(
     availability && (answerReason === 'unavailable-processing' || answerReason === 'model-missing')
       ? null
       : answerReason
-  const reason = live ?? fromAnswer
+  // Ein Abbruch des Suchprozesses ist nicht dauerhaft: hat die letzte Anfrage
+  // die Suche nach Bedeutung doch geliefert, gilt der Fehler nicht mehr
+  const liveReason = live === 'error' && status === 'complete' ? null : live
+  const reason = liveReason ?? fromAnswer
   if (!reason) return null
+  const message = availability?.semanticMessage?.trim()
 
   switch (reason) {
     case 'unavailable-processing':
@@ -101,13 +105,13 @@ export function semanticNotice(
       return {
         tone: 'error',
         title: 'Suche nach Bedeutung blockiert',
-        text: `${SEARCH_TOOL_BLOCKED_TEXT} ${EXACT_SEARCH_STILL_WORKS}`
+        text: `${message || SEARCH_TOOL_BLOCKED_TEXT} ${EXACT_SEARCH_STILL_WORKS}`
       }
     case 'error':
       return {
         tone: 'error',
         title: 'Suche nach Bedeutung gerade nicht verfügbar',
-        text: `${SEARCH_ERROR_TEXT} ${EXACT_SEARCH_STILL_WORKS}`,
+        text: `${message || SEARCH_ERROR_TEXT} ${EXACT_SEARCH_STILL_WORKS}`,
         action: 'retry-semantic'
       }
   }

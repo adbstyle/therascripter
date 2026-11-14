@@ -9,6 +9,7 @@ import { pluralize } from '../../utils/dossierFormat'
 import { SearchResultsList } from './SearchResultsList'
 import { SemanticNoticeBox } from './SemanticNoticeBox'
 import {
+  hitRouteFocus,
   moveActive,
   optionId,
   recentOptions,
@@ -99,7 +100,7 @@ export function SearchModal({ onClose }: SearchModalProps): React.JSX.Element {
         navigate({ kind: 'session', sessionId: option.doc.sessionId }, { reopenOverlay: 'search' })
       } else {
         navigate(
-          { kind: 'session', sessionId: option.doc.sessionId, focus: option.hit.focus },
+          { kind: 'session', sessionId: option.doc.sessionId, focus: hitRouteFocus(option.hit) },
           { reopenOverlay: 'search' }
         )
       }

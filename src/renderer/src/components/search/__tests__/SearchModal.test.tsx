@@ -434,6 +434,25 @@ describe('Treffer öffnen und zurückkehren (#209 AK 11/12, AK 26)', () => {
     expect(await screen.findByRole('dialog')).toBeTruthy()
   })
 
+  it('ein Treffer aus einer früheren Fassung führt mit Anker-Suche zur Stelle (#212)', async () => {
+    vi.mocked(window.api.search.query).mockImplementation(async (input) =>
+      answer(input.requestId, {
+        results: [doc('s1', { hits: [semanticHit({ fromEarlierVersion: true })] })],
+        semantic: 'model-missing'
+      })
+    )
+    renderHost()
+    await openModal()
+    await typeQuery('Schlaf')
+    await screen.findByText('[PERSON 1] Sitzung s1')
+    await userEvent.click(screen.getAllByRole('option')[1])
+    expect(route()).toMatchObject({
+      kind: 'session',
+      sessionId: 's1',
+      focus: { kind: 'hit', fromEarlierVersion: true, anchor: 'Ein- und Durchschlafstörungen' }
+    })
+  })
+
   it('der Kopf eines Dokuments öffnet es oben (ohne Fundstelle)', async () => {
     renderHost()
     await openModal()
@@ -520,6 +539,29 @@ describe('Verfügbarkeit der Suche nach Bedeutung (#209 AK 18, #210 AK 4/5)', ()
     expect(note).toHaveTextContent('nicht genügend Speicherplatz')
     await userEvent.click(within(note).getByRole('button', { name: 'Erneut versuchen' }))
     expect(window.api.search.retryModel).toHaveBeenCalledTimes(1)
+  })
+
+  it('zeigt den Grund aus semanticMessage', async () => {
+    withAvailability({
+      model: { status: 'ready' },
+      semantic: 'error',
+      semanticMessage: 'Der Suchdienst liess sich dreimal nicht starten.'
+    })
+    renderHost()
+    await openModal()
+    expect(
+      await screen.findByRole('note', { name: 'Suche nach Bedeutung gerade nicht verfügbar' })
+    ).toHaveTextContent('Der Suchdienst liess sich dreimal nicht starten.')
+  })
+
+  it('ein Abbruch gilt nicht mehr, sobald eine Anfrage die Suche nach Bedeutung liefert', async () => {
+    withAvailability({ model: { status: 'ready' }, semantic: 'error' })
+    renderHost()
+    await openModal()
+    await screen.findByRole('note')
+    await typeQuery('Hofer')
+    await screen.findByText('[PERSON 1] Sitzung s3')
+    expect(screen.queryByRole('note')).toBeNull()
   })
 
   it('Werkzeug blockiert', async () => {

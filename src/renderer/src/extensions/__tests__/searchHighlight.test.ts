@@ -206,6 +206,23 @@ describe('resolveSearchFocus — robust gegen Bearbeitung', () => {
     expect(found.kind === 'body' && found.paragraphIndex).toBe(3)
   })
 
+  it('Treffer aus einer früheren Fassung suchen gleich über den Anker (#212)', () => {
+    const h = editorWith()
+    // Bereich zeigt auf Absatz 0 (alte Fassung), der Anker steht in Absatz 1
+    const focus = {
+      kind: 'hit' as const,
+      paraFrom: 0,
+      paraTo: 0,
+      ranges: [{ p: 0, s: 1, e: 5 }],
+      anchor: 'Bern',
+      fromEarlierVersion: true as const
+    }
+    const resolved = resolveSearchFocus(h.editor.state.doc, focus)
+    expect(resolved.kind === 'body' && resolved.paragraphIndex).toBe(1)
+    expect(resolved.kind === 'body' && resolved.relocated).toBe(true)
+    if (resolved.kind === 'body') expect(textOf(h, resolved.spec.marks)).toBe('Bern')
+  })
+
   it('meldet «missing», wenn es die Stelle nicht mehr gibt', () => {
     const h = editorWith()
     const focus = hitFocus(h, 1, 'Bern')
