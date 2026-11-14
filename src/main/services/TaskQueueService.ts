@@ -73,6 +73,12 @@ export class TaskQueueService {
   // abortRunningForSession() (called from SessionService.deleteSession) can
   // signal the executor to stop cleanly. See DR-6 in plans/2026-04-29-pipeline-progress-ui-issue-80.md.
   private runningController: { sessionId: string; controller: AbortController } | null = null
+  /**
+   * Läuft vor jedem Task, bevor er als running gilt (Epic #192): beendet den
+   * Suchprozess und bricht die Vektorphase ab — nie gleichzeitig mit NER,
+   * whisper oder llama (8-GB-Budget, #209 AK 17).
+   */
+  private beforeTask: (() => Promise<unknown>) | null = null
 
   constructor(private readonly db: Database.Database) {
     this.repository = new TaskRepository(db)
@@ -424,6 +430,29 @@ export class TaskQueueService {
   }
 
   /**
+   * Hook vor jedem Task (Epic #192). Der Task beginnt erst, wenn das Promise
+   * erfüllt ist; ein Fehler darin hält ihn nicht auf.
+   */
+  setBeforeTaskHook(hook: (() => Promise<unknown>) | null): void {
+    this.beforeTask = hook
+  }
+
+  /**
+   * Läuft eine Verarbeitung oder steht eine an, die nicht auf das Ende einer
+   * Aufnahme wartet? Solange das gilt, startet der Suchprozess nicht
+   * (#209 AK 18): eine Aufnahme selbst sperrt die Suche nach Bedeutung nicht.
+   */
+  hasActiveWork(): boolean {
+    if (this.processing) return true
+    if (this.pausedForRecording) return false
+    try {
+      return this.repository.findPending() !== null
+    } catch {
+      return false
+    }
+  }
+
+  /**
    * Läuft ein Schritt oder wartet einer? Anders als isProcessing() auch true
    * zwischen zwei Pipeline-Schritten und während die Warteschlange für eine
    * Aufnahme pausiert — ein App-Update darf dann nicht neu starten (#164).
@@ -470,6 +499,30 @@ export class TaskQueueService {
     if (!task) return
 
     this.processing = true
+
+    if (this.beforeTask) {
+      try {
+        await this.beforeTask()
+      } catch (err) {
+        console.error('[TaskQueue] Hook vor dem Task fehlgeschlagen:', err)
+      }
+      // Während des Hooks können Beenden, eine Aufnahme oder ein Löschen
+      // dazwischengekommen sein — dann den Task (noch) nicht starten.
+      let current: Task | null = null
+      try {
+        current = this.repository.findPending()
+      } catch {
+        // DB während des Beendens geschlossen
+      }
+      if (this.shouldStop || this.pausedForRecording || current?.id !== task.id) {
+        this.processing = false
+        if (!this.shouldStop && !this.pausedForRecording && current) {
+          setTimeout(() => this.scheduleNext(), 0)
+        }
+        return
+      }
+    }
+
     console.log(`[TaskQueue] Starting task ${task.type} for session ${task.sessionId}`)
 
     const executor = this.executors.get(task.type)
