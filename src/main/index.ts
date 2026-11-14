@@ -447,7 +447,9 @@ app.whenReady().then(() => {
       sendToRenderer('nav:openSettings')
     },
     // Epic #192 — Zurück/Vorwärts und Seitenleiste; der Renderer führt den Verlauf
-    onNavCommand: (command) => sendToRenderer('nav:command', command)
+    onNavCommand: (command) => sendToRenderer('nav:command', command),
+    // «Suchen …» (⌘K) bei verstecktem Fenster: erst zeigen (#209)
+    onShowWindow: () => tray.showWindow()
   })
 
   // Start task queue processing

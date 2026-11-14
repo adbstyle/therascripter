@@ -106,7 +106,10 @@ export interface SearchDocumentResult {
 }
 
 /** Gefundenes Patientendossier (#209 AK 23–26): ID · Geburtsdatum unterscheiden. */
-export type SearchDossierResult = DossierRef
+export interface SearchDossierResult extends DossierRef {
+  /** Zugeordnete Sitzungen und PDF-Dokumente (ohne solche im Löschen), wie in der Übersicht. */
+  entryCount: number
+}
 
 /**
  * Warum die Suche nach Bedeutung gerade nicht geht (PR S4):

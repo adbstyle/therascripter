@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { FileUp, Mic, MoreHorizontal, Trash2 } from 'lucide-react'
+import { FileUp, Mic, MoreHorizontal, Search, Trash2 } from 'lucide-react'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { useNavigation } from '../../navigation/navigation'
 import { useToast } from '../../hooks/useToast'
@@ -16,7 +16,7 @@ interface DossierHeaderActionsProps {
 }
 
 /**
- * Aktionen im Kopf der Dossier-Seite: «PDF importieren» und «Aufnahme
+ * Aktionen im Kopf der Dossier-Seite: «Im Dossier suchen» (#211), «PDF importieren» und «Aufnahme
  * starten» ordnen das Neue diesem Dossier zu (#206) — die App bleibt dabei
  * auf der Seite, der Verlauf zeigt die Live-Karte bzw. die neuen PDFs. Dazu
  * das Menü «Weitere Aktionen» mit «Patientendossier löschen» (#204) —
@@ -71,6 +71,15 @@ export function DossierHeaderActions({
 
   return (
     <>
+      {/* Suche nur in diesem Dossier (#211) */}
+      <button
+        type="button"
+        onClick={() => navigate({ kind: 'dossierSearch', dossierId })}
+        className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface-0 px-3 py-1.5 text-sm font-medium text-text-primary transition-colors hover:bg-surface-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <Search className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+        Im Dossier suchen
+      </button>
       <button
         type="button"
         onClick={() => void importPdfs(undefined, { dossierId, dossierName })}

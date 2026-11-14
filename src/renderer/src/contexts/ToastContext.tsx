@@ -8,7 +8,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
   const [toasts, setToasts] = useState<ToastData[]>([])
 
   const addToast = useCallback(
-    (message: string, type: 'success' | 'error', options?: ToastOptions) => {
+    (message: string, type: ToastData['type'], options?: ToastOptions) => {
       const id = nextId++
       setToasts((prev) => [...prev, { id, message, type, durationMs: options?.durationMs }])
     },
@@ -24,7 +24,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
   const value = useMemo<ToastContextValue>(
     () => ({
       success: (message: string, options?: ToastOptions) => addToast(message, 'success', options),
-      error: (message: string, options?: ToastOptions) => addToast(message, 'error', options)
+      error: (message: string, options?: ToastOptions) => addToast(message, 'error', options),
+      info: (message: string, options?: ToastOptions) => addToast(message, 'info', options)
     }),
     [addToast]
   )

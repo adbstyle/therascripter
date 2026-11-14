@@ -8,6 +8,8 @@ export interface ToastOptions {
 export interface ToastContextValue {
   success: (message: string, options?: ToastOptions) => void
   error: (message: string, options?: ToastOptions) => void
+  /** Neutraler Hinweis (kein Erfolg, kein Fehler), z. B. eine fehlende Fundstelle. */
+  info: (message: string, options?: ToastOptions) => void
 }
 
 export const ToastContext = createContext<ToastContextValue | null>(null)

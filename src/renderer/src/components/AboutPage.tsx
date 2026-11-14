@@ -177,6 +177,12 @@ export default function AboutPage(): React.JSX.Element {
             Löschen Sie eine Sitzung, entfernt TheraScript auch ihre Einträge im Suchindex.
           </p>
           <p className="mt-1 text-sm text-text-secondary">
+            Die Suche (⌘K) läuft nur auf Ihrem Mac; Suchanfragen verlassen ihn nicht. Ausschnitte in
+            den Treffern stehen immer im Klartext, auch in der pseudonymisierten Ansicht. Die fünf
+            letzten Suchanfragen bleiben lokal gespeichert, bis Sie sie mit «Verlauf löschen»
+            entfernen.
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
             Patientendossiers mit Stammdaten, Diagnosen, Medikation und Notiz bleiben lokal
             gespeichert, bis Sie sie löschen oder TheraScript vollständig entfernen. TheraScript nur
             in den Papierkorb zu legen, löscht sie nicht.
