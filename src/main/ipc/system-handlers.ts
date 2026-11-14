@@ -104,6 +104,7 @@ export function registerSystemHandlers(): void {
       detail:
         '• ML-Modelle (mehrere GB)\n' +
         '• Alle Transkriptionen und Audiodateien\n' +
+        '• Alle Patientendossiers (Stammdaten, Diagnosen, Medikation, Notizen)\n' +
         '• Sperrliste\n' +
         '• Einstellungen\n\n' +
         'Die App-Datei (TheraScript.app) muss anschliessend ' +

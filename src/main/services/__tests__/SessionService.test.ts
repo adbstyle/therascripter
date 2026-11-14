@@ -447,4 +447,38 @@ describe('SessionService', () => {
       expect(() => service.getAnonymizedPlainText(session.id)).toThrow(/anonymisiertes Dokument/)
     })
   })
+
+  // #204/#207: ein Patientendossier nimmt seine exklusiven Sitzungen mit —
+  // markieren in der Transaktion des Aufrufers, abschliessen danach.
+  describe('markForDeletion / finishDeletion', () => {
+    it('marks several sessions inside a caller transaction and rolls back with it', () => {
+      const a = service.createSession('A', 'audio')
+      const b = service.createSession('B', 'pdf')
+
+      expect(() =>
+        db.transaction(() => {
+          service.markForDeletion([a.id, b.id])
+          throw new Error('Aufrufer bricht ab')
+        })()
+      ).toThrow('Aufrufer bricht ab')
+      expect(service.getSession(a.id)).not.toBeNull()
+
+      db.transaction(() => service.markForDeletion([a.id, b.id, 'unknown']))()
+      expect(service.getSession(a.id)).toBeNull()
+      expect(service.getSession(b.id)).toBeNull()
+      expect(service.getAllSessionIds().sort()).toEqual([a.id, b.id].sort())
+    })
+
+    it('finishes a marked session and never touches an unmarked one', () => {
+      const marked = service.createSession('Markiert', 'audio')
+      const kept = service.createSession('Bleibt', 'audio')
+      service.markForDeletion([marked.id])
+
+      expect(service.finishDeletion(marked.id)).toBe(true)
+      expect(service.getAllSessionIds()).toEqual([kept.id])
+      expect(service.finishDeletion(kept.id)).toBe(false)
+      expect(service.getSession(kept.id)).not.toBeNull()
+      expect(service.finishDeletion('gone')).toBe(true)
+    })
+  })
 })

@@ -20,6 +20,7 @@ import type { AppUpdateState } from '../shared/types/AppUpdate'
 import type { ModelGroup, DiarizationPipeline } from '../shared/validation/model-catalog-schemas'
 import { SummaryChangedSchema } from '../shared/validation/summary-schemas'
 import { ToolHealthStateSchema } from '../shared/validation/tool-health-schemas'
+import { dossierApi } from './api/dossiers'
 
 const api: IpcApi = {
   sessions: {
@@ -229,6 +230,7 @@ const api: IpcApi = {
     dismissHint: () => ipcRenderer.invoke('microphone:dismissHint'),
     openSettings: () => ipcRenderer.invoke('microphone:openSettings')
   },
+  dossiers: dossierApi,
   nav: {
     onOpenSettings: (callback) => {
       const handler = (): void => callback()

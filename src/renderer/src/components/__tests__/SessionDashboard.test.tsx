@@ -220,6 +220,15 @@ beforeEach(() => {
     nav: {
       onOpenSettings: vi.fn().mockReturnValue(() => {})
     },
+    dossiers: {
+      list: vi.fn().mockResolvedValue([]),
+      get: vi.fn().mockResolvedValue(null),
+      create: vi.fn(),
+      update: vi.fn(),
+      deletePreview: vi.fn().mockResolvedValue(null),
+      delete: vi.fn(),
+      onChanged: vi.fn().mockReturnValue(() => {})
+    },
     toolHealth: {
       getState: vi.fn().mockResolvedValue({ status: 'ok', tools: [], bundlePath: '' }),
       recheck: vi.fn(),
