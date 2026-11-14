@@ -48,6 +48,8 @@ Tracks every transcription and PDF import session.
 | `created_at` | TEXT | DEFAULT `datetime('now')` | ISO 8601 timestamp of session creation |
 | `updated_at` | TEXT | DEFAULT `datetime('now')` | ISO 8601 timestamp of last update |
 | `review_at` | TEXT | nullable | ISO 8601 timestamp of when the session first reached `review` status; used for source-file cleanup |
+| `title_entity_snapshot` | TEXT | nullable | Issue #203 (migration 018): JSON `{ "[PERSON 1]": "Ruth Gerber", … }` — meaning of the placeholder tokens in `title` when it was written. The Klartext view resolves a token only while `entity_map` still gives it this meaning (`shared/utils/resolvePlaceholders.ts`) |
+| `summary_entity_snapshot` | TEXT | nullable | Same for `summary`; written by the summarization (from the EntityMap read with the LLM input) and on user edits (recorded tokens keep their meaning, new ones get the current one). Migration 018 backfilled existing rows with today's unambiguous meanings |
 
 Index: `idx_sessions_created_at` on `created_at`.
 
