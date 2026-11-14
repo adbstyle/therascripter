@@ -232,14 +232,18 @@ export class ToolHealthService {
 /**
  * Startprüfung anwerfen und die Verarbeitung darauf warten lassen — höchstens
  * `capMs`, danach läuft sie trotzdem an. Die Oberfläche wartet nie (NFR 1).
+ * Gibt dieselbe Sperre zurück: auch der Suchprozess (Epic #192) startet erst
+ * danach, sonst fiele ein Python-Start in die laufende Quarantäne-Reparatur.
  */
 export function startToolCheck(
   service: Pick<ToolHealthService, 'check'>,
   queue: { holdUntil(gate: Promise<unknown>): void },
   capMs = 10_000
-): void {
+): Promise<unknown> {
   const cap = new Promise<void>((resolve) => setTimeout(resolve, capMs).unref?.())
-  queue.holdUntil(Promise.race([service.check(), cap]))
+  const gate = Promise.race([service.check(), cap]).catch(() => undefined)
+  queue.holdUntil(gate)
+  return gate
 }
 
 // ── Für die Werkzeug-Aufrufe ──────────────────────────────────────────────

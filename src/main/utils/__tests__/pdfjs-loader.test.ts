@@ -34,11 +34,7 @@ beforeAll(() => {
   const nodeRequire = createRequire(__filename)
   moduleInternals = nodeRequire('module') as unknown as ModuleWithLoad
   originalLoad = moduleInternals._load
-  moduleInternals._load = function (
-    this: unknown,
-    request: string,
-    ...rest: [unknown, boolean]
-  ) {
+  moduleInternals._load = function (this: unknown, request: string, ...rest: [unknown, boolean]) {
     if (request === '@napi-rs/canvas') {
       const err = new Error("Cannot find module '@napi-rs/canvas'") as Error & { code: string }
       err.code = 'MODULE_NOT_FOUND'

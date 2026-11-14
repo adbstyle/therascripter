@@ -13,8 +13,10 @@ import { SEARCH_MAX_HITS_PER_DOCUMENT } from '../../shared/search-config'
  * Reihenfolge der Dokumente (#209 AK 8):
  * 1. Dokumente mit exaktem Treffer vor solchen nur nach Bedeutung
  *    (Dokument-Score `hasExact ? 1 + maxCos : maxCos`, gemessen 0.636).
- * 2. Innerhalb: höchster Kosinus, sofern beide einen haben.
- * 3. Ohne Modell: bester bm25 (kleiner = besser, SQLite-Konvention).
+ * 2. Innerhalb: höchster Kosinus; ein Dokument ohne Kosinus steht hinter
+ *    allen mit Kosinus (totale Ordnung, sonst Zyklen).
+ * 3. Dann bester bm25 (kleiner = besser, SQLite-Konvention) — ohne Modell
+ *    das einzige Mass.
  * 4. Dann das neuere Datum, zuletzt die ID (stabile Reihenfolge).
  *
  * Gruppierung (#209 AK 7): jedes Dokument einmal, mit bis zu
@@ -63,29 +65,41 @@ export interface RankedDocument {
 
 const FIELD_ORDER: Record<SearchField, number> = { title: 0, summary: 1, body: 2 }
 
-/** Vergleich zweier Abschnitte innerhalb eines Dokuments: passendster zuerst. */
+/**
+ * Vergleich zweier Abschnitte innerhalb eines Dokuments: passendster zuerst.
+ * Totale Ordnung wie compareDocuments (ohne Kosinus = −∞, ohne bm25 = +∞).
+ */
 export function compareChunks(a: ChunkCandidate, b: ChunkCandidate): number {
   const exact = Number(!!b.exact) - Number(!!a.exact)
   if (exact !== 0) return exact
-  if (a.semantic && b.semantic && a.semantic.cosine !== b.semantic.cosine) {
-    return b.semantic.cosine - a.semantic.cosine
-  }
-  if (a.exact && b.exact && a.exact.bm25 !== b.exact.bm25) return a.exact.bm25 - b.exact.bm25
+  const cosA = a.semantic?.cosine ?? Number.NEGATIVE_INFINITY
+  const cosB = b.semantic?.cosine ?? Number.NEGATIVE_INFINITY
+  if (cosA !== cosB) return cosB > cosA ? 1 : -1
+  const bmA = a.exact?.bm25 ?? Number.POSITIVE_INFINITY
+  const bmB = b.exact?.bm25 ?? Number.POSITIVE_INFINITY
+  if (bmA !== bmB) return bmA < bmB ? -1 : 1
   const field = FIELD_ORDER[a.field] - FIELD_ORDER[b.field]
   if (field !== 0) return field
   return a.ord - b.ord || a.chunkId - b.chunkId
 }
 
-/** Vergleich zweier Dokumente: passendstes zuerst. */
+/**
+ * Vergleich zweier Dokumente: passendstes zuerst. Eine TOTALE Ordnung
+ * (transitiv, antisymmetrisch) — sonst hinge die Reihenfolge von der
+ * Eingabe ab und die Dossier-Suche wiche von der gefilterten Gesamtsuche ab
+ * (#211 AK 3): `hasExact` absteigend, dann Kosinus absteigend (ohne Kosinus
+ * = −∞), dann bm25 aufsteigend (ohne = +∞), dann das neuere Datum, zuletzt
+ * die ID.
+ */
 export function compareDocuments(a: RankedDocument, b: RankedDocument): number {
   const exact = Number(b.hasExact) - Number(a.hasExact)
   if (exact !== 0) return exact
-  if (a.maxCosine !== null && b.maxCosine !== null && a.maxCosine !== b.maxCosine) {
-    return b.maxCosine - a.maxCosine
-  }
-  if (a.bestBm25 !== null && b.bestBm25 !== null && a.bestBm25 !== b.bestBm25) {
-    return a.bestBm25 - b.bestBm25
-  }
+  const cosA = a.maxCosine ?? Number.NEGATIVE_INFINITY
+  const cosB = b.maxCosine ?? Number.NEGATIVE_INFINITY
+  if (cosA !== cosB) return cosB > cosA ? 1 : -1
+  const bmA = a.bestBm25 ?? Number.POSITIVE_INFINITY
+  const bmB = b.bestBm25 ?? Number.POSITIVE_INFINITY
+  if (bmA !== bmB) return bmA < bmB ? -1 : 1
   if (a.sortDay !== b.sortDay) return a.sortDay < b.sortDay ? 1 : -1
   return a.sessionId < b.sessionId ? -1 : a.sessionId > b.sessionId ? 1 : 0
 }

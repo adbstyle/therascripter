@@ -20,6 +20,7 @@ interface Harness {
   flags: { processing: boolean; model: SearchModelInfo | null }
   clock: { now: number }
   embed: { impl: (texts: string[]) => Promise<Float32Array[]> }
+  activity: boolean[]
 }
 
 function setup(): Harness {
@@ -27,6 +28,7 @@ function setup(): Harness {
   const docs = new Map<string, unknown>()
   const calls: string[][] = []
   const changed: string[] = []
+  const activity: boolean[] = []
   const flags = { processing: false, model: TEST_MODEL as SearchModelInfo | null }
   const clock = { now: NOW }
   const embed = {
@@ -39,7 +41,8 @@ function setup(): Harness {
       calls.push(texts)
       return embed.impl(texts)
     },
-    onSessionVectorsChanged: (id) => changed.push(id)
+    onSessionVectorsChanged: (id) => changed.push(id),
+    onActiveChange: (active) => activity.push(active)
   }
   const service = new SearchIndexService(db, {
     now: () => clock.now,
@@ -49,7 +52,7 @@ function setup(): Harness {
     },
     vectors
   })
-  return { db, docs, service, calls, changed, flags, clock, embed }
+  return { db, docs, service, calls, changed, flags, clock, embed, activity }
 }
 
 function longParagraphs(n: number, word: string): Array<{ speaker: 'A' | 'B'; text: string }> {
@@ -345,5 +348,93 @@ describe('SearchIndexService — Vektorphase', () => {
     }
     await h.service.runVectorPhaseToEnd()
     expect(state(h.db, 's1')).toMatchObject({ attempts: 0, vec_gen: null })
+  })
+
+  it('counts only failures caused by the batch itself (crash/timeout during the request)', async () => {
+    addIndexedSession(h.db, h.docs, { id: 's1' }, [{ text: 'Etwas Text hier' }])
+    indexAll(h.service)
+    for (const kind of ['start', 'cooldown', 'blocked', 'stopping'] as const) {
+      h.embed.impl = async () => {
+        throw new SearchWorkerUnavailableError('error', 'x', kind)
+      }
+      await h.service.runVectorPhaseToEnd()
+      expect(state(h.db, 's1').attempts).toBe(0)
+    }
+    h.embed.impl = async () => {
+      throw new SearchWorkerUnavailableError('error', 'abgestürzt', 'request')
+    }
+    await h.service.runVectorPhaseToEnd()
+    expect(state(h.db, 's1')).toMatchObject({ attempts: 1, last_error: 'abgestürzt' })
+  })
+
+  it('reports start and end of its work (the idle timer of the search process)', async () => {
+    addIndexedSession(h.db, h.docs, { id: 's1' }, [{ text: 'Etwas Text hier' }])
+    indexAll(h.service)
+    await h.service.runVectorPhaseToEnd()
+    expect(h.activity).toEqual([true, false])
+    // Nichts zu tun: keine Meldung
+    await h.service.runVectorPhaseToEnd()
+    expect(h.activity).toEqual([true, false])
+  })
+
+  it('a recording ends the work at once and reports it (the process may then end)', async () => {
+    addIndexedSession(h.db, h.docs, { id: 's1' }, longParagraphs(12, 'Arbeit'))
+    indexAll(h.service)
+    let release: () => void = () => {}
+    h.embed.impl = (texts) =>
+      new Promise((resolve) => {
+        release = () => resolve(texts.map((t) => fakeEmbed(t)))
+      })
+    const run = h.service.runVectorPhaseToEnd()
+    await new Promise((r) => setTimeout(r, 10))
+    expect(h.activity).toEqual([true])
+    h.service.setRecordingPause(true)
+    release()
+    await run
+    expect(h.activity).toEqual([true, false])
+  })
+
+  it('sends no further section of a session deleted during the run', async () => {
+    addIndexedSession(h.db, h.docs, { id: 's1' }, longParagraphs(12, 'Geheimnis'))
+    indexAll(h.service)
+    let n = 0
+    h.embed.impl = async (texts) => {
+      if (++n === 1) {
+        h.db.prepare("UPDATE sessions SET deleting_at = 'x' WHERE id = 's1'").run()
+        h.service.noteSessionsDeleted(['s1'])
+      }
+      return texts.map((t) => fakeEmbed(t))
+    }
+    await h.service.runVectorPhaseToEnd()
+    expect(h.calls).toHaveLength(1)
+  })
+
+  it('an edit during a running batch: superseded, old vectors stay active, new not marked current', async () => {
+    addIndexedSession(h.db, h.docs, { id: 's1' }, longParagraphs(4, 'Angst'))
+    indexAll(h.service)
+    await h.service.runVectorPhaseToEnd()
+    const first = state(h.db, 's1').text_gen
+    h.docs.set('/docs/s1.json', (await import('./helpers')).makeDoc(longParagraphs(4, 'Ruhe')))
+    h.db.prepare('UPDATE sessions SET search_rev = search_rev + 1 WHERE id = ?').run('s1')
+    indexAll(h.service)
+    const second = state(h.db, 's1').text_gen
+    let n = 0
+    h.embed.impl = async (texts) => {
+      if (++n === 1) {
+        // Bearbeitung mitten im Batch: dritte Textgeneration
+        h.docs.set('/docs/s1.json', (await import('./helpers')).makeDoc(longParagraphs(4, 'Wut')))
+        h.db.prepare('UPDATE sessions SET search_rev = search_rev + 1 WHERE id = ?').run('s1')
+        indexAll(h.service)
+      }
+      return texts.map((t) => fakeEmbed(t))
+    }
+    h.changed.length = 0
+    await h.service.runVectorPhaseToEnd()
+    const third = state(h.db, 's1').text_gen
+    expect(third).toBeGreaterThan(second)
+    // Die zweite Generation wurde nie aktiv; am Ende ist die dritte fertig
+    expect(state(h.db, 's1').vec_gen).toBe(third)
+    expect(h.changed).toEqual(['s1'])
+    expect(first).toBeLessThan(second)
   })
 })
