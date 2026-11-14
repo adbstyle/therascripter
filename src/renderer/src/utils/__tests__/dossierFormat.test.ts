@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
+  ambiguousDossierNames,
+  dossierDistinction,
+  dossierLabel,
   dossierIdentification,
   duplicateNameText,
   entryCountLabel,
@@ -128,5 +131,60 @@ describe('summarizeDeletion (#204 AK 17, #207 AK 1)', () => {
       '2 Sitzungen, die auch in den Dossiers Hofer, Maria und Keller, Nina liegen'
     )
     expect(s.message).toBe('Das Patientendossier wird endgültig entfernt.')
+  })
+
+  it.each([
+    [{ sessions: 1, pdfs: 0 }, '1 Sitzung, die auch im Dossier Hofer, Maria liegt'],
+    [{ sessions: 0, pdfs: 1 }, '1 PDF-Dokument, das auch im Dossier Hofer, Maria liegt'],
+    [
+      { sessions: 1, pdfs: 1 },
+      '1 Sitzung und 1 PDF-Dokument, die auch im Dossier Hofer, Maria liegen'
+    ],
+    [{ sessions: 3, pdfs: 0 }, '3 Sitzungen, die auch im Dossier Hofer, Maria liegen'],
+    [{ sessions: 0, pdfs: 2 }, '2 PDF-Dokumente, die auch im Dossier Hofer, Maria liegen']
+  ])('Grammatik der geteilten Inhalte: %o', (counts, text) => {
+    const s = summarizeDeletion(preview({ shared: { ...counts, otherDossiers: [ref()] } }))
+    expect(s.sections[1].items[0]).toBe(text)
+  })
+
+  it('nennt gleichnamige andere Dossiers mit «ID · Geburtsdatum»', () => {
+    const other = ref({ id: 'b', externalId: 'P-1001', birthDate: '1985-02-14' })
+    const ambiguous = ambiguousDossierNames([ref({ id: 'a' }), other])
+    const s = summarizeDeletion(
+      preview({ shared: { sessions: 0, pdfs: 1, otherDossiers: [other] } }),
+      ambiguous
+    )
+    expect(s.sections[1].items[0]).toBe(
+      '1 PDF-Dokument, das auch im Dossier Hofer, Maria (P-1001 · 14.02.1985) liegt'
+    )
+  })
+})
+
+describe('gleichnamige Dossiers unterscheiden (Sichtprüfung)', () => {
+  const a = ref({ id: 'a', externalId: 'P-1001', birthDate: '1985-02-14' })
+  const b = ref({ id: 'b', externalId: null, birthDate: '1970-01-01' })
+  const c = ref({ id: 'c' })
+  const other = ref({ id: 'd', firstName: 'Nina', lastName: 'Keller', externalId: 'P-7' })
+
+  it('erkennt mehrfach vergebene Namen nach der Dublettenregel (Umlaute, Gross/klein)', () => {
+    const set = ambiguousDossierNames([
+      ref({ id: '1', lastName: 'Müller', firstName: 'Hanna' }),
+      ref({ id: '2', lastName: 'MUELLER', firstName: ' hanna ' }),
+      other
+    ])
+    expect(set.size).toBe(1)
+    expect(dossierLabel(other, set)).toBe('Keller, Nina')
+  })
+
+  it('Zusatz: ID, sonst Geburtsdatum, sonst keiner — nur bei gleichem Namen', () => {
+    const set = ambiguousDossierNames([a, b, c, other])
+    expect(dossierDistinction(a, set)).toBe('P-1001')
+    expect(dossierDistinction(b, set)).toBe('01.01.1970')
+    expect(dossierDistinction(c, set)).toBe('')
+    expect(dossierDistinction(other, set)).toBe('')
+    expect(dossierLabel(a, set)).toBe('Hofer, Maria (P-1001)')
+    expect(dossierLabel(b, set)).toBe('Hofer, Maria (01.01.1970)')
+    expect(dossierLabel(c, set)).toBe('Hofer, Maria')
+    expect(dossierLabel(other, set)).toBe('Keller, Nina')
   })
 })

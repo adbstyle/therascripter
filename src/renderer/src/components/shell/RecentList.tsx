@@ -5,7 +5,8 @@ import { useLiveQuery } from '../../hooks/useLiveQuery'
 import { useNavigation } from '../../navigation/navigation'
 import { useViewMode } from '../../viewMode/useViewMode'
 import { sessionTitleIn } from '../../viewMode/sessionText'
-import { dossierListName } from '../../utils/dossierFormat'
+import { dossierLabel } from '../../utils/dossierFormat'
+import { useAmbiguousDossierNames } from '../../stores/dossierNames'
 import type { Route } from '../../navigation/routes'
 import type { RecentEntry } from '../../../../shared/types/Recent'
 import type { ViewMode } from '../../../../shared/types/ViewMode'
@@ -26,7 +27,8 @@ function toItem(
   entry: RecentEntry,
   mode: ViewMode,
   route: Route,
-  navigate: ReturnType<typeof useNavigation>['navigate']
+  navigate: ReturnType<typeof useNavigation>['navigate'],
+  ambiguous: ReadonlySet<string>
 ): Item {
   if (entry.kind === 'dossier') {
     const { dossier } = entry
@@ -34,8 +36,9 @@ function toItem(
       key: `dossier:${dossier.id}`,
       icon: BookUser,
       kindLabel: 'Patientendossier',
-      // Namen von Dossiers verdeckt die pseudonymisierte Ansicht nicht (Epic OOS 16)
-      label: dossierListName(dossier),
+      // Namen von Dossiers verdeckt die pseudonymisierte Ansicht nicht (Epic OOS 16);
+      // gleichnamige tragen ID bzw. Geburtsdatum als Zusatz
+      label: dossierLabel(dossier, ambiguous),
       recording: false,
       current: route.kind === 'dossier' && route.dossierId === dossier.id,
       open: () => navigate({ kind: 'dossier', dossierId: dossier.id })
@@ -83,7 +86,8 @@ export default function RecentList(): React.JSX.Element {
     ],
     []
   )
-  const items = recent.data.map((entry) => toItem(entry, mode, route, navigate))
+  const ambiguous = useAmbiguousDossierNames()
+  const items = recent.data.map((entry) => toItem(entry, mode, route, navigate, ambiguous))
 
   return (
     <section aria-labelledby={headingId} className="mt-3 flex flex-col gap-0.5">

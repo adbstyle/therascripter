@@ -1,4 +1,5 @@
 import { formatSwissDate, localTodayIso } from '../../../shared/utils/calendar-date'
+import { normalizeDossierKey } from '../../../shared/utils/dossier-normalize'
 import type { DossierRef } from '../../../shared/types/Dossier'
 
 /** «Nachname, Vorname» — Übersicht, Hinweise, Plaketten. */
@@ -16,6 +17,43 @@ export function dossierIdentification(ref: Pick<DossierRef, 'externalId' | 'birt
   return [ref.externalId, ref.birthDate ? formatSwissDate(ref.birthDate) : null]
     .filter(Boolean)
     .join(' · ')
+}
+
+type NameFields = Pick<DossierRef, 'firstName' | 'lastName'>
+type DistinctionFields = NameFields & Pick<DossierRef, 'externalId' | 'birthDate'>
+
+/** Vergleichsschlüssel des angezeigten Namens (gleiche Regel wie die Dublettenprüfung). */
+export function dossierNameKey(ref: NameFields): string {
+  return `${normalizeDossierKey(ref.lastName)}\u0000${normalizeDossierKey(ref.firstName)}`
+}
+
+/** Namen (Schlüssel), die mehr als ein Dossier trägt. */
+export function ambiguousDossierNames(list: readonly NameFields[]): Set<string> {
+  const seen = new Set<string>()
+  const ambiguous = new Set<string>()
+  for (const ref of list) {
+    const key = dossierNameKey(ref)
+    if (seen.has(key)) ambiguous.add(key)
+    else seen.add(key)
+  }
+  return ambiguous
+}
+
+/**
+ * Zusatz für gleichnamige Dossiers (Sichtprüfung): gibt es mehrere Dossiers
+ * mit diesem Namen, die Dossier-ID, sonst das Geburtsdatum; fehlt beides —
+ * oder ist der Name eindeutig —, kein Zusatz ('').
+ */
+export function dossierDistinction(ref: DistinctionFields, ambiguous: ReadonlySet<string>): string {
+  if (!ambiguous.has(dossierNameKey(ref))) return ''
+  if (ref.externalId) return ref.externalId
+  return ref.birthDate ? formatSwissDate(ref.birthDate) : ''
+}
+
+/** «Hofer, Lukas» bzw. bei gleichnamigen Dossiers «Hofer, Lukas (P-1001)». */
+export function dossierLabel(ref: DistinctionFields, ambiguous: ReadonlySet<string>): string {
+  const distinction = dossierDistinction(ref, ambiguous)
+  return distinction ? `${dossierListName(ref)} (${distinction})` : dossierListName(ref)
 }
 
 export function pluralize(count: number, one: string, many: string): string {

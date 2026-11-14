@@ -6,7 +6,8 @@ import { useScrollRestoration } from '../navigation/useScrollRestoration'
 import { useLiveQuery } from '../hooks/useLiveQuery'
 import { isSemanticUnavailable, useSearch } from '../hooks/useSearch'
 import { semanticNotice } from '../utils/searchNotice'
-import { dossierListName, pluralize } from '../utils/dossierFormat'
+import { dossierLabel, pluralize } from '../utils/dossierFormat'
+import { useAmbiguousDossierNames } from '../stores/dossierNames'
 import { SearchResultsList } from '../components/search/SearchResultsList'
 import { SemanticNoticeBox } from '../components/search/SemanticNoticeBox'
 import { ResultsHead } from '../components/search/ResultsHead'
@@ -43,6 +44,7 @@ export default function DossierSearchPage({
   const scope = useMemo(() => ({ kind: 'dossier' as const, dossierId }), [dossierId])
   const search = useSearch(scope)
   const { state } = search
+  const ambiguous = useAmbiguousDossierNames()
   const dossier = useLiveQuery<Dossier | null>(
     () => window.api.dossiers.get(dossierId),
     [(cb) => window.api.dossiers.onChanged(() => cb())],
@@ -99,7 +101,7 @@ export default function DossierSearchPage({
     }
   }
 
-  const name = dossier.data ? dossierListName(dossier.data) : null
+  const name = dossier.data ? dossierLabel(dossier.data, ambiguous) : null
   const result = state.result
   const docCount = result?.results.length ?? 0
   const searched = state.submitted !== null && result !== null

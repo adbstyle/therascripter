@@ -5,7 +5,12 @@ import { useLiveQuery } from '../../hooks/useLiveQuery'
 import { usePopoverPlacement } from '../../hooks/usePopoverPlacement'
 import { useToast } from '../../hooks/useToast'
 import { filterDossiers, prepareDossierFilter } from '../../utils/dossierFilter'
-import { dossierIdentification, dossierListName } from '../../utils/dossierFormat'
+import {
+  ambiguousDossierNames,
+  dossierIdentification,
+  dossierLabel,
+  dossierListName
+} from '../../utils/dossierFormat'
 import type { DossierListItem, DossierRef } from '../../../../shared/types/Dossier'
 
 /** Mehr Zeilen rendert die Auswahl nicht — die Suche grenzt ein (#205). */
@@ -125,7 +130,8 @@ export function AssignDossiersPopover({
       map.delete(id)
       return map
     })
-    const name = dossierListName(dossier)
+    // Die Liste kennt alle Dossiers: gleichnamige im Toast mit Zusatz
+    const name = dossierLabel(dossier, ambiguousDossierNames(dossiers.data))
     toast.error(
       next
         ? `«${sessionLabel}» konnte dem Patientendossier «${name}» nicht zugeordnet werden.`

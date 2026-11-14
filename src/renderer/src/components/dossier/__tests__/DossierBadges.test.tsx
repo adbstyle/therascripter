@@ -89,6 +89,12 @@ describe('DossierBadges (#205 AK 5)', () => {
     expect(screen.queryByRole('button', { name: 'Dossier zuordnen' })).not.toBeInTheDocument()
   })
 
+  it('shows ID or birth date on badges of same-named dossiers (Sichtprüfung)', async () => {
+    setup({ assigned: [ref(MEIER_A), ref(HOFER)] })
+    expect(await screen.findByText('Meier, Anna (PD-0412)')).toBeInTheDocument()
+    expect(screen.getByText('Hofer, Lukas')).toBeInTheDocument()
+  })
+
   it('shows only the other dossiers as «Auch in» in the timeline (AK 7)', () => {
     const { container, unmount } = setup({ variant: 'timeline', assigned: [ref(HOFER)] })
     expect(container).toBeEmptyDOMElement()

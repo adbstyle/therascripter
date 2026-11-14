@@ -7,10 +7,12 @@ import { sessionTitleIn } from '../../viewMode/sessionText'
 import { useViewMode } from '../../viewMode/useViewMode'
 import {
   dossierIdentification,
+  dossierLabel,
   dossierListName,
   entryCountLabel,
   pluralize
 } from '../../utils/dossierFormat'
+import { useAmbiguousDossierNames } from '../../stores/dossierNames'
 import type { ViewMode } from '../../../../shared/types/ViewMode'
 import {
   hitLabel,
@@ -308,6 +310,7 @@ function OptionContent({
   titleId?: string
   viewMode: ViewMode
 }): React.JSX.Element {
+  const ambiguous = useAmbiguousDossierNames()
   switch (option.kind) {
     case 'recent':
       return (
@@ -366,7 +369,7 @@ function OptionContent({
               key={d.id}
               className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-text-secondary"
             >
-              {dossierListName(d)}
+              {dossierLabel(d, ambiguous)}
             </span>
           ))}
         </div>
