@@ -12,14 +12,17 @@ function describeContents({ sessions, pdfs }: { sessions: number; pdfs: number }
   return parts.join(' und ')
 }
 
-/** «im Dossier Hofer, Maria», «in den Dossiers A, B, C und 2 weiteren». */
+/**
+ * «im Dossier Hofer, Maria», «in den Dossiers Hofer, Maria; Keller, Nina und
+ * 2 weiteren» — Semikolon, weil die Namen selbst ein Komma tragen.
+ */
 function describeOtherDossiers(others: DossierRef[]): string {
   if (others.length === 0) return 'in anderen Dossiers'
   if (others.length === 1) return `im Dossier ${dossierListName(others[0])}`
   const named = others.slice(0, MAX_NAMED_DOSSIERS).map(dossierListName)
   const rest = others.length - named.length
-  if (rest > 0) return `in den Dossiers ${named.join(', ')} und ${rest} weiteren`
-  return `in den Dossiers ${named.slice(0, -1).join(', ')} und ${named[named.length - 1]}`
+  if (rest > 0) return `in den Dossiers ${named.join('; ')} und ${rest} weiteren`
+  return `in den Dossiers ${named.slice(0, -1).join('; ')} und ${named[named.length - 1]}`
 }
 
 export interface DeleteDossierSummary {

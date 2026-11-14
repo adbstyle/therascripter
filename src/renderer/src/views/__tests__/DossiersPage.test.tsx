@@ -1,0 +1,143 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { act, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import DossiersPage from '../DossiersPage'
+import { renderWithProviders } from '../../test/renderWithProviders'
+import { createMockApi, emitApiEvent } from '../../test/mockApi'
+import { makeDossierListItem } from '../../test/dossierFixtures'
+import { localTodayIso } from '../../../../shared/utils/calendar-date'
+
+const LIST = [
+  makeDossierListItem({
+    id: 'd1',
+    firstName: 'Lea',
+    lastName: 'Bachmann',
+    externalId: 'PD-1042',
+    birthDate: '1991-03-14',
+    entryCount: 12,
+    lastEntryDay: localTodayIso()
+  }),
+  makeDossierListItem({
+    id: 'd2',
+    firstName: 'Anna',
+    lastName: 'Meier',
+    externalId: 'PD-0412',
+    birthDate: '1969-06-11',
+    entryCount: 1,
+    lastEntryDay: '2025-10-28'
+  }),
+  makeDossierListItem({
+    id: 'd3',
+    firstName: 'Anna',
+    lastName: 'Meier',
+    externalId: null,
+    birthDate: null,
+    entryCount: 0,
+    lastEntryDay: null
+  }),
+  makeDossierListItem({ id: 'd4', firstName: 'Jürg', lastName: 'Müller', externalId: 'PD-7' })
+]
+
+function renderPage(list = LIST) {
+  window.api = createMockApi({ dossiers: { list: vi.fn().mockResolvedValue(list) } })
+  return renderWithProviders(<DossiersPage />, { route: { kind: 'dossiers' } })
+}
+
+const rowNames = (): string[] =>
+  within(screen.getByRole('list', { name: 'Patientendossiers' }))
+    .getAllByRole('button')
+    .map((b) => b.querySelector('span')?.textContent ?? '')
+
+beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn()
+})
+
+describe('DossiersPage (#204 AK 12–15)', () => {
+  it('zeigt alle Dossiers in der Reihenfolge des Main-Prozesses mit Anzahl und Angaben', async () => {
+    renderPage()
+    expect(await screen.findByRole('heading', { name: 'Patientendossiers' })).toBeInTheDocument()
+    expect(screen.getByText('4')).toBeInTheDocument()
+    expect(rowNames()).toEqual(['Bachmann, Lea', 'Meier, Anna', 'Meier, Anna', 'Müller, Jürg'])
+    const first = screen.getAllByRole('button', { name: /Bachmann, Lea/ })[0]
+    expect(first).toHaveTextContent('PD-1042 · 14.03.1991')
+    expect(first).toHaveTextContent('12 Einträge')
+    expect(first).toHaveTextContent('Heute')
+    const meier = screen.getAllByRole('button', { name: /Meier, Anna/ })
+    expect(meier[0]).toHaveTextContent('1 Eintrag')
+    expect(meier[0]).toHaveTextContent('28.10.2025')
+    expect(meier[1]).toHaveTextContent('Keine Einträge')
+    // Keine Gesundheitsdaten in der Übersicht
+    expect(screen.queryByText(/Diagnose/)).not.toBeInTheDocument()
+  })
+
+  it('erklärt in der leeren Übersicht, wie man ein Dossier anlegt (AK 13)', async () => {
+    const user = userEvent.setup()
+    renderPage([])
+    expect(
+      await screen.findByRole('heading', { name: 'Noch keine Patientendossiers' })
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Legen Sie es mit Vor- und Nachnamen an/)).toBeInTheDocument()
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
+    const buttons = screen.getAllByRole('button', { name: 'Neues Patientendossier' })
+    await user.click(buttons[buttons.length - 1])
+    expect(
+      await screen.findByRole('dialog', { name: 'Neues Patientendossier' })
+    ).toBeInTheDocument()
+  })
+
+  it('filtert nach Teilen von Vor- und Nachnamen, auch zusammen und mit Umlauten (AK 14)', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const filter = await screen.findByRole('searchbox', { name: 'Nach Namen filtern' })
+    await user.type(filter, 'ann mei')
+    await waitFor(() => expect(rowNames()).toEqual(['Meier, Anna', 'Meier, Anna']))
+    await user.clear(filter)
+    await user.type(filter, 'MUELL')
+    await waitFor(() => expect(rowNames()).toEqual(['Müller, Jürg']))
+    await user.clear(filter)
+    await user.type(filter, 'PD-1042')
+    // Nicht nach ID (OOS 2)
+    expect(await screen.findByText('Kein Patientendossier passt zu «PD-1042».')).toBeInTheDocument()
+  })
+
+  it('öffnet ein Dossier per Klick und ist per Tastatur bedienbar', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const filter = await screen.findByRole('searchbox', { name: 'Nach Namen filtern' })
+    filter.focus()
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getAllByRole('button', { name: /Bachmann, Lea/ })[0]).toHaveFocus()
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getAllByRole('button', { name: /Meier, Anna/ })[0]).toHaveFocus()
+    await user.keyboard('{ArrowUp}{ArrowUp}')
+    expect(filter).toHaveFocus()
+  })
+
+  it('lädt bei dossiers:changed nach', async () => {
+    renderPage()
+    await screen.findByRole('list', { name: 'Patientendossiers' })
+    vi.mocked(window.api.dossiers.list).mockResolvedValue([LIST[0]])
+    act(() => emitApiEvent(window.api, 'dossiers.onChanged', { deletedIds: [] }))
+    await waitFor(() => expect(rowNames()).toEqual(['Bachmann, Lea']))
+  })
+
+  it('zeigt und filtert 500 Dossiers ohne spürbare Verzögerung (AK 15)', async () => {
+    const user = userEvent.setup()
+    const many = Array.from({ length: 500 }, (_, i) =>
+      makeDossierListItem({
+        id: `d${i}`,
+        firstName: `Vorname${i}`,
+        lastName: `Nachname${String(i).padStart(3, '0')}`,
+        externalId: `PD-${i}`
+      })
+    )
+    const start = performance.now()
+    renderPage(many)
+    await waitFor(() => expect(rowNames()).toHaveLength(500))
+    const filter = screen.getByRole('searchbox', { name: 'Nach Namen filtern' })
+    await user.type(filter, 'nachname42')
+    await waitFor(() => expect(rowNames()).toHaveLength(10))
+    // Grosszügig wegen jsdom und CI; im echten Build per Hand prüfen (Bericht)
+    expect(performance.now() - start).toBeLessThan(5000)
+  })
+})
