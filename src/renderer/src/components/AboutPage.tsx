@@ -29,7 +29,7 @@ export default function AboutPage(): React.JSX.Element {
   }, [info?.dataDir])
 
   return (
-    <div className="p-8">
+    <div>
       <div className="max-w-lg space-y-6">
         {/* Version / Logo */}
         <div>

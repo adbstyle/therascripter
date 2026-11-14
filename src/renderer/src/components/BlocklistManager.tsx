@@ -117,7 +117,7 @@ const BlocklistManager = forwardRef<BlocklistManagerHandle>(
 
     return (
       <>
-        <div className="p-6">
+        <div>
           <div className="mb-4 flex items-baseline justify-between gap-4">
             <p className="text-sm text-text-secondary">
               Begriffe, die immer automatisch pseudonymisiert werden.

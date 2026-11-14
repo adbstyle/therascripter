@@ -150,7 +150,7 @@ export default function ModelsSettings(): React.JSX.Element {
   const diarizationInstalled = diarizationSuite?.isInstalled === true
 
   return (
-    <div className="space-y-8 p-6">
+    <div className="space-y-8">
       {reconcile.events.length > 0 && (
         <ReconcileEventsBanner events={reconcile.events} onDismiss={reconcile.dismiss} />
       )}

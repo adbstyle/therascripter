@@ -8,6 +8,10 @@
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
   --color-primary-light: #dbeafe;
+  /* Gefüllte Knöpfe mit weisser Schrift: in beiden Themes ≥ 4.5:1 (im Dunkel
+     ist --color-primary dafür zu hell, es dient dort als Linkfarbe). */
+  --color-primary-solid: #2563eb;
+  --color-primary-solid-hover: #1d4ed8;
   --color-recording: #dc2626;
   --color-recording-hover: #b91c1c;
   /* Gefüllte Knöpfe mit weisser Schrift (Aufnahme starten/stoppen, Löschen,
@@ -77,6 +81,8 @@
   --color-primary: #60a5fa;
   --color-primary-hover: #93c5fd;
   --color-primary-light: #1e3a5f;
+  --color-primary-solid: #2563eb;
+  --color-primary-solid-hover: #1d4ed8;
   --color-recording: #ef4444;
   --color-recording-hover: #b91c1c;
   --color-recording-solid: #dc2626;

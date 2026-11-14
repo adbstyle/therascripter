@@ -97,7 +97,7 @@ export default function ReconcileEventsBanner({ events, onDismiss }: Props): Rea
             <button
               type="button"
               onClick={onDismiss}
-              className="titlebar-no-drag rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-hover"
+              className="titlebar-no-drag rounded-md bg-primary-solid px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-solid-hover"
             >
               Verstanden
             </button>
