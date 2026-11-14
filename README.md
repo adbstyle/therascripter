@@ -17,7 +17,7 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 - **Updates in der App** — signierte Update-Beschreibung (Ed25519) auf Cloudflare R2; neue App-Versionen und neue Fassungen der Sprachmodelle kommen als **ein** Update: im Hintergrund geladen, geprüft und beim Beenden, nach 10 min Leerlauf oder auf Klick gemeinsam installiert, mit einem Neustart (abschaltbar; scheitert ein Teil, bleibt alles beim bisherigen Stand)
 - **Datenschutz** — keine Übermittlung von Sitzungsinhalten; Renderer ohne Netzwerkzugriff (CSP `connect-src 'none'`), Netzwerk nur im Main-Prozess für Modelle und Versionsprüfung, Electron Fuses gehärtet, FileVault-Prüfung
 - **System-Tray** — App läuft im Hintergrund weiter, Aufnahme über Menüleisten-Icon stoppbar
-- **Auto-Löschung** — Sitzungen werden 30 Tage nach Erstellung automatisch gelöscht
+- **Aufbewahrung** — Der Text von Sitzungen und PDF-Dokumenten bleibt erhalten, bis Sie ihn selbst löschen. Audioaufnahmen und Original-PDFs werden 24 Stunden nach erfolgreicher Verarbeitung gelöscht; schlägt die Verarbeitung fehl, bleiben sie erhalten, bis Sie die Sitzung selbst löschen. Inhalte mit Aufbewahrungspflicht gehören weiterhin in die rechtlich führende Praxissoftware. Beim Löschen einer Sitzung entfernt die App alle zugehörigen Daten aus ihren Dateien (nicht aus Backups des Macs)
 
 ## Systemvoraussetzungen
 

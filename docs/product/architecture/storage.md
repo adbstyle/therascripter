@@ -12,7 +12,7 @@ Therascript uses two storage mechanisms: **better-sqlite3** for structured sessi
 ~/.therascript/data/therascript.db
 ```
 
-The database is opened with WAL journal mode, foreign keys enabled, `synchronous = NORMAL`, and `temp_store = MEMORY`.
+The database is opened with WAL journal mode, foreign keys enabled, `synchronous = NORMAL`, `temp_store = MEMORY` and `secure_delete = ON` (per connection, set on every open — see «Deleting a session» below).
 
 ### Migration System
 
@@ -23,6 +23,8 @@ Migrations are numbered SQL files in `src/main/db/migrations/`. At startup, `ini
 | `001-initial-schema.sql` | 1 | Creates `sessions`, `blocklist`, `task_queue`, `model_registry` |
 | `002-add-diarization-path.sql` | 2 | Adds `diarization_path` column to `sessions` |
 | `003-add-review-at.sql` | 3 | Adds `review_at` column to `sessions`; backfills existing review sessions |
+| … | … | (see `src/main/db/migrations/index.ts`) |
+| `017-session-deleting-at.sql` | 17 | Adds `deleting_at` to `sessions` — restart-proof deletion (#202); existing rows stay `NULL` |
 
 ---
 
@@ -48,6 +50,7 @@ Tracks every transcription and PDF import session.
 | `created_at` | TEXT | DEFAULT `datetime('now')` | ISO 8601 timestamp of session creation |
 | `updated_at` | TEXT | DEFAULT `datetime('now')` | ISO 8601 timestamp of last update |
 | `review_at` | TEXT | nullable | ISO 8601 timestamp of when the session first reached `review` status; used for source-file cleanup |
+| `deleting_at` | TEXT | nullable | Set when the user confirmed the deletion and its files are not all removed yet (#202). Rows with a value are hidden from every read that reaches the user (`findById`, `findAll`, source-file cleanup) |
 
 Index: `idx_sessions_created_at` on `created_at`.
 
@@ -193,26 +196,30 @@ The staged app of an update lives outside `~/.therascript/`, in `<userData>/app-
 
 ---
 
-## Auto-Deletion
+## Retention and Deletion
 
-### Session expiry (30 days)
-
-Sessions older than 30 days (measured from `created_at`) are deleted automatically. On deletion all associated files are removed:
-
-- `audio_path` (`.wav`)
-- `transcript_path` (`.json`)
-- `diarization_path` (`.json`)
-- `anonymized_path` (`.json`)
-- `pdf_path` (`.pdf`)
-- `extracted/<session-id>.json`
-- `recovery/<session-id>.pcm`
-
-The database row is then deleted. Because `task_queue` has `ON DELETE CASCADE`, all task rows for the session are removed automatically.
+Sessions are kept until the user deletes them (#202). There is no age-based deletion — the 30-day auto-deletion of earlier versions is gone. Only the source file of a successfully processed session is removed automatically.
 
 ### Source-file cleanup (24 hours after review)
 
-Once a session reaches `review` status, `review_at` is stamped. Sessions that have been in `review` for more than 24 hours and still have a source file on disk (`audio_path IS NOT NULL` or `pdf_path IS NOT NULL`) have their source file deleted and the corresponding column set to `NULL`. This removes the raw patient audio or PDF while preserving the anonymized output.
+Once a session reaches `review` status, `review_at` is stamped. Sessions that have been in `review` for more than 24 hours and still have a source file on disk (`audio_path IS NOT NULL` or `pdf_path IS NOT NULL`) have their source file deleted and the corresponding column set to `NULL`. This removes the raw patient audio or PDF while preserving the text, the pseudonymization, title and summary. Failed sessions never reach `review`, so their recording or PDF stays for a later retry — however old the session is.
 
-### Schedule
+`SourceFileCleanupService` runs this once at app startup, then every 6 hours (`CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000`). It deletes no rows, so it needs neither `VACUUM` nor a checkpoint.
 
-Auto-deletion runs once immediately at app startup, then on a 6-hour interval for as long as the app is running (`CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000`). After each deletion pass, `VACUUM` and `WAL_CHECKPOINT(TRUNCATE)` are run to reclaim disk space.
+### Deleting a session
+
+`SessionService.deleteSession()` works in two phases, so an interrupted deletion is finished at the next start (#202, Postcondition 2):
+
+1. **Mark:** `deleting_at` is set. From now on the session is gone for the user and for any executor still writing (`update()` returns `null`).
+2. **Remove:** abort the session's tasks (`TaskQueueService.abortRunningForSession`), remove every file the session can have — the stored paths plus the convention paths (`audio/<id>.wav`, `transcripts/<id>.json`, `transcripts/<id>-aligned.json`, `diarization/<id>.json`, `anonymized/<id>.json`, `pdf/<id>.pdf`, `extracted/<id>.json`, `recovery/<id>.pcm`) — delete the row (`task_queue` follows via `ON DELETE CASCADE`) and run `PRAGMA wal_checkpoint(TRUNCATE)`.
+
+If a file cannot be removed (anything but «does not exist»), the row stays marked; its title, summary, entity map and error message are cleared immediately, the paths stay for the retry. At startup — before the task queue and the IPC handlers — `finishPendingDeletions()` completes every marked row, then `sweepOrphanedSessionFiles()` removes files in the session folders whose name is `<uuid>…` and whose session no longer exists in the database (leftovers of a crash, of a pre-#202 deletion, or of an executor that wrote after the deletion). Files with any other name are never touched.
+
+**Why nothing is recoverable from the app's files (Postcondition 1):**
+
+- `secure_delete = ON` makes SQLite overwrite deleted rows and freed pages (including overflow pages of large entity maps) with zeros instead of leaving them as free space.
+- In WAL mode the zeroed pages first land in the `-wal` file, while older frames there and the main file may still hold the content. The `wal_checkpoint(TRUNCATE)` after every deletion writes the zeroed pages into `therascript.db` and truncates the WAL to zero bytes.
+- `SessionService.secureDelete.test.ts` checks this on a real database file: a marker string in title, summary, error message and a multi-page entity map is found in neither `.db` nor `-wal` after the deletion; a control without `secure_delete` shows that the search would find it.
+- `VACUUM` is not needed for this (and no longer runs): with `secure_delete` nothing readable is left in free pages; `VACUUM` would only shrink the file.
+- Files are removed with `unlink`, not overwritten. On APFS (copy-on-write) and SSDs (wear levelling) overwriting a file in place does not reach the original blocks, so it would add no protection; FileVault (checked at startup) is what protects freed blocks.
+- Out of scope: copies in Time Machine backups or APFS snapshots of the Mac.
