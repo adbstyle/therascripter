@@ -39,6 +39,12 @@ export interface SearchModelProvisionerDeps {
   onStateChange: (state: SearchModelState) => void
   now: () => Date
   log: (message: string) => void
+  /**
+   * Meldet das Aufwachen des Macs (powerMonitor 'resume'). Ein im Ruhezustand
+   * fällig gewordener Versuch läuft dann sofort statt erst, wenn der Timer
+   * irgendwann nachzieht.
+   */
+  subscribeResume?: (listener: () => void) => void
 }
 
 /**
@@ -63,9 +69,18 @@ export class SearchModelProvisioner {
   private running: Promise<void> | null = null
   private signal: { aborted: boolean } | null = null
   private stopped = false
+  /** Zeitpunkt (ms) des geplanten nächsten Versuchs; null = keiner geplant. */
+  private dueAt: number | null = null
 
   constructor(private readonly deps: SearchModelProvisionerDeps) {
     this.state = this.passiveState()
+    deps.subscribeResume?.(() => this.handleResume())
+  }
+
+  /** Nach dem Aufwachen: ein inzwischen fälliger Versuch läuft sofort. */
+  handleResume(): void {
+    if (this.stopped || this.dueAt === null) return
+    if (this.deps.now().getTime() >= this.dueAt) void this.ensure()
   }
 
   getState(): SearchModelState {
@@ -98,8 +113,9 @@ export class SearchModelProvisioner {
     const def = this.deps.getModel()
     if (def && this.deps.isInstalled()) return { status: 'ready' }
     if (!def || !this.deps.isPublished(def)) return { status: 'unpublished' }
-    // Fehlt und ist veröffentlicht: der erste Versuch folgt gleich
-    return { status: 'downloading', progress: 0 }
+    // Fehlt und ist veröffentlicht: geladen wird erst beim echten Start
+    if (!this.deps.setupComplete()) return { status: 'waiting', reason: 'setup' }
+    return { status: 'waiting', reason: 'starting' }
   }
 
   private ensure(): Promise<void> {
@@ -128,9 +144,17 @@ export class SearchModelProvisioner {
     }
     if (this.stopped) return
     // Die Ersteinrichtung lädt es selbst und stösst uns danach an
-    if (!this.deps.setupComplete()) return
+    if (!this.deps.setupComplete()) {
+      this.setState({ status: 'waiting', reason: 'setup' })
+      return
+    }
     if (this.deps.isBusy()) {
-      this.timer = setTimeout(() => void this.ensure(), SEARCH_MODEL_BUSY_RECHECK_MS)
+      this.schedule(SEARCH_MODEL_BUSY_RECHECK_MS)
+      this.setState({
+        status: 'waiting',
+        reason: 'busy',
+        nextAttemptAt: new Date(this.dueAt!).toISOString()
+      })
       return
     }
 
@@ -149,6 +173,8 @@ export class SearchModelProvisioner {
     try {
       result = await this.deps.install(def, {
         signal,
+        // Beim Beenden auch tar beenden — READY zuletzt trägt die Selbstheilung
+        abortExtraction: true,
         onProgress: (p) => {
           const progress = Math.max(0, Math.min(100, Math.round(p.percent)))
           if (this.state.status === 'downloading' && this.state.progress === progress) return
@@ -190,13 +216,13 @@ export class SearchModelProvisioner {
     const delay = short
       ? SEARCH_MODEL_RETRY_DELAYS_MS[this.failures - 1]
       : SEARCH_MODEL_LONG_RETRY_MS
-    this.timer = setTimeout(() => void this.ensure(), delay)
+    this.schedule(delay)
     this.setState(
       short
         ? {
             status: 'retry-scheduled',
             reason,
-            nextAttemptAt: new Date(this.deps.now().getTime() + delay).toISOString()
+            nextAttemptAt: new Date(this.dueAt!).toISOString()
           }
         : { status: 'failed', reason }
     )
@@ -212,9 +238,16 @@ export class SearchModelProvisioner {
     }
   }
 
+  private schedule(delay: number): void {
+    this.clearTimer()
+    this.dueAt = this.deps.now().getTime() + delay
+    this.timer = setTimeout(() => void this.ensure(), delay)
+  }
+
   private clearTimer(): void {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
+    this.dueAt = null
   }
 
   private setState(next: SearchModelState): void {

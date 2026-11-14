@@ -48,8 +48,8 @@ const ids = (b: ReturnType<typeof selectBundle>): string[] => b?.models.map((m) 
 describe('selectBundle — Suchmodell (Epic #192, #210 AK 2)', () => {
   const searchEntry = entry({
     id: 'embeddinggemma-2-text',
-    relativePath: 'search/embeddinggemma-2-text-v1',
-    checkPath: 'search/embeddinggemma-2-text-v1/READY',
+    relativePath: 'search-embeddinggemma-2-text-v1',
+    checkPath: 'search-embeddinggemma-2-text-v1/READY',
     archive: true,
     required: true,
     minAppVersion: '1.1.0',
@@ -62,8 +62,8 @@ describe('selectBundle — Suchmodell (Epic #192, #210 AK 2)', () => {
       expect.objectContaining({
         id: 'embeddinggemma-2-text',
         kind: 'new',
-        relativePath: 'search/embeddinggemma-2-text-v1',
-        checkPath: 'search/embeddinggemma-2-text-v1/READY',
+        relativePath: 'search-embeddinggemma-2-text-v1',
+        checkPath: 'search-embeddinggemma-2-text-v1/READY',
         archive: true,
         required: true
       })
@@ -75,8 +75,8 @@ describe('selectBundle — Suchmodell (Epic #192, #210 AK 2)', () => {
       ...LOCAL,
       {
         id: 'embeddinggemma-2-text',
-        relativePath: 'search/embeddinggemma-2-text-v1',
-        checkPath: 'search/embeddinggemma-2-text-v1/READY',
+        relativePath: 'search-embeddinggemma-2-text-v1',
+        checkPath: 'search-embeddinggemma-2-text-v1/READY',
         archive: true,
         required: true
       }
@@ -93,7 +93,7 @@ describe('selectBundle — Suchmodell (Epic #192, #210 AK 2)', () => {
       { app, models: [searchEntry] },
       ctx({
         selfProvisionedIds: new Set(['embeddinggemma-2-text']),
-        isOnDisk: (p) => p === 'search/embeddinggemma-2-text-v1/READY'
+        isOnDisk: (p) => p === 'search-embeddinggemma-2-text-v1/READY'
       })
     )
     expect(bundle?.models.map((m) => [m.id, m.kind])).toEqual([['embeddinggemma-2-text', 'update']])

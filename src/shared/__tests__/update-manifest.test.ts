@@ -152,8 +152,8 @@ describe('buildManifest', () => {
       })
       const entry = manifest.models.find((m) => m.id === search.id)
       expect(entry).toMatchObject({
-        relativePath: 'search/embeddinggemma-2-text-v1',
-        checkPath: 'search/embeddinggemma-2-text-v1/READY',
+        relativePath: 'search-embeddinggemma-2-text-v1',
+        checkPath: 'search-embeddinggemma-2-text-v1/READY',
         archive: true,
         group: 'search',
         required: true,

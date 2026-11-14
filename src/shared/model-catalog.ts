@@ -74,6 +74,18 @@ export interface ModelDefinition {
 export const R2_CDN = 'https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev'
 
 /**
+ * Ordner des Suchmodells unter models/ (Epic #192). Bewusst auf oberster
+ * Ebene und ohne «/»: die Update-Beschreibung lässt Archive nur in einem
+ * eigenen Ordner direkt unter models/ zu (`layoutProblem` in
+ * model-update-schemas.ts, gleich in v0.10.x) — sonst verwürfe jede App den
+ * Manifest-Eintrag. Der Name trägt die Version (neue Artefakt-Generation =
+ * neuer Ordner). Einzige Quelle für alle, die den Standardpfad brauchen.
+ */
+export const SEARCH_MODEL_DIR_NAME = 'search-embeddinggemma-2-text-v1'
+/** Letzte Datei im Tarball — liegt sie da, ist das Modell vollständig entpackt. */
+export const SEARCH_MODEL_READY_FILE = 'READY'
+
+/**
  * Altes Sentinel für «Hash noch nicht synchronisiert» — wirkt wie
  * `published: false`. Neue Einträge nutzen `published: false` mit echtem Hash.
  */
@@ -181,9 +193,9 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
     id: 'embeddinggemma-2-text',
     label: 'EmbeddingGemma 2',
     url: `${R2_CDN}/embeddinggemma-2-text-v1.tar.gz`,
-    relativePath: 'search/embeddinggemma-2-text-v1',
+    relativePath: SEARCH_MODEL_DIR_NAME,
     // READY ist die letzte Datei im Tarball: liegt sie da, ist alles entpackt
-    checkPath: 'search/embeddinggemma-2-text-v1/READY',
+    checkPath: `${SEARCH_MODEL_DIR_NAME}/${SEARCH_MODEL_READY_FILE}`,
     sizeBytes: 430_211_881,
     sha256: '49e225895475004c699f08390f822e92a1fa8be4882e03e50d44c50f3badf4f8',
     archive: true,
@@ -223,6 +235,19 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
     hfRepo: 'google/gemma-4-E2B-it-qat-q4_0-gguf'
   }
 ]
+
+/**
+ * Pflichtmodelle, die noch `published: false` tragen, obwohl die öffentlichen
+ * Texte sie schon beschreiben (Suchmodell, Epic #192). `release.sh` bricht ab,
+ * solange die Liste nicht leer ist (`scripts/check-unpublished-models.ts`):
+ * README und Website nennen ab dem Merge nach main den Download mit dem
+ * Modell — eine App ohne es widerspräche ihnen.
+ */
+export function unpublishedRequiredModels(
+  defs: readonly Pick<ModelDefinition, 'id' | 'isRequired' | 'published' | 'sha256'>[]
+): string[] {
+  return defs.filter((m) => m.isRequired === true && !isPublished(m)).map((m) => m.id)
+}
 
 /** Ein aus dem Katalog entferntes Modell, dessen Datei noch auf Nutzer-Macs liegen kann. */
 export interface RetiredModel {

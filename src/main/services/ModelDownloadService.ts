@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { existsSync, mkdirSync, rmSync, unlinkSync } from 'fs'
+import { existsSync, mkdirSync, renameSync, rmSync, statSync, unlinkSync } from 'fs'
 import { dirname, join, relative } from 'path'
 import { app, BrowserWindow } from 'electron'
 import { getDataDir } from '../db/connection'
@@ -355,6 +355,14 @@ export type ModelInstallResult =
 
 export interface ModelInstallOptions {
   signal: { aborted: boolean }
+  /**
+   * Bricht das Signal auch das Entpacken ab (tar wird beendet)? Nur der
+   * SearchModelProvisioner setzt das — beim Beenden soll kein tar weiterlaufen.
+   * Ersteinrichtung und Einstellungen bleiben, wie sie waren. Ein halb
+   * entpacktes Modell heilt sich ohnehin selbst: READY ist der letzte Eintrag
+   * im Tarball, ohne READY gilt es als nicht installiert.
+   */
+  abortExtraction?: boolean
   onProgress?: (progress: DownloadProgress) => void
   onPhase?: (phase: 'verifying' | 'extracting') => void
 }
@@ -362,12 +370,24 @@ export interface ModelInstallOptions {
 const DISK_FULL = /ENOSPC|No space left|Kein Platz/i
 const LOCAL_FILE_ERROR = /EACCES|EPERM|EROFS|EISDIR|nicht finalisiert/i
 
+/** Antwort des Servers mit Fehlerstatus (downloadFile meldet «HTTP <Status>»). */
+const HTTP_STATUS = /^HTTP \d{3}\b/
+
 /** Ordnet die Fehlermeldung von downloadFile einem Grund zu. */
 export function classifyDownloadError(error: string): ModelInstallFailureReason {
   if (error === 'Aborted') return 'aborted'
+  if (HTTP_STATUS.test(error)) return 'server'
   if (DISK_FULL.test(error)) return 'disk-space'
   if (LOCAL_FILE_ERROR.test(error)) return 'unknown'
   return 'network'
+}
+
+function fileSize(path: string): number | null {
+  try {
+    return existsSync(path) ? statSync(path).size : null
+  } catch {
+    return null
+  }
 }
 
 function tryUnlink(path: string): void {
@@ -408,7 +428,34 @@ export async function installCatalogModel(
     return { ok: false, reason: DISK_FULL.test(message) ? 'disk-space' : 'unknown', error: message }
   }
 
-  const result = await downloadFile(def.url, targetPath, (p) => opts.onProgress?.(p), opts.signal)
+  const partial = `${targetPath}.partial`
+  let result: { success: boolean; error?: string; sha256?: string }
+  // Eine .partial in voller (oder zu grosser) Länge liesse den Range-Request
+  // mit HTTP 416 scheitern — und das bei jedem Versuch. Passt sie exakt, wird
+  // sie geprüft und übernommen, sonst verworfen.
+  const partialSize = fileSize(partial)
+  if (partialSize !== null && partialSize >= def.sizeBytes) {
+    if (partialSize === def.sizeBytes && (await verifyFileSha256(partial, def.sha256))) {
+      try {
+        renameSync(partial, targetPath)
+      } catch {
+        rmSync(partial, { force: true })
+      }
+    } else {
+      rmSync(partial, { force: true })
+    }
+  }
+  if (existsSync(targetPath) && !existsSync(partial) && fileSize(targetPath) === def.sizeBytes) {
+    // Schon vollständig geladen (übernommene .partial oder Abbruch vor dem Entpacken)
+    result = { success: true }
+  } else {
+    result = await downloadFile(def.url, targetPath, (p) => opts.onProgress?.(p), opts.signal)
+    if (!result.success && result.error?.startsWith('HTTP 416')) {
+      // Range passt nicht zum Objekt auf dem Server: neu ohne Range
+      rmSync(partial, { force: true })
+      result = await downloadFile(def.url, targetPath, (p) => opts.onProgress?.(p), opts.signal)
+    }
+  }
   if (!result.success) {
     const error = result.error ?? 'Download fehlgeschlagen'
     return { ok: false, reason: classifyDownloadError(error), error }
@@ -435,9 +482,17 @@ export async function installCatalogModel(
     let extract: { success: boolean; error?: string }
     try {
       mkdirSync(extractDir, { recursive: true })
-      extract = await extractTarGz(targetPath, extractDir)
+      extract = await extractTarGz(
+        targetPath,
+        extractDir,
+        opts.abortExtraction ? opts.signal : undefined
+      )
     } catch (err) {
       extract = { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+    if (!extract.success && extract.error === 'Aborted') {
+      // Archiv bleibt liegen: der nächste Versuch entpackt es ohne neuen Download
+      return { ok: false, reason: 'aborted', error: 'Aborted' }
     }
     if (!extract.success) {
       tryUnlink(targetPath)

@@ -207,9 +207,25 @@ export async function verifyFileSha256(filePath: string, expectedHash: string): 
   })
 }
 
-export function extractTarGz(archivePath: string, targetDir: string): Promise<DownloadResult> {
+/**
+ * Entpackt ein tar.gz. Mit `abortSignal` (wie bei downloadFile) wird `tar`
+ * beendet, sobald das Signal gesetzt ist — das Ergebnis ist dann
+ * `{success:false, error:'Aborted'}` und das Archiv bleibt liegen. Ohne
+ * Signal unverändert (Ersteinrichtung, Einstellungen).
+ */
+export function extractTarGz(
+  archivePath: string,
+  targetDir: string,
+  abortSignal?: { aborted: boolean }
+): Promise<DownloadResult> {
   return new Promise((resolve) => {
-    execFile('tar', ['-xzf', archivePath, '-C', targetDir], (error) => {
+    let abortPoll: ReturnType<typeof setInterval> | null = null
+    const child = execFile('tar', ['-xzf', archivePath, '-C', targetDir], (error) => {
+      if (abortPoll !== null) clearInterval(abortPoll)
+      if (abortSignal?.aborted) {
+        resolve({ success: false, error: 'Aborted' })
+        return
+      }
       if (error) {
         resolve({ success: false, error: `Extraction fehlgeschlagen: ${error.message}` })
         return
@@ -222,5 +238,10 @@ export function extractTarGz(archivePath: string, targetDir: string): Promise<Do
       }
       resolve({ success: true })
     })
+    if (abortSignal) {
+      abortPoll = setInterval(() => {
+        if (abortSignal.aborted) child.kill('SIGTERM')
+      }, 250)
+    }
   })
 }

@@ -80,7 +80,7 @@ import {
 const MODELS = '/tmp/ts/models'
 const SEARCH_ID = 'embeddinggemma-2-text'
 const search = MODEL_DEFINITIONS.find((m) => m.id === SEARCH_ID)!
-const READY = join(MODELS, 'search/embeddinggemma-2-text-v1/READY')
+const READY = join(MODELS, 'search-embeddinggemma-2-text-v1/READY')
 
 /** Alle übrigen Ersteinrichtungs-Modelle liegen da — ein Bestandsnutzer. */
 function existingInstall(): void {
@@ -168,7 +168,7 @@ describe('Suchmodell — Ort und «installiert»', () => {
     files.add(READY)
     expect(isSearchModelInstalled()).toBe(true)
     expect(getSearchModelLocation()).toMatchObject({
-      dir: join(MODELS, 'search/embeddinggemma-2-text-v1'),
+      dir: join(MODELS, 'search-embeddinggemma-2-text-v1'),
       overridden: false
     })
   })
@@ -282,7 +282,8 @@ describe('installCatalogModel', () => {
 
   it.each([
     ['getaddrinfo ENOTFOUND pub.r2.dev', 'network'],
-    ['HTTP 404', 'network'],
+    ['HTTP 404', 'server'],
+    ['HTTP 500', 'server'],
     ['Connection timeout', 'network'],
     ['ENOSPC: no space left on device, write', 'disk-space'],
     ['Datei konnte nicht finalisiert werden: EACCES', 'unknown'],

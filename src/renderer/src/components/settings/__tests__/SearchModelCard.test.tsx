@@ -65,4 +65,38 @@ describe('SearchModelCard', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Bereit')
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
   })
+
+  it('während laufender Arbeit: wartet, mit Prüfzeit — kein «Wird geladen 0 %»', async () => {
+    const at = new Date(2026, 10, 14, 9, 31).toISOString()
+    mount({ status: 'waiting', reason: 'busy', nextAttemptAt: at })
+    expect(await screen.findByRole('status')).toHaveTextContent('Wartet')
+    expect(screen.getByText(/sobald die laufende Aufnahme oder Verarbeitung/)).toHaveTextContent(
+      'Nächste Prüfung um 09:31'
+    )
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+  })
+
+  it('vor abgeschlossener Ersteinrichtung: eigener Hinweis', async () => {
+    mount({ status: 'waiting', reason: 'setup' })
+    expect(
+      await screen.findByText(/sobald die Ersteinrichtung abgeschlossen ist/)
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+  })
+
+  it('«Erneut versuchen» während laufender Arbeit gibt sichtbare Rückmeldung', async () => {
+    mount(
+      { status: 'failed', reason: 'network' },
+      { status: 'waiting', reason: 'busy', nextAttemptAt: new Date().toISOString() }
+    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Erneut versuchen' }))
+    expect(
+      await screen.findByText(/Gerade läuft eine Aufnahme oder Verarbeitung/)
+    ).toBeInTheDocument()
+  })
+
+  it('Grund server hat einen eigenen Text', async () => {
+    mount({ status: 'failed', reason: 'server' })
+    expect(await screen.findByText(/Download-Server hat die Anfrage abgelehnt/)).toBeInTheDocument()
+  })
 })

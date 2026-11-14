@@ -130,14 +130,27 @@ export interface RecentSearchQuery {
  * Warum das Suchmodell nicht geladen werden konnte (#210 AK 5). Texte für die
  * Oberfläche: `SEARCH_MODEL_FAILURE_TEXT` in `shared/search-model-texts.ts`.
  */
-export type SearchModelFailureReason = 'network' | 'disk-space' | 'checksum' | 'extract' | 'unknown'
+export type SearchModelFailureReason =
+  | 'network'
+  | 'server'
+  | 'disk-space'
+  | 'checksum'
+  | 'extract'
+  | 'unknown'
+
+/** Warum das fehlende Suchmodell gerade nicht geladen wird. */
+export type SearchModelWaitReason = 'busy' | 'setup' | 'starting'
 
 /**
  * Bereitstellung des Suchmodells (#210 AK 2–5, PC 1), geführt vom
  * SearchModelProvisioner im Main-Prozess.
  *
  * - `ready`: liegt vollständig auf dem Mac.
- * - `downloading`: Download läuft im Hintergrund; `progress` 0–100.
+ * - `waiting`: fehlt, wird aber gerade nicht geladen — `busy` (Aufnahme oder
+ *   Verarbeitung läuft; neuer Anlauf um `nextAttemptAt`), `setup`
+ *   (Ersteinrichtung noch nicht abgeschlossen, sie lädt es selbst) oder
+ *   `starting` (der erste Versuch nach dem Start folgt gleich).
+ * - `downloading`: Download läuft wirklich; `progress` 0–100.
  * - `retry-scheduled`: ein Versuch ist gescheitert, der nächste folgt von
  *   selbst um `nextAttemptAt` (ISO-Zeit; Staffel 1, 5, 30 Minuten).
  * - `failed`: auch die kurzen Wiederholungen sind gescheitert. Die App
@@ -148,6 +161,12 @@ export type SearchModelFailureReason = 'network' | 'disk-space' | 'checksum' | '
  */
 export type SearchModelState =
   | { status: 'ready' }
+  | {
+      status: 'waiting'
+      reason: SearchModelWaitReason
+      /** Nur bei 'busy': wann der Dienst wieder prüft (ISO-Zeit). */
+      nextAttemptAt?: string
+    }
   | { status: 'downloading'; progress: number }
   | { status: 'retry-scheduled'; reason: SearchModelFailureReason; nextAttemptAt: string }
   | { status: 'failed'; reason: SearchModelFailureReason }

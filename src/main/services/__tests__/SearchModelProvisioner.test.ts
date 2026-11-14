@@ -17,8 +17,8 @@ const def = {
   url: 'https://cdn/eg2.tar.gz',
   sizeBytes: 430_211_881,
   sha256: 'a'.repeat(64),
-  relativePath: 'search/embeddinggemma-2-text-v1',
-  checkPath: 'search/embeddinggemma-2-text-v1/READY',
+  relativePath: 'search-embeddinggemma-2-text-v1',
+  checkPath: 'search-embeddinggemma-2-text-v1/READY',
   archive: true,
   group: 'search',
   isRequired: true,
@@ -100,7 +100,11 @@ describe('SearchModelProvisioner', () => {
     p.start()
     await vi.advanceTimersByTimeAsync(0)
     expect(h.install).toHaveBeenCalledTimes(1)
-    expect(h.states).toEqual([{ status: 'downloading', progress: 50 }, { status: 'ready' }])
+    expect(h.states).toEqual([
+      { status: 'downloading', progress: 0 },
+      { status: 'downloading', progress: 50 },
+      { status: 'ready' }
+    ])
   })
 
   it('lädt nie neben der Ersteinrichtung — erst, wenn sie abgeschlossen ist', async () => {
@@ -231,6 +235,15 @@ describe('SearchModelProvisioner', () => {
     expect(p.getState()).toEqual({ status: 'downloading', progress: 0 })
   })
 
+  it('bricht beim Beenden auch das Entpacken ab (abortExtraction)', async () => {
+    const h = harness()
+    fakeInstall(h, { ok: true, installed: true })
+    const p = new SearchModelProvisioner(h.deps)
+    p.start()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.install.mock.calls[0][1]).toMatchObject({ abortExtraction: true })
+  })
+
   it('stop() während des Wartens löscht den geplanten Versuch', async () => {
     const h = harness()
     fakeInstall(h, fail('network'))
@@ -280,10 +293,85 @@ describe('SearchModelProvisioner', () => {
     p.start()
     await vi.advanceTimersByTimeAsync(0)
     expect(h.states).toEqual([
+      { status: 'downloading', progress: 0 },
       { status: 'downloading', progress: 10 },
       { status: 'downloading', progress: 55 },
       { status: 'downloading', progress: 100 },
       { status: 'ready' }
     ])
+  })
+
+  describe('Anzeige, solange nichts lädt (Review PR #224)', () => {
+    it('vor abgeschlossener Ersteinrichtung: waiting setup, nie downloading', async () => {
+      const h = harness({ setupComplete: () => false })
+      const p = new SearchModelProvisioner(h.deps)
+      expect(p.getState()).toEqual({ status: 'waiting', reason: 'setup' })
+      p.start()
+      await vi.advanceTimersByTimeAsync(10 * MIN)
+      expect(p.getState()).toEqual({ status: 'waiting', reason: 'setup' })
+      expect(h.states.some((s) => s.status === 'downloading')).toBe(false)
+    })
+
+    it('vor dem ersten Versuch: waiting starting statt «Wird geladen 0 %»', () => {
+      const p = new SearchModelProvisioner(harness().deps)
+      expect(p.getState()).toEqual({ status: 'waiting', reason: 'starting' })
+    })
+
+    it('während Aufnahme/Verarbeitung: waiting busy mit nachgeführter Prüfzeit', async () => {
+      const h = harness({ isBusy: () => true })
+      const p = new SearchModelProvisioner(h.deps)
+      p.start()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(p.getState()).toEqual({
+        status: 'waiting',
+        reason: 'busy',
+        nextAttemptAt: '2026-11-14T10:01:00.000Z'
+      })
+      await vi.advanceTimersByTimeAsync(SEARCH_MODEL_BUSY_RECHECK_MS)
+      expect(p.getState()).toMatchObject({ nextAttemptAt: '2026-11-14T10:02:00.000Z' })
+      expect(h.states.some((s) => s.status === 'downloading')).toBe(false)
+    })
+
+    it('«Erneut versuchen» während laufender Arbeit liefert waiting busy (sichtbar)', async () => {
+      const h = harness({ isBusy: () => true })
+      const p = new SearchModelProvisioner(h.deps)
+      expect(await p.retryNow()).toMatchObject({ status: 'waiting', reason: 'busy' })
+      expect(h.install).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Aufwachen aus dem Ruhezustand', () => {
+    it('holt einen im Ruhezustand fällig gewordenen Versuch sofort nach, Zeit stimmt danach', async () => {
+      let resume: () => void = () => {}
+      const h = harness({ subscribeResume: (l) => (resume = l) })
+      fakeInstall(h, fail('network'))
+      const p = new SearchModelProvisioner(h.deps)
+      p.start()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(p.getState()).toMatchObject({ nextAttemptAt: '2026-11-14T10:01:00.000Z' })
+
+      // Mac schläft 2 Stunden: Uhr springt, Timer feuern (noch) nicht
+      vi.setSystemTime(new Date('2026-11-14T12:00:00Z'))
+      resume()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(h.install).toHaveBeenCalledTimes(2)
+      expect(p.getState()).toEqual({
+        status: 'retry-scheduled',
+        reason: 'network',
+        nextAttemptAt: '2026-11-14T12:05:00.000Z'
+      })
+    })
+
+    it('ist der Versuch noch nicht fällig, ändert das Aufwachen nichts', async () => {
+      let resume: () => void = () => {}
+      const h = harness({ subscribeResume: (l) => (resume = l) })
+      fakeInstall(h, fail('network'))
+      const p = new SearchModelProvisioner(h.deps)
+      p.start()
+      await vi.advanceTimersByTimeAsync(0)
+      resume()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(h.install).toHaveBeenCalledTimes(1)
+    })
   })
 })

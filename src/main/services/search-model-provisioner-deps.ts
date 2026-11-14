@@ -1,5 +1,6 @@
 import { rmSync, statfsSync } from 'fs'
 import { join } from 'path'
+import { powerMonitor } from 'electron'
 import { isPublished } from '../../shared/model-catalog'
 import type { SearchAvailability } from '../../shared/types/Search'
 import { getActiveSessionId } from '../ipc/recording-handlers'
@@ -54,7 +55,9 @@ export function initSearchModelProvisioner(): SearchModelProvisioner {
       sendToRenderer(SEARCH_AVAILABILITY_CHANNEL, availability)
     },
     now: () => new Date(),
-    log: (message) => console.log(message)
+    log: (message) => console.log(message),
+    // Nach dem Ruhezustand einen fälligen Versuch nachholen
+    subscribeResume: (listener) => powerMonitor.on('resume', listener)
   })
   return provisioner
 }

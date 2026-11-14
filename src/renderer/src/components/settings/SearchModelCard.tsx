@@ -4,7 +4,8 @@ import type { SearchModelState } from '../../../../shared/types/Search'
 import {
   SEARCH_MODEL_FAILURE_TEXT,
   SEARCH_MODEL_PENDING_TEXT,
-  SEARCH_MODEL_UNPUBLISHED_TEXT
+  SEARCH_MODEL_UNPUBLISHED_TEXT,
+  SEARCH_MODEL_WAIT_TEXT
 } from '../../../../shared/search-model-texts'
 
 /** Uhrzeit des nächsten Versuchs, z. B. «14:05». */
@@ -17,6 +18,8 @@ function statusLabel(state: SearchModelState): string {
   switch (state.status) {
     case 'ready':
       return 'Bereit'
+    case 'waiting':
+      return 'Wartet'
     case 'downloading':
       return 'Wird geladen'
     case 'retry-scheduled':
@@ -37,6 +40,8 @@ function statusLabel(state: SearchModelState): string {
 export default function SearchModelCard(): React.JSX.Element {
   const [state, setState] = useState<SearchModelState | null>(null)
   const [retrying, setRetrying] = useState(false)
+  /** Rückmeldung, wenn «Erneut versuchen» wegen laufender Arbeit nicht sofort lädt. */
+  const [deferredRetry, setDeferredRetry] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -48,7 +53,10 @@ export default function SearchModelCard(): React.JSX.Element {
       .catch(() => {
         /* Karte bleibt leer — die übrigen Einstellungen funktionieren weiter */
       })
-    const unsubscribe = window.api.search.onAvailabilityChanged((a) => setState(a.model))
+    const unsubscribe = window.api.search.onAvailabilityChanged((a) => {
+      setState(a.model)
+      if (a.model.status !== 'waiting') setDeferredRetry(false)
+    })
     return () => {
       active = false
       unsubscribe()
@@ -60,6 +68,7 @@ export default function SearchModelCard(): React.JSX.Element {
     try {
       const next = await window.api.search.retryModel()
       setState(next.model)
+      setDeferredRetry(next.model.status === 'waiting' && next.model.reason === 'busy')
     } catch {
       /* Der Zustand kommt über onAvailabilityChanged */
     } finally {
@@ -110,6 +119,13 @@ export default function SearchModelCard(): React.JSX.Element {
             </div>
           )}
 
+          {deferredRetry && (
+            <p className="mt-3 text-sm text-text-secondary">
+              Gerade läuft eine Aufnahme oder Verarbeitung. Das Suchmodell wird geladen, sobald sie
+              abgeschlossen ist.
+            </p>
+          )}
+
           {canRetry && (
             <button
               type="button"
@@ -131,6 +147,10 @@ function describe(state: SearchModelState): string {
   switch (state.status) {
     case 'ready':
       return 'Liegt auf Ihrem Mac. Die Suche nach Bedeutung ist verfügbar.'
+    case 'waiting':
+      return state.reason === 'busy' && state.nextAttemptAt
+        ? `${SEARCH_MODEL_WAIT_TEXT.busy} Nächste Prüfung um ${formatTime(state.nextAttemptAt)}.`
+        : SEARCH_MODEL_WAIT_TEXT[state.reason]
     case 'downloading':
       return SEARCH_MODEL_PENDING_TEXT
     case 'retry-scheduled':
@@ -150,6 +170,7 @@ function StatusIcon({ state }: { state: SearchModelState }): React.JSX.Element |
       return (
         <Loader2 className="h-4 w-4 animate-spin text-primary" strokeWidth={2} aria-hidden="true" />
       )
+    case 'waiting':
     case 'retry-scheduled':
       return <Clock className="h-4 w-4 text-text-tertiary" strokeWidth={2} aria-hidden="true" />
     case 'failed':

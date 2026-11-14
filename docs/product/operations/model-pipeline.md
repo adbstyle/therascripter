@@ -99,7 +99,7 @@ HF_HOME=<hf-cache> PYTHONDONTWRITEBYTECODE=1 python_sidecar/standalone/bin/pytho
 scripts/package-models.sh search /tmp/eg2-export
 ```
 
-`PACKAGE_OUTPUT_DIR=<dir>` writes somewhere else than `r2-upload/`. Two runs over the same snapshot produce the same sha256 (verified: revision `f9972ac…`, `embeddinggemma-2-text-v1.tar.gz`, 430'211'881 bytes, sha256 `49e225895475004c699f08390f822e92a1fa8be4882e03e50d44c50f3badf4f8`). The archive is extracted into `search/embeddinggemma-2-text-v1/`; `READY` is the catalog's `checkPath`.
+`PACKAGE_OUTPUT_DIR=<dir>` writes somewhere else than `r2-upload/`. Two runs over the same snapshot produce the same sha256 (verified: revision `f9972ac…`, `embeddinggemma-2-text-v1.tar.gz`, 430'211'881 bytes, sha256 `49e225895475004c699f08390f822e92a1fa8be4882e03e50d44c50f3badf4f8`). The archive is extracted into `search-embeddinggemma-2-text-v1/`; `READY` is the catalog's `checkPath`.
 
 Verify before uploading:
 
@@ -138,12 +138,12 @@ Model-only republish between releases: `scripts/publish-manifest.sh --from-catal
 
 A catalog entry can exist with its real hash and size before the artifact is on R2: `published: false` hides it from every runtime access (`isPublished` in `src/shared/model-catalog.ts`). The app does not download it, first launch is unchanged, Settings shows no row (the search model shows «Noch nicht verfügbar»), and `buildManifest` / `manifest-from-catalog.ts` leave it out without aborting. A copy placed by hand at its `checkPath` (or, in development, `THERASCRIPT_SEARCH_MODEL_DIR`) still counts as installed. The search model `embeddinggemma-2-text` is in this state.
 
-Steps to publish it (product owner only — nothing goes to R2 otherwise):
+Steps to publish it (product owner only — nothing goes to R2 otherwise). **Mandatory before `epic/192` is merged into `main`:**
 
 1. **Upload** exactly the file whose values are in the catalog: `scripts/upload-r2.sh r2-upload/embeddinggemma-2-text-v1.tar.gz`. Never a full `package-models.sh` run (new gzip timestamps → new hashes for the other artifacts).
 2. **Check the uploaded object**, not the local file, against the catalog (`sizeBytes` `430211881`, `sha256` `49e225895475004c699f08390f822e92a1fa8be4882e03e50d44c50f3badf4f8`):
    `curl -sI https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/embeddinggemma-2-text-v1.tar.gz | grep -i content-length` and `curl -s https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/embeddinggemma-2-text-v1.tar.gz | shasum -a 256`. If they differ, put the values of the uploaded object into the catalog (model-hash-sync gotcha), never the other way round.
-3. **Flip the switch:** remove `published: false` from the entry in `src/shared/model-catalog.ts` (absent = published). Adjust the tests that pin the switch (`src/shared/__tests__/update-manifest.test.ts`, «der echte Katalog führt das Suchmodell … unveröffentlicht»), run `npm run typecheck && npm test`. The public texts (README, website, install guide) already state the sizes with the search model; `FirstLaunchScreen` computes its total from the catalog and shows ~2.1 GB from now on.
+3. **Flip the switch:** remove `published: false` from the entry in `src/shared/model-catalog.ts` (absent = published). Adjust the tests that pin the switch (`src/shared/__tests__/update-manifest.test.ts`, «der echte Katalog führt das Suchmodell … unveröffentlicht»), run `npm run typecheck && npm test`. The public texts (README, website, install guide) describe this target state on `epic/192` already, which is why the switch must be flipped **before** `epic/192` is merged into `main` (`docs/product/operations/release.md`, «Integration Branches»); until then texts and app disagree. `FirstLaunchScreen` computes its total from the catalog and shows ~2.1 GB from now on. `release.sh` refuses to release while a required model is `published: false` (`scripts/check-unpublished-models.ts`, override only with `--allow-unpublished-models "<reason>"`).
 4. **Release** with `scripts/release.sh`. Its manifest step now HEAD-checks the artifact and publishes the entry with `required: true` and its layout, so apps from #167 on get it in the same update as `kind: 'new'`; the release's own `SearchModelProvisioner` loads it in the background for everyone else. Also set `--require-search` in `release.sh` for the smoke step (see the search-service gotcha in `CLAUDE.md`).
 5. After the release: `curl https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/manifest.json | jq '.models[] | select(.id == "embeddinggemma-2-text")'`.
 
