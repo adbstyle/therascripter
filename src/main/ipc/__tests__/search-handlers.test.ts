@@ -1,12 +1,14 @@
 import { describe, it, expect, vi } from 'vitest'
 
-vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() } }))
+vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() }, app: { isPackaged: false } }))
 
 import {
   handleSearchQuery,
   handleSearchRecentClear,
   handleSearchRecentList,
-  handleSearchRecentRemember
+  handleSearchRecentRemember,
+  handleSearchSemantic,
+  SemanticRequestTracker
 } from '../search-handlers'
 
 function service() {
@@ -16,8 +18,9 @@ function service() {
       dossiers: [],
       results: [],
       truncated: false,
-      semantic: 'unavailable' as const
+      semantic: 'pending' as const
     })),
+    semantic: vi.fn(),
     listRecent: vi.fn(() => [{ query: 'a', usedAt: 'x' }]),
     rememberRecent: vi.fn(),
     clearRecent: vi.fn()
@@ -28,7 +31,7 @@ describe('search IPC handlers', () => {
   it('validates search:query and passes it on', () => {
     const s = service()
     const input = { requestId: 3, query: 'Angst', scope: { kind: 'dossier', dossierId: 'd1' } }
-    expect(handleSearchQuery(s, input)).toMatchObject({ requestId: 3, semantic: 'unavailable' })
+    expect(handleSearchQuery(s, input)).toMatchObject({ requestId: 3, semantic: 'pending' })
     expect(s.query).toHaveBeenCalledWith(input)
   })
 
@@ -57,5 +60,35 @@ describe('search IPC handlers', () => {
     expect(() => handleSearchRecentRemember(s, { query: '' })).toThrow()
     handleSearchRecentClear(s)
     expect(s.clearRecent).toHaveBeenCalled()
+  })
+
+  it('validates search:semantic and lets a newer request of the same window supersede an older one', async () => {
+    const tracker = new SemanticRequestTracker()
+    const seen: Array<() => boolean> = []
+    const s = {
+      semantic: vi.fn(
+        async (input: { requestId: number }, opts: { isSuperseded?: () => boolean }) => {
+          seen.push(opts.isSuperseded!)
+          await new Promise((r) => setTimeout(r, 10))
+          return {
+            requestId: input.requestId,
+            dossiers: [],
+            results: [],
+            truncated: false,
+            semantic: opts.isSuperseded!() ? ('superseded' as const) : ('complete' as const)
+          }
+        }
+      )
+    }
+    const q = (requestId: number) => ({ requestId, query: 'Angst', scope: { kind: 'all' } })
+    const first = handleSearchSemantic(s, tracker, 1, q(1))
+    const other = handleSearchSemantic(s, tracker, 2, q(1))
+    const second = handleSearchSemantic(s, tracker, 1, q(2))
+    expect((await first).semantic).toBe('superseded')
+    expect((await second).semantic).toBe('complete')
+    expect((await other).semantic).toBe('complete')
+    await expect(handleSearchSemantic(s, tracker, 1, { query: '' })).rejects.toThrow(
+      /search:semantic/
+    )
   })
 })

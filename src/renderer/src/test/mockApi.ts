@@ -183,11 +183,20 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
         dossiers: [],
         results: [],
         truncated: false,
-        semantic: 'unavailable'
+        semantic: 'model-missing'
       })),
       recentList: vi.fn().mockResolvedValue([]),
       recentRemember: vi.fn().mockResolvedValue(undefined),
-      recentClear: vi.fn().mockResolvedValue(undefined)
+      recentClear: vi.fn().mockResolvedValue(undefined),
+      semantic: vi.fn().mockImplementation(async (input: { requestId: number }) => ({
+        requestId: input.requestId,
+        dossiers: [],
+        results: [],
+        truncated: false,
+        semantic: 'model-missing'
+      })),
+      warmup: vi.fn().mockResolvedValue({ phase: 'stopped', reason: 'model-missing' }),
+      onProcessStateChanged: on('search.onProcessStateChanged')
     },
     pendingEdits: {
       onFlushRequest: on('pendingEdits.onFlushRequest')

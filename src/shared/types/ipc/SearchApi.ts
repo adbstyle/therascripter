@@ -1,8 +1,13 @@
-import type { RecentSearchQuery, SearchQueryInput, SearchQueryResult } from '../Search'
+import type {
+  RecentSearchQuery,
+  SearchProcessState,
+  SearchQueryInput,
+  SearchQueryResult
+} from '../Search'
 
 /**
- * Suche (Epic #192 — #209, #211). PR S4 ergänzt `open`, `semantic`,
- * `retryModel` und `onAvailabilityChanged` in eigenen Zeilen.
+ * Suche (Epic #192 — #209, #211). PR S2 ergänzt `open`, `retryModel` und
+ * `onAvailabilityChanged` in eigenen Zeilen.
  */
 export interface SearchApi {
   /** Patientendossiers und exakte Treffer; `semantic` meldet den Stand der Suche nach Bedeutung. */
@@ -13,4 +18,14 @@ export interface SearchApi {
   recentRemember(query: string): Promise<void>
   /** «Verlauf löschen» (#209 AK 28). */
   recentClear(): Promise<void>
+  /**
+   * Suche nach Bedeutung samt exakten Treffern, gerankt (PR S4). Nach
+   * `query` mit `semantic: 'pending'` aufrufen; eine neuere Anfrage desselben
+   * Fensters löst eine ältere ab ('superseded').
+   */
+  semantic(input: SearchQueryInput): Promise<SearchQueryResult>
+  /** Beim Öffnen der Suche: Suchmodell und Vektoren vorladen (#209 AK 16). */
+  warmup(): Promise<SearchProcessState>
+  /** Zustand des Suchprozesses; gibt die Abmeldung zurück. */
+  onProcessStateChanged(callback: (state: SearchProcessState) => void): () => void
 }

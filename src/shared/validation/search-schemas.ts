@@ -30,3 +30,11 @@ export const SearchQueryInputSchema = z
   .strict()
 
 export const SearchRecentRememberSchema = z.object({ query: SearchQueryTextSchema }).strict()
+
+/** Event `search:processStateChanged` (PR S4) — im Preload geprüft. */
+export const SearchProcessStateSchema = z
+  .object({
+    phase: z.enum(['stopped', 'starting', 'ready', 'busy', 'stopping']),
+    reason: z.enum(['processing', 'model-missing', 'tool-blocked', 'error']).nullable()
+  })
+  .strict()

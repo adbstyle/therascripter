@@ -176,6 +176,13 @@ export interface AppUpdateDeps {
   currentWork: () => BusyReason | null
   idleSeconds: () => number
   isWindowVisible: () => boolean
+  /**
+   * Epic #192 (#210 AK 7): Hintergrundarbeit der Suche anhalten (Aufbereitung,
+   * Suchprozess), bevor die App für den Tausch beendet wird. Die Suche zählt
+   * NICHT als Arbeit (`currentWork`) — sie verzögert ein Update nie; das
+   * Beenden wartet in runQuitCleanup begrenzt auf den Suchprozess.
+   */
+  stopBackgroundWork?: () => void
   /** Beendet die App über den normalen Weg (before-quit). */
   quitApp: () => void
   relaunch: () => void
@@ -807,6 +814,13 @@ export class AppUpdateService {
     this.installPending = false
     this.quitPlan = { relaunch: true, startHidden: !this.deps.isWindowVisible() }
     this.deps.log('AppUpdate: Installation mit Neustart')
+    try {
+      this.deps.stopBackgroundWork?.()
+    } catch (err) {
+      this.deps.log(
+        `AppUpdate: Hintergrundarbeit nicht angehalten: ${err instanceof Error ? err.message : err}`
+      )
+    }
     this.deps.quitApp()
   }
 
