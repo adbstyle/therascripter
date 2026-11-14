@@ -1,0 +1,50 @@
+{
+  "doc": "b2",
+  "entities": [
+    {
+      "text": "Rüegg",
+      "type": "PERSON",
+      "canonical": "Marco Rüegg"
+    },
+    {
+      "text": "Lenk",
+      "type": "ORT",
+      "canonical": "Lenk"
+    },
+    {
+      "text": "Nicole",
+      "type": "PERSON",
+      "canonical": "Nicole"
+    },
+    {
+      "text": "Lukas",
+      "type": "PERSON",
+      "canonical": "Lukas"
+    },
+    {
+      "text": "Marco Rüegg",
+      "type": "PERSON",
+      "canonical": "Marco Rüegg"
+    },
+    {
+      "text": "Marco",
+      "type": "PERSON",
+      "canonical": "Marco Rüegg"
+    },
+    {
+      "text": "Emmental",
+      "type": "ORT",
+      "canonical": "Emmental"
+    },
+    {
+      "text": "Zürich",
+      "type": "ORT",
+      "canonical": "Zürich"
+    },
+    {
+      "text": "Keller",
+      "type": "PERSON",
+      "canonical": "Keller"
+    }
+  ]
+}

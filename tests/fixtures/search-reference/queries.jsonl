@@ -1,0 +1,136 @@
+{"id": "q01", "type": "paraphrase", "text": "Klientin meidet öffentliche Verkehrsmittel", "origin": "eval-2026-10"}
+{"id": "q02", "type": "paraphrase", "text": "Organische Ursache der Beschwerden medizinisch ausgeschlossen", "origin": "eval-2026-10"}
+{"id": "q03", "type": "paraphrase", "text": "Hinweise auf restriktives Essverhalten", "origin": "eval-2026-10"}
+{"id": "q04", "type": "paraphrase", "text": "Übermüdung durch nächtliche Versorgung des Säuglings", "origin": "eval-2026-10"}
+{"id": "q05", "type": "paraphrase", "text": "Fehlende Muttergefühle unmittelbar nach der Entbindung", "origin": "eval-2026-10"}
+{"id": "q06", "type": "paraphrase", "text": "Unzufriedenheit mit dem eigenen Aussehen", "origin": "eval-2026-10"}
+{"id": "q07", "type": "paraphrase", "text": "Bestrafung durch Liebesentzug in der Kindheit", "origin": "eval-2026-10"}
+{"id": "q08", "type": "paraphrase", "text": "Frühmorgendliches Erwachen mit kreisenden Gedanken an die Arbeit", "origin": "eval-2026-10"}
+{"id": "q09", "type": "paraphrase", "text": "Gefühl innerer Leere und Freudlosigkeit", "origin": "eval-2026-10"}
+{"id": "q10", "type": "paraphrase", "text": "Angst, im Unterricht vor der Gruppe zu sprechen", "origin": "eval-2026-10"}
+{"id": "q11", "type": "thematisch", "text": "Erklärung, warum Vermeidung die Angst langfristig verstärkt", "origin": "eval-2026-10"}
+{"id": "q12", "type": "thematisch", "text": "Schuldgefühle wegen der Unterbringung der Mutter im Pflegeheim", "origin": "eval-2026-10"}
+{"id": "q13", "type": "thematisch", "text": "Wut auf den Bruder, der bei der Pflege der Mutter nicht hilft", "origin": "eval-2026-10"}
+{"id": "q14", "type": "thematisch", "text": "Übergriffige Schwiegermutter, die ungefragt in die Wohnung kommt", "origin": "eval-2026-10"}
+{"id": "q15", "type": "thematisch", "text": "Konflikt mit dem Vater über die Nachfolge im Familienbetrieb", "origin": "eval-2026-10"}
+{"id": "q16", "type": "thematisch", "text": "Innerer Kritiker und abwertende Selbstgespräche", "origin": "eval-2026-10"}
+{"id": "q17", "type": "thematisch", "text": "Vater anerkennt nur Leistung", "origin": "eval-2026-10"}
+{"id": "q18", "type": "thematisch", "text": "Streit der Eltern über eine medikamentöse Behandlung des Kindes", "origin": "eval-2026-10"}
+{"id": "q19", "type": "thematisch", "text": "Traditionelles Rollenverständnis: Kinderbetreuung als Frauensache", "origin": "eval-2026-10"}
+{"id": "q20", "type": "thematisch", "text": "Wunsch nach beruflichem Wiedereinstieg nach der Geburt", "origin": "eval-2026-10"}
+{"id": "q21", "type": "thematisch", "text": "Weinen ohne erkennbaren Anlass", "origin": "eval-2026-10"}
+{"id": "q22", "type": "thematisch", "text": "Alkohol als Mittel zum Abschalten nach der Arbeit", "origin": "eval-2026-10"}
+{"id": "q23", "type": "thematisch", "text": "Klient erkennt eigene Kindheitsprobleme im Verhalten seines Sohnes", "origin": "eval-2026-10"}
+{"id": "q24", "type": "thematisch", "text": "Arbeitsüberlastung im Pflegeberuf wegen Personalmangel", "origin": "eval-2026-10"}
+{"id": "q25", "type": "thematisch", "text": "Leistungsdruck und Angst vor dem Durchfallen", "origin": "eval-2026-10"}
+{"id": "q26", "type": "fakten", "text": "Wo hatte Frau Meier ihren ersten Angstanfall?", "origin": "eval-2026-10"}
+{"id": "q27", "type": "fakten", "text": "Wie oft war sie wegen vermuteter Herzprobleme auf dem Notfall?", "origin": "eval-2026-10"}
+{"id": "q28", "type": "fakten", "text": "Wann zieht die Mutter ins Pflegeheim ein und in welches?", "origin": "eval-2026-10"}
+{"id": "q29", "type": "fakten", "text": "Welche Stufe steht zuoberst auf der Expositionsliste?", "origin": "eval-2026-10"}
+{"id": "q30", "type": "fakten", "text": "Um wie viel will Frau Meier ihr Arbeitspensum reduzieren?", "origin": "eval-2026-10"}
+{"id": "q31", "type": "fakten", "text": "Seit wann nimmt sie das Antidepressivum und welche Nebenwirkungen hatte sie?", "origin": "eval-2026-10"}
+{"id": "q32", "type": "fakten", "text": "Wie viel Bier trinkt Herr Rüegg unter der Woche?", "origin": "eval-2026-10"}
+{"id": "q33", "type": "fakten", "text": "Wie lange arbeitete er schon bei der Baufirma?", "origin": "eval-2026-10"}
+{"id": "q34", "type": "fakten", "text": "Ab wann gilt die Kündigung?", "origin": "eval-2026-10"}
+{"id": "q35", "type": "fakten", "text": "Was hat der Vater ihm nach der Kündigung angeboten?", "origin": "eval-2026-10"}
+{"id": "q36", "type": "fakten", "text": "Bei welcher Stelle hat Herr Rüegg ein Vorstellungsgespräch?", "origin": "eval-2026-10"}
+{"id": "q37", "type": "fakten", "text": "Wie heisst die Kinderpsychiaterin von Lukas?", "origin": "eval-2026-10"}
+{"id": "q38", "type": "fakten", "text": "Wann ist die Statistikprüfung?", "origin": "eval-2026-10"}
+{"id": "q39", "type": "fakten", "text": "Mit welcher Note hat Leonie die Prüfung bestanden?", "origin": "eval-2026-10"}
+{"id": "q40", "type": "fakten", "text": "Wie viel Zeit verbringt sie täglich in sozialen Medien?", "origin": "eval-2026-10"}
+{"id": "q41", "type": "fakten", "text": "Hat sie eine Präsentation abgesagt und dabei eine Krankheit vorgetäuscht?", "origin": "eval-2026-10"}
+{"id": "q42", "type": "fakten", "text": "Wie alt ist Elif?", "origin": "eval-2026-10"}
+{"id": "q43", "type": "fakten", "text": "Wer hat Frau Yilmaz die Therapie empfohlen?", "origin": "eval-2026-10"}
+{"id": "q44", "type": "fakten", "text": "An wie vielen Tagen pro Woche bekommt Elif einen Betreuungsplatz?", "origin": "eval-2026-10"}
+{"id": "q45", "type": "fakten", "text": "Wann und mit welchem Pensum möchte Frau Yilmaz wieder arbeiten?", "origin": "eval-2026-10"}
+{"id": "q46", "type": "fakten", "text": "Wie lange wurde Herr Rüegg krankgeschrieben?", "origin": "eval-2026-10"}
+{"id": "q47", "type": "stichwort", "text": "Sertralin", "origin": "eval-2026-10"}
+{"id": "q48", "type": "stichwort", "text": "Ritalin", "origin": "eval-2026-10"}
+{"id": "q49", "type": "stichwort", "text": "Sonnenberg", "origin": "eval-2026-10"}
+{"id": "q50", "type": "stichwort", "text": "Gedankenprotokoll", "origin": "eval-2026-10"}
+{"id": "q51", "type": "stichwort", "text": "Selin", "origin": "eval-2026-10"}
+{"id": "q52", "type": "stichwort", "text": "Konventionalstrafe", "origin": "eval-2026-10"}
+{"id": "q53", "type": "stichwort", "text": "Schlüssel Schwiegermutter", "origin": "eval-2026-10"}
+{"id": "q54", "type": "stichwort", "text": "Instagram", "origin": "eval-2026-10"}
+{"id": "q55", "type": "umgangssprache", "text": "Angstanfall beim Einkaufen im Supermarkt", "origin": "eval-2026-10"}
+{"id": "q56", "type": "umgangssprache", "text": "Klientin lässt das Mittagessen oft ausfallen", "origin": "eval-2026-10"}
+{"id": "q57", "type": "umgangssprache", "text": "Beikost mit Karottenbrei", "origin": "eval-2026-10"}
+{"id": "q58", "type": "umgangssprache", "text": "Vater gibt dem Baby am Samstagmorgen das Fläschchen", "origin": "eval-2026-10"}
+{"id": "q59", "type": "umgangssprache", "text": "Frühstück ans Bett gebracht, um die Mutter milde zu stimmen", "origin": "eval-2026-10"}
+{"id": "q60", "type": "umgangssprache", "text": "Sorge, dass das Kind keine Freunde mehr findet", "origin": "eval-2026-10"}
+{"id": "q61", "type": "umgangssprache", "text": "Rückfall auf dem Weg zum abgestellten Auto", "origin": "eval-2026-10"}
+{"id": "q62", "type": "uebergreifend", "text": "Abklärung von Suizidgedanken", "origin": "eval-2026-10"}
+{"id": "q63", "type": "uebergreifend", "text": "Anleitung einer Atemübung", "origin": "eval-2026-10"}
+{"id": "q64", "type": "uebergreifend", "text": "Erfolgserlebnisse, auf die Klient:innen stolz sind", "origin": "eval-2026-10"}
+{"id": "q65", "type": "uebergreifend", "text": "Partner reagiert ungeduldig oder verständnislos", "origin": "eval-2026-10"}
+{"id": "q66", "type": "uebergreifend", "text": "Eltern schämen sich für ihr Verhalten gegenüber dem Kind", "origin": "eval-2026-10"}
+{"id": "q67", "type": "uebergreifend", "text": "Hausaufgaben, die die Therapeutin bis zur nächsten Sitzung mitgibt", "origin": "eval-2026-10"}
+{"id": "q68", "type": "uebergreifend", "text": "Schwierige Beziehung zur eigenen Mutter", "origin": "eval-2026-10"}
+{"id": "q75", "type": "thematisch", "text": "Finanzielle Abhängigkeit vom Partner wird als Sicherheit erlebt", "origin": "eval-2026-10"}
+{"id": "q79", "type": "paraphrase", "text": "Mentale Last, die ganze Familie zu organisieren", "origin": "eval-2026-10"}
+{"id": "q88", "type": "paraphrase", "text": "Kurzer Rückzug ins Bad, um nach der Arbeit abzuschalten", "origin": "eval-2026-10"}
+{"id": "q89", "type": "uebergreifend", "text": "Belastung durch die Arbeit in der Pflege", "origin": "eval-2026-10"}
+{"id": "q90", "type": "uebergreifend", "text": "Eltern oder Schwiegereltern mischen sich mit Ratschlägen in den Haushalt ein", "origin": "eval-2026-10"}
+{"id": "q92", "type": "negativ", "text": "Spielsucht und Schulden durch Online-Casino", "origin": "eval-2026-10"}
+{"id": "q93", "type": "negativ", "text": "Trauer um ein verstorbenes Haustier", "origin": "eval-2026-10"}
+{"id": "q94", "type": "negativ", "text": "Probleme mit Cannabiskonsum", "origin": "eval-2026-10"}
+{"id": "q95", "type": "negativ", "text": "Tinnitus und Hörsturz", "origin": "eval-2026-10"}
+{"id": "q96", "type": "negativ", "text": "Zwangshandlungen: ständiges Kontrollieren, ob der Herd ausgeschaltet ist", "origin": "eval-2026-10"}
+{"id": "q97", "type": "negativ", "text": "Mobbing am Arbeitsplatz durch den Vorgesetzten", "origin": "eval-2026-10"}
+{"id": "q98", "type": "fakten", "text": "Migräneanfälle und Kopfschmerztabletten", "origin": "eval-2026-10", "note": "bis 2026-10 negativ; der fiktive Bericht ra nennt Migräne"}
+{"id": "q99", "type": "negativ", "text": "Erfahrungen mit Online-Dating-Apps", "origin": "eval-2026-10"}
+{"id": "q201", "type": "klarname", "text": "Reto Imhof Informatiker", "origin": "spike-208"}
+{"id": "q202", "type": "klarname", "text": "was sagt Leonie über Selin", "origin": "spike-208"}
+{"id": "q203", "type": "klarname", "text": "Deniz Lastwagen frühmorgens", "origin": "spike-208"}
+{"id": "q204", "type": "klarname", "text": "Dr. Vontobel Zuweisung", "origin": "spike-208"}
+{"id": "q205", "type": "klarname", "text": "Sandra", "origin": "spike-208"}
+{"id": "q206", "type": "klarname", "text": "Corinne", "origin": "spike-208"}
+{"id": "q207", "type": "klarname", "text": "Winterthur", "origin": "spike-208"}
+{"id": "q208", "type": "klarname", "text": "Anne Schlüssel zurückverlangt", "origin": "spike-208"}
+{"id": "q209", "type": "klarname", "text": "Emine Yilmaz", "origin": "spike-208"}
+{"id": "q210", "type": "klarname", "text": "Rüegg Schreinerei Emmental", "origin": "spike-208"}
+{"id": "q211", "type": "klarname", "text": "Kunz", "origin": "spike-208"}
+{"id": "q212", "type": "klarname", "text": "Dr. Ammann Ritalin", "origin": "spike-208"}
+{"id": "q213", "type": "klarname", "text": "Thomas Lausanne Bruder hilft nicht", "origin": "spike-208"}
+{"id": "q214", "type": "klarname", "text": "Frau Rüttimann Hebamme", "origin": "spike-208"}
+{"id": "q215", "type": "klarname", "text": "Nicole Streit wegen Lukas", "origin": "spike-208"}
+{"id": "q216", "type": "klarname", "text": "Jana Putzplan", "origin": "spike-208"}
+{"id": "q217", "type": "klarname", "text": "Ernst Rüegg Alkohol", "origin": "spike-208"}
+{"id": "q218", "type": "klarname", "text": "Dr. Ferrari Labor", "origin": "spike-208"}
+{"id": "q219", "type": "bericht", "text": "Ferritin tief", "origin": "spike-208"}
+{"id": "q220", "type": "bericht", "text": "Bandscheibenvorfall L4/L5", "origin": "spike-208"}
+{"id": "q221", "type": "bericht", "text": "EPDS Punktzahl", "origin": "spike-208"}
+{"id": "q222", "type": "bericht", "text": "F41.0", "origin": "spike-208"}
+{"id": "q223", "type": "bericht", "text": "Gamma-GT erhöht", "origin": "spike-208"}
+{"id": "q224", "type": "bericht", "text": "AUDIT-Fragebogen Punkte", "origin": "spike-208"}
+{"id": "q225", "type": "bericht", "text": "Troponin negativ", "origin": "spike-208"}
+{"id": "q226", "type": "bericht", "text": "BMI Untergewicht", "origin": "spike-208"}
+{"id": "q227", "type": "bericht", "text": "frühere Ernährungsberatung in Liestal", "origin": "spike-208"}
+{"id": "q228", "type": "bericht", "text": "Penicillin-Allergie", "origin": "spike-208"}
+{"id": "q229", "type": "bericht", "text": "Spontanabort in früherer Schwangerschaft", "origin": "spike-208"}
+{"id": "q230", "type": "bericht", "text": "Mastitis Antibiotikum", "origin": "spike-208"}
+{"id": "q231", "type": "bericht", "text": "Escitalopram empfohlen", "origin": "spike-208"}
+{"id": "q232", "type": "bericht", "text": "EDE-Q Gesamtwert", "origin": "spike-208"}
+{"id": "q233", "type": "bericht", "text": "Geburt mit Vakuumextraktion", "origin": "spike-208"}
+{"id": "q234", "type": "bericht", "text": "GAD-7 und PHQ-9 Werte", "origin": "spike-208"}
+{"id": "q235", "type": "bericht", "text": "Menstruationszyklus unregelmässig", "origin": "spike-208"}
+{"id": "q236", "type": "bericht", "text": "Welche Diagnose F32.1?", "origin": "spike-208"}
+{"id": "q237", "type": "umgangssprache", "text": "het de Chorb a de Kasse la stah", "origin": "spike-208"}
+{"id": "q238", "type": "umgangssprache", "text": "lahts Zmittag eifach us", "origin": "spike-208"}
+{"id": "q239", "type": "umgangssprache", "text": "chunnt nie meh als drü Stund zum Schlafe", "origin": "spike-208"}
+{"id": "q240", "type": "umgangssprache", "text": "suuft jede Abig drü vier Bier", "origin": "spike-208"}
+{"id": "q241", "type": "umgangssprache", "text": "Schwiegermami chunnt eifach ine", "origin": "spike-208"}
+{"id": "q242", "type": "umgangssprache", "text": "het de Bueb agschroue wäg em Sirup", "origin": "spike-208"}
+{"id": "q243", "type": "umgangssprache", "text": "gaht nöd i d Mensa", "origin": "spike-208"}
+{"id": "q244", "type": "umgangssprache", "text": "Mami mues is Altersheim", "origin": "spike-208"}
+{"id": "q245", "type": "umgangssprache", "text": "Brüeder lahts la hocke", "origin": "spike-208"}
+{"id": "q246", "type": "umgangssprache", "text": "fahrt nüme Tram nur no Velo", "origin": "spike-208"}
+{"id": "q247", "type": "umgangssprache", "text": "Vater seit immer riiss di zäme", "origin": "spike-208"}
+{"id": "q248", "type": "umgangssprache", "text": "Chliini wott nume uf em Arm si", "origin": "spike-208"}
+{"id": "q249", "type": "umgangssprache", "text": "Chrippeplatz übercho", "origin": "spike-208"}
+{"id": "q250", "type": "umgangssprache", "text": "wird füürrot wenn sie muess rede", "origin": "spike-208"}
+{"id": "q251", "type": "umgangssprache", "text": "Insta glöscht", "origin": "spike-208"}
+{"id": "q252", "type": "umgangssprache", "text": "Bueb cha nöd stillsitze i de Schuel", "origin": "spike-208"}
+{"id": "q253", "type": "negativ", "text": "Spinnenphobie", "origin": "spike-208"}
+{"id": "q254", "type": "negativ", "text": "Scheidung und Streit ums Sorgerecht", "origin": "spike-208"}
+{"id": "q255", "type": "negativ", "text": "Verkehrsunfall mit Schleudertrauma", "origin": "spike-208"}

@@ -1,0 +1,240 @@
+{
+  "doc": "rb",
+  "entities": [
+    {
+      "text": "Psychiatrisches Ambulatorium Bern West",
+      "type": "ORGANISATION",
+      "canonical": "Psychiatrisches Ambulatorium Bern West"
+    },
+    {
+      "text": "Bern",
+      "type": "ORT",
+      "canonical": "Bern"
+    },
+    {
+      "text": "Brünnenmattweg 41",
+      "type": "KONTAKT",
+      "canonical": "Brünnenmattweg 41"
+    },
+    {
+      "text": "3018 Bern",
+      "type": "KONTAKT",
+      "canonical": "3018 Bern"
+    },
+    {
+      "text": "031 998 62 10",
+      "type": "KONTAKT",
+      "canonical": "031 998 62 10"
+    },
+    {
+      "text": "031 998 62 11",
+      "type": "KONTAKT",
+      "canonical": "031 998 62 11"
+    },
+    {
+      "text": "ambulatorium.bernwest@hin.ch",
+      "type": "KONTAKT",
+      "canonical": "ambulatorium.bernwest@hin.ch"
+    },
+    {
+      "text": "Daniel Keller",
+      "type": "PERSON",
+      "canonical": "Daniel Keller"
+    },
+    {
+      "text": "Keller",
+      "type": "PERSON",
+      "canonical": "Daniel Keller"
+    },
+    {
+      "text": "Falkenweg 9",
+      "type": "KONTAKT",
+      "canonical": "Falkenweg 9"
+    },
+    {
+      "text": "3012 Bern",
+      "type": "KONTAKT",
+      "canonical": "3012 Bern"
+    },
+    {
+      "text": "Hans-Peter Zingg",
+      "type": "PERSON",
+      "canonical": "Hans-Peter Zingg"
+    },
+    {
+      "text": "Zingg",
+      "type": "PERSON",
+      "canonical": "Hans-Peter Zingg"
+    },
+    {
+      "text": "Hausarztpraxis Bümpliz",
+      "type": "ORGANISATION",
+      "canonical": "Hausarztpraxis Bümpliz"
+    },
+    {
+      "text": "031 992 17 40",
+      "type": "KONTAKT",
+      "canonical": "031 992 17 40"
+    },
+    {
+      "text": "20. März 2026",
+      "type": "DATUM",
+      "canonical": "20. März 2026"
+    },
+    {
+      "text": "Marco Rüegg",
+      "type": "PERSON",
+      "canonical": "Marco Rüegg"
+    },
+    {
+      "text": "Rüegg",
+      "type": "PERSON",
+      "canonical": "Marco Rüegg"
+    },
+    {
+      "text": "2. September 1984",
+      "type": "DATUM",
+      "canonical": "2. September 1984"
+    },
+    {
+      "text": "Holderweg 17",
+      "type": "KONTAKT",
+      "canonical": "Holderweg 17"
+    },
+    {
+      "text": "3027 Bern",
+      "type": "KONTAKT",
+      "canonical": "3027 Bern"
+    },
+    {
+      "text": "078 655 21 09",
+      "type": "KONTAKT",
+      "canonical": "078 655 21 09"
+    },
+    {
+      "text": "16. März 2026",
+      "type": "DATUM",
+      "canonical": "16. März 2026"
+    },
+    {
+      "text": "Nicole Rüegg",
+      "type": "PERSON",
+      "canonical": "Nicole Rüegg"
+    },
+    {
+      "text": "Lukas",
+      "type": "PERSON",
+      "canonical": "Lukas"
+    },
+    {
+      "text": "Gfeller und Rentsch AG",
+      "type": "ORGANISATION",
+      "canonical": "Gfeller und Rentsch AG"
+    },
+    {
+      "text": "23. Februar 2026",
+      "type": "DATUM",
+      "canonical": "23. Februar 2026"
+    },
+    {
+      "text": "19. Februar 2026",
+      "type": "DATUM",
+      "canonical": "19. Februar 2026"
+    },
+    {
+      "text": "15. März 2026",
+      "type": "DATUM",
+      "canonical": "15. März 2026"
+    },
+    {
+      "text": "Bandscheibenvorfall",
+      "type": "MEDIZINISCH",
+      "canonical": "Bandscheibenvorfall"
+    },
+    {
+      "text": "Lumbalgien",
+      "type": "MEDIZINISCH",
+      "canonical": "Lumbalgien"
+    },
+    {
+      "text": "Ernst Rüegg",
+      "type": "PERSON",
+      "canonical": "Ernst Rüegg"
+    },
+    {
+      "text": "Emmental",
+      "type": "ORT",
+      "canonical": "Emmental"
+    },
+    {
+      "text": "Margrit Rüegg",
+      "type": "PERSON",
+      "canonical": "Margrit Rüegg"
+    },
+    {
+      "text": "Zürich",
+      "type": "ORT",
+      "canonical": "Zürich"
+    },
+    {
+      "text": "Mittelgradige depressive Episode",
+      "type": "MEDIZINISCH",
+      "canonical": "Mittelgradige depressive Episode"
+    },
+    {
+      "text": "F32.1",
+      "type": "MEDIZINISCH",
+      "canonical": "F32.1"
+    },
+    {
+      "text": "Z73.0",
+      "type": "MEDIZINISCH",
+      "canonical": "Z73.0"
+    },
+    {
+      "text": "Ausgebranntsein",
+      "type": "MEDIZINISCH",
+      "canonical": "Ausgebranntsein"
+    },
+    {
+      "text": "Schädlicher Gebrauch von Alkohol",
+      "type": "MEDIZINISCH",
+      "canonical": "Schädlicher Gebrauch von Alkohol"
+    },
+    {
+      "text": "F10.1",
+      "type": "MEDIZINISCH",
+      "canonical": "F10.1"
+    },
+    {
+      "text": "Abhängigkeitssyndrom",
+      "type": "MEDIZINISCH",
+      "canonical": "Abhängigkeitssyndrom"
+    },
+    {
+      "text": "Diskushernie",
+      "type": "MEDIZINISCH",
+      "canonical": "Diskushernie"
+    },
+    {
+      "text": "M54.5",
+      "type": "MEDIZINISCH",
+      "canonical": "M54.5"
+    },
+    {
+      "text": "Escitalopram",
+      "type": "MEDIZINISCH",
+      "canonical": "Escitalopram"
+    },
+    {
+      "text": "Stefan Aebersold",
+      "type": "PERSON",
+      "canonical": "Stefan Aebersold"
+    },
+    {
+      "text": "Laura Gerber",
+      "type": "PERSON",
+      "canonical": "Laura Gerber"
+    }
+  ]
+}

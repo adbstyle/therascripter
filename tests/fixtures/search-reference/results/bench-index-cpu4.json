@@ -1,0 +1,12 @@
+{
+ "device": "cpu",
+ "threads": 4,
+ "words": 7599,
+ "chunks": 37,
+ "baseline_gib": 0.022125735878944397,
+ "load_s": 4.677741374936886,
+ "load_peak_gib": 1.1179371252655983,
+ "index_s": 123.91019025002606,
+ "index_peak_gib": 0.9759695306420326,
+ "process_peak_gib": 1.1179371252655983
+}
