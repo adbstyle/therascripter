@@ -10,6 +10,10 @@
   --color-primary-light: #dbeafe;
   --color-recording: #dc2626;
   --color-recording-hover: #b91c1c;
+  /* Gefüllte Knöpfe mit weisser Schrift (Aufnahme starten/stoppen, Löschen,
+     Fehler-Toast): in beiden Themes ≥ 4.5:1 zu Weiss (Epic #192). */
+  --color-recording-solid: #dc2626;
+  --color-recording-solid-hover: #b91c1c;
   --color-success: #16a34a;
   --color-warning: #ea580c;
 
@@ -74,7 +78,9 @@
   --color-primary-hover: #93c5fd;
   --color-primary-light: #1e3a5f;
   --color-recording: #ef4444;
-  --color-recording-hover: #fca5a5;
+  --color-recording-hover: #b91c1c;
+  --color-recording-solid: #dc2626;
+  --color-recording-solid-hover: #b91c1c;
   --color-success: #22c55e;
   --color-warning: #f97316;
 

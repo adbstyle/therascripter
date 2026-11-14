@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import TitleBar from './TitleBar'
 import Sidebar from './Sidebar'
 import RecordingBar from './RecordingBar'
@@ -10,6 +10,7 @@ import { useNavigation } from '../../navigation/navigation'
 import { useRecordingState } from '../../contexts/recording'
 import { useToolHealth } from '../../hooks/useToolHealth'
 import { useSidebarOpen } from '../../hooks/useSidebarOpen'
+import { pruneScrollPositions } from '../../navigation/useScrollRestoration'
 
 /**
  * App-Shell (Epic #192): Titelleiste über der ganzen Breite, darunter
@@ -19,13 +20,21 @@ import { useSidebarOpen } from '../../hooks/useSidebarOpen'
  * Inhalt über das Fenster hinaus, statt zu scrollen.
  */
 export default function AppShell(): React.JSX.Element {
-  const { route, entryId, anchorId, navigate } = useNavigation()
+  const { route, entryId, anchorId, entryIds, navigate, consumeAnchor } = useNavigation()
   const { isRecording, duration, microphone } = useRecordingState()
   const toolHealth = useToolHealth()
   const { sidebarOpen, toggleSidebar } = useSidebarOpen()
   // Pro App-Lauf ausgeblendet; nach dem nächsten Start kommt der Hinweis wieder
   const [toolsHintDismissed, setToolsHintDismissed] = useState(false)
   const scrollPositions = useRef(new Map<number, number>())
+  // Verworfene Verlaufseinträge (Limit, neuer Zweig, purge) brauchen keine Position mehr
+  const liveIds = entryIds.join(',')
+  useEffect(() => {
+    pruneScrollPositions(
+      scrollPositions.current,
+      liveIds.split(',').map((id) => Number(id))
+    )
+  }, [liveIds])
 
   // Auf der Sitzungsliste zeigt die Live-Karte die Aufnahme — keine Leiste doppelt
   const showRecordingBar = isRecording && route.kind !== 'sessions'
@@ -69,6 +78,7 @@ export default function AppShell(): React.JSX.Element {
             entryId={entryId}
             anchorId={anchorId}
             positions={scrollPositions.current}
+            onAnchorConsumed={consumeAnchor}
           >
             <RouteView />
           </PageScroll>

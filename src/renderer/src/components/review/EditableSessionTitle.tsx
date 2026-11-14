@@ -79,6 +79,9 @@ export function EditableSessionTitle({
   }
   const onKeyDown = (e: KeyboardEvent<HTMLHeadingElement>): void => {
     if (e.key === 'Escape') {
+      // Nur die Bearbeitung abbrechen — Esc darf nicht bis zum Editor
+      // durchdringen, der damit sonst zurück im Verlauf ginge
+      e.stopPropagation()
       e.currentTarget.textContent = originalRef.current
       e.currentTarget.blur()
     }
@@ -93,9 +96,7 @@ export function EditableSessionTitle({
     return (
       <h2
         key="read-only"
-        // no-drag: the header is a window drag region — without it the
-        // Klartext title could not be selected and copied
-        className={`titlebar-no-drag session-title h-9 truncate rounded-lg border border-transparent px-4 leading-9 ${className ?? ''}`}
+        className={`session-title h-9 truncate rounded-lg border border-transparent px-4 leading-9 ${className ?? ''}`}
         title={empty ? undefined : readOnlyText}
       >
         {empty ? <span className="text-text-tertiary">{fallback}</span> : readOnlyText}
@@ -107,13 +108,6 @@ export function EditableSessionTitle({
     <h2
       key="editable"
       ref={setRef}
-      // `titlebar-no-drag` is mandatory: the parent ReviewEditor header is a
-      // macOS hiddenInset drag region (`titlebar-drag`); without this opt-out
-      // the OS treats clicks as window-drags and the contentEditable never
-      // receives focus. A contentEditable element must always pass clicks
-      // through, so the class belongs on the component itself, not the call
-      // site.
-      //
       // Standard inline-edit-title pattern (Linear/Notion/Figma):
       // - Filled (default): looks like a plain bold heading. truncate +
       //   transparent border that reserves space so focus does not shift
@@ -126,7 +120,7 @@ export function EditableSessionTitle({
       // The contentEditable element shows a text caret on hover by
       // default — that is the discoverability hint, no extra hover chrome
       // needed.
-      className={`titlebar-no-drag session-title h-9 rounded-lg border border-transparent px-4 leading-9 outline-none transition-colors truncate focus:border-primary focus:overflow-x-auto focus:text-clip ${className ?? ''}`}
+      className={`session-title h-9 rounded-lg border border-transparent px-4 leading-9 outline-none transition-colors truncate focus:border-primary focus:overflow-x-auto focus:text-clip ${className ?? ''}`}
       contentEditable
       suppressContentEditableWarning
       onBlur={onBlur}

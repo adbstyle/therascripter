@@ -2,7 +2,13 @@ import { useCallback, useEffect, useMemo, useReducer } from 'react'
 import type { ReactNode } from 'react'
 import { initialNavState, navReducer, type NavigateOptions } from './navReducer'
 import type { Route } from './routes'
-import { NavigationContext, type BackOptions, type Navigation } from './navigation'
+import {
+  blurActiveElement,
+  isModalDialogOpen,
+  NavigationContext,
+  type BackOptions,
+  type Navigation
+} from './navigation'
 
 interface NavigationProviderProps {
   children: ReactNode
@@ -21,32 +27,38 @@ export function NavigationProvider({
 }: NavigationProviderProps): React.JSX.Element {
   const [state, dispatch] = useReducer(navReducer, initialRoute, initialNavState)
 
-  const navigate = useCallback(
-    (route: Route, options?: NavigateOptions) => dispatch({ type: 'navigate', route, options }),
+  // Jeder Seitenwechsel löst zuerst den Fokus (Speichern beim Verlassen)
+  const navigate = useCallback((route: Route, options?: NavigateOptions) => {
+    blurActiveElement()
+    dispatch({ type: 'navigate', route, options })
+  }, [])
+  const back = useCallback((options?: BackOptions) => {
+    blurActiveElement()
+    dispatch({ type: 'back', fromEntryId: options?.fromEntryId, fallback: options?.fallback })
+  }, [])
+  const forward = useCallback(() => {
+    blurActiveElement()
+    dispatch({ type: 'forward' })
+  }, [])
+  const consumeAnchor = useCallback(
+    (entryId: number) => dispatch({ type: 'consumeAnchor', entryId }),
     []
   )
-  const back = useCallback(
-    (options?: BackOptions) =>
-      dispatch({ type: 'back', fromEntryId: options?.fromEntryId, fallback: options?.fallback }),
-    []
-  )
-  const forward = useCallback(() => dispatch({ type: 'forward' }), [])
 
   useEffect(
     () =>
       window.api.nav.onCommand((command) => {
-        if (command === 'back') dispatch({ type: 'back' })
-        else if (command === 'forward') dispatch({ type: 'forward' })
+        // ⌘[ / ⌘] wirken auch bei offenem Dialog (Menü-Kürzel) — dort nicht wechseln
+        if (isModalDialogOpen()) return
+        if (command === 'back') back()
+        else if (command === 'forward') forward()
       }),
-    []
+    [back, forward]
   )
 
   useEffect(
-    () =>
-      window.api.nav.onOpenSettings(() =>
-        dispatch({ type: 'navigate', route: { kind: 'settings', subpage: null } })
-      ),
-    []
+    () => window.api.nav.onOpenSettings(() => navigate({ kind: 'settings', subpage: null })),
+    [navigate]
   )
 
   useEffect(
@@ -84,11 +96,13 @@ export function NavigationProvider({
       anchorId: state.current.anchorId,
       canBack: state.back.length > 0,
       canForward: state.forward.length > 0,
+      entryIds: [...state.back, state.current, ...state.forward].map((e) => e.id),
       navigate,
       back,
-      forward
+      forward,
+      consumeAnchor
     }),
-    [state, navigate, back, forward]
+    [state, navigate, back, forward, consumeAnchor]
   )
 
   return <NavigationContext.Provider value={value}>{children}</NavigationContext.Provider>

@@ -112,7 +112,7 @@ describe('AppShell — Seitenleiste und Titelleiste', () => {
       within(nav).getByRole('button', { name: 'Aufnahme starten' })
     ]
     expect(iconButtons.map((b) => b.getAttribute('aria-label'))).toEqual([
-      'Seitenleiste ausblenden',
+      'Seitenleiste',
       'Zurück',
       'Vorwärts',
       'PDF importieren',
@@ -122,6 +122,7 @@ describe('AppShell — Seitenleiste und Titelleiste', () => {
       expect(button.textContent).toBe('')
       expect(button.getAttribute('title')).toContain(button.getAttribute('aria-label'))
     }
+    expect(iconButtons[0]).toHaveAttribute('title', 'Seitenleiste ein-/ausblenden (⌃⌘S)')
   })
 
   it('hält die Titelleiste als Zieh-Bereich und nimmt alle Knöpfe davon aus', async () => {
@@ -152,10 +153,12 @@ describe('AppShell — Seitenleiste und Titelleiste', () => {
     renderShell()
     await screen.findByRole('navigation', { name: 'Seitenleiste' })
 
-    await user.click(screen.getByRole('button', { name: 'Seitenleiste ausblenden' }))
+    const toggle = screen.getByRole('button', { name: 'Seitenleiste' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    await user.click(toggle)
     expect(screen.queryByRole('navigation', { name: 'Seitenleiste' })).not.toBeInTheDocument()
     expect(window.api.settings.set).toHaveBeenCalledWith('sidebarOpen', false)
-    expect(screen.getByRole('button', { name: 'Seitenleiste einblenden' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Seitenleiste' })).toHaveAttribute(
       'aria-pressed',
       'false'
     )
@@ -173,7 +176,10 @@ describe('AppShell — Seitenleiste und Titelleiste', () => {
     renderShell()
     // Schon im ersten Render — ohne auf eine Antwort zu warten
     expect(screen.queryByRole('navigation', { name: 'Seitenleiste' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Seitenleiste einblenden' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Seitenleiste' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
     expect(window.api.settings.get).not.toHaveBeenCalledWith('sidebarOpen')
   })
 
@@ -392,5 +398,111 @@ describe('AppShell — Verhalten wie vor dem Umbau', () => {
     })
     expect(screen.getByText('00:00:30')).toBeInTheDocument()
     expect(renders).toBe(before)
+  })
+})
+
+describe('AppShell — Befunde aus dem Review', () => {
+  it('zeigt bei eingeklappter Seitenleiste Update-Chip und Hinweispunkt in der Titelleiste', async () => {
+    const user = userEvent.setup()
+    window.api = createMockApi({
+      sessions: { list: vi.fn().mockResolvedValue([reviewSession]) },
+      nav: { initialSidebarOpen: false },
+      appUpdate: {
+        getState: vi
+          .fn()
+          .mockResolvedValue({ ...IDLE_APP_UPDATE, phase: 'ready', version: '0.11.0' })
+      },
+      modelReconcile: {
+        getEvents: vi.fn().mockResolvedValue([{ id: 'e1', status: 'pending' }])
+      }
+    })
+    renderShell()
+    const banner = screen.getByRole('banner', { name: 'TheraScript' })
+    const chip = await within(banner).findByRole('button', { name: 'Update bereit' })
+    expect(
+      await within(banner).findByRole('button', {
+        name: 'Seitenleiste — Automatische Anpassung — Hinweis in Modelle'
+      })
+    ).toHaveAttribute('aria-pressed', 'false')
+
+    await user.click(chip)
+    expect(await screen.findByRole('heading', { name: 'Updates' })).toBeInTheDocument()
+
+    // Eingeblendet: die Hinweise stehen wieder nur im Fuss der Seitenleiste
+    await user.click(within(banner).getByRole('button', { name: /^Seitenleiste/ }))
+    const nav = screen.getByRole('navigation', { name: 'Seitenleiste' })
+    expect(within(banner).queryByRole('button', { name: 'Update bereit' })).not.toBeInTheDocument()
+    expect(within(banner).getByRole('button', { name: 'Seitenleiste' })).toBeInTheDocument()
+    expect(within(nav).getByRole('button', { name: 'Update bereit' })).toBeInTheDocument()
+    expect(
+      within(nav).getByLabelText('Automatische Anpassung — Hinweis in Modelle')
+    ).toBeInTheDocument()
+  })
+
+  it('löst den Anker nur einmal ein — später zählt die gemerkte Position', async () => {
+    const user = userEvent.setup()
+    renderShell()
+    await user.click(await screen.findByRole('button', { name: 'Erstgespräch öffnen' }))
+    await user.click(await screen.findByRole('button', { name: 'Editor verlassen' }))
+    await waitFor(() =>
+      expect(document.querySelector('[data-session-id="s1"]')).toHaveClass('session-highlight')
+    )
+
+    // Weit scrollen, dann Einstellungen und zurück
+    const scroll = screen.getByTestId('page-scroll')
+    scroll.scrollTop = 800
+    scroll.dispatchEvent(new Event('scroll'))
+    const scrollIntoView = vi.mocked(Element.prototype.scrollIntoView)
+    scrollIntoView.mockClear()
+    await user.click(screen.getByRole('button', { name: 'Einstellungen' }))
+    await screen.findByRole('heading', { name: 'Einstellungen' })
+    await user.click(screen.getByRole('button', { name: 'Zurück' }))
+    await screen.findByRole('button', { name: 'Erstgespräch öffnen' })
+
+    expect(screen.getByTestId('page-scroll').scrollTop).toBe(800)
+    expect(document.querySelector('[data-session-id="s1"]')).not.toHaveClass('session-highlight')
+    expect(scrollIntoView).not.toHaveBeenCalled()
+  })
+
+  it('wechselt bei offenem Dialog nicht per Menübefehl die Seite', async () => {
+    const user = userEvent.setup()
+    renderShell()
+    await user.click(await screen.findByRole('button', { name: 'Einstellungen' }))
+    await screen.findByRole('heading', { name: 'Einstellungen' })
+
+    const dialog = document.createElement('div')
+    dialog.setAttribute('role', 'dialog')
+    dialog.setAttribute('aria-modal', 'true')
+    document.body.appendChild(dialog)
+    try {
+      act(() => emitApiEvent(window.api, 'nav.onCommand', 'back'))
+      act(() => emitApiEvent(window.api, 'nav.onCommand', 'toggleSidebar'))
+      expect(screen.getByRole('heading', { name: 'Einstellungen' })).toBeInTheDocument()
+      expect(screen.getByRole('navigation', { name: 'Seitenleiste' })).toBeInTheDocument()
+    } finally {
+      dialog.remove()
+    }
+    act(() => emitApiEvent(window.api, 'nav.onCommand', 'back'))
+    expect(await screen.findByRole('heading', { name: 'Transkriptionen' })).toBeInTheDocument()
+  })
+
+  it('löst vor jedem Seitenwechsel den Fokus, damit Speichern-beim-Verlassen greift', async () => {
+    const user = userEvent.setup()
+    renderShell()
+    await user.click(await screen.findByRole('button', { name: 'Erstgespräch öffnen' }))
+    await screen.findByText('Editor s1')
+
+    const input = document.createElement('input')
+    const onBlur = vi.fn()
+    input.addEventListener('blur', onBlur)
+    document.body.appendChild(input)
+    input.focus()
+    try {
+      act(() => emitApiEvent(window.api, 'nav.onCommand', 'back'))
+      expect(onBlur).toHaveBeenCalledTimes(1)
+      expect(await screen.findByRole('heading', { name: 'Transkriptionen' })).toBeInTheDocument()
+    } finally {
+      input.remove()
+    }
   })
 })

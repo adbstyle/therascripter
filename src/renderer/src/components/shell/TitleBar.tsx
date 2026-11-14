@@ -2,6 +2,8 @@ import { ChevronLeft, ChevronRight, PanelLeft } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { ViewModeToggle } from './ViewModeToggle'
 import { useNavigation } from '../../navigation/navigation'
+import { RECONCILE_HINT, useShellHints } from '../../hooks/useShellHints'
+import { ReconcileDot, UpdateChip } from './ShellHints'
 
 interface TitleBarProps {
   /** `minimal`: nur die Wortmarke (Ersteinrichtung, Ladezustand). */
@@ -38,7 +40,9 @@ export default function TitleBar({
         TheraScript
       </span>
       {variant === 'full' && (
-        <div className="relative ml-auto flex items-center">
+        <div className="relative ml-auto flex items-center gap-2">
+          {/* Eingeklappt: der Update-Hinweis aus dem Fuss der Seitenleiste wandert hierher */}
+          {!sidebarOpen && <CollapsedUpdateChip />}
           <ViewModeToggle />
         </div>
       )}
@@ -51,15 +55,20 @@ function NavigationButtons({
   onToggleSidebar
 }: Pick<TitleBarProps, 'sidebarOpen' | 'onToggleSidebar'>): React.JSX.Element {
   const { canBack, canForward, back, forward } = useNavigation()
-  const sidebarLabel = sidebarOpen ? 'Seitenleiste ausblenden' : 'Seitenleiste einblenden'
+  const { reconcilePending } = useShellHints()
+  // Festes Label plus aria-pressed: der Zustand steckt im «gedrückt», nicht im Namen.
+  // Eingeklappt trägt der Knopf den Hinweispunkt aus dem Fuss der Seitenleiste.
+  const showDot = !sidebarOpen && reconcilePending
 
   return (
     <div className="relative z-10 flex items-center gap-1.5">
       <TitleBarButton
         icon={PanelLeft}
-        label={sidebarLabel}
+        label={showDot ? `Seitenleiste — ${RECONCILE_HINT}` : 'Seitenleiste'}
+        tooltip="Seitenleiste ein-/ausblenden"
         shortcut="⌃⌘S"
         pressed={sidebarOpen}
+        dot={showDot}
         onClick={() => onToggleSidebar?.()}
       />
       <TitleBarButton
@@ -80,11 +89,19 @@ function NavigationButtons({
   )
 }
 
+function CollapsedUpdateChip(): React.JSX.Element | null {
+  const { updateHint } = useShellHints()
+  return updateHint ? <UpdateChip hint={updateHint} placement="titlebar" /> : null
+}
+
 interface TitleBarButtonProps {
   icon: LucideIcon
   label: string
+  /** Tooltip, falls er vom Namen abweicht (ohne Kürzel). */
+  tooltip?: string
   shortcut: string
   pressed?: boolean
+  dot?: boolean
   disabled?: boolean
   onClick: () => void
 }
@@ -92,8 +109,10 @@ interface TitleBarButtonProps {
 function TitleBarButton({
   icon: Icon,
   label,
+  tooltip,
   shortcut,
   pressed,
+  dot,
   disabled,
   onClick
 }: TitleBarButtonProps): React.JSX.Element {
@@ -104,12 +123,15 @@ function TitleBarButton({
       disabled={disabled}
       aria-label={label}
       aria-pressed={pressed}
-      title={`${label} (${shortcut})`}
+      title={`${tooltip ?? label} (${shortcut})`}
       className={`titlebar-no-drag inline-flex h-[30px] w-[30px] items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-40 ${
         pressed ? 'bg-surface-2' : ''
       }`}
     >
-      <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden />
+      <span className="relative inline-flex">
+        <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden />
+        {dot && <ReconcileDot labelled={false} />}
+      </span>
     </button>
   )
 }

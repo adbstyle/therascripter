@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render } from '@testing-library/react'
 import { PageScroll } from '../../components/shell/PageScroll'
-import { useScrollRestoration } from '../useScrollRestoration'
+import { pruneScrollPositions, useScrollRestoration } from '../useScrollRestoration'
 
 function Page({ ready }: { ready: boolean }): React.JSX.Element {
   useScrollRestoration(ready)
@@ -87,5 +87,47 @@ describe('useScrollRestoration', () => {
     const card = getByText('Karte 1')
     card.dispatchEvent(new Event('animationend'))
     expect(card.classList.contains('session-highlight')).toBe(false)
+  })
+
+  it('meldet den eingelösten Anker genau einmal', () => {
+    const onAnchorConsumed = vi.fn()
+    const positions = new Map<number, number>()
+    const { rerender } = render(
+      <PageScroll
+        entryId={4}
+        anchorId="s1"
+        positions={positions}
+        onAnchorConsumed={onAnchorConsumed}
+      >
+        <Page ready />
+      </PageScroll>
+    )
+    rerender(
+      <PageScroll
+        entryId={4}
+        anchorId={undefined}
+        positions={positions}
+        onAnchorConsumed={onAnchorConsumed}
+      >
+        <Page ready />
+      </PageScroll>
+    )
+    expect(onAnchorConsumed).toHaveBeenCalledTimes(1)
+    expect(onAnchorConsumed).toHaveBeenCalledWith(4)
+  })
+})
+
+describe('pruneScrollPositions', () => {
+  it('entfernt Positionen von Einträgen, die nicht mehr im Verlauf sind', () => {
+    const positions = new Map([
+      [1, 100],
+      [2, 200],
+      [3, 300]
+    ])
+    pruneScrollPositions(positions, [1, 3, 4])
+    expect([...positions.entries()]).toEqual([
+      [1, 100],
+      [3, 300]
+    ])
   })
 })

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isModalDialogOpen } from '../navigation/navigation'
 
 /**
  * Seitenleiste ein-/ausgeblendet (Epic #192). Gespeichert in electron-store
@@ -21,7 +22,7 @@ export function useSidebarOpen(): { sidebarOpen: boolean; toggleSidebar: () => v
   useEffect(
     () =>
       window.api.nav.onCommand((command) => {
-        if (command === 'toggleSidebar') toggleSidebar()
+        if (command === 'toggleSidebar' && !isModalDialogOpen()) toggleSidebar()
       }),
     [toggleSidebar]
   )

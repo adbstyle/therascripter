@@ -34,8 +34,11 @@ interface SettingsProps {
 
 export default function Settings({ subpage, onSubpageChange }: SettingsProps): React.JSX.Element {
   const blocklistRef = useRef<BlocklistManagerHandle>(null)
-  // Keine asynchronen Daten, die die Höhe bestimmen — sofort wiederherstellen
-  useScrollRestoration(true)
+  // Nur die Übersicht stellt ihre Position wieder her: ihre Karten haben feste
+  // Höhe, auch solange die Zusammenfassungen laden. Die Unterseiten (Sperrliste,
+  // Modelle, Updates, Über) laden asynchron und wachsen erst danach — sie
+  // beginnen bewusst oben, statt an einer halb geladenen Stelle zu landen.
+  useScrollRestoration(subpage === null)
 
   let headerAction: React.ReactNode = null
   if (subpage === 'sperrliste') {

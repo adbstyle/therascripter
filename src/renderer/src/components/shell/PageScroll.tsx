@@ -7,6 +7,7 @@ interface PageScrollProps {
   anchorId: string | undefined
   /** Scroll-Positionen aller Verlaufseinträge; lebt ausserhalb, weil PageScroll pro Eintrag neu gemountet wird. */
   positions: Map<number, number>
+  onAnchorConsumed?: (entryId: number) => void
   children: ReactNode
 }
 
@@ -20,6 +21,7 @@ export function PageScroll({
   entryId,
   anchorId,
   positions,
+  onAnchorConsumed,
   children
 }: PageScrollProps): React.JSX.Element {
   // State statt Ref: die Seite stellt ihre Position im Layout-Effekt her, der
@@ -27,8 +29,8 @@ export function PageScroll({
   // noch vor dem ersten Zeichnen ein zweites Mal, jetzt mit Container.
   const [element, setElement] = useState<HTMLElement | null>(null)
   const info = useMemo<PageScrollInfo>(
-    () => ({ entryId, anchorId, element, positions }),
-    [entryId, anchorId, element, positions]
+    () => ({ entryId, anchorId, element, positions, onAnchorConsumed }),
+    [entryId, anchorId, element, positions, onAnchorConsumed]
   )
 
   return (

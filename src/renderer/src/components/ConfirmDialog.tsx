@@ -70,7 +70,7 @@ export function ConfirmDialog({
         <button
           className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${
             destructive
-              ? 'bg-recording hover:bg-recording-hover'
+              ? 'bg-recording-solid hover:bg-recording-solid-hover'
               : 'bg-primary hover:bg-primary-hover'
           }`}
           onClick={onConfirm}

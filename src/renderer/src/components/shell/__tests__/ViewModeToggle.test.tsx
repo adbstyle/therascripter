@@ -51,7 +51,7 @@ describe('ViewModeToggle', () => {
     const user = userEvent.setup()
     // Erst der Seitenleisten-Knopf; ‹ › sind ohne Verlauf deaktiviert (Epic #192)
     await user.tab()
-    expect(screen.getByRole('button', { name: 'Seitenleiste ausblenden' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Seitenleiste' })).toHaveFocus()
     await user.tab()
     expect(screen.getByRole('button', { name: 'Pseudonymisiert' })).toHaveFocus()
     await user.keyboard('{Enter}')

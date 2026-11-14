@@ -196,4 +196,25 @@ describe('navReducer', () => {
       expect(navReducer(state, { type: 'purge', predicate: deleted('x') })).toBe(state)
     })
   })
+
+  it('verwirft den Anker eines Eintrags, sobald er eingelöst ist', () => {
+    let state = run(initialNavState(), go(session('a'), { anchorId: 'a' }), { type: 'back' })
+    expect(state.current.anchorId).toBe('a')
+    expect(navReducer(state, { type: 'consumeAnchor', entryId: state.current.id + 99 })).toBe(state)
+    state = navReducer(state, { type: 'consumeAnchor', entryId: state.current.id })
+    expect(state.current.anchorId).toBeUndefined()
+  })
+
+  it('lässt nach purge keinen Vorwärts-Eintrag der aktuellen Seite stehen', () => {
+    // Liste → A → (Seitenleiste) Liste → ‹ → A löschen
+    let state = run(initialNavState(), go(session('a')), go(sessions), { type: 'back' })
+    expect(state.current.route).toEqual(session('a'))
+    state = navReducer(state, {
+      type: 'purge',
+      predicate: (r) => r.kind === 'session' && r.sessionId === 'a'
+    })
+    expect(state.current.route).toEqual(sessions)
+    expect(state.forward).toEqual([])
+    expect(state.back).toEqual([])
+  })
 })

@@ -263,6 +263,8 @@ export class SessionService {
           : this.repository.update(session.id, { pdfPath: null })
       if (update) cleaned++
     }
+    // Die Liste (u. a. die Aufzählung im Löschdialog) liest audio_path/pdf_path
+    if (cleaned > 0) notifySessionsChanged()
     return cleaned
   }
 

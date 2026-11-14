@@ -47,6 +47,8 @@ export type NavAction =
     }
   | { type: 'forward'; isValid?: RouteValidator }
   | { type: 'purge'; predicate: (route: Route) => boolean }
+  /** Anker eines Eintrags verwerfen, sobald er eingelöst ist (einmal pro Rückkehr). */
+  | { type: 'consumeAnchor'; entryId: number }
 
 export function initialNavState(route: Route = HOME_ROUTE): NavState {
   return { back: [], current: { id: 1, route }, forward: [], nextId: 2 }
@@ -67,6 +69,11 @@ export function navReducer(state: NavState, action: NavAction): NavState {
       return step(state, 'forward', action.isValid ?? always)
     case 'purge':
       return purge(state, action.predicate)
+    case 'consumeAnchor': {
+      if (state.current.id !== action.entryId || state.current.anchorId === undefined) return state
+      const { anchorId: _consumed, ...current } = state.current
+      return { ...state, current }
+    }
   }
 }
 
@@ -162,7 +169,11 @@ function purge(state: NavState, predicate: (route: Route) => boolean): NavState 
     if (back.length === state.back.length && forward.length === state.forward.length) {
       return state
     }
-    return { ...state, back: dropAdjacent(back, state.current), forward }
+    return {
+      ...state,
+      back: dropAdjacent(back, state.current),
+      forward: dropLeading(forward, state.current)
+    }
   }
 
   const deleted = state.current.route
@@ -176,12 +187,23 @@ function purge(state: NavState, predicate: (route: Route) => boolean): NavState 
   } else {
     current = { id: nextId++, route: HOME_ROUTE }
   }
-  return { back: dropAdjacent(back, current), current, forward, nextId }
+  return {
+    back: dropAdjacent(back, current),
+    current,
+    forward: dropLeading(forward, current),
+    nextId
+  }
 }
 
 /** Nach dem Entfernen können zwei gleiche Seiten nebeneinander stehen. */
 function dedupe(entries: Entry[]): Entry[] {
   return entries.filter((e, i) => i === 0 || !sameRoute(entries[i - 1].route, e.route))
+}
+
+/** Vorwärts darf nicht mit der aktuellen Seite beginnen — › wäre aktiv, ohne etwas zu tun. */
+function dropLeading(forward: Entry[], current: Entry): Entry[] {
+  const first = forward[0]
+  return first && sameRoute(first.route, current.route) ? forward.slice(1) : forward
 }
 
 function dropAdjacent(back: Entry[], current: Entry): Entry[] {

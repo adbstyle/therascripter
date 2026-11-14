@@ -11,6 +11,8 @@ export interface PageScrollInfo {
   element: HTMLElement | null
   /** Letzte Scroll-Position je Verlaufseintrag. */
   positions: Map<number, number>
+  /** Der Anker gilt einmal: danach zählt nur noch die gemerkte Position. */
+  onAnchorConsumed?: (entryId: number) => void
 }
 
 export const PageScrollContext = createContext<PageScrollInfo | null>(null)
@@ -38,6 +40,7 @@ export function useScrollRestoration(ready: boolean): void {
     if (saved !== undefined) container.scrollTop = saved
 
     if (!info.anchorId) return
+    info.onAnchorConsumed?.(info.entryId)
     const card = Array.from(container.querySelectorAll<HTMLElement>('[data-session-id]')).find(
       (el) => el.dataset.sessionId === info.anchorId
     )
@@ -50,6 +53,14 @@ export function useScrollRestoration(ready: boolean): void {
       once: true
     })
   }, [info, ready])
+}
+
+/** Entfernt gemerkte Positionen von Einträgen, die nicht mehr im Verlauf sind. */
+export function pruneScrollPositions(positions: Map<number, number>, liveIds: number[]): void {
+  const live = new Set(liveIds)
+  for (const id of [...positions.keys()]) {
+    if (!live.has(id)) positions.delete(id)
+  }
 }
 
 function isFullyVisible(el: HTMLElement, container: HTMLElement): boolean {

@@ -27,7 +27,7 @@ export function Toast({ toast, onDismiss }: ToastProps): React.JSX.Element {
     return () => clearTimeout(timer)
   }, [toast.id, onDismiss])
 
-  const bgColor = toast.type === 'success' ? 'bg-tooltip-bg' : 'bg-recording'
+  const bgColor = toast.type === 'success' ? 'bg-tooltip-bg' : 'bg-recording-solid'
 
   return (
     <div

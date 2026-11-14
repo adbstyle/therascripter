@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, Settings } from 'lucide-react'
-import { useAppUpdate } from '../../hooks/useAppUpdate'
-import { useReconcileEvents } from '../../hooks/useReconcileEvents'
+import { useShellHints } from '../../hooks/useShellHints'
 import { useNavigation } from '../../navigation/navigation'
+import { ReconcileDot, UpdateChip } from './ShellHints'
 
 export const FEEDBACK_EMAIL = 'therascript.flatworm325@passmail.com'
 
@@ -13,8 +13,7 @@ export const FEEDBACK_EMAIL = 'therascript.flatworm325@passmail.com'
  */
 export default function SidebarFooter(): React.JSX.Element {
   const { route, navigate } = useNavigation()
-  const { state: appUpdate, needsAttention: updateNeedsAttention } = useAppUpdate()
-  const { pendingCount: reconcilePending } = useReconcileEvents()
+  const { updateHint, reconcilePending } = useShellHints()
   const [appVersion, setAppVersion] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const copyResetRef = useRef<number | null>(null)
@@ -45,12 +44,6 @@ export default function SidebarFooter(): React.JSX.Element {
     copyResetRef.current = window.setTimeout(() => setCopied(false), 1800)
   }
 
-  const updateHint = !updateNeedsAttention
-    ? null
-    : appUpdate?.phase === 'ready'
-      ? 'Update bereit'
-      : 'Update verfügbar'
-
   return (
     <div className="mt-3 flex flex-col gap-0.5 border-t border-border pt-2">
       <button
@@ -64,27 +57,12 @@ export default function SidebarFooter(): React.JSX.Element {
         <span className="relative inline-flex">
           <Settings className="h-4 w-4" strokeWidth={1.75} aria-hidden />
           {/* Issue #84 — automatische Anpassung noch nicht gesehen; Settings → Modelle räumt ihn */}
-          {reconcilePending > 0 && (
-            <span
-              aria-label="Automatische Anpassung — Hinweis in Modelle"
-              title="Automatische Anpassung — Hinweis in Modelle"
-              className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-primary"
-            />
-          )}
+          {reconcilePending && <ReconcileDot />}
         </span>
         Einstellungen
       </button>
 
-      {updateHint && (
-        <button
-          type="button"
-          onClick={() => navigate({ kind: 'settings', subpage: 'updates' })}
-          className="flex items-center gap-2 rounded-md px-2.5 py-1 text-left text-xs font-medium text-primary transition-colors hover:bg-primary-light/30 hover:text-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        >
-          <span aria-hidden className="ml-1 h-1.5 w-1.5 rounded-full bg-primary" />
-          <span>{updateHint}</span>
-        </button>
-      )}
+      {updateHint && <UpdateChip hint={updateHint} placement="sidebar" />}
 
       <div className="flex min-w-0 items-center justify-between gap-2 px-2.5 py-1">
         <button

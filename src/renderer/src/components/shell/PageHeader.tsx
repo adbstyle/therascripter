@@ -9,7 +9,8 @@ interface PageHeaderProps {
 
 /**
  * Seitenkopf innerhalb der Seite (Epic #192): scrollt mit dem Inhalt, kein
- * Zurück-Knopf — zurück geht es über ‹ in der Titelleiste, ⌘[ oder Esc.
+ * Zurück-Knopf — zurück geht es über ‹ in der Titelleiste oder ⌘[ (im
+ * Editor zusätzlich Esc).
  */
 export function PageHeader({ title, actions }: PageHeaderProps): React.JSX.Element {
   return (

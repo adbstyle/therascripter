@@ -45,7 +45,7 @@ export default function SessionsPage(): React.JSX.Element {
               <button
                 type="button"
                 onClick={() => void startRecording()}
-                className="flex items-center gap-1.5 rounded-lg bg-recording px-3.5 py-[7px] text-sm font-medium text-white transition-colors hover:bg-recording-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                className="flex items-center gap-1.5 rounded-lg bg-recording-solid px-3.5 py-[7px] text-sm font-medium text-white transition-colors hover:bg-recording-solid-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               >
                 <Mic className="h-4 w-4" strokeWidth={2} aria-hidden />
                 Aufnahme starten

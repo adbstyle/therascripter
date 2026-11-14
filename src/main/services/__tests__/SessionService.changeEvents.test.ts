@@ -70,6 +70,22 @@ describe('SessionService → sessions:changed', () => {
     expect(notifySessionsChanged).not.toHaveBeenCalled()
   })
 
+  it('nach der Bereinigung der Quelldateien, aber nur wenn etwas bereinigt wurde', () => {
+    expect(service.cleanupSourceFiles()).toBe(0)
+    expect(notifySessionsChanged).not.toHaveBeenCalled()
+
+    const session = service.createSession('Aufnahme', 'audio')
+    const old = new Date(Date.now() - 48 * 3600 * 1000).toISOString()
+    db.prepare(
+      "UPDATE sessions SET status = 'review', review_at = ?, audio_path = '/mock/home/x.wav' WHERE id = ?"
+    ).run(old, session.id)
+    notifySessionsChanged.mockReset()
+
+    expect(service.cleanupSourceFiles()).toBe(1)
+    expect(notifySessionsChanged).toHaveBeenCalledTimes(1)
+    expect(service.getSession(session.id)?.audioPath).toBeNull()
+  })
+
   it('nicht für eine unbekannte Sitzung', () => {
     expect(service.deleteSession('gibt-es-nicht')).toBe(false)
     expect(service.renameSession('gibt-es-nicht', 'x')).toBeNull()

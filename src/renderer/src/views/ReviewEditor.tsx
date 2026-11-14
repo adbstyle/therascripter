@@ -705,7 +705,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
-            className="titlebar-no-drag flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface-0 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
+            className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface-0 px-4 py-2 text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-1"
             onClick={handleExportClipboard}
             title={
               isPlain
@@ -717,7 +717,7 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
             {isPlain ? 'Klartext kopieren' : 'Pseudonymisiert kopieren'}
           </button>
           <button
-            className="titlebar-no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface-0 text-text-secondary transition-colors hover:border-error-border hover:bg-error-bg hover:text-error-text"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong bg-surface-0 text-text-secondary transition-colors hover:border-error-border hover:bg-error-bg hover:text-error-text"
             onClick={handleDeleteRequest}
             aria-label="Transkription löschen"
             title="Löschen"
@@ -725,11 +725,11 @@ function ReviewEditor({ sessionId, onBack }: ReviewEditorProps): React.JSX.Eleme
             <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />
           </button>
           <button
-            className={`titlebar-no-drag flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong transition-colors hover:bg-surface-1 ${panelOpen ? 'bg-surface-2 text-text-primary' : 'bg-surface-0 text-text-secondary'}`}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong transition-colors hover:bg-surface-1 ${panelOpen ? 'bg-surface-2 text-text-primary' : 'bg-surface-0 text-text-secondary'}`}
             onClick={togglePanel}
-            aria-label="Seitenleiste anzeigen"
+            aria-label="Übersicht ein-/ausblenden"
             aria-pressed={panelOpen}
-            title="Seitenleiste"
+            title="Übersicht ein-/ausblenden"
           >
             <PanelRight className="h-4 w-4" strokeWidth={1.75} aria-hidden />
           </button>
