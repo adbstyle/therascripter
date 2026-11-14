@@ -142,7 +142,11 @@ describe('mapTextRange', () => {
   })
 })
 
-function hitFocus(h: TestEditorHandle, index: number, needle: string): SearchFocus {
+function hitFocus(
+  h: TestEditorHandle,
+  index: number,
+  needle: string
+): Extract<SearchFocus, { kind: 'hit' }> {
   const map = paragraphTextMap(h.editor.state.doc.child(index), paragraphPos(h, index))
   const s = map.text.indexOf(needle)
   return {
