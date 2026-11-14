@@ -243,8 +243,8 @@ Each executor calls `onProgress(0.0–1.0)` as it runs. `TaskQueueService` write
 When any subprocess exits with a non-zero code, the executor collects error lines from stderr (lines containing `error`, `Error`, or `failed`) and throws with a German-language error string. `TaskQueueService.handleTaskFailure()` then:
 
 1. Marks the task as `failed` in SQLite with the error message.
-2. Sets the session status to `error` with the error message.
-3. Emits `task:error` to the renderer, which displays the error in the session card.
+2. Sets the session status to `error` with the error message **without absolute paths** (`stripAbsolutePaths`, `src/main/utils/userFacingError.ts`): messages such as «Audiodatei nicht gefunden: /Users/<name>/.therascript/…» or «whisper-cli binary nicht gefunden: …» can also occur in the packaged app (missing recording or model file, damaged installation); the path would show the user name on the card. The full message stays in the log and in the task row.
+3. Emits `task:error` (same message without paths) to the renderer, which displays the error in the session card.
 
 The queue does not continue to the next task for that session once any task fails.
 
