@@ -199,7 +199,8 @@ export function PlaceholderChipView({ node, selected }: NodeViewProps): React.JS
               zIndex: 9999,
               pointerEvents: 'none'
             }}
-            className="whitespace-nowrap rounded bg-tooltip-bg px-2 py-1 text-xs font-normal text-white shadow-lg"
+            // select-none: the tooltip shows the original (#203 AK 9)
+            className="select-none whitespace-nowrap rounded bg-tooltip-bg px-2 py-1 text-xs font-normal text-white shadow-lg"
           >
             {original}
           </span>,

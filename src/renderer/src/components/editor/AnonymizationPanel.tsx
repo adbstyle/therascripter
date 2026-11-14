@@ -207,7 +207,9 @@ function VariantRow({ variant }: { variant: OriginalVariant }): React.JSX.Elemen
 
   return (
     <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-      <span className="truncate" title={variant.text}>
+      {/* select-none: originals must not ride along on a native ⌘A + ⌘C in
+          the pseudonymized view (#203 AK 9) */}
+      <span className="select-none truncate" title={variant.text} data-original>
         &ldquo;{variant.text}&rdquo;
       </span>
       {variant.count > 1 && (

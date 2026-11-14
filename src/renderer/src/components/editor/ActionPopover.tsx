@@ -255,7 +255,9 @@ export function ActionPopover({
         role="menu"
         aria-label={ariaLabel}
         aria-orientation="vertical"
-        className={`fixed z-50 min-w-[240px] rounded-lg border border-border bg-surface-1 py-1 shadow-lg transition-opacity duration-100 ${fade}`}
+        // select-none: chip menus name the original (»Ruth Gerber«) — it must
+        // not ride along on a native ⌘A + ⌘C in the pseudonymized view (#203 AK 9)
+        className={`fixed z-50 min-w-[240px] select-none rounded-lg border border-border bg-surface-1 py-1 shadow-lg transition-opacity duration-100 ${fade}`}
         style={mainPos ?? { left: -9999, top: -9999 }}
       >
         {items.map((item, idx) => {
