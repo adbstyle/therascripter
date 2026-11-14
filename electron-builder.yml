@@ -41,6 +41,12 @@ extraResources:
     to: ml_sidecar/diarize.py
   - from: python_sidecar/ner_service.py
     to: ml_sidecar/ner_service.py
+  - from: python_sidecar/search_service.py
+    to: ml_sidecar/search_service.py
+  # Apache-2.0-Text für den nachgebauten transformers-Code in search_service.py
+  # (und das Suchmodell) — unabhängig von der transformers-Version im Standalone.
+  - from: python_sidecar/LICENSE-Apache-2.0.txt
+    to: ml_sidecar/LICENSE-Apache-2.0.txt
   - from: python_sidecar/torchcodec_shim.py
     to: ml_sidecar/torchcodec_shim.py
 npmRebuild: false

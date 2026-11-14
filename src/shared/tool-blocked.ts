@@ -13,7 +13,7 @@ export type BlockedTool = (typeof BLOCKED_TOOLS)[number]
 /** Was ohne das Werkzeug nicht geht (AK 5) — Sie-Form, ohne Fachbegriffe. */
 export const TOOL_FEATURES: Record<BlockedTool, string> = {
   whisper: 'Transkription',
-  python: 'Sprechererkennung und Pseudonymisierung',
+  python: 'Sprechererkennung, Pseudonymisierung und Suche',
   llama: 'Zusammenfassung',
   ocr: 'Texterkennung in gescannten PDFs'
 }

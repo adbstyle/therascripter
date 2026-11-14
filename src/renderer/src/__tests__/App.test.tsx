@@ -168,7 +168,7 @@ describe('App — blockierte Werkzeuge (Issue #168)', () => {
     window.api.toolHealth.getState = vi.fn().mockResolvedValue(blocked)
     renderApp()
     expect(
-      await screen.findByText(/Betroffen: Sprechererkennung und Pseudonymisierung/)
+      await screen.findByText(/Betroffen: Sprechererkennung, Pseudonymisierung und Suche/)
     ).toBeInTheDocument()
     await userEvent.click(screen.getAllByRole('button', { name: 'Hinweis schliessen' })[0])
     expect(screen.queryByText(/Betroffen:/)).not.toBeInTheDocument()
