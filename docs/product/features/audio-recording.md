@@ -40,7 +40,7 @@ The `VUMeter` component provides real-time audio level feedback during recording
   - Red (`#dc2626`) -- clipping risk (height > 0.8)
 - **Accessibility**: Uses `role="meter"` with `aria-label="Audiopegel"` and `aria-valuenow` reporting the smoothed percentage.
 
-The `RecordingSessionCard` also displays a monospace duration timer in `HH:MM:SS` format, updated every second; the `RecordingBar` shows the same timer in Settings/Review.
+The `RecordingSessionCard` also displays a monospace duration timer in `HH:MM:SS` format, updated every second; the `RecordingBar` shows the same timer on every other page (Settings, the editor). Starting a recording — from the page header or the record icon in the sidebar — navigates to the sessions list, where the live card lives (Epic #192).
 
 ## Consent Banner
 
@@ -49,7 +49,7 @@ The `ConsentBanner` is a warning shown above the sessions list while a recording
 - **When shown**: On every recording start until the user dismisses it with the "Nicht mehr anzeigen" checkbox checked.
 - **Content**: "Bitte stellen Sie sicher, dass die aufgenommene Person der Aufnahme zugestimmt hat (StGB Art. 179bis)." -- a reference to the Swiss criminal code provision on unauthorized audio recording.
 - **Persistence**: Controlled by the `consentReminderShown` key in electron-store. When the user checks "Nicht mehr anzeigen" and dismisses the banner, the key is set to `true` and the banner never appears again.
-- **Dismissal without checkbox**: If the user closes the banner without checking the checkbox, it will reappear on the next recording. Within the same recording it stays dismissed even when the user navigates away and back (tracked per recording in `App.tsx`).
+- **Dismissal without checkbox**: If the user closes the banner without checking the checkbox, it will reappear on the next recording. Within the same recording it stays dismissed even when the user navigates away and back (tracked per recording as `consentDismissed` in the `RecordingContext`, reset on every new recording).
 
 ## System Tray
 

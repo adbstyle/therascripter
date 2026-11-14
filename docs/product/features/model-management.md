@@ -158,7 +158,7 @@ Disk space (NFR 1): `diskNeedBytes` = app × 5 + archive model × 2.5 + flat mod
 | Phase | Meaning |
 |---|---|
 | `idle` | no update known — up to date, not yet checked or last check failed (`checkedAt`, `checkFailed`) |
-| `available` | update known, not fully staged (auto-update off, too little space — with a hint naming the space needed — or a failed background download); always shown in the bottom bar |
+| `available` | update known, not fully staged (auto-update off, too little space — with a hint naming the space needed — or a failed background download); always shown in the sidebar footer |
 | `downloading` | staging of all parts (see above); progress weighted by size |
 | `ready` | all parts staged and verified; persisted in the `appUpdate` setting so a restart keeps it |
 | `unsupported` | only a new app version that cannot replace itself (not in `/Applications` or `~/Applications`, App Translocation, DMG volume, no write permission or foreign owner) → hint with the website installation guide |
@@ -179,7 +179,7 @@ Cancelling aborts the running step (`AbortSignal` into download, `hdiutil`, `dit
 
 ### Automatic updates (#165)
 
-Setting `autoUpdate` (default `true`, also for existing installations via electron-store defaults) — covers app **and** models. Off: no automatic download or install (also not on quit); checks continue and updates are shown; an update already downloaded stays installable; a running background download is cancelled. An update can be postponed but not skipped (#167 AK 5) — there is no dismiss any more; the former `dismissedManifestVersions` and `pendingModelUpdates` settings are deleted at start, so a previously skipped model is offered again once. UI: Settings → Updates (`UpdateSettings.tsx`, `Toggle.tsx`); the bottom bar shows «Update bereit» / «Update verfügbar» and opens that page — whenever `updateNeedsAttention()` (`useAppUpdate.ts`, also used for the highlighted Settings card) is true: phase `ready`, `unsupported` or `available`.
+Setting `autoUpdate` (default `true`, also for existing installations via electron-store defaults) — covers app **and** models. Off: no automatic download or install (also not on quit); checks continue and updates are shown; an update already downloaded stays installable; a running background download is cancelled. An update can be postponed but not skipped (#167 AK 5) — there is no dismiss any more; the former `dismissedManifestVersions` and `pendingModelUpdates` settings are deleted at start, so a previously skipped model is offered again once. UI: Settings → Updates (`UpdateSettings.tsx`, `Toggle.tsx`); the sidebar footer shows «Update bereit» / «Update verfügbar» and opens that page — whenever `updateNeedsAttention()` (`useAppUpdate.ts`, also used for the highlighted Settings card) is true: phase `ready`, `unsupported` or `available`.
 
 ## electron-store Keys
 

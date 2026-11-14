@@ -157,9 +157,9 @@ The editor auto-saves to disk 2 seconds after the last edit (debounced via `useA
 
 ## Navigation
 
-The Review Editor is not a routed page — it is rendered conditionally in `App.tsx` when `currentView` is `'review'` and a `reviewSessionId` is set. Users enter the editor by clicking a session card that is in `review` status on the Session Dashboard. This sets the view state and passes the session ID as a prop.
+The editor is the page of the route `{ kind: 'session', sessionId }` (Epic #192, `src/renderer/src/navigation/`). Users open it by clicking a session card in `review` status; the sessions list remembers that card on its history entry (`anchorId`). Opening works during a recording too — the `RecordingBar` then sits above the editor.
 
-Exiting happens via the "Zurück" button in the header, which resets `reviewSessionId` to null, switches the view back to `'sessions'`, and triggers a session list refresh. Navigation into the review editor is disabled during active recording.
+There is **no close button** (decision in Epic #192, as in the approved prototype). Users go back with ‹ in the title bar, ⌘[ («Gehe zu → Zurück») or Esc; «Zurück» remains only in the load-error view. `RouteView` passes `onBack = back({ fromEntryId, fallback: sessions })`: it acts only while the editor is still the current page (a deletion may already have removed the entry from the history) and falls back to the sessions list if the history holds nothing. Back on the list, the scroll position is restored and the card you came from is highlighted. The list reloads on its own via `sessions:changed` — a title edit in the editor shows there without a manual refresh.
 
 ## Backend (Main Process)
 
