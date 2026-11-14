@@ -6,6 +6,7 @@ import {
   SpeakerLabelNode,
   TimestampNode
 } from '../renderer/src/extensions/transcriptNodes'
+import { SearchHighlight } from '../renderer/src/extensions/searchHighlight'
 import type { TipTapDocument } from '../shared/types/TipTapDocument'
 import type { EntitySource, PlaceholderType } from '../shared/types'
 
@@ -60,7 +61,8 @@ export function createTestEditor(
       }),
       PlaceholderChipNode,
       SpeakerLabelNode,
-      TimestampNode
+      TimestampNode,
+      SearchHighlight
     ],
     content: opts.initialDoc ?? { type: 'doc', content: [{ type: 'paragraph' }] }
   }

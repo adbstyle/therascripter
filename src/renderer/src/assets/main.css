@@ -222,3 +222,30 @@
   color: var(--color-text-tertiary);
   pointer-events: none;
 }
+
+/* Fundstelle der Suche (#209 AK 11, Prototyp «Fundstelle»): der Absatz ist als
+   Ganzes hinterlegt, exakte Begriffe darin unterstrichen, ein Chip mit einem
+   Treffer umrandet. Nur Klassen — nie Text, title oder aria: in der
+   pseudonymisierten Ansicht wird so kein Klarname sichtbar. */
+.ProseMirror p.search-hit-paragraph {
+  background: var(--color-primary-light);
+  border-radius: 6px;
+  margin-inline: -10px;
+  padding: 6px 10px;
+}
+
+.search-hit-term {
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--color-primary);
+}
+
+.search-hit-chip {
+  border-radius: 4px;
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.search-hit-field {
+  background: var(--color-primary-light);
+  border-radius: 8px;
+}

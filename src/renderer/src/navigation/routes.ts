@@ -1,19 +1,26 @@
 /**
- * Seiten der App (Epic #192). Alle Routen sind schon hier definiert, auch
- * die, für die es noch keine Seite gibt (Patientendossiers) — spätere PRs
- * fassen diese Datei dann nicht mehr an.
+ * Seiten der App (Epic #192). Die Suche (#209/#211) ergänzt die Suche im
+ * Patientendossier und Fundstellen als `focus` einer Sitzung.
  */
 
 /** Unterseiten der Einstellungen; Teil der Route, damit ‹ auch dort zurückführt. */
 export type SubPage = 'sperrliste' | 'darstellung' | 'modelle' | 'updates' | 'ueber'
 
-/** Stelle in einer Sitzung, zu der gesprungen wird (#209 AK 11, noch ungenutzt). */
-export type SessionFocus = { kind: 'title' } | { kind: 'paragraph'; index: number }
+import type { SearchFocus } from '../../../shared/types/Search'
+
+/**
+ * Stelle in einer Sitzung, zu der gesprungen wird (#209 AK 11): eine
+ * Fundstelle der Suche (Titel, Zusammenfassung oder Absätze mit Markierungen)
+ * oder ein Absatz.
+ */
+export type SessionFocus = SearchFocus | { kind: 'paragraph'; index: number }
 
 export type Route =
   | { kind: 'sessions' }
   | { kind: 'dossiers' }
   | { kind: 'dossier'; dossierId: string }
+  /** Suche nur in diesem Patientendossier (#211). */
+  | { kind: 'dossierSearch'; dossierId: string }
   | { kind: 'session'; sessionId: string; focus?: SessionFocus }
   | { kind: 'settings'; subpage: SubPage | null }
 
@@ -33,6 +40,8 @@ export function routeKey(route: Route): string {
       return route.kind
     case 'dossier':
       return `dossier:${route.dossierId}`
+    case 'dossierSearch':
+      return `dossierSearch:${route.dossierId}`
     case 'session':
       return `session:${route.sessionId}`
     case 'settings':

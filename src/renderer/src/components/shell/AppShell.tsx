@@ -3,6 +3,7 @@ import TitleBar from './TitleBar'
 import Sidebar from './Sidebar'
 import RecordingBar from './RecordingBar'
 import RouteView from './RouteView'
+import { SearchHost } from '../search/SearchHost'
 import { PageScroll } from './PageScroll'
 import MicrophoneBanner from '../MicrophoneBanner'
 import ToolsBlockedBanner from '../ToolsBlockedBanner'
@@ -94,6 +95,8 @@ export default function AppShell(): React.JSX.Element {
           </PageScroll>
         </div>
       </div>
+      {/* Suchfenster (#209) — ⌘K, Seitenleiste, Rücksprung aus einem Treffer */}
+      <SearchHost />
     </div>
   )
 }

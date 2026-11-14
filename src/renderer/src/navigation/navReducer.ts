@@ -14,7 +14,10 @@ export interface Entry {
   route: Route
   /** Karte, die beim Zurückkehren sichtbar und hervorgehoben sein soll. */
   anchorId?: string
-  /** Beim Zurückkehren wieder zu öffnendes Overlay (#209 AK 12, noch ungenutzt). */
+  /**
+   * Beim Zurückkehren wieder zu öffnendes Overlay (#209 AK 12): das
+   * Suchfenster, aus dem eine Sitzung bzw. ein Dossier geöffnet wurde.
+   */
   reopenOverlay?: 'search'
 }
 
@@ -56,6 +59,8 @@ export type NavAction =
   | { type: 'purge'; predicate: (route: Route) => boolean }
   /** Anker eines Eintrags verwerfen, sobald er eingelöst ist (einmal pro Rückkehr). */
   | { type: 'consumeAnchor'; entryId: number }
+  /** Wieder zu öffnendes Overlay verwerfen, sobald es geöffnet ist (einmal pro Rückkehr). */
+  | { type: 'consumeOverlay'; entryId: number }
 
 export function initialNavState(route: Route = HOME_ROUTE): NavState {
   return { back: [], current: { id: 1, route }, forward: [], nextId: 2 }
@@ -81,6 +86,13 @@ export function navReducer(state: NavState, action: NavAction): NavState {
       const { anchorId: _consumed, ...current } = state.current
       return { ...state, current }
     }
+    case 'consumeOverlay': {
+      if (state.current.id !== action.entryId || state.current.reopenOverlay === undefined) {
+        return state
+      }
+      const { reopenOverlay: _consumed, ...current } = state.current
+      return { ...state, current }
+    }
   }
 }
 
@@ -99,9 +111,15 @@ function navigate(state: NavState, route: Route, options: NavigateOptions): NavS
       return { ...state, current: { id: state.nextId, route, ...target }, nextId: state.nextId + 1 }
     }
     // Dieselbe Seite: kein neuer Eintrag. Eine andere Stelle (focus) derselben
-    // Sitzung übernimmt der aktuelle Eintrag.
+    // Sitzung übernimmt der aktuelle Eintrag — ohne `reopenOverlay`: es gibt
+    // keine Herkunftsseite, zu der das Overlay zurückkehren könnte.
     if (route === state.current.route) return state
-    return { ...state, current: { ...origin, route } }
+    const current: Entry = {
+      ...state.current,
+      ...(options.anchorId !== undefined ? { anchorId: options.anchorId } : {}),
+      route
+    }
+    return { ...state, current }
   }
 
   if (options.replace) {
@@ -195,7 +213,7 @@ function purge(state: NavState, predicate: (route: Route) => boolean): NavState 
   const deleted = state.current.route
   let current: Entry
   let nextId = state.nextId
-  if (deleted.kind === 'dossier') {
+  if (deleted.kind === 'dossier' || deleted.kind === 'dossierSearch') {
     current = { id: nextId++, route: { kind: 'dossiers' } }
   } else if (back.length > 0) {
     current = back[back.length - 1]

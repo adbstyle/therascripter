@@ -15,6 +15,8 @@ export interface Navigation {
   entryId: number
   /** Karte, die auf dieser Seite beim Zurückkehren hervorgehoben wird. */
   anchorId: string | undefined
+  /** Overlay, das beim Zurückkehren auf diese Seite wieder aufgeht (#209 AK 12). */
+  reopenOverlay: 'search' | undefined
   canBack: boolean
   canForward: boolean
   /** IDs aller Einträge im Verlauf — wer Daten pro Eintrag hält, räumt damit auf. */
@@ -24,6 +26,8 @@ export interface Navigation {
   forward: () => void
   /** Anker eines Eintrags verwerfen, nachdem er eingelöst wurde. */
   consumeAnchor: (entryId: number) => void
+  /** Wieder zu öffnendes Overlay verwerfen, nachdem es geöffnet wurde. */
+  consumeOverlay: (entryId: number) => void
 }
 
 /** Ein modaler Dialog ist offen — Menübefehle wechseln dann nicht die Seite. */

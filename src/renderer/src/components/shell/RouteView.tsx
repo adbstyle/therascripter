@@ -6,6 +6,7 @@ import ReviewEditor from '../../views/ReviewEditor'
 import Settings from '../../views/Settings'
 import DossiersPage from '../../views/DossiersPage'
 import DossierPage from '../../views/DossierPage'
+import DossierSearchPage from '../../views/DossierSearchPage'
 
 /** Rendert die Seite der aktuellen Route (Epic #192). */
 export default function RouteView(): React.JSX.Element {
@@ -35,6 +36,7 @@ export default function RouteView(): React.JSX.Element {
         <ReviewEditor
           key={route.sessionId}
           sessionId={route.sessionId}
+          focus={route.focus}
           onBack={closeSession}
           onOpenDossier={openDossier}
         />
@@ -45,5 +47,7 @@ export default function RouteView(): React.JSX.Element {
       return <DossiersPage />
     case 'dossier':
       return <DossierPage key={route.dossierId} dossierId={route.dossierId} />
+    case 'dossierSearch':
+      return <DossierSearchPage key={route.dossierId} dossierId={route.dossierId} />
   }
 }
