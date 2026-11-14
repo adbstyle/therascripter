@@ -136,7 +136,13 @@ def split_turn(text):
     if len(text.split()) <= MAX_UNIT_WORDS:
         return [text]
     pieces, current, count = [], [], 0
+    sentences = []
     for sentence in SENTENCE_SPLIT.split(text):
+        # Ein Satz ohne Satzzeichen über MAX_UNIT_WORDS (Mundart, Kommaketten) wird an
+        # Wortgrenzen geteilt, sonst entstünde eine übergrosse Unit.
+        words = sentence.split()
+        sentences += [" ".join(words[i : i + MAX_UNIT_WORDS]) for i in range(0, len(words), MAX_UNIT_WORDS)]
+    for sentence in sentences:
         n = len(sentence.split())
         if current and count + n > MAX_UNIT_WORDS:
             pieces.append(" ".join(current))
@@ -311,9 +317,20 @@ def cmd_merge_qrels(_args):
     print(f"{added} neue Bewertungen, total {len(rows)} → {QRELS_FILE}")
 
 
+def pool_audit_path(model_id=MODEL_ID):
+    return os.path.join(RESULTS_DIR, f"pool-audit-{model_id.split('/')[-1]}.jsonl")
+
+
 def cmd_pool(_args):
     """Pooling-Audit: Units in den Top-3-Abschnitten jeder Anfrage, die noch keine Note haben,
-    verblindet (ohne Rang) zur Nachbewertung → results/pool-audit.jsonl."""
+    verblindet (ohne Rang) zur Nachbewertung → results/pool-audit-<modell>.jsonl. Paare, die
+    schon in der Nachprüfung eines anderen Modells lagen, sind dort bewertet und fehlen hier.
+    Nach der Bewertung: Urteile nach qrels-parts/, dann merge-qrels und quality neu."""
+    path = pool_audit_path()
+    if os.path.exists(path):
+        sys.exit(f"{path} existiert schon — die Nachprüfung dieses Modells ist gemacht")
+    audited = {(r["q"], r["unit"]) for other in glob.glob(os.path.join(RESULTS_DIR, "pool-audit-*.jsonl"))
+               for r in load_jsonl(other)}
     run = load_result("quality-run1.json")
     units = {u["id"]: u for u in build_units(load_corpus())}
     chunks = {c["id"]: c for c in build_chunks(list(units.values()))}
@@ -329,11 +346,10 @@ def cmd_pool(_args):
                 rows.append({"q": pq["id"], "query": queries[pq["id"]]["text"], "unit": uid, "text": units[uid]["text"]})
     seen, out = set(), []
     for r in rows:
-        if (r["q"], r["unit"]) not in seen:
+        if (r["q"], r["unit"]) not in seen and (r["q"], r["unit"]) not in audited:
             seen.add((r["q"], r["unit"]))
             out.append(r)
     random.Random(208).shuffle(out)
-    path = os.path.join(RESULTS_DIR, "pool-audit.jsonl")
     with open(path, "w", encoding="utf-8") as f:
         f.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in out)
     print(f"{len(out)} Paare zur Nachbewertung → {path}")
@@ -448,6 +464,9 @@ def cmd_quality_one(args):
     queries = load_jsonl(QUERIES_FILE)
     qrels = load_qrels()
     unit_ids = {u["id"] for u in units}
+    unjudged = [q["id"] for q in queries if q["type"] != "negativ" and q["id"] not in qrels]
+    if unjudged:
+        sys.exit(f"Anfragen ohne Relevanzurteile: {unjudged} — erst bewerten und merge-qrels")
     unknown = sorted({u for rels in qrels.values() for u in rels} - unit_ids)
     if unknown:
         sys.exit(f"{len(unknown)} bewertete Units fehlen im Korpus, z. B. {unknown[:5]}")
@@ -719,7 +738,8 @@ def cmd_report(_args):
     idx = {k: load_result(f"bench-index-{k}.json") for k in ("mps", "cpu4")}
     srch = {k: load_result(f"bench-search-{k}.json") for k in ("mps", "cpu4")}
     peak = max(max(i["process_peak_gib"] for i in idx.values()), max(s["process_peak_gib"] for s in srch.values()))
-    warm_worst = max(s["warm_search"]["p95_s"] for s in srch.values())
+    # AK 4: jede Suche nach der ersten, also das Maximum, nicht ein Perzentil.
+    warm_worst = max(s["warm_search"]["max_s"] for s in srch.values())
     summary = {
         "quality": q,
         "index": idx,
@@ -727,7 +747,7 @@ def cmd_report(_args):
         "derived_8gb": {
             "process_peak_gib": peak,
             "peak_within_limit": peak <= LIMIT_PEAK_GIB,
-            "warm_search_p95_worst_s": warm_worst,
+            "warm_search_max_worst_s": warm_worst,
             "warm_within_limit": warm_worst < LIMIT_SEARCH_S,
             "first_search_worst_s": max(s["first_search"]["from_spawn_s"] for s in srch.values()),
         },

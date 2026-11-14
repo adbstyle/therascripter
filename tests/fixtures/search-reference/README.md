@@ -14,6 +14,7 @@ Personen, Orte, Inhalte. Messskript: `scripts/search-spike.py` (Ablauf im Kopf d
 | `pseudo/*.txt` | dieselben Dokumente pseudonymisiert (`[PERSON 1]`, `[ORT 1]` …), erzeugt mit `search-spike.py pseudonymize` |
 | `queries.jsonl` | 136 Anfragen: 126 mit Treffern, 10 ohne (`negativ`) |
 | `qrels.jsonl` | 1'148 Relevanzurteile (Anfrage, Unit, Note 1 oder 2); fehlendes Paar = Note 0 |
+| `RATER.md` | Wortlaut der Bewertungsanleitung für die Relevanzurteile |
 | `qrels-parts/` | Rohurteile je Bewertungsdurchgang, mit `search-spike.py merge-qrels` zusammengeführt |
 | `results/` | Messwerte des gewählten Modells; `results/embeddinggemma-300m/` zum Vergleich |
 
@@ -36,7 +37,9 @@ damit eine spätere Suche über beide Fassungen gegen dasselbe Set geprüft werd
 2. **Nachprüfung der Top-Treffer (Pooling):** Units in den Top-3-Abschnitten jedes Modells,
    die noch kein Urteil hatten, wurden verblindet (ohne Rang und ohne Modellnamen) nachbewertet —
    für embeddinggemma-300m 1'640 Paare (79 relevant), für EmbeddingGemma 2 1'297 Paare
-   (27 teilweise, keines voll relevant). Die Liste steht in `results/pool-audit*.jsonl`.
+   (27 teilweise, keines voll relevant). Paare aus der Nachprüfung eines früheren Modells
+   werden nicht erneut vorgelegt. Die Listen stehen in `results/pool-audit-<modell>.jsonl`,
+   erzeugt mit `search-spike.py pool`; die Anleitung für beide Durchgänge in `RATER.md`.
 3. **Stichprobe durch den Product Owner:** jede fünfte Anfrage (28 von 136) mit allen
    bewerteten Stellen in `results/po-review.md`; Ergebnis pro Anfrage in
    `results/po-review.jsonl`. **Stand: offen.**
@@ -78,7 +81,7 @@ Index 194 MiB. Liegt ausserhalb des Repos (`~/.cache/therascript-search-spike/`)
 | Speicher-Spitze beim Aufbereiten einer Sitzung | 1.87 GiB | 1.12 GiB | 3.5 GiB |
 | Dauer Aufbereiten einer Sitzung (~7'600 Wörter) | 2.9 s | 124 s | – |
 | Speicher-Spitze bei der Suche über 2'000 Einträge | 2.21 GiB | 1.12 GiB | 3.5 GiB |
-| Weitere Suchen, Median / 95 % | 0.03 / 0.04 s | 0.09 / 0.10 s | 2 s |
+| Weitere Suchen, Median / Maximum (30 Suchen) | 0.03 / 0.04 s | 0.09 / 0.11 s | 2 s |
 | Erste Suche nach dem Start | 5.9 s | 4.8 s | (2 s) |
 
 Die erste Suche besteht fast ganz aus dem Laden des Modells (5.3 s bzw. 4.4 s); Index laden
@@ -88,7 +91,7 @@ Die erste Suche besteht fast ganz aus dem Laden des Modells (5.3 s bzw. 4.4 s); 
 
 - **Speicher: ≤ 3.5 GiB erfüllt** (Spitze 2.21 GiB). Annahme: Der Speicherbedarf eines
   Prozesses hängt an Modell und Index, nicht am RAM des Geräts; gemessen wurde ohne Speicherdruck.
-- **Weitere Suchen: < 2 s erfüllt** (schlechtester Wert 0.10 s auf dem Prozessor). Annahme:
+- **Weitere Suchen: < 2 s erfüllt** (langsamste von 30 Suchen 0.11 s auf dem Prozessor). Annahme:
   Ein M1 rechnet um höchstens Faktor 4 langsamer als der Messrechner; selbst Faktor 10 bliebe
   bei 1 s.
 - **Erste Suche: über 2 s** — schon auf dem Messrechner 4.8–5.9 s, auf einem 8-GB-Mac mit

@@ -129,7 +129,7 @@
  "derived_8gb": {
   "process_peak_gib": 2.2067888528108597,
   "peak_within_limit": true,
-  "warm_search_p95_worst_s": 0.10191041696816683,
+  "warm_search_max_worst_s": 0.11149816703982651,
   "warm_within_limit": true,
   "first_search_worst_s": 5.876954472158104
  }
