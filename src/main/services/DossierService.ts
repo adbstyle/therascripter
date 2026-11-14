@@ -6,6 +6,7 @@ import {
   type DossierSessionScopeRow
 } from '../db/repositories/DossierRepository'
 import { walCheckpointTruncate } from '../db/maintenance'
+import { SearchRecentRepository } from '../db/repositories/SearchRecentRepository'
 import { SessionService } from './SessionService'
 import { notifyDossiersChanged, notifySessionsChanged } from './ChangeEvents'
 import {
@@ -275,6 +276,16 @@ export class DossierService {
           return { kind: 'result', result: { ok: false, reason: 'blocked-recording' } }
         }
         this.sessions.markForDeletion(scope.exclusiveIds)
+        // #209 PC 4 — letzte Suchanfragen mit Vor-/Nachname oder ID dieses
+        // Dossiers gehen mit; der Checkpoint unten entfernt sie aus den Dateien
+        const ref = this.repository.findRefById(id)
+        if (ref) {
+          new SearchRecentRepository(this.db).forgetContaining([
+            ref.firstName,
+            ref.lastName,
+            ref.externalId
+          ])
+        }
         this.repository.delete(id)
         return { kind: 'done', exclusiveIds: scope.exclusiveIds }
       }
