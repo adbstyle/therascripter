@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import { SearchIndexService, type VectorPhaseDeps } from '../SearchIndexService'
 import { SearchWorkerUnavailableError } from '../SearchWorker'
-import { addIndexedSession, createSearchTestDb, indexAll } from './helpers'
+import { addIndexedSession, createSearchTestDb, indexAll, makeDoc } from './helpers'
 import { TEST_MODEL, fakeEmbed } from './semanticHelpers'
 import type { SearchModelInfo } from '../searchModel'
 
@@ -436,5 +436,83 @@ describe('SearchIndexService — Vektorphase', () => {
     expect(state(h.db, 's1').vec_gen).toBe(third)
     expect(h.changed).toEqual(['s1'])
     expect(first).toBeLessThan(second)
+  })
+})
+
+// #212 AK 2 für die Vektoren: Nach einer Bearbeitung ausserhalb von Aufnahme
+// und Verarbeitung sind binnen einer Minute auch die Vektoren nachgezogen —
+// über den echten Takt (setInterval/setTimeout), nicht über runVectorPhaseToEnd.
+describe('SearchIndexService — Vektoren nach einer Bearbeitung binnen einer Minute (#212 AK 2)', () => {
+  let db: Database.Database
+  let service: SearchIndexService
+
+  afterEach(() => {
+    service?.stop()
+    db?.close()
+    vi.useRealTimers()
+  })
+
+  async function editedSessionAfterOneMinute(
+    prepare?: (db: Database.Database) => void
+  ): Promise<{ calls: string[][]; before: number }> {
+    db = createSearchTestDb()
+    const docs = new Map<string, unknown>()
+    const calls: string[][] = []
+    service = new SearchIndexService(db, {
+      now: () => Date.now(),
+      readDocument: (path) => docs.get(path),
+      vectors: {
+        resolveModel: () => TEST_MODEL,
+        isProcessingActive: () => false,
+        embedDocuments: async (texts) => {
+          calls.push(texts)
+          return texts.map((t) => fakeEmbed(t))
+        }
+      }
+    })
+    addIndexedSession(db, docs, { id: 's1' }, longParagraphs(6, 'Angst'))
+    addIndexedSession(db, docs, { id: 'stock' }, longParagraphs(6, 'Bestand'))
+    indexAll(service)
+    await service.runVectorPhaseToEnd()
+    const before = state(db, 's1').text_gen
+    // Erst jetzt Fake-Timer: die Vorbereitung oben treibt die Phase selbst
+    vi.useFakeTimers({ now: NOW })
+    prepare?.(db)
+    calls.length = 0
+
+    // Bearbeitung jetzt (review:save → search_rev + 1, updated_at = jetzt)
+    docs.set('/docs/s1.json', makeDoc(longParagraphs(6, 'Freude')))
+    db.prepare('UPDATE sessions SET search_rev = search_rev + 1, updated_at = ? WHERE id = ?').run(
+      new Date(Date.now()).toISOString(),
+      's1'
+    )
+    service.start()
+    await vi.advanceTimersByTimeAsync(60_000)
+    return { calls, before }
+  }
+
+  it('zieht Text UND Vektoren der bearbeiteten Sitzung binnen 60 s nach', async () => {
+    const { calls, before } = await editedSessionAfterOneMinute()
+    const after = state(db, 's1')
+    expect(after.text_gen).toBeGreaterThan(before)
+    expect(after.vec_gen).toBe(after.text_gen)
+    expect(pendingVectors(db, 's1', after.text_gen)).toBe(0)
+    expect(calls.flat().some((t) => t.includes('Freude'))).toBe(true)
+  })
+
+  it('ein Backoff aus einem früheren Fehler hält die neue Fassung nicht auf', async () => {
+    const { calls } = await editedSessionAfterOneMinute((d) =>
+      d
+        .prepare(
+          `UPDATE search_index_state SET attempts = 4, last_error = 'kaputt',
+             next_attempt_at = ? WHERE session_id = 's1'`
+        )
+        .run(new Date(NOW + 6 * 3600_000).toISOString())
+    )
+    const after = state(db, 's1')
+    expect(after.vec_gen).toBe(after.text_gen)
+    expect(after.attempts).toBe(0)
+    expect(after.next_attempt_at).toBeNull()
+    expect(calls.flat().some((t) => t.includes('Freude'))).toBe(true)
   })
 })

@@ -218,7 +218,9 @@ export class SearchIndexRepository {
              text_gen = excluded.text_gen,
              text_rev = excluded.text_rev,
              last_error = excluded.last_error,
-             doc_stat = excluded.doc_stat`
+             doc_stat = excluded.doc_stat,
+             attempts = 0,
+             next_attempt_at = NULL`
         )
         .run(sessionId, gen, readRev, error, docStat)
       return gen
