@@ -150,7 +150,7 @@ export default function DossiersPage(): React.JSX.Element {
 /** Leere Übersicht mit Anleitung (#204 AK 13). */
 function EmptyOverview({ onCreate }: { onCreate: () => void }): React.JSX.Element {
   return (
-    <div className="flex max-w-md flex-col items-start gap-2.5 rounded-xl border border-dashed border-border-strong p-6">
+    <div className="flex max-w-[340px] flex-col items-start gap-2.5 rounded-xl border border-dashed border-border-strong p-6">
       <BookUser className="h-7 w-7 text-text-secondary" strokeWidth={1.5} aria-hidden />
       <h2 className="text-base font-semibold leading-6 text-text-primary">
         Noch keine Patientendossiers

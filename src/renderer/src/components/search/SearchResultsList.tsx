@@ -378,7 +378,7 @@ function OptionContent({
     case 'hit':
       return (
         <div className="flex gap-3 px-2.5 py-1.5 pl-8 text-sm">
-          <span className="w-24 shrink-0 text-xs leading-5 text-text-tertiary">
+          <span className="w-28 shrink-0 hyphens-auto break-words text-xs leading-5 text-text-tertiary">
             {hitLabel(option.hit, option.doc.type)}
           </span>
           <SnippetText snippet={option.hit.snippet} semantic={option.hit.kind === 'semantic'} />
