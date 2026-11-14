@@ -293,29 +293,46 @@ describe('DossierTimeline (#205)', () => {
     expect(screen.getByLabelText(/^Aufnahmedauer /)).toBeInTheDocument()
   })
 
+  // Lastunabhängig (Abschluss-Check #192): jsdom unter CPU-Last streckt jede
+  // absolute Zeit. Die Aussage «linear, keine Arbeit pro Eintrag im Quadrat»
+  // prüft das Verhältnis zu 30 Einträgen, gemessen unmittelbar davor im selben
+  // Prozess; die absolute Grenze fängt nur grobe Rückschritte (auf dem
+  // Entwicklungs-Mac ~0.3 s für 300 Einträge). AK 25 selbst (< 1 s auf einem
+  // 8-GB-Mac) ist nur in der laufenden App messbar.
   it('renders 300 entries in well under a second (AK 25)', async () => {
-    const entries = Array.from({ length: 300 }, (_, i) => {
-      const day = new Date(2026, 10, 14 - Math.floor(i / 2))
-      const iso = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
-      return makeTimelineEntry({
-        id: `e${i}`,
-        title: `Sitzung ${i}`,
-        titlePlain: `Sitzung ${i}`,
-        type: i % 3 === 0 ? 'pdf' : 'audio',
-        summary: 'Zusammenfassung '.repeat(30),
-        summaryPlain: 'Zusammenfassung '.repeat(30),
-        sortDay: iso,
-        dossiers: [makeDossierRef(), makeDossierRef({ id: 'd2', firstName: 'Maria' })]
+    const makeEntries = (count: number): TimelineEntry[] =>
+      Array.from({ length: count }, (_, i) => {
+        const day = new Date(2026, 10, 14 - Math.floor(i / 2))
+        const iso = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+        return makeTimelineEntry({
+          id: `e${i}`,
+          title: `Sitzung ${i}`,
+          titlePlain: `Sitzung ${i}`,
+          type: i % 3 === 0 ? 'pdf' : 'audio',
+          summary: 'Zusammenfassung '.repeat(30),
+          summaryPlain: 'Zusammenfassung '.repeat(30),
+          sortDay: iso,
+          dossiers: [makeDossierRef(), makeDossierRef({ id: 'd2', firstName: 'Maria' })]
+        })
       })
-    })
-    const start = performance.now()
-    renderTimeline(entries)
-    await screen.findByText('Sitzung 299')
-    const elapsed = performance.now() - start
-    expect(screen.getAllByRole('article')).toHaveLength(300)
-    // jsdom ist deutlich langsamer als Chromium; das Budget gilt für den Test-Rechner
-    expect(elapsed).toBeLessThan(1000)
-  })
+    const timed = async (count: number): Promise<number> => {
+      const start = performance.now()
+      const view = renderTimeline(makeEntries(count))
+      await screen.findByText(`Sitzung ${count - 1}`)
+      const elapsed = performance.now() - start
+      expect(screen.getAllByRole('article')).toHaveLength(count)
+      view.unmount()
+      return elapsed
+    }
+    await timed(30) // Aufwärmen (Module, erste Darstellung)
+    const small = await timed(30)
+    const large = await timed(300)
+    console.log(
+      `[DossierTimeline] 30 Einträge ${small.toFixed(0)} ms, 300 Einträge ${large.toFixed(0)} ms`
+    )
+    expect(large).toBeLessThan(Math.max(25 * small, 250))
+    expect(large).toBeLessThan(10_000)
+  }, 60_000)
 })
 
 describe('TimelineEntryCard (#205 AK 10–15)', () => {

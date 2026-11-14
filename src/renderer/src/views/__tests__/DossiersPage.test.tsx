@@ -136,36 +136,56 @@ describe('DossiersPage (#204 AK 12–15)', () => {
     await waitFor(() => expect(rowNames()).toEqual(['Bachmann, Lea']))
   })
 
+  // Lastunabhängig (Abschluss-Check #192): unter CPU-Last streckt jsdom jede
+  // absolute Zeit. Geprüft wird deshalb strukturell — Anzeige von 500 Zeilen
+  // höchstens linear gegenüber 50 Zeilen (gemessen unmittelbar davor), Filtern
+  // nicht teurer als die volle Anzeige, wenige Durchläufe pro Tastendruck —
+  // und absolut nur gegen grobe Rückschritte. Die eigentliche Spürbarkeit
+  // (AK 15) ist nur in der laufenden App beurteilbar.
   it('zeigt und filtert 500 Dossiers ohne spürbare Verzögerung (AK 15)', async () => {
-    const many = Array.from({ length: 500 }, (_, i) =>
-      makeDossierListItem({
-        id: `d${i}`,
-        firstName: `Vorname${i}`,
-        lastName: `Nachname${String(i).padStart(3, '0')}`,
-        externalId: `PD-${i}`
-      })
-    )
+    const makeMany = (count: number): ReturnType<typeof makeDossierListItem>[] =>
+      Array.from({ length: count }, (_, i) =>
+        makeDossierListItem({
+          id: `d${i}`,
+          firstName: `Vorname${i}`,
+          lastName: `Nachname${String(i).padStart(3, '0')}`,
+          externalId: `PD-${i}`
+        })
+      )
     let commits = 0
-    window.api = createMockApi({ dossiers: { list: vi.fn().mockResolvedValue(many) } })
-    const renderStart = performance.now()
-    renderWithProviders(
-      <Profiler id="dossiers" onRender={() => commits++}>
-        <DossiersPage />
-      </Profiler>,
-      { route: { kind: 'dossiers' } }
-    )
-    await waitFor(() => expect(rowNames()).toHaveLength(500))
-    // Budgets grosszügig für jsdom auf CI; im echten Build sind es Millisekunden
-    expect(performance.now() - renderStart).toBeLessThan(1500)
+    const timedRender = async (count: number): Promise<{ ms: number; unmount: () => void }> => {
+      window.api = createMockApi({
+        dossiers: { list: vi.fn().mockResolvedValue(makeMany(count)) }
+      })
+      const start = performance.now()
+      const view = renderWithProviders(
+        <Profiler id="dossiers" onRender={() => commits++}>
+          <DossiersPage />
+        </Profiler>,
+        { route: { kind: 'dossiers' } }
+      )
+      await waitFor(() => expect(rowNames()).toHaveLength(count))
+      return { ms: performance.now() - start, unmount: view.unmount }
+    }
+    ;(await timedRender(50)).unmount() // Aufwärmen
+    const small = await timedRender(50)
+    small.unmount()
+    const large = await timedRender(500)
+    expect(large.ms).toBeLessThan(Math.max(25 * small.ms, 250))
+    expect(large.ms).toBeLessThan(15_000)
 
     const filter = screen.getByRole('searchbox', { name: 'Nach Namen filtern' })
     commits = 0
     const filterStart = performance.now()
     fireEvent.change(filter, { target: { value: 'nachname42' } })
     await waitFor(() => expect(rowNames()).toHaveLength(10))
-    expect(performance.now() - filterStart).toBeLessThan(1500)
+    const filterMs = performance.now() - filterStart
+    console.log(
+      `[DossiersPage] 50 Zeilen ${small.ms.toFixed(0)} ms, 500 Zeilen ${large.ms.toFixed(0)} ms, Filtern ${filterMs.toFixed(0)} ms`
+    )
+    expect(filterMs).toBeLessThan(Math.max(large.ms, 250))
     // Ein Tastendruck: Eingabe sofort, gefilterte Liste nachgezogen (useDeferredValue) —
     // höchstens wenige Durchläufe, kein Durchlauf pro Zeile
     expect(commits).toBeLessThanOrEqual(3)
-  })
+  }, 60_000)
 })
