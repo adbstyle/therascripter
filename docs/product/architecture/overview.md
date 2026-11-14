@@ -152,7 +152,7 @@ type Route =
 ```
 
 - `navReducer.ts` — pure history `{ back, current, forward }`, at most 50 entries, kept in memory only (#213 OOS 1). `navigate(route, { anchorId })` writes the anchor onto the entry being left; navigating to the same page creates no entry; `back`/`forward` skip invalid entries; `purge` removes entries of deleted objects and replaces the current one (dossier → overview, session → previous entry, otherwise the sessions list).
-- `NavigationContext.tsx` — `useNavigation()` with `route`, `entryId`, `anchorId`, `canBack`, `canForward`, `navigate`, `back`, `forward`. Subscribes to `nav:command` (menu «Gehe zu»), `nav:openSettings` (app menu ⌘, and tray, always the Settings overview) and `sessions:changed` (`deletedIds` → `purge`, #213 PC 3).
+- `NavigationContext.tsx` — `useNavigation()` with `route`, `entryId`, `anchorId`, `canBack`, `canForward`, `navigate`, `back`, `forward`. Subscribes to `nav:command` (menu «Gehe zu»), `nav:openSettings` (app menu ⌘, and tray, always the Settings overview), `sessions:changed` and `dossiers:changed` (`deletedIds` → `purge`, #213 PC 3).
 - `useScrollRestoration(ready)` — `PageScroll` is the shell's only scroll container and is keyed by `entryId`; it stores `scrollTop` per entry. Once a page's data is loaded, the position is restored and the card of `anchorId` is highlighted (scrolled into view only if hidden) — e.g. after closing a session (#205 AK 16).
 
 **Rendering:**
@@ -169,7 +169,7 @@ type Route =
 
 **Navigation constraints:**
 - The app stays fully navigable during recording; the sessions list shows the live `RecordingSessionCard`, every other route the `RecordingBar`. Starting a recording navigates to the sessions list.
-- The sidebar can be hidden (title-bar button, ⌃⌘S); the state is stored as `sidebarOpen` in electron-store.
+- The sidebar can be hidden (title-bar button, ⌃⌘S); the state is stored as `sidebarOpen` in electron-store and read synchronously by the preload before the first render.
 - The app stays alive in the macOS menu bar when the window is closed (standard macOS behavior via `TrayService`).
 - Lists reload on the bundled main-process event `sessions:changed` (`src/main/services/ChangeEvents.ts`) via `hooks/useLiveQuery`.
 - Updates (app and models as one, #167) show as «Update bereit» / «Update verfügbar» in the sidebar footer, which opens Settings → Updates; installing restarts the app once.

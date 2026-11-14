@@ -169,9 +169,9 @@ Source: `src/main/ipc/dossier-handlers.ts`, service `src/main/services/DossierSe
 | Channel | Payload | Description |
 |---|---|---|
 | `dossiers:changed` | `{ deletedIds: string[] }` (≤ 1000, parsed with `DossiersChangedSchema` in the preload) | After create, after an update of name, dossier ID or birth date (not for free text — it is shown nowhere else), after a deletion with the deleted ID |
-| `sessions:changed` | `{ deletedIds: string[] }` | Sent by the dossier deletion with the IDs of the sessions it deleted. Wiring into the other session paths and the preload listener come with the shell rework of Epic #192 |
+| `sessions:changed` | `{ deletedIds: string[] }` | Also sent by the dossier deletion with the IDs of the sessions it deleted (via `DossierService`; `SessionService.finishDeletion` itself does not notify, so nothing is sent twice). All other triggers: see «Session Handlers» |
 
-Both events go through `src/main/services/ChangeEvents.ts` (`notifyDossiersChanged`, `notifySessionsChanged`): bundled with `setImmediate`, so one tick yields at most one event per channel with the union of deleted IDs.
+Both events go through `src/main/services/ChangeEvents.ts` (`notifyDossiersChanged`, `notifySessionsChanged`): bundled with `setImmediate`, so one tick yields at most one event per channel with the union of deleted IDs; more than 1000 IDs are split. Without a window nothing is sent. Limit and schemas: `src/shared/validation/change-event-schemas.ts`. The renderer removes deleted dossiers from its page history (current page → `dossiers` overview).
 
 ### Model Download Handlers
 
@@ -225,6 +225,7 @@ Source: `src/main/ipc/settings-handlers.ts`
 | Channel | Direction | Input Schema | Return Type | Description |
 |---|---|---|---|---|
 | `viewMode:getSync` | sendSync | _(none)_ | `ViewMode` | Read by the preload **synchronously** before the renderer runs (`window.api.viewMode.initial`), so the first render already shows the saved view. Unknown/unreadable → `'pseudonymized'` |
+| `sidebarOpen:getSync` | sendSync | _(none)_ | `boolean` | Read by the preload synchronously (`window.api.nav.initialSidebarOpen`, Epic #192) so the sidebar never flashes at start. Anything but `false` → `true` |
 | `viewMode:set` | invoke | `ViewModeSetSchema` — `{ mode: 'pseudonymized' \| 'plain' }` | `void` | Persist the chosen view (electron-store `viewMode`) |
 
 ### System Handlers

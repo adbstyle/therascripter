@@ -165,14 +165,21 @@ describe('AppShell — Seitenleiste und Titelleiste', () => {
     expect(window.api.settings.set).toHaveBeenLastCalledWith('sidebarOpen', true)
   })
 
-  it('startet mit der gespeicherten Seitenleisten-Einstellung', async () => {
-    window.api.settings.get = vi.fn(async (key: string) =>
-      key === 'sidebarOpen' ? false : undefined
-    )
+  it('startet ohne Aufblitzen mit der gespeicherten, synchron gelesenen Einstellung', () => {
+    window.api = createMockApi({
+      sessions: { list: vi.fn().mockResolvedValue([reviewSession]) },
+      nav: { initialSidebarOpen: false }
+    })
     renderShell()
-    await waitFor(() =>
-      expect(screen.queryByRole('navigation', { name: 'Seitenleiste' })).not.toBeInTheDocument()
-    )
+    // Schon im ersten Render — ohne auf eine Antwort zu warten
+    expect(screen.queryByRole('navigation', { name: 'Seitenleiste' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Seitenleiste einblenden' })).toBeInTheDocument()
+    expect(window.api.settings.get).not.toHaveBeenCalledWith('sidebarOpen')
+  })
+
+  it('zeigt die Seitenleiste ohne gespeicherten Wert sofort an', () => {
+    renderShell()
+    expect(screen.getByRole('navigation', { name: 'Seitenleiste' })).toBeInTheDocument()
   })
 
   it('geht mit ‹ und › durch die besuchten Seiten', async () => {

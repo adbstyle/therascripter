@@ -159,6 +159,7 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
       onState: on('toolHealth.onState')
     },
     nav: {
+      initialSidebarOpen: true,
       onOpenSettings: on('nav.onOpenSettings'),
       onCommand: on('nav.onCommand')
     },

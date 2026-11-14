@@ -244,6 +244,11 @@ export interface MicrophoneApi {
 
 export interface NavApi {
   onOpenSettings(callback: () => void): () => void
+  /**
+   * Epic #192 — gespeicherter Zustand der Seitenleiste, vom Preload synchron
+   * gelesen (wie `viewMode.initial`): kein Aufblitzen beim Start. Fallback true.
+   */
+  initialSidebarOpen: boolean
   /** Epic #192 — Menü «Gehe zu» (Zurück/Vorwärts) und Seitenleiste ein-/ausblenden. */
   onCommand(callback: (command: NavCommand) => void): () => void
 }

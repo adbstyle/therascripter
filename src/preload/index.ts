@@ -37,6 +37,15 @@ function readInitialViewMode(): ViewMode {
 }
 import { dossierApi } from './api/dossiers'
 
+/** Epic #192 — gespeicherte Seitenleiste vor dem ersten Render; im Zweifel eingeblendet. */
+function readInitialSidebarOpen(): boolean {
+  try {
+    return ipcRenderer.sendSync('sidebarOpen:getSync') !== false
+  } catch {
+    return true
+  }
+}
+
 const api: IpcApi = {
   sessions: {
     list: () => ipcRenderer.invoke('session:list'),
@@ -261,6 +270,7 @@ const api: IpcApi = {
   },
   dossiers: dossierApi,
   nav: {
+    initialSidebarOpen: readInitialSidebarOpen(),
     onOpenSettings: (callback) => {
       const handler = (): void => callback()
       ipcRenderer.on('nav:openSettings', handler)
