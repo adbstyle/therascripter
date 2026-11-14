@@ -49,11 +49,16 @@ export const SEARCH_SNIPPET_MAX_CHARS = 220
 export const SEARCH_ANCHOR_CHARS = 60
 
 /**
- * Schwelle «ausreichend passend» für Treffer nach Bedeutung (#209 AK 6).
- * Vorläufig (Entscheid des Orchestrators), endgültig nach dem Abnahmetest
- * (PR S6).
+ * Schwelle «ausreichend passend» für Treffer nach Bedeutung (#209 AK 6),
+ * kalibriert im Abnahmetest (PR S6, Tabelle in docs/product/features/search.md):
+ * auf dem Referenz-Set zeigen bei 0.71 noch 75 % der Anfragen mit Treffern
+ * einen relevanten Treffer (Produktiv-Rangfolge, nach Bedeutung allein 60 %),
+ * und 8 von 10 Anfragen ohne Treffer zeigen nichts (bei 0.70: 77 % / 63 %,
+ * 4 von 10); der Recall der Abschnitte mit Note 2 sinkt dabei von 44 auf
+ * 36 % (nach Bedeutung) bzw. von 44 auf 40 % (sichtbare Reihenfolge). Kleines Set (148 Abschnitte, 10 Anfragen ohne Treffer) — die
+ * endgültige Wahl trifft der Product Owner.
  */
-export const SEARCH_SEMANTIC_THRESHOLD = 0.7
+export const SEARCH_SEMANTIC_THRESHOLD = 0.71
 
 /** Textphase der Aufbereitung (#212): ruhiges Fenster und Takt. */
 export const SEARCH_QUIET_WINDOW_MS = 10_000

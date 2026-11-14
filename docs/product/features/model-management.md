@@ -12,7 +12,7 @@ On startup, `App.tsx` calls `modelDownload:status` (which runs `checkModelsExist
 
 Before the user can start the download, `FirstLaunchScreen` calls `modelDownload:checkDiskSpace`. The handler in `model-download-handlers.ts` uses `statfsSync` against `~/.therascript/` and enforces a **5 GB minimum** (`MINIMUM_DISK_SPACE_BYTES = 5 * 1024 * 1024 * 1024`). If disk space is insufficient, the screen shows an error with available vs. required space and asks the user to free space and restart.
 
-Why 5 GB is still enough with the search model: models download one after another and every archive is deleted right after extraction, so the peak is reached while the last big archive is extracted. Whisper 0.57 GB + pyannote extracted ~0.13 GB + NER 1.04 GB packed + ~1.1 GB extracted ≈ 2.85 GB (NER step), or with NER extracted plus the search archive 0.43 GB and its 0.58 GB extracted ≈ 2.8 GB (search step). Even the sum of everything packed and extracted (~3.8 GB, upper bound) stays below 5 GiB (5.37 GB), and afterwards models take ~2.4 GB, leaving room for the search index (up to ~0.6 GB at 2'000 sessions).
+Why 5 GB is still enough with the search model: models download one after another and every archive is deleted right after extraction, so the peak is reached while the last big archive is extracted. Whisper 0.57 GB + pyannote extracted ~0.13 GB + NER 1.04 GB packed + ~1.1 GB extracted ≈ 2.85 GB (NER step), or with NER extracted plus the search archive 0.43 GB and its 0.58 GB extracted ≈ 2.8 GB (search step). Even the sum of everything packed and extracted (~3.8 GB, upper bound) stays below 5 GiB (5.37 GB), and afterwards models take ~2.4 GB, leaving room for the search index (up to ~0.7 GB at 2'000 sessions).
 
 ### Model Definitions
 

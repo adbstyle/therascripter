@@ -173,7 +173,7 @@ export default function AboutPage(): React.JSX.Element {
             selbst löschen.
           </p>
           <p className="mt-1 text-sm text-text-secondary">
-            Der Suchindex liegt nur lokal auf Ihrem Mac (bis ~0.6&nbsp;GB bei 2&apos;000 Sitzungen).
+            Der Suchindex liegt nur lokal auf Ihrem Mac (bis ~0.7&nbsp;GB bei 2&apos;000 Sitzungen).
             Löschen Sie eine Sitzung, entfernt TheraScript auch ihre Einträge im Suchindex.
           </p>
           <p className="mt-1 text-sm text-text-secondary">
