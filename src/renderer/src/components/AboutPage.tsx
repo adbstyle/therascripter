@@ -47,13 +47,14 @@ export default function AboutPage(): React.JSX.Element {
           </p>
           <p>
             Mit dem Internet verbindet sich TheraScript nur, um Sprachmodelle herunterzuladen (bei
-            der Ersteinrichtung und beim Hinzufügen eines Modells), um nach neuen Versionen zu
-            suchen (beim Start und alle 4 Stunden) und um Updates herunterzuladen — neue Versionen
-            samt neuen Fassungen der Sprachmodelle, automatisch oder auf Klick (siehe Einstellungen
-            → Updates). Dabei sehen die Anbieter Cloudflare und GitHub Ihre IP-Adresse, den
-            Zeitpunkt und die abgerufene Datei. TheraScript sendet kein Konto, keine Kennung und
-            keine Nutzungsdaten. Nach der Ersteinrichtung funktioniert TheraScript auch ohne
-            Internet.
+            der Ersteinrichtung, beim Hinzufügen eines Modells und, falls es noch fehlt, das
+            Suchmodell mit rund 0.43&nbsp;GB im Hintergrund, auch wenn die automatischen Updates
+            ausgeschaltet sind), um nach neuen Versionen zu suchen (beim Start und alle 4 Stunden)
+            und um Updates herunterzuladen — neue Versionen samt neuen Fassungen der Sprachmodelle,
+            automatisch oder auf Klick (siehe Einstellungen → Updates). Dabei sehen die Anbieter
+            Cloudflare und GitHub Ihre IP-Adresse, den Zeitpunkt und die abgerufene Datei.
+            TheraScript sendet kein Konto, keine Kennung und keine Nutzungsdaten. Nach der
+            Ersteinrichtung funktioniert TheraScript auch ohne Internet.
           </p>
         </div>
 
@@ -170,6 +171,10 @@ export default function AboutPage(): React.JSX.Element {
             Audioaufnahmen und Original-PDFs werden 24&nbsp;Stunden nach erfolgreicher Verarbeitung
             gelöscht. Schlägt die Verarbeitung fehl, bleiben sie erhalten, bis Sie die Sitzung
             selbst löschen.
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
+            Der Suchindex liegt nur lokal auf Ihrem Mac (bis ~0.6&nbsp;GB bei 2&apos;000 Sitzungen).
+            Löschen Sie eine Sitzung, entfernt TheraScript auch ihre Einträge im Suchindex.
           </p>
           <p className="mt-1 text-sm text-text-secondary">
             Patientendossiers mit Stammdaten, Diagnosen, Medikation und Notiz bleiben lokal

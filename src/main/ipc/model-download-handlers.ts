@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { getAppUpdateService } from '../services/app-update-deps'
+import { getSearchModelProvisioner } from '../services/search-model-provisioner-deps'
 import { statfsSync } from 'fs'
 import { getDataDir } from '../db/connection'
 import {
@@ -45,5 +46,8 @@ export function registerModelDownloadHandlers(): void {
     await startModelDownload()
     // Vor abgeschlossener Ersteinrichtung stellt das Update nichts bereit (#167)
     getAppUpdateService()?.handleModelsChanged()
+    // Hat nur das Suchmodell gefehlt, übernimmt jetzt der Hintergrund-Download
+    // (vorher hielt er sich zurück — nie doppelt neben der Ersteinrichtung)
+    getSearchModelProvisioner()?.start()
   })
 }

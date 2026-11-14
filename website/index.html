@@ -547,7 +547,7 @@
           <li>Mac mit Apple-Chip (M1 oder neuer)</li>
           <li>macOS 26 (Tahoe) oder neuer</li>
           <li>8 GB Arbeitsspeicher (RAM) oder mehr</li>
-          <li>5 GB freier Festplattenspeicher</li>
+          <li>5 GB freier Festplattenspeicher (Sprachmodelle ~2.1 GB Download)</li>
         </ul>
       </section>
 
@@ -561,8 +561,9 @@
             Diagnosen, Medikation und Notiz werden ausschliesslich lokal auf Ihrem Mac gespeichert
             (Standardpfad: <code>~/.therascript/</code>). Patientendossiers bleiben erhalten, bis
             Sie sie löschen oder TheraScript in den Einstellungen unter «Über» vollständig
-            entfernen; die App nur in den Papierkorb zu legen, löscht sie nicht. TheraScript
-            übermittelt keine Inhalte aus Ihren Sitzungen – sie verlassen Ihren Mac nur, wenn Sie
+            entfernen; die App nur in den Papierkorb zu legen, löscht sie nicht. Auch der Suchindex
+            (bis ~0.6 GB bei 2'000 Sitzungen) liegt nur auf Ihrem Mac und wird mit der Sitzung
+            gelöscht. TheraScript übermittelt keine Inhalte aus Ihren Sitzungen – sie verlassen Ihren Mac nur, wenn Sie
             sie selbst kopieren.
           </p>
         </details>
@@ -577,6 +578,9 @@
                 den Einstellungen ein Modell hinzufügen, und mit Updates: Neue Fassungen Ihrer Modelle
                 und Modelle, die eine neue Version braucht, lädt TheraScript automatisch zusammen mit
                 dem Update – oder nur auf Klick, wenn Sie die automatischen Updates ausschalten.
+                Fehlt das Suchmodell (rund 0.43 GB, etwa nach dem Update von einer Version ohne
+                Suche), lädt TheraScript es selbständig im Hintergrund nach, auch wenn die
+                automatischen Updates ausgeschaltet sind.
               </li>
               <li>
                 <strong>Nach neuen Versionen suchen:</strong> bei jedem Start, danach alle 4 Stunden

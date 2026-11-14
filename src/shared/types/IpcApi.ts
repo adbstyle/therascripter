@@ -11,7 +11,7 @@ import type { MicrophoneState, MicrophoneStatus } from './Microphone'
 import type { ProcessedModelsSnapshot, AudioStats } from './Provenance'
 import type {
   ModelCatalogEntry,
-  ModelGroup,
+  SlotModelGroup,
   DiarizationPipeline
 } from '../validation/model-catalog-schemas'
 import type { ToolHealthState } from '../tool-blocked'
@@ -264,12 +264,13 @@ export interface NavApi {
 }
 
 export interface ModelCatalogApi {
-  list(group: ModelGroup): Promise<ModelCatalogEntry[]>
+  /** Nur Gruppen mit Slot — das Suchmodell zeigt eine Statuskarte (search.open). */
+  list(group: SlotModelGroup): Promise<ModelCatalogEntry[]>
   listAsr(): Promise<ModelCatalogEntry[]>
   download(id: string): Promise<ModelCatalogEntry[]>
   delete(id: string): Promise<ModelCatalogEntry[]>
-  setActive(group: ModelGroup, id: string): Promise<ModelCatalogEntry[]>
-  clearActive(group: ModelGroup): Promise<ModelCatalogEntry[]>
+  setActive(group: SlotModelGroup, id: string): Promise<ModelCatalogEntry[]>
+  clearActive(group: SlotModelGroup): Promise<ModelCatalogEntry[]>
   cancelDownload(): Promise<void>
 }
 

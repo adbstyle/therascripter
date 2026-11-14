@@ -8,6 +8,7 @@ import { formatBytes } from '../../utils/formatBytes'
 import ModelCard from './ModelCard'
 import DiarizationPipelineSection from './DiarizationPipelineSection'
 import ReconcileEventsBanner from './ReconcileEventsBanner'
+import SearchModelCard from './SearchModelCard'
 
 /**
  * Issue #84 / Story E — sort by status (active first, then installed, then
@@ -236,6 +237,19 @@ export default function ModelsSettings(): React.JSX.Element {
             />
           ))}
         </div>
+      </section>
+
+      {/* ── Suche (Epic #192) — Statuskarte, kein Aktivieren/Löschen ──── */}
+      <section className="space-y-3">
+        <div>
+          <h2 className="mb-1 text-lg font-semibold">Suche</h2>
+          <p className="text-sm text-text-secondary">
+            Findet Textstellen in Ihren Sitzungen und PDF-Dokumenten nach ihrer Bedeutung. Gehört
+            zur Grundausstattung und wird bei Bedarf im Hintergrund geladen; der Suchindex liegt nur
+            auf Ihrem Mac.
+          </p>
+        </div>
+        <SearchModelCard />
       </section>
 
       {/* ── Zusammenfassung ───────────────────────────────────────────── */}

@@ -25,6 +25,10 @@
  * preflight that publish-manifest.sh does in full mode. Exit 1 if anything is
  * missing or differs; then nothing gets published.
  *
+ * Entries with `published: false` (artifact not yet on R2) are skipped for the
+ * HEAD check and left out of the manifest — see «Publishing a new model» in
+ * docs/product/operations/model-pipeline.md.
+ *
  * `version` stays the live manifest's value for models whose sha is unchanged
  * and becomes today's date for changed ones. It is purely informational
  * (updates are triggered by sha), but resetting every date would claim updates
@@ -33,7 +37,7 @@
 
 import { createHash } from 'crypto'
 import { createReadStream, statSync } from 'fs'
-import { MODEL_DEFINITIONS, R2_CDN } from '../src/shared/model-catalog'
+import { MODEL_DEFINITIONS, R2_CDN, isPublished } from '../src/shared/model-catalog'
 import { buildManifest, type ManifestApp, type ManifestModel } from '../src/shared/update-manifest'
 
 const RELEASE_DOWNLOAD = 'https://github.com/adbstyle/therascripter/releases/download'
@@ -62,8 +66,16 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
+  const catalog = MODEL_DEFINITIONS.filter(isPublished)
+  const skipped = MODEL_DEFINITIONS.filter((m) => !isPublished(m))
+  if (skipped.length > 0) {
+    console.error(
+      `Noch nicht veröffentlicht, nicht im Manifest: ${skipped.map((m) => m.id).join(', ')}`
+    )
+  }
+
   const problems: string[] = []
-  for (const m of MODEL_DEFINITIONS) {
+  for (const m of catalog) {
     const head = await fetch(m.url, { method: 'HEAD' })
     const remoteSize = Number(head.headers.get('content-length'))
     if (!head.ok) {
@@ -87,7 +99,7 @@ async function main(): Promise<void> {
       }
     : undefined
   const manifest = buildManifest({
-    catalog: MODEL_DEFINITIONS,
+    catalog,
     live: await liveManifest(),
     appVersion,
     dmg,

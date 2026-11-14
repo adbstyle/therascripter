@@ -180,7 +180,7 @@ Both events go through `src/main/services/ChangeEvents.ts` (`notifyDossiersChang
 
 ### Search Handlers (Epic #192)
 
-Source: `src/main/ipc/search-handlers.ts`, service `src/main/search/SearchService.ts`, types `src/shared/types/Search.ts` and `src/shared/types/ipc/SearchApi.ts`, schemas `src/shared/validation/search-schemas.ts` (all `.strict()`). Feature description: `docs/product/features/search.md`. PR S4 adds `search:open`, `search:semantic`, `search:retryModel` and the event `search:availabilityChanged`.
+Source: `src/main/ipc/search-handlers.ts`, service `src/main/search/SearchService.ts`, types `src/shared/types/Search.ts` and `src/shared/types/ipc/SearchApi.ts`, schemas `src/shared/validation/search-schemas.ts` (all `.strict()`). Feature description: `docs/product/features/search.md`. PR S2 adds `search:open`, `search:retryModel` and the event `search:availabilityChanged` (search model availability); PR S4 adds `search:semantic` and the processing/worker parts of `SearchAvailability`.
 
 | Channel | Direction | Input Schema | Return Type | Description |
 |---|---|---|---|---|
@@ -188,6 +188,9 @@ Source: `src/main/ipc/search-handlers.ts`, service `src/main/search/SearchServic
 | `search:recent:list` | invoke | _(none)_ | `RecentSearchQuery[]` | The five last searches, newest first: `{query, usedAt}` |
 | `search:recent:remember` | invoke | `SearchRecentRememberSchema` — `{ query }` | `void` | Put a query on top (deduplicated by its normalized form, at most five). Only from the search over everything (#211 OOS 3) |
 | `search:recent:clear` | invoke | _(none)_ | `void` | Delete all recent searches, then WAL checkpoint (#209 PC 3) |
+| `search:open` | invoke | _(none)_ | `SearchAvailability` | `{ model: SearchModelState }` — `ready` · `downloading {progress}` · `retry-scheduled {reason, nextAttemptAt}` · `failed {reason}` · `unpublished`; reasons `network \| disk-space \| checksum \| extract \| unknown` (#210 AK 4/5) |
+| `search:retryModel` | invoke | _(none)_ | `SearchAvailability` | «Erneut versuchen»: download the search model now, resolves after the attempt |
+| `search:availabilityChanged` | send (main → renderer) | — | `SearchAvailability` | Every change, including download progress (whole percent) |
 
 ### Model Download Handlers
 
@@ -297,6 +300,8 @@ Source: `src/main/ipc/system-handlers.ts`
 | `search:recent:list` | search |
 | `search:recent:remember` | search |
 | `search:recent:clear` | search |
+| `search:open` | search |
+| `search:retryModel` | search |
 
 ### All send channels (renderer -> main, fire-and-forget)
 
@@ -319,6 +324,7 @@ Source: `src/main/ipc/system-handlers.ts`
 | `sessions:changed` | session (ChangeEvents) |
 | `nav:command` | app menu |
 | `nav:openSettings` | app menu / tray |
+| `search:availabilityChanged` | search (SearchModelProvisioner) |
 
 ### Tool Health (Issue #168)
 

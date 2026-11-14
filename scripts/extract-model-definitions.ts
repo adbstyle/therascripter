@@ -12,7 +12,7 @@
  *   npx tsx scripts/extract-model-definitions.ts
  */
 
-import { MODEL_DEFINITIONS } from '../src/shared/model-catalog'
+import { MODEL_DEFINITIONS, isPublished } from '../src/shared/model-catalog'
 
 /** publish-manifest.sh splits each line on `|` and reads with line-based input.
  * If any field contains `|` or a newline, the bash side silently corrupts the
@@ -29,7 +29,8 @@ function assertSafe(value: string, fieldName: string, modelId: string): void {
   }
 }
 
-for (const m of MODEL_DEFINITIONS) {
+// Noch nicht veröffentlichte Einträge (published: false) liegen nicht auf R2
+for (const m of MODEL_DEFINITIONS.filter(isPublished)) {
   const filename = m.url.split('/').pop()
   if (!filename) {
     console.error(`Model "${m.id}" has invalid URL "${m.url}"`)

@@ -178,6 +178,9 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
       onChanged: on('dossiers.onChanged')
     },
     search: {
+      open: vi.fn().mockResolvedValue({ model: { status: 'ready' } }),
+      retryModel: vi.fn().mockResolvedValue({ model: { status: 'ready' } }),
+      onAvailabilityChanged: on('search.onAvailabilityChanged'),
       query: vi.fn().mockImplementation(async (input: { requestId: number }) => ({
         requestId: input.requestId,
         dossiers: [],

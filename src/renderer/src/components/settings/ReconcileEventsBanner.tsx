@@ -11,7 +11,9 @@ const GROUP_LABEL: Record<ModelGroup, string> = {
   asr: 'Spracherkennung',
   diarization: 'Sprechererkennung',
   ner: 'Pseudonymisierung',
-  summarization: 'Zusammenfassung'
+  summarization: 'Zusammenfassung',
+  // Kein Slot, also heute kein Reconcile-Event — der Eintrag hält die Map vollständig
+  search: 'Suche'
 }
 
 const REASON_LABEL: Record<ReconcileReason, string> = {
