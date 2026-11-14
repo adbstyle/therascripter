@@ -244,12 +244,12 @@ describe('RecentList — gleichnamige Dossiers (Sichtprüfung)', () => {
         <RecentList />
       </NavigationProvider>
     )
-    expect(
-      await screen.findByRole('button', { name: /Hofer, Lukas \(P-1001\)/ })
-    ).toHaveAttribute('title', 'Patientendossier: Hofer, Lukas (P-1001)')
+    expect(await screen.findByRole('button', { name: /Hofer, Lukas \(P-1001\)/ })).toHaveAttribute(
+      'title',
+      'Patientendossier: Hofer, Lukas (P-1001)'
+    )
     expect(screen.getByText('Keller, Anna')).toBeInTheDocument()
     // ohne ID und Geburtsdatum kein Zusatz
     expect(screen.getByText('Hofer, Lukas')).toBeInTheDocument()
   })
 })
-
