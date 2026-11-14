@@ -185,6 +185,14 @@ export function createAppUpdateDeps(onState: (state: AppUpdateState) => void): A
         required: d.isRequired === true
       })),
     retiredIds: () => new Set(RETIRED_MODELS.map((m) => m.id)),
+    // Das Suchmodell lädt der SearchModelProvisioner (getModelDefinitions
+    // enthält nur veröffentlichte Einträge)
+    selfProvisionedIds: () =>
+      new Set(
+        getModelDefinitions()
+          .filter((d) => d.deferrable === true)
+          .map((d) => d.id)
+      ),
     installedSha: (id) => getInstalledVersion(id)?.sha256 ?? null,
     recordInstalledModel: (model) =>
       setInstalledVersion(model.id, {

@@ -85,6 +85,12 @@ export interface QuitCleanupSteps {
    * der Datenbank. Optional, weil nicht jeder Aufrufer ihn hat.
    */
   stopSearchWorker?: () => Promise<void>
+  /**
+   * Epic #192: Hintergrund-Download des Suchmodells abbrechen. Zählt nicht als
+   * Arbeit (WorkGuard) — beim Beenden und vor einem Update-Austausch endet er
+   * hier; der nächste Start setzt am `.partial` fort.
+   */
+  stopSearchModelProvisioner: () => void
   stopSourceFileCleanup: () => void
   shutdownTaskQueue: () => Promise<void>
   destroyTray: () => void
@@ -95,7 +101,7 @@ export interface QuitCleanupSteps {
  * Reihenfolge des Aufräumens beim Beenden (vorher inline in `before-quit`):
  * zuerst speichert der Renderer ausstehende Änderungen — solange die
  * Datenbank offen ist —, dann Aufnahme, Aufbereitung für die Suche,
- * Suchprozess, Aufräumdienst, Warteschlange, Tray,
+ * Suchprozess, Download des Suchmodells, Aufräumdienst, Warteschlange, Tray,
  * zuletzt die Datenbank. Kein Schritt hält die folgenden auf.
  */
 export async function runQuitCleanup(steps: QuitCleanupSteps): Promise<void> {
@@ -120,6 +126,7 @@ export async function runQuitCleanup(steps: QuitCleanupSteps): Promise<void> {
       // Ein hängender Suchprozess darf das Beenden nicht aufhalten
     }
   }
+  run(steps.stopSearchModelProvisioner)
   run(steps.stopSourceFileCleanup)
   try {
     await steps.shutdownTaskQueue()

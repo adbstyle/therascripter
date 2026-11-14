@@ -146,6 +146,8 @@ export interface AppUpdateDeps {
   /** Ablage der Modelle im Katalog dieser App. */
   localLayouts: () => LocalLayout[]
   retiredIds: () => ReadonlySet<string>
+  /** Pflichtmodelle, die diese App selbst nachlädt (Suchmodell) — nie als neues Modell im Update. */
+  selfProvisionedIds?: () => ReadonlySet<string>
   /** Installierte Fassung eines Modells ('' = unbekannt, null = kein Eintrag). */
   installedSha: (id: string) => string | null
   /** Neue Fassung eintragen — erst, wenn der Austausch nachweislich gelungen ist. */
@@ -421,6 +423,7 @@ export class AppUpdateService {
       appInstallable: blocker === null,
       localLayouts: this.deps.localLayouts(),
       retiredIds: this.deps.retiredIds(),
+      selfProvisionedIds: this.deps.selfProvisionedIds?.(),
       installedSha: this.deps.installedSha,
       isOnDisk: (checkPath) => existsSync(join(this.deps.modelsDir, checkPath))
     })

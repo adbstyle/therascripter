@@ -1,6 +1,6 @@
 import { getActiveModelId, getModelById } from './ModelDownloadService'
 import { getInstalledVersion } from './InstalledVersionsStore'
-import type { ModelGroup } from '../../shared/validation/model-catalog-schemas'
+import type { SlotModelGroup } from '../../shared/validation/model-catalog-schemas'
 import type { ModelSnapshot, ProcessedModelsSnapshot, TaskType } from '../../shared/types'
 
 /**
@@ -18,7 +18,7 @@ import type { ModelSnapshot, ProcessedModelsSnapshot, TaskType } from '../../sha
  * from the catalog so a future catalog rename or repackage does not
  * rewrite history.
  */
-function snapshotGroup(group: ModelGroup): ModelSnapshot | null {
+function snapshotGroup(group: SlotModelGroup): ModelSnapshot | null {
   const id = getActiveModelId(group)
   if (!id) return null
   const def = getModelById(id)

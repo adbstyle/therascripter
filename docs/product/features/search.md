@@ -40,7 +40,7 @@ Tables, columns and why the FTS table is not contentless: [storage.md](../archit
 `src/main/search/SearchWorker.ts` on top of `src/main/utils/line-process.ts` — the **first long-lived child process** of the app (every other ML tool is one `runSubprocess` call per task). One Python process (`search_service.py serve`, see [ml-pipeline.md](../architecture/ml-pipeline.md) «Search Service») serves queries **and** the vector phase; two model copies would exceed 3 GiB.
 
 - **`LineProcess`:** JSON lines on stdin/stdout with request IDs, timeout per request, answers with `id: null` (`bad_json`, `too_large`) go to the oldest open request (the service answers strictly in order), stderr drained continuously into a ring buffer (contract line `Gewichte: …` recorded), start timeout until the ready line, half last line dropped at exit. Whitelist env (`buildSubprocessEnv`) plus `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, `PYTHONDONTWRITEBYTECODE=1`, 4 CPU threads. Own process group; stop = close stdin (the service exits on EOF) → 2 s → group SIGTERM → 2 s → SIGKILL. On exit every open request is rejected.
-- **States:** `stopped | starting | ready | busy | stopping`, plus the reason why the search by meaning is unavailable right now: `processing | model-missing | tool-blocked | error` (`getState()`, event `search:processStateChanged`, `search:warmup`). PR S2 merges this with the model download state into `SearchAvailability`.
+- **States:** `stopped | starting | ready | busy | stopping`, plus the reason why the search by meaning is unavailable right now: `processing | model-missing | tool-blocked | error` (`getState()`). Outside it appears as `SearchAvailability.semantic` next to the model state of PR S2 — `ready` (possible; the process runs or starts on the next query), `loading` (process starting), `unavailable-processing`, `model-missing`, `tool-blocked`, `error` — via `search:open` and the one event `search:availabilityChanged` (sent on every change of model or process). `search:open` starts the preloading (#209 AK 16) and answers at once. When the provisioner reports the model as ready, the vector phase starts by itself (stock, #210 AK 1).
 - **Never together with NER, whisper or llama** (8-GB budget): `ensureStarted` is refused while a processing step runs or waits (`TaskQueueService.hasActiveWork()` = running, or pending and not paused for a recording). A **hook before every task** (`TaskQueueService.setBeforeTaskHook`, registered in `main/index.ts`) stops the process and aborts the vector phase; the task becomes `running` only after the process has really exited (#209 AK 17). During a **recording** queries are allowed (the model may load), the preparation never.
 - **Memory freed** 5 min after the last query or batch (`SEARCH_WORKER_IDLE_MS`, #209 AK 17); the vector store is released with it.
 - **Restart after memory growth:** every answer carries `phys_footprint_bytes`; above 2.5 GiB (`SEARCH_WORKER_RESTART_FOOTPRINT_BYTES`) the process restarts once no request is open, i.e. between two batches.
@@ -66,7 +66,7 @@ Part of the background loop in `SearchIndexService`, asynchronous next to the sl
 
 `src/main/search/VectorStore.ts` — the vectors live in Node, Python stays stateless and never reads the database (deleted content never sits in a foreign process).
 
-- loaded on `search:warmup` in parallel to the model start, in slices; only the active vector generation of the current model of visible sessions; one block per session (replace/remove = one map operation);
+- loaded on `search:open` in parallel to the model start, in slices; only the active vector generation of the current model of visible sessions; one block per session (replace/remove = one map operation);
 - released when the search process stops (idle, processing);
 - kept in sync: a completed vector generation replaces the session; a deleted or marked session is removed **synchronously** via `onSessionsDeleted` in `ChangeEvents.notifySessionsChanged` (#209 PC 1); semantic candidates are additionally checked against `SEARCH_VISIBLE_SESSION`;
 - cosine = `(q·query) / ‖q‖` (the query is normalized, the scale cancels); computed in slices of ≤ 20 ms (`SEARCH_COSINE_SLICE_MS`), sessions removed during a pause drop out.
@@ -135,9 +135,15 @@ Before the review: exact queries 133–337 ms («und» 268, «Anna Beispiel» 33
 
 Not measured on an 8-GB Mac (#209 AK 14 is checked in PR S6). `search.performance.test.ts` guards the order of magnitude of queries, `search.blocking.test.ts` the slices of re-indexing and deleting a two-hour session (150 sessions, generous budget).
 
+## Search model availability (PR S2)
+
+The search model (EmbeddingGemma 2 text encoder, catalog id `embeddinggemma-2-text`) belongs to the basic equipment: first launch loads it, and an install without it (existing users after the update, a failed first-launch download) gets it from the `SearchModelProvisioner` in the background, with retries — the rest of the app stays fully usable (#210 AK 2/3). `search:open` reports its state, `search:availabilityChanged` pushes changes, `search:retryModel` is «Erneut versuchen». Until the artifact is on R2 the catalog entry is `published: false` and the state is `unpublished`. Details: [model-management.md](model-management.md#search-model-epic-192).
+
+Disk space for the search index: up to ~0.6 GB at 2'000 sessions (measured ~0.55 GB, see below); it lives only in the local database and a session's rows go with the session.
+
 ## IPC
 
-`search:query`, `search:semantic`, `search:warmup`, event `search:processStateChanged`, `search:recent:list`, `search:recent:remember`, `search:recent:clear` — see [ipc-api.md](../architecture/ipc-api.md) «Search Handlers». In the renderer: `window.api.search`. `search:open`, `search:retryModel` and `search:availabilityChanged` come with PR S2.
+`search:open` (also preloads), `search:retryModel`, event `search:availabilityChanged`, `search:query`, `search:semantic`, `search:recent:list`, `search:recent:remember`, `search:recent:clear` — see [ipc-api.md](../architecture/ipc-api.md) «Search Handlers». In the renderer: `window.api.search`.
 
 ## Measurements (PR S4, M5 Pro, 64 GB, real model)
 
@@ -145,8 +151,8 @@ Not measured on an 8-GB Mac (#209 AK 14 is checked in PR S6). `search.performanc
 
 | What | Value |
 |---|---|
-| `warmup` → process ready (fresh process) | 5.3 s |
-| `warmup` → first answer by meaning | 5.4 s |
+| `search:open` (preload) → process ready (fresh process) | 5.3 s |
+| `search:open` → first answer by meaning | 5.4 s |
 | Restart after idle → answer | 4.5 s |
 | Further queries incl. embedding, cosine, ranking, snippets | 47–61 ms |
 | `phys_footprint` of the search process | 1.58 GiB (peak 1.59 GiB) |

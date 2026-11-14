@@ -76,6 +76,13 @@ import { registerSummaryHandlers } from './ipc/summary-handlers'
 import { startToolCheck } from './services/ToolHealthService'
 import { registerDossierAssignmentHandlers, registerDossierHandlers } from './ipc/dossier-handlers'
 import { registerSearchHandlers } from './ipc/search-handlers'
+import {
+  getSearchAvailability,
+  getSearchModelProvisioner,
+  initSearchModelProvisioner,
+  openSearch,
+  sendSearchAvailability
+} from './services/search-model-provisioner-deps'
 import { initSearchIndexService, getSearchIndexService } from './search/SearchIndexService'
 import { getSearchRuntime, initSearchRuntime } from './search/searchRuntime'
 import { getActiveSessionId } from './ipc/recording-handlers'
@@ -269,6 +276,11 @@ app.whenReady().then(() => {
   // reconcileActiveModels().
   reconcileActiveModels()
 
+  // Epic #192 (#209/#210) — Suchmodell bereitstellen: nach Retire/Reconcile
+  // (ein ausgemustertes Suchmodell ist dann schon weg). Gestartet wird der
+  // Hintergrund-Download erst nach dem Fenster, siehe unten.
+  const searchModel = initSearchModelProvisioner()
+
   // Issue #202 — ein bestätigtes Löschen, das ein Absturz unterbrochen hat oder
   // das nicht alle Dateien entfernen konnte, hier abschliessen; danach Dateien
   // entfernen, deren Sitzung es nicht mehr gibt. Vor der Task-Queue und vor den
@@ -368,7 +380,14 @@ app.whenReady().then(() => {
   registerToolHealthHandlers()
   registerDossierHandlers()
   registerDossierAssignmentHandlers()
-  registerSearchHandlers()
+  registerSearchHandlers({
+    get: getSearchAvailability,
+    open: openSearch,
+    retryModel: async () => {
+      await searchModel.retryNow()
+      return getSearchAvailability()
+    }
+  })
   registerSummaryHandlers({
     sessionService,
     summaries: {
@@ -441,7 +460,8 @@ app.whenReady().then(() => {
   // die Vektorphase ab, BEVOR der Task beginnt (#209 AK 17).
   const searchRuntime = initSearchRuntime(getDatabase(), {
     isProcessingActive: () => taskQueue.hasActiveWork(),
-    onStateChange: (state) => sendToRenderer('search:processStateChanged', state)
+    // Ein Event für Modell und Suchprozess (search:availabilityChanged)
+    onStateChange: () => sendSearchAvailability()
   })
   const searchIndex = initSearchIndexService(getDatabase(), {
     // Gestaffeltes Löschen: sind die Indexzeilen weg, schliesst die Sitzung ab
@@ -455,6 +475,11 @@ app.whenReady().then(() => {
   )
   searchIndex.setRecordingPause(getActiveSessionId() !== null)
   searchIndex.start()
+
+  // Fehlt das Suchmodell (Bestand nach dem Update, gescheiterter Download in
+  // der Ersteinrichtung), lädt es der Provisioner im Hintergrund nach — nicht
+  // vor abgeschlossener Ersteinrichtung, die lädt es selbst (#210 AK 2/3).
+  searchModel.start()
 
   // Non-blocking: check for model + app updates on startup
   checkForUpdates().catch(() => {
@@ -541,6 +566,9 @@ app.on('before-quit', (event) => {
         index?.stop()
       },
       stopSearchWorker: () => getSearchRuntime()?.worker.shutdown(3_000) ?? Promise.resolve(),
+      // Hintergrund-Download des Suchmodells abbrechen — zählt nicht als
+      // Arbeit, ein Update wartet nicht darauf (#210 AK 7)
+      stopSearchModelProvisioner: () => getSearchModelProvisioner()?.stop(),
       stopSourceFileCleanup,
       shutdownTaskQueue: () => getTaskQueue().shutdown(8_000),
       destroyTray: () => getTray().destroy(),

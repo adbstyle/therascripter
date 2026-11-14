@@ -1,19 +1,19 @@
 import { existsSync } from 'fs'
-import { join } from 'path'
-import { app } from 'electron'
-import { getDataDir } from '../db/connection'
+import { getSearchModelLocation } from '../services/ModelDownloadService'
 
 /**
- * Zugriff auf das Suchmodell (Epic #192, Bauplan Abschnitt 2) an EINER Stelle.
+ * Zugriff auf das Suchmodell für Suchprozess, Vektorphase und
+ * Vektorspeicher (Epic #192) — dünne Hülle um den Katalog: Ort und
+ * «installiert» aus `getSearchModelLocation()` (ModelDownloadService, PR S2;
+ * Ordner `SEARCH_MODEL_DIR_NAME` mit Marker `SEARCH_MODEL_READY_FILE`, in der
+ * Entwicklung übersteuerbar mit THERASCRIPT_SEARCH_MODEL_DIR), Prompts,
+ * Dimension und Längen aus dem `embedding`-Block des Katalogeintrags.
+ * `getSearchModelLocation` liest den Eintrag auch, wenn er noch nicht
+ * veröffentlicht ist (`published: false`) — ein lokal vorhandenes Modell ist
+ * so trotzdem nutzbar.
  *
- * Bis der Katalogeintrag `embeddinggemma-2-text` (PR S2) da ist, gelten hier
- * die Werte des Bauplans; S2 ersetzt nur das Innere von `resolveSearchModel`
- * durch den Katalog (`embedding`-Block, `checkPath`). Alles andere — Worker,
- * Vektorphase, Vektorspeicher — fragt nur diese Funktion.
- *
- * NFR-9/10: Prompts, Dimension und Länge kommen mit dem Modell; jede
- * Indexzeile merkt sich `modelId`, ein anderes Modell macht alle Vektoren
- * veraltet.
+ * NFR-9/10: jede Indexzeile merkt sich `modelId`; ein anderes Modell macht
+ * alle Vektoren veraltet.
  */
 
 export interface SearchModelInfo {
@@ -27,48 +27,19 @@ export interface SearchModelInfo {
   padMultiple: number
 }
 
-/**
- * Ordner des Suchmodells im Modellverzeichnis — auf oberster Ebene: das
- * Update-Manifest-Schema ausgelieferter App-Versionen verwirft Archive mit
- * `/` im Pfad. PR S2 exportiert dieselbe Konstante aus dem Katalog.
- */
-export const SEARCH_MODEL_RELATIVE_PATH = 'search-embeddinggemma-2-text-v1'
-
-export const SEARCH_MODEL_DEFAULTS = {
-  modelId: 'embeddinggemma-2-text',
-  relativePath: SEARCH_MODEL_RELATIVE_PATH,
-  readyMarker: 'READY',
-  dim: 768,
-  queryPrompt: 'task: search result | query: ',
-  documentPrompt: 'title: none | text: ',
-  maxTokens: 1024,
-  padMultiple: 128
-} as const
-
-function info(dir: string): SearchModelInfo {
-  const d = SEARCH_MODEL_DEFAULTS
-  return {
-    dir,
-    modelId: d.modelId,
-    dim: d.dim,
-    queryPrompt: d.queryPrompt,
-    documentPrompt: d.documentPrompt,
-    maxTokens: d.maxTokens,
-    padMultiple: d.padMultiple
-  }
-}
-
-/**
- * Installiertes Suchmodell oder null. In der Entwicklung (nicht gepackt)
- * zeigt `THERASCRIPT_SEARCH_MODEL_DIR` auf ein entpacktes Artefakt; in der
- * gepackten App gilt nur das Modellverzeichnis (Marker `READY` = vollständig
- * entpackt, er liegt als letzte Datei im Archiv).
- */
+/** Installiertes Suchmodell oder null. */
 export function resolveSearchModel(): SearchModelInfo | null {
-  const override = process.env.THERASCRIPT_SEARCH_MODEL_DIR
-  if (override && !app.isPackaged) {
-    return existsSync(join(override, SEARCH_MODEL_DEFAULTS.readyMarker)) ? info(override) : null
+  const location = getSearchModelLocation()
+  if (!location || !existsSync(location.readyPath)) return null
+  const embedding = location.def.embedding
+  if (!embedding) return null
+  return {
+    dir: location.dir,
+    modelId: location.def.id,
+    dim: embedding.dim,
+    queryPrompt: embedding.queryPrompt,
+    documentPrompt: embedding.documentPrompt,
+    maxTokens: embedding.maxTokens,
+    padMultiple: embedding.padMultiple
   }
-  const dir = join(getDataDir(), 'models', SEARCH_MODEL_DEFAULTS.relativePath)
-  return existsSync(join(dir, SEARCH_MODEL_DEFAULTS.readyMarker)) ? info(dir) : null
 }

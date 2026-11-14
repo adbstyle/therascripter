@@ -6,7 +6,8 @@ import { SearchWorker } from '../SearchWorker'
 import { SearchIndexService } from '../SearchIndexService'
 import { SearchService } from '../SearchService'
 import { VectorStore } from '../VectorStore'
-import { SEARCH_MODEL_DEFAULTS, type SearchModelInfo } from '../searchModel'
+import type { SearchModelInfo } from '../searchModel'
+import { MODEL_DEFINITIONS } from '../../../shared/model-catalog'
 import { TaskQueueService } from '../../services/TaskQueueService'
 import { SessionRepository } from '../../db/repositories/SessionRepository'
 import { addIndexedSession, createSearchTestDb, indexAll } from './helpers'
@@ -30,16 +31,10 @@ const MODEL_DIR = process.env.THERASCRIPT_SEARCH_MODEL_DIR
 const PYTHON = process.env.THERASCRIPT_SEARCH_PYTHON
 const SCRIPT = join(__dirname, '..', '..', '..', '..', 'python_sidecar', 'search_service.py')
 
+// Konfiguration aus dem Katalog (auch unveröffentlicht), Ort aus der Variable
+const catalogEntry = MODEL_DEFINITIONS.find((m) => m.group === 'search')!
 const model: SearchModelInfo | null = MODEL_DIR
-  ? {
-      dir: MODEL_DIR,
-      modelId: SEARCH_MODEL_DEFAULTS.modelId,
-      dim: SEARCH_MODEL_DEFAULTS.dim,
-      queryPrompt: SEARCH_MODEL_DEFAULTS.queryPrompt,
-      documentPrompt: SEARCH_MODEL_DEFAULTS.documentPrompt,
-      maxTokens: SEARCH_MODEL_DEFAULTS.maxTokens,
-      padMultiple: SEARCH_MODEL_DEFAULTS.padMultiple
-    }
+  ? { dir: MODEL_DIR, modelId: catalogEntry.id, ...catalogEntry.embedding! }
   : null
 
 const GiB = 1024 ** 3

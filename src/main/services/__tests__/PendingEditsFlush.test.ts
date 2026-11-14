@@ -89,6 +89,7 @@ describe('runQuitCleanup', () => {
       },
       cleanupRecording: () => order.push('recording'),
       stopSearchIndex: () => order.push('search'),
+      stopSearchModelProvisioner: () => order.push('search-model'),
       stopSourceFileCleanup: () => order.push('cleanup'),
       shutdownTaskQueue: async () => {
         order.push('queue')
@@ -96,7 +97,16 @@ describe('runQuitCleanup', () => {
       destroyTray: () => order.push('tray'),
       closeDatabase: () => order.push('db')
     })
-    expect(order).toEqual(['flush', 'recording', 'search', 'cleanup', 'queue', 'tray', 'db'])
+    expect(order).toEqual([
+      'flush',
+      'recording',
+      'search',
+      'search-model',
+      'cleanup',
+      'queue',
+      'tray',
+      'db'
+    ])
   })
 
   it('beendet den Suchprozess nach der Aufbereitung und vor der Datenbank (Epic #192)', async () => {
@@ -109,6 +119,7 @@ describe('runQuitCleanup', () => {
         await Promise.resolve()
         order.push('worker')
       },
+      stopSearchModelProvisioner: () => order.push('provisioner'),
       stopSourceFileCleanup: () => order.push('cleanup'),
       shutdownTaskQueue: async () => {
         order.push('queue')
@@ -121,6 +132,7 @@ describe('runQuitCleanup', () => {
       'recording',
       'search',
       'worker',
+      'provisioner',
       'cleanup',
       'queue',
       'tray',
@@ -136,6 +148,9 @@ describe('runQuitCleanup', () => {
         throw new Error('nicht initialisiert')
       },
       stopSearchIndex: () => {
+        throw new Error('nicht initialisiert')
+      },
+      stopSearchModelProvisioner: () => {
         throw new Error('nicht initialisiert')
       },
       stopSourceFileCleanup: vi.fn(),

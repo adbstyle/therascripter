@@ -35,6 +35,14 @@ export interface SelectContext {
   installedSha: (id: string) => string | null
   /** Liegt der Prüfpfad (relativ zu models/) auf der Festplatte? */
   isOnDisk: (checkPath: string) => boolean
+  /**
+   * Fehlende Pflichtmodelle, die diese App selbst im Hintergrund nachlädt
+   * (`deferrable`, Suchmodell — SearchModelProvisioner). Sie kommen nie als
+   * `kind: 'new'` mit, sonst liefen zwei Downloads desselben Modells. Eine
+   * App, die das Modell noch nicht kennt, lässt das Feld leer und bekommt es
+   * im selben Update mit.
+   */
+  selfProvisionedIds?: ReadonlySet<string>
 }
 
 /** Ein Pfad gleich, über oder unter dem anderen — ein Tausch träfe beide. */
@@ -93,7 +101,7 @@ export function selectBundle(
     if (ctx.isOnDisk(layout.checkPath)) {
       if (ctx.installedSha(entry.id) === entry.sha256) continue
       kind = 'update'
-    } else if (app && layout.required) {
+    } else if (app && layout.required && !ctx.selfProvisionedIds?.has(entry.id)) {
       // Braucht erst die neue Version — kommt im selben Vorgang mit (AK 4)
       kind = 'new'
     } else {

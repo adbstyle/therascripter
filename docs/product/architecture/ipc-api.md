@@ -48,7 +48,7 @@ The `api` object contains the following namespaces:
 | `api.modelDownload` | `status()`, `checkDiskSpace()`, `start()`, `onStatus(cb)` |
 | `api.appUpdate` | `getState()`, `check()`, `download()`, `cancelDownload()`, `install()`, `setAutoUpdate(enabled)`, `openInstallGuide()`, `onState(cb)` |
 | `api.dossiers` | `list()`, `get(dossierId)`, `create(input)`, `update(dossierId, patch)`, `deletePreview(dossierId)`, `delete(dossierId, fingerprint)`, `timeline(dossierId)`, `listForSession(sessionId)`, `assign(sessionId, dossierId)`, `unassign(sessionId, dossierId)`, `onChanged(cb)` — preload in `src/preload/api/dossiers.ts` |
-| `api.search` | `query(input)`, `semantic(input)`, `warmup()`, `onProcessStateChanged(cb)`, `recentList()`, `recentRemember(query)`, `recentClear()` — preload in `src/preload/api/search.ts` |
+| `api.search` | `query(input)`, `semantic(input)`, `recentList()`, `recentRemember(query)`, `recentClear()` — preload in `src/preload/api/search.ts` |
 
 All `on*` listener methods return an unsubscribe function `() => void`.
 
@@ -180,17 +180,18 @@ Both events go through `src/main/services/ChangeEvents.ts` (`notifyDossiersChang
 
 ### Search Handlers (Epic #192)
 
-Source: `src/main/ipc/search-handlers.ts`, service `src/main/search/SearchService.ts`, types `src/shared/types/Search.ts` and `src/shared/types/ipc/SearchApi.ts`, schemas `src/shared/validation/search-schemas.ts` (all `.strict()`). Feature description: `docs/product/features/search.md`. PR S4 added `search:semantic`, `search:warmup` and the event `search:processStateChanged`; PR S2 adds `search:open`, `search:retryModel` and the event `search:availabilityChanged`.
+Source: `src/main/ipc/search-handlers.ts`, service `src/main/search/SearchService.ts`, types `src/shared/types/Search.ts` and `src/shared/types/ipc/SearchApi.ts`, schemas `src/shared/validation/search-schemas.ts` (all `.strict()`). Feature description: `docs/product/features/search.md`. PR S2 added `search:open`, `search:retryModel` and the event `search:availabilityChanged` (search model availability); PR S4 added `search:semantic`, the field `semantic` of `SearchAvailability` (processing and search process) and the preloading in `search:open`.
 
 | Channel | Direction | Input Schema | Return Type | Description |
 |---|---|---|---|---|
 | `search:query` | invoke | `SearchQueryInputSchema` — `{ requestId: int ≥ 0, query: string(1..200, not blank, no control characters), scope: {kind:'all'} \| {kind:'dossier', dossierId} }` | `SearchQueryResult` | `{requestId, dossiers, results, truncated, semantic}`. `dossiers` (only for `scope.kind === 'all'`, ≤ 20): `DossierRef[]` matched by name parts or dossier ID. `results` (≤ 100): one `SearchDocumentResult` per session/PDF — `sessionId, type, title, titlePlain, sortDay, dossiers, hits` with ≤ 3 `SearchHit {field, kind, label {speaker?, timestamp?}, snippet {text, marks, truncatedStart, truncatedEnd}, focus}`; `focus` = `{kind:'title'}` · `{kind:'summary'}` · `{kind:'hit', paraFrom, paraTo, ranges?: {p,s,e}[], anchor}`. `semantic`: `'pending'` (call `search:semantic`) or why the search by meaning is unavailable: `'unavailable-processing'` · `'model-missing'` · `'tool-blocked'` · `'error'` |
 | `search:semantic` | invoke | `SearchQueryInputSchema` | `SearchQueryResult` | Search by meaning merged with the exact hits (exact first, inside by cosine, all sections ≥ threshold, dossier filter after the ranking). `semantic`: `'complete'`; `'superseded'` when a newer request of the same window replaced it; otherwise the reason as above — `results` then holds the exact hits |
-| `search:warmup` | invoke | _(none)_ | `SearchProcessState` | When the search opens: start the search process and load the vectors (only when possible); returns `{phase, reason}` once the start is decided, never throws |
-| `search:processStateChanged` | event (main → renderer) | `SearchProcessStateSchema` (checked in preload) | — | `{phase: 'stopped'\|'starting'\|'ready'\|'busy'\|'stopping', reason: null\|'processing'\|'model-missing'\|'tool-blocked'\|'error'}` on every change |
 | `search:recent:list` | invoke | _(none)_ | `RecentSearchQuery[]` | The five last searches, newest first: `{query, usedAt}` |
 | `search:recent:remember` | invoke | `SearchRecentRememberSchema` — `{ query }` | `void` | Put a query on top (deduplicated by its normalized form, at most five). Only from the search over everything (#211 OOS 3) |
 | `search:recent:clear` | invoke | _(none)_ | `void` | Delete all recent searches, then WAL checkpoint (#209 PC 3) |
+| `search:open` | invoke | _(none)_ | `SearchAvailability` | Starts preloading the search model and vectors when the search by meaning is possible (#209 AK 16) and answers at once. `{ model: SearchModelState, semantic }` — `semantic`: `ready` · `loading` · `unavailable-processing` · `model-missing` · `tool-blocked` · `error`; `model`: `ready` · `downloading {progress}` · `retry-scheduled {reason, nextAttemptAt}` · `failed {reason}` · `unpublished`; reasons `network \| disk-space \| checksum \| extract \| unknown` (#210 AK 4/5) |
+| `search:retryModel` | invoke | _(none)_ | `SearchAvailability` | «Erneut versuchen»: download the search model now, resolves after the attempt |
+| `search:availabilityChanged` | send (main → renderer) | — | `SearchAvailability` | Every change of the model (including download progress, whole percent) or of the search process / processing |
 
 ### Model Download Handlers
 
@@ -298,10 +299,11 @@ Source: `src/main/ipc/system-handlers.ts`
 | `system:uninstall` | system |
 | `search:query` | search |
 | `search:semantic` | search |
-| `search:warmup` | search |
 | `search:recent:list` | search |
 | `search:recent:remember` | search |
 | `search:recent:clear` | search |
+| `search:open` | search |
+| `search:retryModel` | search |
 
 ### All send channels (renderer -> main, fire-and-forget)
 
@@ -324,6 +326,7 @@ Source: `src/main/ipc/system-handlers.ts`
 | `sessions:changed` | session (ChangeEvents) |
 | `nav:command` | app menu |
 | `nav:openSettings` | app menu / tray |
+| `search:availabilityChanged` | search (SearchModelProvisioner, SearchWorker) |
 
 ### Tool Health (Issue #168)
 

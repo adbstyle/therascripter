@@ -127,7 +127,7 @@ export type SemanticSearchStatus =
   | 'tool-blocked'
   | 'error'
 
-/** Zustand des Suchprozesses (Worker) — `search:warmup` und `search:processStateChanged`. */
+/** Zustand des Suchprozesses (Worker, Main-Prozess); nach aussen als `SearchAvailability.semantic`. */
 export type SearchProcessPhase = 'stopped' | 'starting' | 'ready' | 'busy' | 'stopping'
 
 export interface SearchProcessState {
@@ -151,3 +151,80 @@ export interface RecentSearchQuery {
   query: string
   usedAt: string
 }
+
+/**
+ * Warum das Suchmodell nicht geladen werden konnte (#210 AK 5). Texte für die
+ * Oberfläche: `SEARCH_MODEL_FAILURE_TEXT` in `shared/search-model-texts.ts`.
+ */
+export type SearchModelFailureReason =
+  | 'network'
+  | 'server'
+  | 'disk-space'
+  | 'checksum'
+  | 'extract'
+  | 'unknown'
+
+/** Warum das fehlende Suchmodell gerade nicht geladen wird. */
+export type SearchModelWaitReason = 'busy' | 'setup' | 'starting'
+
+/**
+ * Bereitstellung des Suchmodells (#210 AK 2–5, PC 1), geführt vom
+ * SearchModelProvisioner im Main-Prozess.
+ *
+ * - `ready`: liegt vollständig auf dem Mac.
+ * - `waiting`: fehlt, wird aber gerade nicht geladen — `busy` (Aufnahme oder
+ *   Verarbeitung läuft; neuer Anlauf um `nextAttemptAt`), `setup`
+ *   (Ersteinrichtung noch nicht abgeschlossen, sie lädt es selbst) oder
+ *   `starting` (der erste Versuch nach dem Start folgt gleich).
+ * - `downloading`: Download läuft wirklich; `progress` 0–100.
+ * - `retry-scheduled`: ein Versuch ist gescheitert, der nächste folgt von
+ *   selbst um `nextAttemptAt` (ISO-Zeit; Staffel 1, 5, 30 Minuten).
+ * - `failed`: auch die kurzen Wiederholungen sind gescheitert. Die App
+ *   versucht es weiter alle 6 Stunden still im Hintergrund; die Oberfläche
+ *   zeigt den Grund und «Erneut versuchen».
+ * - `unpublished`: diese Version kennt das Suchmodell, es ist aber noch nicht
+ *   zum Download freigegeben (`published: false` im Katalog).
+ */
+export type SearchModelState =
+  | { status: 'ready' }
+  | {
+      status: 'waiting'
+      reason: SearchModelWaitReason
+      /** Nur bei 'busy': wann der Dienst wieder prüft (ISO-Zeit). */
+      nextAttemptAt?: string
+    }
+  | { status: 'downloading'; progress: number }
+  | { status: 'retry-scheduled'; reason: SearchModelFailureReason; nextAttemptAt: string }
+  | { status: 'failed'; reason: SearchModelFailureReason }
+  | { status: 'unpublished' }
+
+/**
+ * Antwort von `search:open` und Inhalt von `search:availabilityChanged`.
+ * Ein Objekt mit einem Feld pro Teil: `model` (PR S2) und `semantic`
+ * (Verarbeitung und Suchprozess, PR S4).
+ */
+export interface SearchAvailability {
+  /** Ohne Modell keine Suche nach Bedeutung; die exakte Suche geht immer. */
+  model: SearchModelState
+  /** Suche nach Bedeutung gerade möglich? (PR S4: Verarbeitung und Suchprozess) */
+  semantic: SemanticAvailability
+}
+
+/**
+ * Stand der Suche nach Bedeutung in `SearchAvailability` (PR S4):
+ * - ready: möglich; der Suchprozess läuft oder startet bei der nächsten Anfrage
+ * - loading: der Suchprozess lädt gerade das Modell (nach `search:open`)
+ * - unavailable-processing: eine Verarbeitung läuft oder steht an (#209 AK 18)
+ * - model-missing: das Suchmodell ist nicht (vollständig) installiert — den
+ *   Grund sagt `model`
+ * - tool-blocked: macOS hat das Python-Werkzeug blockiert (#168)
+ * - error: der Suchprozess ist abgestürzt bzw. startete nicht; ein neuer
+ *   Versuch folgt nach kurzer Pause von selbst
+ */
+export type SemanticAvailability =
+  | 'ready'
+  | 'loading'
+  | 'unavailable-processing'
+  | 'model-missing'
+  | 'tool-blocked'
+  | 'error'

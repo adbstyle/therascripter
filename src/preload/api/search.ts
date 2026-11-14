@@ -1,23 +1,20 @@
-import { ipcRenderer } from 'electron'
+import { ipcRenderer, type IpcRendererEvent } from 'electron'
+import type { SearchAvailability } from '../../shared/types/Search'
 import type { SearchApi } from '../../shared/types/ipc/SearchApi'
-import { SearchProcessStateSchema } from '../../shared/validation/search-schemas'
 
-/** Suche (Epic #192 — #209, #211). */
+/** Suche (Epic #192 — #209, #210, #211). */
 export const searchApi: SearchApi = {
+  open: () => ipcRenderer.invoke('search:open'),
+  retryModel: () => ipcRenderer.invoke('search:retryModel'),
+  onAvailabilityChanged: (callback) => {
+    const handler = (_event: IpcRendererEvent, availability: SearchAvailability): void =>
+      callback(availability)
+    ipcRenderer.on('search:availabilityChanged', handler)
+    return () => ipcRenderer.removeListener('search:availabilityChanged', handler)
+  },
   query: (input) => ipcRenderer.invoke('search:query', input),
   recentList: () => ipcRenderer.invoke('search:recent:list'),
   recentRemember: (query) => ipcRenderer.invoke('search:recent:remember', { query }),
   recentClear: () => ipcRenderer.invoke('search:recent:clear'),
-  semantic: (input) => ipcRenderer.invoke('search:semantic', input),
-  warmup: () => ipcRenderer.invoke('search:warmup'),
-  onProcessStateChanged: (callback) => {
-    const handler = (_event: Electron.IpcRendererEvent, data: unknown): void => {
-      const parsed = SearchProcessStateSchema.safeParse(data)
-      if (parsed.success) callback(parsed.data)
-    }
-    ipcRenderer.on('search:processStateChanged', handler)
-    return () => {
-      ipcRenderer.removeListener('search:processStateChanged', handler)
-    }
-  }
+  semantic: (input) => ipcRenderer.invoke('search:semantic', input)
 }

@@ -178,6 +178,9 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
       onChanged: on('dossiers.onChanged')
     },
     search: {
+      open: vi.fn().mockResolvedValue({ model: { status: 'ready' }, semantic: 'ready' }),
+      retryModel: vi.fn().mockResolvedValue({ model: { status: 'ready' }, semantic: 'ready' }),
+      onAvailabilityChanged: on('search.onAvailabilityChanged'),
       query: vi.fn().mockImplementation(async (input: { requestId: number }) => ({
         requestId: input.requestId,
         dossiers: [],
@@ -194,9 +197,7 @@ export function createMockApi(overrides: MockApiOverrides = {}): IpcApi {
         results: [],
         truncated: false,
         semantic: 'model-missing'
-      })),
-      warmup: vi.fn().mockResolvedValue({ phase: 'stopped', reason: 'model-missing' }),
-      onProcessStateChanged: on('search.onProcessStateChanged')
+      }))
     },
     pendingEdits: {
       onFlushRequest: on('pendingEdits.onFlushRequest')

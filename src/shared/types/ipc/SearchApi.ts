@@ -1,15 +1,23 @@
 import type {
   RecentSearchQuery,
-  SearchProcessState,
+  SearchAvailability,
   SearchQueryInput,
   SearchQueryResult
 } from '../Search'
 
 /**
- * Suche (Epic #192 — #209, #211). PR S2 ergänzt `open`, `retryModel` und
- * `onAvailabilityChanged` in eigenen Zeilen.
+ * Suche (Epic #192 — #209, #210, #211).
  */
 export interface SearchApi {
+  /**
+   * Beim Öffnen der Suche: Stand des Suchmodells (#210 AK 4/5) und der Suche
+   * nach Bedeutung; lädt das Suchmodell und die Vektoren vor (#209 AK 16).
+   */
+  open(): Promise<SearchAvailability>
+  /** «Erneut versuchen», wenn das Suchmodell nicht geladen werden konnte (#210 AK 5). */
+  retryModel(): Promise<SearchAvailability>
+  /** Verfügbarkeit hat sich geändert (z. B. Download-Fortschritt). Gibt die Abmeldung zurück. */
+  onAvailabilityChanged(callback: (availability: SearchAvailability) => void): () => void
   /** Patientendossiers und exakte Treffer; `semantic` meldet den Stand der Suche nach Bedeutung. */
   query(input: SearchQueryInput): Promise<SearchQueryResult>
   /** Die fünf letzten Suchanfragen, neueste zuerst (#209 AK 27). */
@@ -24,8 +32,4 @@ export interface SearchApi {
    * Fensters löst eine ältere ab ('superseded').
    */
   semantic(input: SearchQueryInput): Promise<SearchQueryResult>
-  /** Beim Öffnen der Suche: Suchmodell und Vektoren vorladen (#209 AK 16). */
-  warmup(): Promise<SearchProcessState>
-  /** Zustand des Suchprozesses; gibt die Abmeldung zurück. */
-  onProcessStateChanged(callback: (state: SearchProcessState) => void): () => void
 }

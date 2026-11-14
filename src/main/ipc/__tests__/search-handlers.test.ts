@@ -3,6 +3,8 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() }, app: { isPackaged: false } }))
 
 import {
+  handleSearchOpen,
+  handleSearchRetryModel,
   handleSearchQuery,
   handleSearchRecentClear,
   handleSearchRecentList,
@@ -90,5 +92,41 @@ describe('search IPC handlers', () => {
     await expect(handleSearchSemantic(s, tracker, 1, { query: '' })).rejects.toThrow(
       /search:semantic/
     )
+  })
+
+  it('search:open und search:retryModel liefern den Stand des Suchmodells (#210 AK 4/5)', async () => {
+    const availability = {
+      get: vi.fn(() => ({
+        model: { status: 'downloading' as const, progress: 12 },
+        semantic: 'model-missing' as const
+      })),
+      retryModel: vi.fn(async () => ({
+        model: { status: 'ready' as const },
+        semantic: 'ready' as const
+      }))
+    }
+    expect(handleSearchOpen(availability)).toEqual({
+      model: { status: 'downloading', progress: 12 },
+      semantic: 'model-missing'
+    })
+    expect(await handleSearchRetryModel(availability)).toEqual({
+      model: { status: 'ready' },
+      semantic: 'ready'
+    })
+    expect(availability.retryModel).toHaveBeenCalledTimes(1)
+  })
+
+  it('search:open preloads through open() when the provider has it (#209 AK 16)', () => {
+    const open = vi.fn(() => ({
+      model: { status: 'ready' as const },
+      semantic: 'loading' as const
+    }))
+    const get = vi.fn()
+    expect(handleSearchOpen({ get, open, retryModel: vi.fn() })).toEqual({
+      model: { status: 'ready' },
+      semantic: 'loading'
+    })
+    expect(open).toHaveBeenCalledTimes(1)
+    expect(get).not.toHaveBeenCalled()
   })
 })

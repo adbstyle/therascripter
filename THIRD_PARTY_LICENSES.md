@@ -206,7 +206,7 @@ Die App lädt alle Modelle vom R2-CDN `https://pub-f6971d643e3a464ba6977c0816c43
 - **Nutzungsbedingungen:** Die Model Card verlangt im Abschnitt «Ethics & Safety», dass Einsätze die [Gemma Prohibited Use Policy](https://ai.google.dev/gemma/prohibited_use_policy) einhalten. Die Lizenz selbst enthält keine Einsatzbeschränkung. Für eine Suche in den eigenen Sitzungen der Therapeut:in ist kein Konflikt mit der Policy erkennbar (keine automatisierten Entscheidungen, keine Weitergabe). Die rechtliche Bindung dieses Hinweises neben Apache-2.0 hat der Projektverantwortliche zu beurteilen.
 - **Zugangsbedingungen:** Keine (nicht gated).
 - **Veränderung durch TheraScript:** `scripts/export-search-model.py` übernimmt nur die 413 Text-Tensoren (`language_model.*`, unverändert in bfloat16) und setzt in `config.json` `vision_config`/`audio_config` auf null. Der Tarball (`scripts/package-models.sh search`) enthält dazu `tokenizer.json`, eine `LICENSE` mit Apache-2.0-Text, Urheberhinweis «Copyright Google LLC» und Änderungsvermerk (Abschnitt 4(a) und 4(b)).
-- **Geforderte Namensnennung:** Kopie der Apache-2.0-Lizenz und Kennzeichnung der Änderung: im Tarball erfüllt. Für die Seite «Über» der App ist der Eintrag noch nachzutragen (Epic #192, Katalog-PR).
+- **Geforderte Namensnennung:** Kopie der Apache-2.0-Lizenz und Kennzeichnung der Änderung: im Tarball erfüllt.
 - **Weitergabe über eigenes Hosting:** zulässig unter Bedingungen (Lizenzkopie und Änderungsvermerk, im Tarball erfüllt).
 - **Einsatz in Therapiepraxen:** zulässig unter Bedingungen (Prohibited Use Policy laut Model Card, siehe oben).
 - **Ausgeliefert in:** noch nicht. Geplant als Pflichtmodell der Suche (Epic #192, ADR-008/ADR-010).

@@ -10,7 +10,7 @@ import { ToolBlockedError } from '../../shared/tool-blocked'
 import { onSessionsDeleted } from '../services/ChangeEvents'
 import type { VectorPhaseDeps } from './SearchIndexService'
 import type { SemanticSearchDeps } from './SearchService'
-import type { SearchProcessState } from '../../shared/types/Search'
+import type { SearchProcessState, SemanticAvailability } from '../../shared/types/Search'
 
 /**
  * Laufzeit der Suche nach Bedeutung (Epic #192, PR S4): EIN Suchprozess und
@@ -130,11 +130,28 @@ export function resetSearchRuntimeForTests(): void {
   runtime = null
 }
 
+/** Prozesszustand → `SearchAvailability.semantic`. */
+export function semanticAvailabilityOf(state: SearchProcessState): SemanticAvailability {
+  switch (state.reason) {
+    case 'processing':
+      return 'unavailable-processing'
+    case 'model-missing':
+      return 'model-missing'
+    case 'tool-blocked':
+      return 'tool-blocked'
+    case 'error':
+      return 'error'
+    default:
+      return state.phase === 'starting' ? 'loading' : 'ready'
+  }
+}
+
 /**
- * `search:warmup`: beim Öffnen der Suche (#209 AK 16) das Modell laden und
- * parallel die Vektoren — beides nur, wenn die Suche nach Bedeutung gerade
- * möglich ist. Liefert den Prozesszustand, sobald der Start entschieden ist
- * (bereit oder nicht verfügbar); wirft nie.
+ * Vorladen beim Öffnen der Suche (#209 AK 16, über `search:open`): das Modell
+ * und parallel die Vektoren — beides nur, wenn die Suche nach Bedeutung
+ * gerade möglich ist. Erfüllt sich mit dem Prozesszustand, sobald der Start
+ * entschieden ist; wirft nie. Der Start setzt die Phase `starting` noch
+ * synchron, ein direkt danach gelesener Stand meldet also `loading`.
  */
 export async function warmupSearch(rt: SearchRuntime): Promise<SearchProcessState> {
   const model = rt.semanticDeps.resolveModel()
