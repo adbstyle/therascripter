@@ -1,5 +1,10 @@
 import { z } from 'zod'
 import { isValidIsoDateNotAfter, localTodayIso } from '../utils/calendar-date'
+import {
+  hasControlChars,
+  hasControlCharsExceptLineBreaks,
+  isBlankDossierText
+} from '../utils/dossier-normalize'
 
 // IPC-Schemas für Patientendossiers (#204). Längen entsprechen den CHECKs der
 // Tabelle `dossiers` (Migration 020). JS zählt UTF-16-Einheiten, SQLite Zeichen —
@@ -11,14 +16,25 @@ export const MAX_DOSSIER_FREE_TEXT_LENGTH = 20_000
 
 export const DossierIdSchema = z.string().min(1).max(64)
 
-/** Vor- oder Nachname: Pflicht, nur Leerzeichen gilt als leer (#204 AK 2). */
+/**
+ * Vor- oder Nachname: Pflicht; nur Leerraum oder unsichtbare Zeichen
+ * (U+200B–U+200D, U+FEFF) gilt als leer (#204 AK 2). Steuerzeichen
+ * (U+0000–U+001F, U+007F, auch Zeilenumbruch und Tab) sind nie erlaubt.
+ */
 export const DossierNameSchema = z
   .string()
   .max(MAX_DOSSIER_NAME_LENGTH)
-  .refine((s) => s.trim().length > 0, { message: 'Name darf nicht leer sein' })
+  .refine((s) => !hasControlChars(s), { message: 'Name enthält Steuerzeichen' })
+  .refine((s) => !isBlankDossierText(s), { message: 'Name darf nicht leer sein' })
 
-/** Patientendossier-ID; leer bzw. nur Leerzeichen wird als «keine ID» gespeichert. */
-export const DossierExternalIdSchema = z.string().max(MAX_DOSSIER_EXTERNAL_ID_LENGTH)
+/**
+ * Patientendossier-ID; leer bzw. nur Leerraum/unsichtbare Zeichen wird als
+ * «keine ID» gespeichert. Steuerzeichen sind nie erlaubt.
+ */
+export const DossierExternalIdSchema = z
+  .string()
+  .max(MAX_DOSSIER_EXTERNAL_ID_LENGTH)
+  .refine((s) => !hasControlChars(s), { message: 'Dossier-ID enthält Steuerzeichen' })
 
 /**
  * Vollständiges, gültiges Kalenderdatum, das nicht nach dem heutigen Tag
@@ -31,7 +47,11 @@ export const PastOrTodayIsoDateSchema = z
     message: 'Kein gültiges Datum oder in der Zukunft'
   })
 
-export const DossierFreeTextSchema = z.string().max(MAX_DOSSIER_FREE_TEXT_LENGTH)
+/** Mehrzeiliger Freitext: Zeilenumbruch (LF, CR) und Tab erlaubt, andere Steuerzeichen nicht. */
+export const DossierFreeTextSchema = z
+  .string()
+  .max(MAX_DOSSIER_FREE_TEXT_LENGTH)
+  .refine((s) => !hasControlCharsExceptLineBreaks(s), { message: 'Text enthält Steuerzeichen' })
 
 export const DossierCreateSchema = z
   .object({

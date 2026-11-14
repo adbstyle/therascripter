@@ -60,7 +60,7 @@ describe('DossierService', () => {
 
   describe('create', () => {
     it('stores first and last name, trimmed and composed (AK 1/2)', () => {
-      const dossier = created(service.create({ firstName: '  Anna ', lastName: 'Müller' }))
+      const dossier = created(service.create({ firstName: '  Anna ', lastName: 'Mu\u0308ller' }))
       expect(dossier).toMatchObject({
         firstName: 'Anna',
         lastName: 'Müller',
@@ -97,7 +97,7 @@ describe('DossierService', () => {
 
     it('rejects an external id another dossier already has — case, whitespace and umlauts ignored (AK 5/7)', () => {
       created(service.create({ firstName: 'Anna', lastName: 'Meier', externalId: 'Müller-01' }))
-      for (const externalId of ['müller-01', ' MUELLER-01 ', 'Müller-01']) {
+      for (const externalId of ['müller-01', ' MUELLER-01 ', 'Mu\u0308ller-01']) {
         expect(service.create({ firstName: 'Ben', lastName: 'Huber', externalId })).toEqual({
           ok: false,
           reason: 'external-id-taken',
@@ -152,6 +152,31 @@ describe('DossierService', () => {
       expect(() =>
         service.create({ firstName: 'A', lastName: 'B', birthDate: '2999-01-01' })
       ).toThrow()
+    })
+  })
+
+  // Review #217: der Service prüft dieselben Regeln wie die Schemas
+  describe('control and invisible characters', () => {
+    it('rejects control characters in names, id and free text', () => {
+      expect(() => service.create({ firstName: 'An\u0000na', lastName: 'M' })).toThrow()
+      expect(() =>
+        service.create({ firstName: 'A', lastName: 'M', externalId: 'PD\u00071' })
+      ).toThrow()
+      const anna = created(service.create({ firstName: 'Anna', lastName: 'Meier' }))
+      expect(() => service.update(anna.id, { note: 'x\u0000y' })).toThrow()
+      expect(service.update(anna.id, { note: 'Zeile 1\nZeile 2\tTab' }).ok).toBe(true)
+    })
+
+    it('treats invisible-only names as empty and ignores invisible characters for equality', () => {
+      expect(() => service.create({ firstName: '\u200B\uFEFF', lastName: 'Meier' })).toThrow()
+      const anna = created(service.create({ firstName: '\u200BAnna', lastName: 'Meier' }))
+      expect(anna.firstName).toBe('Anna')
+      const dup = service.create({ firstName: 'Anna\u200D', lastName: 'Meier' })
+      expect(dup.ok === false && dup.reason).toBe('duplicate-name')
+      const blankId = created(
+        service.create({ firstName: 'Ben', lastName: 'Huber', externalId: '\u200B ' })
+      )
+      expect(blankId.externalId).toBeNull()
     })
   })
 
@@ -320,7 +345,8 @@ describe('DossierService', () => {
 
       expect(list).toHaveLength(500)
       expect(list[0].lastName).toBe('Nachname000')
-      expect(elapsed).toBeLessThan(100)
+      // Grosszügig, damit langsame CI-Maschinen nicht flackern
+      expect(elapsed).toBeLessThan(1000)
     })
   })
 

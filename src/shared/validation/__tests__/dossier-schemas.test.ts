@@ -151,3 +151,45 @@ describe('id, delete and event schemas', () => {
     expect(DossiersChangedSchema.safeParse({}).success).toBe(false)
   })
 })
+
+// Review #217: NUL und andere Steuerzeichen, unsichtbare Zeichen
+describe('control and invisible characters', () => {
+  it('rejects control characters in names and dossier id, including line breaks', () => {
+    for (const c of ['\u0000', '\u0001', '\n', '\t', '\u001F', '\u007F']) {
+      expect(DossierCreateSchema.safeParse({ firstName: `An${c}na`, lastName: 'M' }).success).toBe(
+        false
+      )
+      expect(
+        DossierCreateSchema.safeParse({ firstName: 'A', lastName: 'M', externalId: `PD${c}1` })
+          .success
+      ).toBe(false)
+      expect(
+        DossierUpdateSchema.safeParse({ dossierId: 'd1', patch: { lastName: `M${c}` } }).success
+      ).toBe(false)
+    }
+  })
+
+  it('treats a name of whitespace and zero-width characters only as empty', () => {
+    expect(
+      DossierCreateSchema.safeParse({ firstName: '\u200B \uFEFF', lastName: 'Meier' }).success
+    ).toBe(false)
+    expect(
+      DossierCreateSchema.safeParse({ firstName: '\u200BAnna', lastName: 'Meier' }).success
+    ).toBe(true)
+  })
+
+  it('free text allows line breaks and tab, but no other control characters', () => {
+    const patch = (note: string): boolean =>
+      DossierUpdateSchema.safeParse({ dossierId: 'd1', patch: { note } }).success
+    expect(patch('Zeile 1\nZeile 2\r\n\tEingerückt')).toBe(true)
+    expect(patch('a\u0000b')).toBe(false)
+    expect(patch('a\u0007b')).toBe(false)
+    expect(patch('a\u007Fb')).toBe(false)
+    expect(
+      DossierUpdateSchema.safeParse({ dossierId: 'd1', patch: { diagnoses: 'F32\u0000' } }).success
+    ).toBe(false)
+    expect(
+      DossierUpdateSchema.safeParse({ dossierId: 'd1', patch: { medication: 'x\u001B' } }).success
+    ).toBe(false)
+  })
+})

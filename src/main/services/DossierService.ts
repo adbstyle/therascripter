@@ -8,7 +8,13 @@ import {
 import { walCheckpointTruncate } from '../db/maintenance'
 import { SessionService } from './SessionService'
 import { notifyDossiersChanged, notifySessionsChanged } from './ChangeEvents'
-import { cleanDossierText, normalizeDossierKey } from '../../shared/utils/dossier-normalize'
+import {
+  cleanDossierText,
+  hasControlChars,
+  hasControlCharsExceptLineBreaks,
+  isBlankDossierText,
+  normalizeDossierKey
+} from '../../shared/utils/dossier-normalize'
 import { isValidIsoDateNotAfter, localTodayIso } from '../../shared/utils/calendar-date'
 import type {
   CreateDossierInput,
@@ -46,16 +52,24 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 function cleanName(value: string): string {
-  const cleaned = cleanDossierText(value)
-  if (cleaned.length === 0) throw new Error('Vor- und Nachname dürfen nicht leer sein')
-  return cleaned
+  if (hasControlChars(value)) throw new Error('Name enthält Steuerzeichen')
+  if (isBlankDossierText(value)) throw new Error('Vor- und Nachname dürfen nicht leer sein')
+  return cleanDossierText(value)
 }
 
-/** Leere bzw. nur aus Leerzeichen bestehende Dossier-ID wird als «keine ID» (NULL) gespeichert. */
+/**
+ * Leere bzw. nur aus Leerraum oder unsichtbaren Zeichen bestehende
+ * Dossier-ID wird als «keine ID» (NULL) gespeichert.
+ */
 function cleanExternalId(value: string | null | undefined): string | null {
   if (value == null) return null
-  const cleaned = cleanDossierText(value)
-  return cleaned.length === 0 ? null : cleaned
+  if (hasControlChars(value)) throw new Error('Dossier-ID enthält Steuerzeichen')
+  return isBlankDossierText(value) ? null : cleanDossierText(value)
+}
+
+function checkFreeText(value: string): string {
+  if (hasControlCharsExceptLineBreaks(value)) throw new Error('Text enthält Steuerzeichen')
+  return value
 }
 
 function checkBirthDate(value: string | null | undefined): string | null {
@@ -178,9 +192,9 @@ export class DossierService {
         record.externalId === null ? null : normalizeDossierKey(record.externalId)
     }
     if (patch.birthDate !== undefined) record.birthDate = checkBirthDate(patch.birthDate)
-    if (patch.diagnoses !== undefined) record.diagnoses = patch.diagnoses
-    if (patch.medication !== undefined) record.medication = patch.medication
-    if (patch.note !== undefined) record.note = patch.note
+    if (patch.diagnoses !== undefined) record.diagnoses = checkFreeText(patch.diagnoses)
+    if (patch.medication !== undefined) record.medication = checkFreeText(patch.medication)
+    if (patch.note !== undefined) record.note = checkFreeText(patch.note)
 
     if (!this.repository.findById(id)) return { ok: false, reason: 'not-found' }
 
