@@ -9,6 +9,8 @@ type TabId = 'anonymization' | 'provenance'
 
 interface ReviewSidePanelProps {
   isOpen: boolean
+  /** Issue #203 — Klartext view: list only, no actions that change the session. */
+  readOnly?: boolean
   anonymization: AnonymizationOverviewData
   onRevert: (entityId: string) => void
   onChangeType: (entityId: string, newType: PlaceholderType) => void
@@ -22,6 +24,7 @@ const ID_PREFIX = 'review-side'
 
 export function ReviewSidePanel({
   isOpen,
+  readOnly = false,
   anonymization,
   onRevert,
   onChangeType,
@@ -74,6 +77,7 @@ export function ReviewSidePanel({
         >
           <AnonymizationPanel
             data={anonymization}
+            readOnly={readOnly}
             onRevert={onRevert}
             onChangeType={onChangeType}
             onAddToBlocklist={onAddToBlocklist}

@@ -6,6 +6,8 @@ import { groupSessionsByTime, GROUP_ORDER } from '../utils/groupSessionsByTime'
 import { SessionCard } from './SessionCard'
 import { RecordingSessionCard, type LiveRecording } from './RecordingSessionCard'
 import { DeleteSessionDialog } from './DeleteSessionDialog'
+import { useViewMode } from '../viewMode/useViewMode'
+import { sessionTitleIn } from '../viewMode/sessionText'
 
 const PROCESSING_STATUSES: SessionStatus[] = ['queued', 'processing']
 
@@ -34,6 +36,7 @@ export default function SessionDashboard({
   const today = useStartOfToday()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
+  const viewMode = useViewMode()
   const [isDragOver, setIsDragOver] = useState(false)
 
   // Scroll to a specific session card after returning from review
@@ -236,6 +239,7 @@ export default function SessionDashboard({
       {deleteTarget && (
         <DeleteSessionDialog
           session={deleteTarget}
+          displayTitle={sessionTitleIn(deleteTarget, viewMode)}
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
         />

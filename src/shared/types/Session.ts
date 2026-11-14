@@ -1,4 +1,4 @@
-import type { EntityMap } from './EntityMap'
+import type { EntityMap, PlaceholderSnapshot } from './EntityMap'
 import type { TaskType } from './Task'
 import type { ProcessedModelsSnapshot } from './Provenance'
 
@@ -47,6 +47,19 @@ export interface Session {
    * NULL for legacy rows that reached 'review' before this column existed.
    */
   processedWithModels: ProcessedModelsSnapshot | null
+  /**
+   * Issue #203 — meaning of the placeholder tokens in `title` / `summary` at
+   * the time they were written (token → original). NULL: nothing recorded.
+   */
+  titleEntitySnapshot?: PlaceholderSnapshot | null
+  summaryEntitySnapshot?: PlaceholderSnapshot | null
+  /**
+   * Issue #203 — `title` / `summary` for the Klartext view, resolved in the
+   * main process (the session list never loads the EntityMap). Tokens whose
+   * meaning changed since the text was written stay as they are.
+   */
+  titlePlain?: string
+  summaryPlain?: string | null
 }
 
 export interface CreateSessionInput {
@@ -79,4 +92,6 @@ export interface UpdateSessionInput {
   retryCount?: number
   pdfHasScannedPages?: boolean | null
   processedWithModels?: ProcessedModelsSnapshot | null
+  titleEntitySnapshot?: PlaceholderSnapshot | null
+  summaryEntitySnapshot?: PlaceholderSnapshot | null
 }

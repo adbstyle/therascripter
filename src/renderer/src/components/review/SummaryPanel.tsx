@@ -1,12 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, FocusEvent } from 'react'
+import type { EntityMap, PlaceholderSnapshot } from '../../../../shared/types'
+import { resolvePlaceholders } from '../../../../shared/utils/resolvePlaceholders'
+import { useIsPlainView } from '../../viewMode/useViewMode'
 
 interface Props {
   sessionId: string
+  /**
+   * Issue #203 — the editor's live EntityMap: in the Klartext view, tokens
+   * resolve against it where their meaning is unchanged since the summary
+   * was written.
+   */
+  entityMap?: EntityMap
 }
 
-export function SummaryPanel({ sessionId }: Props): React.JSX.Element | null {
+export function SummaryPanel({ sessionId, entityMap }: Props): React.JSX.Element | null {
+  const plain = useIsPlainView()
   const [text, setText] = useState<string | null>(null)
+  const [snapshot, setSnapshot] = useState<PlaceholderSnapshot | null>(null)
   // #168 — warum die Zusammenfassung fehlt; 'running' nach «Zusammenfassung erstellen»
   const [missing, setMissing] = useState<'tool-blocked' | 'running' | null>(null)
   const [refetchCounter, setRefetchCounter] = useState(0)
@@ -20,6 +31,7 @@ export function SummaryPanel({ sessionId }: Props): React.JSX.Element | null {
         if (cancelled) return
         if (record && record.text && record.text.length > 0) {
           setText(record.text)
+          setSnapshot(record.textSnapshot ?? null)
           originalRef.current = record.text
           setMissing(null)
           return
@@ -77,14 +89,19 @@ export function SummaryPanel({ sessionId }: Props): React.JSX.Element | null {
           <>
             <p>
               Die Zusammenfassung fehlt, weil macOS ein Werkzeug von Therascript blockiert hat.
-              Sobald das behoben ist, können Sie sie hier nachholen.
+              {plain
+                ? ' Sobald das behoben ist, können Sie sie in der pseudonymisierten Ansicht nachholen.'
+                : ' Sobald das behoben ist, können Sie sie hier nachholen.'}
             </p>
-            <button
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-2"
-              onClick={regenerate}
-            >
-              Zusammenfassung erstellen
-            </button>
+            {/* Nachholen ändert die Sitzung — im Klartext nicht verfügbar (#203 AK 8) */}
+            {!plain && (
+              <button
+                className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-2"
+                onClick={regenerate}
+              >
+                Zusammenfassung erstellen
+              </button>
+            )}
           </>
         )}
         <hr className="mt-4 w-12 border-0 border-t border-border-strong" aria-hidden />
@@ -96,9 +113,14 @@ export function SummaryPanel({ sessionId }: Props): React.JSX.Element | null {
     const next = (el.textContent ?? '').trim()
     if (next === originalRef.current) return
     originalRef.current = next
-    window.api.summary.updateText(sessionId, next).catch((err) => {
-      console.error('Failed to save summary edit', err)
-    })
+    // Keeps the Klartext rendering (and a remount after a view switch) current
+    setText(next)
+    window.api.summary
+      .updateText(sessionId, next)
+      .then((record) => setSnapshot(record?.textSnapshot ?? null))
+      .catch((err) => {
+        console.error('Failed to save summary edit', err)
+      })
   }
 
   const onBlur = (e: FocusEvent<HTMLParagraphElement>): void => commit(e.currentTarget)
@@ -113,11 +135,28 @@ export function SummaryPanel({ sessionId }: Props): React.JSX.Element | null {
     }
   }
 
+  const textStyle = { fontSize: '14px', lineHeight: '24px' }
+
+  // Issue #203 — Klartext: read-only, tokens resolved where their meaning is
+  // unchanged since the summary was written (AK 4, 5, 8). Plain DOM text, so
+  // copying it yields exactly what is shown (AK 9).
+  if (plain) {
+    return (
+      <section>
+        <p key="read-only" className="font-semibold text-text-primary" style={textStyle}>
+          {resolvePlaceholders(text, entityMap, snapshot)}
+        </p>
+        <hr className="mt-4 w-12 border-0 border-t border-border-strong" aria-hidden />
+      </section>
+    )
+  }
+
   return (
     <section>
       <p
+        key="editable"
         className="rounded-sm font-semibold text-text-primary outline-none focus:ring-1 focus:ring-primary"
-        style={{ fontSize: '14px', lineHeight: '24px' }}
+        style={textStyle}
         contentEditable
         suppressContentEditableWarning
         onBlur={onBlur}

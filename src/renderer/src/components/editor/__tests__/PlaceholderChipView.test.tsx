@@ -176,3 +176,11 @@ describe('PlaceholderChipView', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 })
+
+describe('PlaceholderChipView — tooltip not selectable (#203 AK 9)', () => {
+  it('the tooltip with the original is select-none', async () => {
+    setup()
+    fireEvent.focus(screen.getByRole('button', { name: /Person 1/ }))
+    expect(await screen.findByRole('tooltip')).toHaveClass('select-none')
+  })
+})

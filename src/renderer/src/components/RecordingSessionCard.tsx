@@ -5,6 +5,8 @@ import { AUTO_STOP_SECONDS } from '../../../shared/constants/recording'
 import { VUMeter } from './VUMeter'
 import type { ValueStore } from '../utils/valueStore'
 import { formatTime } from '../utils/formatTime'
+import { useViewMode } from '../viewMode/useViewMode'
+import { sessionTitleIn } from '../viewMode/sessionText'
 
 export interface LiveRecording {
   /** Pegel und Dauer als Store statt Wert — siehe useRecording (Issue #140) */
@@ -31,8 +33,8 @@ export function RecordingSessionCard({
 }: RecordingSessionCardProps): React.JSX.Element {
   const duration = useSyncExternalStore(live.duration.subscribe, live.duration.get)
   const remaining = Math.max(0, AUTO_STOP_SECONDS - duration)
-  const displayTitle =
-    session.title && session.title.trim().length > 0 ? session.title : 'Unbenannte Transkription'
+  const title = sessionTitleIn(session, useViewMode())
+  const displayTitle = title.trim().length > 0 ? title : 'Unbenannte Transkription'
 
   return (
     <div

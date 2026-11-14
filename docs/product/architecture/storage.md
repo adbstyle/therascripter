@@ -52,6 +52,11 @@ Tracks every transcription and PDF import session.
 | `updated_at` | TEXT | DEFAULT `datetime('now')` | ISO 8601 timestamp of last update |
 | `review_at` | TEXT | nullable | ISO 8601 timestamp of when the session first reached `review` status; used for source-file cleanup |
 | `deleting_at` | TEXT | nullable | Set when the user confirmed the deletion and its files are not all removed yet (#202). Rows with a value are hidden from every read that reaches the user (`findById`, `findAll`, source-file cleanup) |
+| `title_entity_snapshot` | TEXT | nullable | Issue #203 (migration 019): JSON `{ "[PERSON 1]": "Ruth Gerber", … }` — meaning of the placeholder tokens in `title` when it was written. The Klartext view resolves a token only while `entity_map` still gives it this meaning (`shared/utils/resolvePlaceholders.ts`) |
+| `summary_entity_snapshot` | TEXT | nullable | Same for `summary`; written by the summarization (from the EntityMap read with the LLM input) and on user edits (only tokens absent from the old text count as newly typed and get the current meaning; tokens of the old text keep their record — or, without one, stay placeholders for good). Migration 019 backfilled existing rows with today's unambiguous meanings, reading only object entries of valid maps (never fails on malformed legacy data) |
+| `title_plain` / `summary_plain` | TEXT | nullable | Issue #203: Klartext of `title`/`summary`, computed on every write that can change it (`SessionRepository.update` → `db/plainTexts.ts`, incl. `review:save`'s entity_map). NULL = same as the raw text. The session list selects only these — never `entity_map` or the snapshots. Existing rows: one-time `placeholder-plain-backfill` in `runStartupMaintenance` (`app_maintenance`) |
+
+All four #203 columns hold clear names and are cleared by `scrubMarkedContent` together with title, summary and entity_map.
 
 Index: `idx_sessions_created_at` on `created_at`.
 

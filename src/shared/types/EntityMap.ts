@@ -19,3 +19,9 @@ export interface EntityMapEntry {
 export interface EntityMap {
   [entityId: string]: EntityMapEntry
 }
+
+/**
+ * Issue #203 — token (`[PERSON 1]`) → original, recorded when a session title
+ * or summary was written (see shared/utils/resolvePlaceholders).
+ */
+export type PlaceholderSnapshot = Record<string, string>

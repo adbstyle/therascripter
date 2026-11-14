@@ -220,6 +220,10 @@ beforeEach(() => {
     nav: {
       onOpenSettings: vi.fn().mockReturnValue(() => {})
     },
+    viewMode: {
+      initial: 'pseudonymized',
+      set: vi.fn().mockResolvedValue(undefined)
+    },
     toolHealth: {
       getState: vi.fn().mockResolvedValue({ status: 'ok', tools: [], bundlePath: '' }),
       recheck: vi.fn(),

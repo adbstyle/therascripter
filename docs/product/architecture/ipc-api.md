@@ -179,7 +179,14 @@ Source: `src/main/ipc/settings-handlers.ts`
 | `settings:get` | invoke | `SettingsGetSchema` — `{ key: SettingsKey }` | `unknown` | Read a setting value from electron-store |
 | `settings:set` | invoke | `SettingsSetSchema` — `{ key: SettingsKey, value: unknown }` | `void` | Write a setting value. When `key` is `"theme"`, also syncs Electron's `nativeTheme.themeSource`. |
 
-`SettingsKey` is an enum: `activeModels | firstLaunchDone | consentReminderShown | modelsDownloaded | theme`.
+`SettingsKey` is an enum: `activeModels | firstLaunchDone | consentReminderShown | modelsDownloaded | theme | reviewPanelOpen`.
+
+#### View mode (Issue #203)
+
+| Channel | Direction | Input Schema | Return Type | Description |
+|---|---|---|---|---|
+| `viewMode:getSync` | sendSync | _(none)_ | `ViewMode` | Read by the preload **synchronously** before the renderer runs (`window.api.viewMode.initial`), so the first render already shows the saved view. Unknown/unreadable → `'pseudonymized'` |
+| `viewMode:set` | invoke | `ViewModeSetSchema` — `{ mode: 'pseudonymized' \| 'plain' }` | `void` | Persist the chosen view (electron-store `viewMode`) |
 
 ### System Handlers
 
@@ -267,4 +274,6 @@ Source: `src/main/ipc/tool-health-handlers.ts`
 |---|---|---|---|---|
 | `summary:missingReason` | invoke | `SummaryGetInputSchema` | `'tool-blocked' \| null` | Why the summary is missing: the last attempt failed on a tool blocked by macOS |
 | `summary:regenerate` | invoke | `SummaryGetInputSchema` | `boolean` | Enqueue one summarization task for a review session; false if nothing to do |
+
+Since Issue #203, `summary:updateTitle` and `summary:updateText` resolve with the updated `SummaryRecord` (incl. `titleSnapshot`/`textSnapshot`), and `session:list` rows carry `titlePlain`/`summaryPlain`, resolved in the main process.
 | `summary:changed` | event | — | `{ sessionId }` (`SummaryChangedSchema`) | A summarization attempt failed — reload the hint |

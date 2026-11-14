@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SessionCard } from '../SessionCard'
 import { PIPELINE_UI_STRINGS } from '../../../../shared/constants/pipelineWording'
 import type { Session } from '../../../../shared/types'
 import { toolBlockedMessage } from '../../../../shared/tool-blocked'
 import { useTaskProgress } from '../../hooks/useTaskProgress'
+import { getViewModeStore, _resetViewModeStoreForTests } from '../../viewMode/viewModeStore'
 
 vi.mock('../../hooks/useTaskProgress', () => ({
   useTaskProgress: vi.fn()
@@ -463,5 +464,46 @@ describe('SessionCard — von macOS blockiertes Werkzeug (#168)', () => {
     ).toBeInTheDocument()
     expect(screen.queryByText(PIPELINE_UI_STRINGS.retryExhausted)).not.toBeInTheDocument()
     expect(screen.queryByText(PIPELINE_UI_STRINGS.retryAfterSecondFailure)).not.toBeInTheDocument()
+  })
+})
+
+describe('SessionCard — view mode (#203)', () => {
+  const tokenSession = makeSession({
+    title: 'Gespräch mit [PERSON 1]',
+    titlePlain: 'Gespräch mit Ruth Gerber',
+    summary: '[PERSON 1] aus [ORT 1] erzählt.',
+    summaryPlain: 'Ruth Gerber aus [ORT 1] erzählt.'
+  })
+
+  beforeEach(() => {
+    vi.mocked(useTaskProgress).mockReturnValue(emptyHookResult)
+    _resetViewModeStoreForTests()
+  })
+
+  afterEach(() => _resetViewModeStoreForTests())
+
+  it('pseudonymized: title and summary with placeholders, never the originals', () => {
+    getViewModeStore().set('pseudonymized')
+    render(<SessionCard session={tokenSession} onDelete={vi.fn()} onClick={vi.fn()} />)
+    expect(screen.getByText('Gespräch mit [PERSON 1]')).toBeInTheDocument()
+    expect(screen.getByText('[PERSON 1] aus [ORT 1] erzählt.')).toBeInTheDocument()
+    expect(screen.queryByText(/Ruth Gerber/)).toBeNull()
+  })
+
+  it('Klartext: title and summary resolved by the main process, also for screen readers (AK 4, 14)', () => {
+    getViewModeStore().set('plain')
+    render(<SessionCard session={tokenSession} onDelete={vi.fn()} onClick={vi.fn()} />)
+    expect(screen.getByText('Gespräch mit Ruth Gerber')).toBeInTheDocument()
+    expect(screen.getByText('Ruth Gerber aus [ORT 1] erzählt.')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Gespräch mit Ruth Gerber öffnen' })
+    ).toBeInTheDocument()
+  })
+
+  it('switches in place when the view changes (AK 13)', () => {
+    getViewModeStore().set('pseudonymized')
+    render(<SessionCard session={tokenSession} onDelete={vi.fn()} onClick={vi.fn()} />)
+    act(() => getViewModeStore().set('plain'))
+    expect(screen.getByText('Gespräch mit Ruth Gerber')).toBeInTheDocument()
   })
 })

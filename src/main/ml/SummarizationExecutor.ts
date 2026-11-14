@@ -1,4 +1,4 @@
-import type { Task } from '../../shared/types'
+import type { EntityMap, Task } from '../../shared/types'
 import type { TaskExecutor } from '../services/task-executors'
 import { ToolBlockedError } from '../../shared/tool-blocked'
 
@@ -8,7 +8,15 @@ export interface SummarizationExecutorDeps {
   }
   sessionService: {
     getAnonymizedPlainText(sessionId: string): string
-    saveGeneratedSummary(sessionId: string, title: string, text: string, modelId: string): unknown
+    /** #203 — read with the text, so the summary's tokens keep the meaning the LLM saw. */
+    getEntityMap(sessionId: string): EntityMap | null
+    saveGeneratedSummary(
+      sessionId: string,
+      title: string,
+      text: string,
+      modelId: string,
+      entityMapAtRead: EntityMap | null
+    ): unknown
   }
   isModelInstalled: () => boolean
   getActiveModelId: () => string | null
@@ -31,8 +39,10 @@ export class SummarizationExecutor implements TaskExecutor {
     }
 
     let text: string
+    let entityMapAtRead: EntityMap | null
     try {
       text = this.deps.sessionService.getAnonymizedPlainText(task.sessionId)
+      entityMapAtRead = this.deps.sessionService.getEntityMap(task.sessionId)
     } catch (err) {
       // Anonymized doc may be missing for older or partially-processed sessions —
       // skip silently rather than fail the whole task and turn the session into 'error'.
@@ -88,7 +98,8 @@ export class SummarizationExecutor implements TaskExecutor {
       task.sessionId,
       result.title,
       result.text,
-      modelId
+      modelId,
+      entityMapAtRead
     )
   }
 }
