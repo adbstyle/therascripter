@@ -2,7 +2,6 @@ import type Database from 'better-sqlite3'
 import { normalizeSearchText } from '../../shared/utils/search-normalize'
 import { SEARCH_MIN_TERM_LENGTH, SEARCH_SHORT_QUERY_MAX_CHUNKS } from '../../shared/search-config'
 import { SEARCH_SORT_DAY, SEARCH_VISIBLE_SESSION } from '../db/repositories/SearchIndexRepository'
-import { sectionIndexText, type ChunkUnitRef } from './chunker'
 import type { ChunkCandidate } from './ranking'
 import type { SearchField } from '../../shared/types/Search'
 
@@ -14,8 +13,9 @@ import type { SearchField } from '../../shared/types/Search'
  * Teilwörter als Phrase; kürzere Wörter sind dann nur Füllwerk.
  *
  * Besteht die Anfrage nur aus kürzeren Wörtern, liefert der Trigramm-Index
- * nichts; dann durchsucht ein Scan die aktiven Abschnitte (neueste Sitzungen
- * zuerst) und hört nach SEARCH_SHORT_QUERY_MAX_CHUNKS Treffer-Abschnitten auf.
+ * nichts; dann durchsucht ein Scan den gespeicherten normalisierten Text
+ * (neueste Sitzungen zuerst) und hört nach SEARCH_SHORT_QUERY_MAX_CHUNKS
+ * Treffer-Abschnitten auf.
  *
  * Gesucht wird über den Klartext von Text, Titel und Zusammenfassung (AK 4,
  * AK 5), nur in fertig verarbeiteten Sitzungen, die nicht im Löschen sind.
@@ -120,37 +120,27 @@ function findViaFts(db: Database.Database, terms: string[]): ExactSearchResult {
   return collect(rows, false)
 }
 
-interface ScanRow extends CandidateRow {
-  units: string
-  text: string
-}
-
+/**
+ * Kurze Anfragen: Scan über den normalisierten Text, den search_fts selbst
+ * speichert (ohne «Sprecher N:»-Präfixe), per instr in SQLite. Neueste
+ * Sitzungen zuerst, höchstens SEARCH_SHORT_QUERY_MAX_CHUNKS Treffer-Abschnitte.
+ */
 function findViaScan(db: Database.Database, terms: string[]): ExactSearchResult {
-  const statement = db.prepare(
-    `SELECT c.id, c.session_id, c.field, c.ord, c.para_from, c.para_to, 0 AS score,
-            ${SEARCH_SORT_DAY} AS sort_day, c.units, c.text
-     FROM search_chunks c
-     JOIN search_index_state st ON st.session_id = c.session_id AND st.text_gen = c.gen
-     JOIN sessions s ON s.id = c.session_id
-     WHERE ${SEARCH_VISIBLE_SESSION}
-     ORDER BY sort_day DESC, s.created_at DESC, c.session_id, c.id`
-  )
-  const hits: CandidateRow[] = []
-  let capped = false
-  for (const row of statement.iterate() as IterableIterator<ScanRow>) {
-    let units: ChunkUnitRef[] = []
-    try {
-      units = JSON.parse(row.units) as ChunkUnitRef[]
-    } catch {
-      units = []
-    }
-    const norm = normalizeSearchText(sectionIndexText({ units, text: row.text }))
-    if (!terms.every((t) => norm.includes(t))) continue
-    hits.push(row)
-    if (hits.length >= SEARCH_SHORT_QUERY_MAX_CHUNKS) {
-      capped = true
-      break
-    }
-  }
-  return collect(hits, capped)
+  const where = terms.map(() => 'instr(norm, ?) > 0').join(' AND ')
+  const rows = db
+    .prepare(
+      `WITH m AS MATERIALIZED (SELECT rowid AS id FROM search_fts WHERE ${where})
+       SELECT c.id, c.session_id, c.field, c.ord, c.para_from, c.para_to, 0 AS score,
+              ${SEARCH_SORT_DAY} AS sort_day
+       FROM m
+       JOIN search_chunks c ON c.id = m.id
+       JOIN search_index_state st ON st.session_id = c.session_id AND st.text_gen = c.gen
+       JOIN sessions s ON s.id = c.session_id
+       WHERE ${SEARCH_VISIBLE_SESSION}
+       ORDER BY sort_day DESC, s.created_at DESC, c.session_id, c.id
+       LIMIT ?`
+    )
+    .all(...terms, SEARCH_SHORT_QUERY_MAX_CHUNKS + 1) as CandidateRow[]
+  const capped = rows.length > SEARCH_SHORT_QUERY_MAX_CHUNKS
+  return collect(capped ? rows.slice(0, SEARCH_SHORT_QUERY_MAX_CHUNKS) : rows, capped)
 }

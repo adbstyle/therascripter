@@ -18,9 +18,11 @@ import { SEARCH_MAX_HITS_PER_DOCUMENT } from '../../shared/search-config'
  * 4. Dann das neuere Datum, zuletzt die ID (stabile Reihenfolge).
  *
  * Gruppierung (#209 AK 7): jedes Dokument einmal, mit bis zu
- * SEARCH_MAX_HITS_PER_DOCUMENT Fundstellen; Abschnitte, deren Absätze sich
- * überschneiden (die wiederholte Unit), werden zu einer Fundstelle
- * zusammengefasst.
+ * SEARCH_MAX_HITS_PER_DOCUMENT Fundstellen; ein Abschnitt, dessen Absätze sich
+ * mit denen einer passenderen Fundstelle überschneiden (die wiederholte Unit),
+ * wird in diese Fundstelle zusammengefasst und zählt nicht als eigene. Die
+ * Fundstelle behält Absätze, Ausschnitt und Markierungen ihres besten
+ * Abschnitts.
  *
  * Der Filter auf ein Patientendossier kommt NACH dieser Funktion (#211 AK 3):
  * die Reihenfolge ist dann identisch zur Suche über alle Inhalte.
@@ -42,7 +44,7 @@ export interface ChunkCandidate {
 export interface RankedHit {
   /** Abschnitt, aus dem Ausschnitt und Markierungen stammen. */
   primary: ChunkCandidate
-  /** Alle zusammengefassten Abschnitte (inkl. primary), Rangfolge. */
+  /** Alle zusammengefassten Abschnitte (inkl. primary), Rangfolge — für S4/Diagnose. */
   merged: ChunkCandidate[]
   kind: SearchHitKind
   field: SearchField
@@ -103,11 +105,11 @@ export function pickHits(
 ): RankedHit[] {
   const hits: RankedHit[] = []
   for (const chunk of [...candidates].sort(compareChunks)) {
-    const into = hits.find((hit) => hit.merged.some((m) => overlaps(m, chunk)))
+    // Nur mit der Fundstelle selbst vergleichen, nicht transitiv: sonst fasste
+    // ein häufiges Wort über die wiederholten Units die ganze Sitzung zusammen.
+    const into = hits.find((hit) => overlaps(hit.primary, chunk))
     if (into) {
       into.merged.push(chunk)
-      into.paraFrom = Math.min(into.paraFrom ?? Infinity, chunk.paraFrom ?? Infinity)
-      into.paraTo = Math.max(into.paraTo ?? -Infinity, chunk.paraTo ?? -Infinity)
       continue
     }
     if (hits.length >= maxHits) continue

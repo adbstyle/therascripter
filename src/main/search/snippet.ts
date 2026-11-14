@@ -98,8 +98,8 @@ function dedupeRanges(ranges: SearchParagraphRange[]): SearchParagraphRange[] {
 }
 
 /**
- * Baut einen Treffer für die Anzeige. `chunks` muss die Abschnitte des
- * Treffers (primary und zusammengefasste) enthalten. Bei Treffern nach
+ * Baut einen Treffer für die Anzeige. `chunks` muss den besten Abschnitt des
+ * Treffers (`primary`) enthalten; Absätze und Markierungen stammen von ihm. Bei Treffern nach
  * Bedeutung (PR S4) ist `terms` leer: dann Anfang des Abschnitts, ohne
  * Markierungen, Anker = Anfang der ersten Unit.
  */
@@ -126,15 +126,10 @@ export function buildHit(
   else if (hit.field === 'summary') focus = { kind: 'summary' }
   else {
     const ranges: SearchParagraphRange[] = []
-    for (const candidate of hit.merged) {
-      const chunk = chunks.get(candidate.chunkId)
-      if (!chunk) continue
-      const withMatches = candidate === hit.primary ? units : unitsWithMatches(chunk, exactTerms)
-      for (const u of withMatches) {
-        if (!u.unit) continue
-        for (const m of u.matches) {
-          ranges.push({ p: u.unit.p, s: u.unit.s + m.start, e: u.unit.s + m.end })
-        }
+    for (const u of units) {
+      if (!u.unit) continue
+      for (const m of u.matches) {
+        ranges.push({ p: u.unit.p, s: u.unit.s + m.start, e: u.unit.s + m.end })
       }
     }
     const anchor = firstMatch

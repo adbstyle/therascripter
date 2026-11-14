@@ -76,7 +76,7 @@ describe('search ranking', () => {
     expect(hits).toHaveLength(3)
     expect(hits[0].field).toBe('title')
     expect(hits[1].merged.map((m) => m.chunkId)).toEqual([1, 2])
-    expect([hits[1].paraFrom, hits[1].paraTo]).toEqual([0, 9])
+    expect([hits[1].paraFrom, hits[1].paraTo]).toEqual([0, 4])
     expect(hits[2].primary.chunkId).toBe(3)
   })
 

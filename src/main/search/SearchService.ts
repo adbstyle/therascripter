@@ -141,7 +141,7 @@ export class SearchService {
   /** Ausschnitte, Fundstellen, Titel, Datum und Dossiers der getroffenen Dokumente. */
   private buildResults(documents: RankedDocument[], terms: string[]): SearchDocumentResult[] {
     if (documents.length === 0) return []
-    const chunkIds = documents.flatMap((d) => d.hits.flatMap((h) => h.merged.map((m) => m.chunkId)))
+    const chunkIds = documents.flatMap((d) => d.hits.map((h) => h.primary.chunkId))
     const chunks = new Map<number, StoredChunk>(
       this.index.findChunksByIds(chunkIds).map((c) => [c.id, c])
     )
