@@ -22,11 +22,12 @@ Gegen stille Abweichungen sichern **Goldvektoren** ab: `scripts/make-search-gold
 
 | Messung (M5 Pro, 64 GB) | Wert |
 |---|---|
-| fp32 auf der CPU gegen Goldvektoren | Kosinus 1.0000000 (alle 16 Vektoren) |
+| fp32 auf der CPU gegen Goldvektoren | Kosinus 1.0 auf 9 Stellen (alle 16 Vektoren); Schwelle 0.9999995 |
 | bf16 auf MPS gegen Goldvektoren | Kosinus min. 0.9999147 |
 | Zusätzliches Bundle | 0 MB (nur `safetensors`, `tokenizers`, `numpy` explizit in `requirements.txt`, ohne Versionswechsel) |
 | Import bis bereit | ~3–7 s je nach Datei-Cache und Last (Import ~1–2 s) |
-| phys_footprint nach Laden | ~1.5 GiB; beim Aufbereiten < 2.2 GiB |
+| phys_footprint nach Laden | ~1.5 GiB; beim Aufbereiten kurzer Läufe (≤ 148 Abschnitte) ~2.1 GiB |
+| Dauerlauf 2000 Anfragen auf MPS | +827 Bytes pro Forward-Pass (ohne Autorelease-Pool ~100 KiB) |
 
 Die Gewichte kommen als eigenes Text-Artefakt (`scripts/export-search-model.py`, `scripts/package-models.sh search`): nur die 413 Tensoren `language_model.*` in bf16, 542 MB statt 1.49 GB, reproduzierbar gepackt.
 
@@ -43,6 +44,7 @@ Die Gewichte kommen als eigenes Text-Artefakt (`scripts/export-search-model.py`,
 
 - **Pflege:** Der Nachbau gilt für genau ein Artefakt (Modell-ID und Ordner tragen die Version). Ein anderes Modell braucht neue Goldvektoren und gegebenenfalls einen neuen Nachbau; die Goldvektoren schlagen an, bevor falsche Vektoren in einen Index gelangen.
 - **Präzision:** bf16 auf MPS, nie fp16 (Gemma läuft in fp16 über). Auf der CPU fp32: bf16 ist dort sehr langsam (15.9 s für 8 Texte). Rückfall nach MPS-OOM: erst `.to('cpu')`, dann `.float()` (NER-Gotcha).
-- **Speicher:** Aufgefüllt wird pro Batch auf Vielfache von 128 Tokens und höchstens 2048 Token-Slots pro Batch. Ohne Raster 3.9 GiB `phys_footprint`, mit Raster 1.8 GiB; vier Texte à 1024 Tokens kamen auf 3.4 GiB, zwei auf 1.8 GiB.
+- **Prüfschärfe:** Auf MPS verdeckt das bf16-Rauschen Off-by-one-Fehler im Encoder (Sliding Window 511/513, Kürzung 1023: weiterhin ≥ 0.99992). Deshalb laufen Smoke und Vitest den Selftest zusätzlich in fp32 auf der CPU mit Schwelle 0.9999995 — dieselben Fehler fallen dort auf 0.99993–0.999998 und werden rot.
+- **Speicher:** Aufgefüllt wird pro Batch auf Vielfache von 128 Tokens, höchstens 2 Texte und 2048 Token-Slots pro Batch. Ohne Raster 3.9 GiB `phys_footprint`, mit Raster 1.8 GiB; vier Texte à 1024 Tokens kamen auf 3.4 GiB, zwei auf 1.8 GiB. Jeder Forward-Pass läuft in einem Objective-C-Autorelease-Pool; ohne ihn wuchs der Prozess auf MPS um ~100 KiB pro Pass. Jede Antwort meldet `phys_footprint_bytes`, der Aufrufer startet den Dienst ab einer Schwelle neu.
 - **Protokoll:** ein langlebiger Prozess (JSON-Lines, `serve`) für Anfragen und Aufbereitung; stdout trägt nur Protokollzeilen. Python bleibt zustandslos, Node hält die Vektoren (Bauplan, Epic #192).
 - **Lizenz:** Der nachgebaute Code und das Modell stehen unter Apache-2.0; Einträge in `THIRD_PARTY_LICENSES.md`.
