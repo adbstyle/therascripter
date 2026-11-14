@@ -11,7 +11,8 @@ export type SessionDeletionInput = Pick<
   | 'extractedPath'
   | 'anonymizedPath'
   | 'summary'
->
+> &
+  Partial<Pick<Session, 'reviewAt'>>
 
 /**
  * What deleting this session removes, in the words of the delete dialog
@@ -19,6 +20,8 @@ export type SessionDeletionInput = Pick<
  * e.g. the recording only until the 24-hour source-file cleanup removed it.
  * Works on the list projection of a session (no entity map needed): the
  * pseudonymization exists exactly when the pseudonymized document exists.
+ * Search data (Epic #192) is named once the session was processed — from
+ * then on the search index holds its texts.
  * Blocklist entries and backups of the Mac are deliberately not mentioned:
  * deleting a session does not touch them (Out of Scope 5/6).
  */
@@ -46,6 +49,11 @@ export function sessionDeletionDetails(session: SessionDeletionInput): string[] 
   ) {
     details.push('Zwischenergebnisse der Verarbeitung')
   }
+
+  // Epic #192 (#209): die Suche bereitet jede fertig verarbeitete Sitzung auf
+  // (Titel, Zusammenfassung, Text im Klartext). Massgeblich ist, ob die
+  // Verarbeitung einmal abgeschlossen wurde — reviewAt wird nie zurückgesetzt.
+  if (session.reviewAt) details.push('Für die Suche aufbereitete Texte')
 
   const hasSummary = typeof session.summary === 'string' && session.summary.trim().length > 0
   details.push(hasSummary ? 'Titel und Zusammenfassung' : 'Titel')

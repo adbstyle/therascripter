@@ -341,6 +341,13 @@ export class DossierService {
           ...countByType(shared),
           otherDossiers: shared.length > 0 ? this.repository.findDossiersSharingSessions(id) : []
         },
+        search: {
+          exclusiveSearchable: exclusive.filter((row) => row.searchable === 1).length,
+          recentQueries: new SearchRecentRepository(this.db).countContaining(
+            [ref.firstName, ref.lastName],
+            [ref.externalId]
+          )
+        },
         blockedByRecording: activeSessionId !== null && exclusiveIds.includes(activeSessionId),
         fingerprint: fingerprintOf(
           exclusiveIds,

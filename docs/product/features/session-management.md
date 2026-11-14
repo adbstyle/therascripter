@@ -126,6 +126,7 @@ Sessions are kept until the user deletes them — there is no automatic deletion
   - «Audioaufnahme» / «Original-PDF» — only while the source file still exists (until 24 h after successful processing, for failed sessions until deleted)
   - «Transkript inklusive Ihrer Bearbeitungen» / «Text des PDF-Dokuments inklusive Ihrer Bearbeitungen» and «Pseudonymisierung samt den Originaltexten aller Platzhalter» — once processing finished
   - «Zwischenergebnisse der Verarbeitung» — raw transcript, speaker assignment, extracted text, if present
+  - «Für die Suche aufbereitete Texte» — once processing finished once (`reviewAt` set; it is never reset): from then on the search index holds title, summary and text in clear text (Epic #192, #207)
   - «Titel» or «Titel und Zusammenfassung»
   - Blocklist entries and backups of the Mac are not mentioned: deleting a session does not touch them
 - «Verschwindet aus den Patientendossiers:» (with exactly one: «Verschwindet aus dem Patientendossier:») — the dossiers the session is assigned to, with ID and birth date where present (#205 AK 23); omitted without assignment. In the list the dialog reads the current list item (it reloads on every change), in the Review Editor the state when the trash button was clicked

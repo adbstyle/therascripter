@@ -43,7 +43,19 @@ export function summarizeDeletion(preview: DossierDeletePreview): DeleteDossierS
   if (exclusiveCount > 0) {
     deleted.push(`${describeContents(preview.exclusive)} samt Text und Zusammenfassung`)
   }
+  // Suchdaten nur, soweit es sie gibt (Epic EK 22: keine unzutreffende Aussage)
+  // (gleicher Wortlaut wie im Löschdialog einer Sitzung, sessionDeletionDetails)
+  if (preview.search.exclusiveSearchable > 0) deleted.push('Für die Suche aufbereitete Texte')
   deleted.push('Stammdaten, Diagnosen, Medikation und Notiz')
+  if (preview.search.recentQueries > 0) {
+    deleted.push(
+      `${pluralize(
+        preview.search.recentQueries,
+        'letzte Suchanfrage',
+        'letzte Suchanfragen'
+      )} mit Namen oder ID dieses Patientendossiers`
+    )
+  }
 
   const kept: string[] = []
   if (sharedCount > 0) {

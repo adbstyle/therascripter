@@ -60,6 +60,7 @@ function preview(over: Partial<DossierDeletePreview> = {}): DossierDeletePreview
     displayName: 'Lukas Hofer',
     exclusive: { sessions: 0, pdfs: 0 },
     shared: { sessions: 0, pdfs: 0, otherDossiers: [] },
+    search: { exclusiveSearchable: 0, recentQueries: 0 },
     blockedByRecording: false,
     fingerprint: 'f',
     ...over

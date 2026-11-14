@@ -69,6 +69,11 @@ export interface DossierSessionScopeRow {
   type: SessionType
   status: SessionStatus
   otherCount: number
+  /**
+   * 1, wenn für die Suche aufbereitete Texte bestehen oder demnächst entstehen
+   * (Abschnitte im Index bzw. Verarbeitung schon einmal abgeschlossen), sonst 0.
+   */
+  searchable: number
 }
 
 const COLUMN_OF: Record<keyof DossierRecordPatch, string> = {
@@ -232,7 +237,10 @@ export class DossierRepository {
       .prepare(
         `SELECT s.id, s.type, s.status,
                 (SELECT COUNT(*) FROM session_dossiers o
-                 WHERE o.session_id = s.id AND o.dossier_id <> sd.dossier_id) AS otherCount
+                 WHERE o.session_id = s.id AND o.dossier_id <> sd.dossier_id) AS otherCount,
+                CASE WHEN s.review_at IS NOT NULL
+                       OR EXISTS (SELECT 1 FROM search_chunks c WHERE c.session_id = s.id)
+                     THEN 1 ELSE 0 END AS searchable
          FROM session_dossiers sd
          JOIN sessions s ON s.id = sd.session_id
          WHERE sd.dossier_id = ? AND s.deleting_at IS NULL

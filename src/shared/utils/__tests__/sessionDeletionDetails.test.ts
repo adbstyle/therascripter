@@ -80,4 +80,15 @@ describe('sessionDeletionDetails', () => {
     ).join(' ')
     expect(all).not.toMatch(/Sperrliste|Backup|Time Machine/i)
   })
+
+  it('names the search data once the session was processed (Epic #192, EK 22)', () => {
+    const processed = sessionDeletionDetails(
+      input({ anonymizedPath: '/an.json', reviewAt: '2026-11-01T10:00:00.000Z' })
+    )
+    expect(processed).toContain('Für die Suche aufbereitete Texte')
+    expect(processed.at(-1)).toBe('Titel')
+
+    const stillProcessing = sessionDeletionDetails(input({ audioPath: '/a.wav', reviewAt: null }))
+    expect(stillProcessing).not.toContain('Für die Suche aufbereitete Texte')
+  })
 })
