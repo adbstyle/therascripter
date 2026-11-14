@@ -30,6 +30,15 @@ describe('AppMenuService — «Gehe zu» (Epic #192)', () => {
     return () => Object.defineProperty(process, 'platform', { value: platform })
   })
 
+  it('sendet «Suchen …» (⌘K) als nav:command search (#209)', () => {
+    const onNavCommand = vi.fn()
+    initAppMenu({ onOpenSettings: vi.fn(), onNavCommand })
+    const search = findItem('Suchen …')
+    expect(search.accelerator).toBe('Command+K')
+    ;(search.click as () => void)()
+    expect(onNavCommand.mock.calls).toEqual([['search']])
+  })
+
   it('sendet Zurück (⌘[), Vorwärts (⌘]) und Seitenleiste (⌃⌘S) als nav:command', () => {
     const onNavCommand = vi.fn()
     initAppMenu({ onOpenSettings: vi.fn(), onNavCommand })

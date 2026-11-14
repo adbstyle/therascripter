@@ -89,6 +89,13 @@ function rebuild(): void {
       label: 'Gehe zu',
       submenu: [
         {
+          // Suchfenster (#209): öffnet und schliesst es, auch mit Fokus im Editor
+          label: 'Suchen …',
+          accelerator: 'Command+K',
+          click: () => onNavCommand('search')
+        },
+        { type: 'separator' },
+        {
           label: 'Zurück',
           accelerator: 'Command+[',
           click: () => onNavCommand('back')
