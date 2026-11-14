@@ -104,6 +104,7 @@ if [ -n "$APP_PATH" ]; then
   LLAMA_BIN_DIR="$RES/llama/bin"
   LLAMA_LIB="$RES/llama/lib"
   SIDECAR="$RES/ml_sidecar/standalone"
+  SIDECAR_SCRIPTS="$RES/ml_sidecar"
   VISION_OCR="$RES/bin/vision-ocr"
   ASAR="$RES/app.asar"
   echo "Prüfe gepackte App: $APP_PATH"
@@ -114,6 +115,7 @@ else
   LLAMA_BIN_DIR="$REPO_ROOT/resources/llama/bin"
   LLAMA_LIB="$REPO_ROOT/resources/llama/lib"
   SIDECAR="$REPO_ROOT/python_sidecar/standalone"
+  SIDECAR_SCRIPTS="$REPO_ROOT/python_sidecar"
   VISION_OCR="$REPO_ROOT/resources/bin/vision-ocr"
   ASAR="$REPO_ROOT/dist/mac-arm64/Therascript.app/Contents/Resources/app.asar"
 fi
@@ -261,6 +263,20 @@ if [ -d "$SIDECAR" ]; then
 else
   missing_bundle 'sidecar' "$SIDECAR"
 fi
+
+# Sidecar-Skripte: electron-builder kopiert jedes einzeln (extraResources) —
+# ein vergessener Eintrag fällt sonst erst auf dem Endnutzer-Mac auf. Das
+# Owner-Write-Bit prüft der Scan unten für die gepackte App; im Staging-Tree
+# liegen die Skripte ausserhalb seiner Verzeichnisse, darum hier explizit.
+echo ""
+echo "=== sidecar scripts ==="
+for script in diarize.py ner_service.py search_service.py torchcodec_shim.py; do
+  check_file_present "$script" "$SIDECAR_SCRIPTS/$script"
+  if [ -f "$SIDECAR_SCRIPTS/$script" ] && [ -z "$(find "$SIDECAR_SCRIPTS/$script" -perm -u+w)" ]; then
+    echo "FAIL [$script]: ohne Owner-Write-Bit — «Dennoch öffnen» kann keine Freigabe schreiben" >&2
+    FAIL=1
+  fi
+done
 
 # Owner-Write-Gate: Homebrew-Bottles shippen Mach-Os teils mit Modus 444/555
 # und die Setup-Skripte übernehmen den Modus via `cp`. «Dennoch öffnen»

@@ -41,6 +41,8 @@ extraResources:
     to: ml_sidecar/diarize.py
   - from: python_sidecar/ner_service.py
     to: ml_sidecar/ner_service.py
+  - from: python_sidecar/search_service.py
+    to: ml_sidecar/search_service.py
   - from: python_sidecar/torchcodec_shim.py
     to: ml_sidecar/torchcodec_shim.py
 npmRebuild: false
