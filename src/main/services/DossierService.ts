@@ -280,11 +280,10 @@ export class DossierService {
         // Dossiers gehen mit; der Checkpoint unten entfernt sie aus den Dateien
         const ref = this.repository.findRefById(id)
         if (ref) {
-          new SearchRecentRepository(this.db).forgetContaining([
-            ref.firstName,
-            ref.lastName,
-            ref.externalId
-          ])
+          new SearchRecentRepository(this.db).forgetContaining(
+            [ref.firstName, ref.lastName],
+            [ref.externalId]
+          )
         }
         this.repository.delete(id)
         return { kind: 'done', exclusiveIds: scope.exclusiveIds }

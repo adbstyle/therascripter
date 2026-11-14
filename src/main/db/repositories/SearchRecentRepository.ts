@@ -18,6 +18,26 @@ export function recentQueryKey(query: string): string {
   return normalizeSearchText(query).trim().split(/\s+/).join(' ')
 }
 
+/**
+ * Schlüssel für #209 PC 4: jeder Name ganz (normalisiert) und seine Wörter
+ * (getrennt an Leerzeichen und Bindestrich) ab 2 Zeichen, die
+ * Patientendossier-ID nur ganz: aus «Müller-Lüdenscheidt» werden «mueller-luedenscheidt»,
+ * «mueller» und «luedenscheidt».
+ */
+export function forgetKeys(names: string[], ids: Array<string | null | undefined> = []): string[] {
+  const keys: string[] = []
+  for (const name of names) {
+    const whole = recentQueryKey(name)
+    if (whole.length > 0) keys.push(whole)
+    for (const word of whole.split(/[\s-]+/)) if ([...word].length >= 2) keys.push(word)
+  }
+  for (const id of ids) {
+    const whole = typeof id === 'string' ? recentQueryKey(id) : ''
+    if (whole.length > 0) keys.push(whole)
+  }
+  return keys
+}
+
 export class SearchRecentRepository {
   constructor(private db: Database.Database) {}
 
@@ -74,20 +94,14 @@ export class SearchRecentRepository {
 
   /**
    * #209 PC 4: Anfragen entfernen, die einen der Begriffe (Vor-/Nachname,
-   * Patientendossier-ID eines gelöschten Dossiers) enthalten. Zu viel zu
+   * Patientendossier-ID eines gelöschten Dossiers) oder eines der Wörter eines
+   * Namens enthalten (`forgetKeys`). Zu viel zu
    * löschen ist unbedenklich. Kein Checkpoint — der Aufrufer (Löschen eines
    * Dossiers) checkpointet am Ende selbst. Gibt die Anzahl gelöschter Zeilen
    * zurück.
    */
-  forgetContaining(terms: Array<string | null | undefined>): number {
-    const keys = [
-      ...new Set(
-        terms
-          .filter((t): t is string => typeof t === 'string')
-          .map(recentQueryKey)
-          .filter((k) => k.length > 0)
-      )
-    ]
+  forgetContaining(names: string[], ids: Array<string | null | undefined> = []): number {
+    const keys = [...new Set(forgetKeys(names, ids))]
     if (keys.length === 0) return 0
     const where = keys.map(() => 'instr(query_norm, ?) > 0').join(' OR ')
     return this.db.prepare(`DELETE FROM search_recent_queries WHERE ${where}`).run(...keys).changes

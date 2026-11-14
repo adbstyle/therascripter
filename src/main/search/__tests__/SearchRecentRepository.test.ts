@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import {
   SearchRecentRepository,
+  forgetKeys,
   recentQueryKey
 } from '../../db/repositories/SearchRecentRepository'
 import { DossierService } from '../../services/DossierService'
@@ -50,6 +51,23 @@ describe('SearchRecentRepository — five last searches (#209 AK 27/28)', () => 
     expect(new SearchRecentRepository(db).list().map((r) => r.query)).toEqual(['Angst'])
     recent.clear()
     expect(queries()).toEqual([])
+  })
+
+  it('splits dossier names into words for the removal (#209 PC 4)', () => {
+    expect(forgetKeys(['Müller-Lüdenscheidt', 'Anna Lena'], ['PD-7'])).toEqual([
+      'mueller-luedenscheidt',
+      'mueller',
+      'luedenscheidt',
+      'anna lena',
+      'anna',
+      'lena',
+      'pd-7'
+    ])
+    recent.remember('müller')
+    recent.remember('lena schlaf')
+    recent.remember('Angst')
+    recent.forgetContaining(['Müller-Lüdenscheidt', 'Anna Lena'], [null])
+    expect(queries()).toEqual(['Angst'])
   })
 
   it('normalizes the dedup key like the search', () => {
