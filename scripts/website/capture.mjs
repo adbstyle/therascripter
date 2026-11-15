@@ -5,7 +5,7 @@
  * echten Oberfläche. Ablauf und Voraussetzungen: docs/product/operations/website.md.
  *
  * Usage:
- *   CDP_PORT=9224 node scripts/website/capture.mjs stills <out-dir>
+ *   CDP_PORT=9224 node scripts/website/capture.mjs stills <out-dir>   (Sitzungen, Dossiers, Dossier, Editor, Sprecher, Suche)
  *   CDP_PORT=9224 node scripts/website/capture.mjs editor <out-dir>     (Animation: Begriff → Sperrliste)
  *   CDP_PORT=9224 node scripts/website/capture.mjs pdf <out-dir> <pdf>  (Animation: PDF-Import)
  *   CDP_PORT=9224 node scripts/website/capture.mjs aufnahme <out-dir>   (Animation: Aufnahme → Transkript)
@@ -16,7 +16,7 @@
  *
  * Der Screencast zeigt nur den Fensterinhalt: Ampel-Knöpfe und Mauszeiger blendet
  * das Skript als Overlay ein (die Ampel liegt bei hiddenInset an trafficLightPosition
- * 15/11, siehe createWindow in src/main/index.ts).
+ * 16/16, siehe createWindow in src/main/index.ts).
  */
 import { mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
@@ -46,8 +46,10 @@ if (!MODE || !OUT) {
 }
 mkdirSync(OUT, { recursive: true })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const WIDTH = 1000
-const HEIGHT = 660
+// 1100 × 726 (Seitenverhältnis wie die ausgelieferten 1600 × 1056): Mit der 248 px breiten
+// Seitenleiste bleiben 852 px Inhalt — genug für die zwei Spalten der Dossier-Seite.
+const WIDTH = 1100
+const HEIGHT = 726
 
 // ── Fenster, Overlay, Theme ──────────────────────────────────────────────────
 
@@ -72,7 +74,7 @@ const OVERLAY = `(() => {
   root.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647'
   ;['#ff5f57', '#febc2e', '#28c840'].forEach((c, i) => {
     const d = document.createElement('div')
-    d.style.cssText = 'position:absolute;top:11px;left:' + (15 + i * 20) + 'px;width:12px;height:12px;border-radius:50%;background:' + c + ';box-shadow:inset 0 0 0 0.5px rgba(0,0,0,.18)'
+    d.style.cssText = 'position:absolute;top:16px;left:' + (16 + i * 20) + 'px;width:12px;height:12px;border-radius:50%;background:' + c + ';box-shadow:inset 0 0 0 0.5px rgba(0,0,0,.18)'
     root.appendChild(d)
   })
   const cur = document.createElement('div')
@@ -239,11 +241,21 @@ async function wordRect(word) {
 async function sessions() {
   return evalInApp('window.api.sessions.list()')
 }
+const SIDEBAR = 'nav[aria-label="Seitenleiste"]'
+/** Klick auf eine Zeile der Seitenleiste (Epic #192; sie ersetzt die frühere untere Leiste). */
+async function sidebarGo(label) {
+  await clickText(label, { selector: `${SIDEBAR} button` })
+  await sleep(800)
+}
 async function toList() {
-  const inEditor = await evalInApp(`!!document.querySelector('[aria-label="Editor schließen"]')`)
-  if (inEditor) await clickText('Editor schließen', { selector: 'button' })
-  else await clickText('Transkriptionen', { selector: 'button' })
-  await sleep(700)
+  await sidebarGo('Transkriptionen')
+}
+async function toDossiers() {
+  await sidebarGo('Alle Patientendossiers')
+}
+async function openDossier(nameInList) {
+  await clickText(nameInList, { selector: '[data-dossier-row] span' })
+  await sleep(1200)
 }
 async function openSession(title) {
   await clickText(title, { selector: 'h3, [class*="font-"]' }).catch(async () => {
@@ -260,13 +272,13 @@ async function openSession(title) {
   await sleep(1200)
 }
 async function sidePanel(open) {
-  // aria-pressed am Umschalter ist der verlässliche Zustand; die Tab-Liste der
-  // Seitenleiste bleibt auch geschlossen im DOM.
+  // aria-pressed am Umschalter ist der verlässliche Zustand; die Übersicht bleibt
+  // auch geschlossen im DOM.
   const isOpen = await evalInApp(
-    `document.querySelector('[aria-label="Seitenleiste anzeigen"]')?.getAttribute('aria-pressed') === 'true'`
+    `document.querySelector('[aria-label="Übersicht ein-/ausblenden"]')?.getAttribute('aria-pressed') === 'true'`
   )
   if (isOpen !== open) {
-    await clickText('Seitenleiste anzeigen', { selector: 'button' })
+    await clickText('Übersicht ein-/ausblenden', { selector: 'button' })
     await sleep(500)
   }
 }
@@ -339,6 +351,38 @@ function startScreencast(name) {
 
 // ── Szenarien ────────────────────────────────────────────────────────────────
 
+/** Suchfenster (⌘K, #209) öffnen — derselbe Knopf wie in der Seitenleiste. */
+async function openSearch() {
+  await evalInApp(
+    `document.querySelector('${SIDEBAR} button[aria-keyshortcuts="Meta+K"]').click(); true`
+  )
+  await sleep(700)
+}
+async function typeInFocus(text) {
+  for (const ch of text) {
+    await send('Input.insertText', { text: ch })
+    await sleep(70)
+  }
+}
+async function pressKey(key, code = key) {
+  await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code })
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code })
+}
+/** Wartet, bis das Suchfenster Treffer zeigt und die Bedeutungssuche geantwortet hat. */
+async function waitForSearchResults() {
+  const deadline = Date.now() + 60_000
+  while (Date.now() < deadline) {
+    const state = await evalInApp(`(() => {
+      const d = document.querySelector('[role="dialog"][aria-label^="Patientendossiers"]')
+      if (!d) return { open: false }
+      return { open: true, text: d.innerText }
+    })()`)
+    if (state.open && /Treffer|Sitzung|Nach Bedeutung/i.test(state.text) && !/Suche läuft|Wird gesucht/i.test(state.text)) return state.text
+    await sleep(500)
+  }
+  throw new Error('Suchtreffer erscheinen nicht')
+}
+
 async function stills() {
   const list = await sessions()
   const haupt = list.find((s) => s.type === 'audio' && (s.anonymizationCount ?? 0) >= 8) ?? list[0]
@@ -349,11 +393,28 @@ async function stills() {
         s.id !== haupt.id &&
         /Prüfung|Jonas|Schule/i.test(`${s.title} ${s.summary ?? ''}`)
     ) ?? list.find((s) => s.type === 'audio' && s.id !== haupt.id)
+  const steiner = list.find((s) => s.type === 'audio' && s.id !== haupt.id && s.id !== multi.id)
   for (const theme of ['light', 'dark']) {
     await setTheme(theme)
+    // «Zuletzt geöffnet» füllt sich nur durch echtes Öffnen (#213): einmal Dossiers und
+    // Sitzungen durchgehen, damit die Seitenleiste in jedem Bild Einträge zeigt.
+    if (theme === 'light') {
+      await openSession(steiner.title)
+      await toDossiers()
+      await openDossier('Meier, Jonas')
+      await toList()
+      await openSession(multi.title)
+      await toDossiers()
+      await openDossier('Steiner, Thomas')
+    }
     await toList()
     await showCursor(false)
     await still(`sitzungen-${theme}`)
+    await toDossiers()
+    await still(`dossiers-${theme}`)
+    await openDossier('Brunner, Lea')
+    await still(`dossier-${theme}`)
+    await toList()
     await openSession(haupt.title)
     await sidePanel(true)
     await still(`editor-${theme}`)
@@ -362,8 +423,23 @@ async function stills() {
     await openSession(multi.title)
     await still(`sprecher-${theme}`)
     await toList()
+    // Zwei Bilder: Name → Dossier plus Fundstellen im Klartext; Begriff → Treffer nach Bedeutung
+    // (die Demo-Sitzung spricht von «Prüfungsdruck», nicht von «Prüfungsangst»).
+    for (const [name, query] of SEARCHES) {
+      await openSearch()
+      await typeInFocus(query)
+      await waitForSearchResults()
+      await sleep(800)
+      await still(`${name}-${theme}`)
+      await pressKey('Escape')
+      await sleep(500)
+    }
   }
 }
+const SEARCHES = [
+  ['suche', 'Brunner'],
+  ['bedeutung', 'Prüfungsangst']
+]
 
 async function editorAnimation() {
   const list = await sessions()
@@ -422,10 +498,12 @@ async function pdfAnimation(pdfPath) {
     await sleep(1200)
     // Import über die Renderer-API (der native Dateidialog ist im Screencast nicht sichtbar);
     // die Karte durchläuft danach sichtbar Text auslesen, Schrift erkennen, Pseudonymisieren.
-    const p = await centerOf('PDF importieren', { selector: 'button' })
+    // Der Knopf im Seitenkopf, nicht das Symbol der Seitenleiste (gleicher Name)
+    const p = await centerOf('PDF importieren', { selector: 'main button' })
     await moveTo(p.x, p.y)
     await sleep(500)
-    const [s] = await evalInApp(`window.api.import.pdf(${JSON.stringify([pdfPath])})`)
+    // Seit Epic #192 antwortet der Import mit { sessions, unassigned, failed }
+    const [s] = (await evalInApp(`window.api.import.pdf(${JSON.stringify([pdfPath])})`)).sessions
     await moveTo(p.x - 300, p.y + 260)
     const done = await waitForSession((l) => l.find((x) => x.id === s.id), 'PDF-Import')
     await sleep(1200)
@@ -449,12 +527,12 @@ async function recordingAnimation() {
     const before = new Set((await sessions()).map((s) => s.id))
     const rec = startScreencast(`aufnahme-${theme}`)
     await sleep(1200)
-    await clickText('Aufnahme starten', { selector: 'button' })
+    await clickText('Aufnahme starten', { selector: 'main button' })
     const fastFrom = Date.now() / 1000 + 1.5
     // Länge von aufnahme-animation.wav (Kurzdialog aus sitzungen.json) plus Reserve
     await sleep(10_500)
     const fastTo = Date.now() / 1000 - 0.5
-    await clickText('Aufnahme stoppen', { selector: 'button' })
+    await clickText('Aufnahme stoppen', { selector: 'main button' })
     await moveTo(mouse.x - 200, mouse.y + 250)
     const s = await waitForSession((l) => l.find((x) => !before.has(x.id)), 'Aufnahme')
     await sleep(1200)

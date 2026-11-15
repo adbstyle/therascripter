@@ -46,7 +46,11 @@ Patientendaten gehören nie in ein Bild, auch nicht zu Testzwecken.
 | --- | --- | --- |
 | `editor-{light,dark}.webp` | Hero: Editor mit Chips, Zusammenfassung und Seitenleiste | `capture.mjs stills` |
 | `sprecher-{light,dark}.webp` | Transkript mit drei Gesprächsbeteiligten | `capture.mjs stills` |
-| `sitzungen-{light,dark}.webp` | Übersicht «Transkriptionen» | `capture.mjs stills` |
+| `sitzungen-{light,dark}.webp` | Übersicht «Transkriptionen» mit Dossier-Plaketten | `capture.mjs stills` |
+| `dossiers-{light,dark}.webp` | Übersicht «Patientendossiers»; zeigt Seitenleiste, «Zuletzt geöffnet» und Zurück/Vorwärts | `capture.mjs stills` |
+| `dossier-{light,dark}.webp` | Patientendossier mit Zeitleiste und Stammdaten | `capture.mjs stills` |
+| `suche-{light,dark}.webp` | Suchfenster: Dossier-Treffer und Fundstellen zu «Brunner» | `capture.mjs stills` |
+| `bedeutung-{light,dark}.webp` | Suchfenster: Treffer nach Bedeutung zu «Prüfungsangst» | `capture.mjs stills` |
 | `aufnahme-{light,dark}.gif` | Aufnahme bis pseudonymisiertes Transkript | `capture.mjs aufnahme` |
 | `editor-{light,dark}.gif` | Begriff markieren und in die Sperrliste aufnehmen | `capture.mjs editor` |
 | `pdf-{light,dark}.gif` | PDF-Import (Scan) bis pseudonymisierter Text | `capture.mjs pdf` |
@@ -64,7 +68,9 @@ Skripten abhängt.
 ### Demo-Sitzung neu erstellen
 
 Quellen in `scripts/website/demo/`: Gesprächsskripte (`sitzungen.json`), Überweisungsbericht
-(`bericht.html`) und Sperrliste (`sperrliste.json`).
+(`bericht.html`), Sperrliste (`sperrliste.json`) und Patientendossiers (`dossiers.json`, ebenfalls frei
+erfunden; `load-demo.mjs` legt sie an und ordnet Sitzungen und PDFs zu — die Namen müssen zu den
+Gesprächen und zum Bericht passen, sonst zeigen die Suchtreffer widersprüchliche Vornamen).
 
 ```bash
 npm run build
@@ -82,12 +88,16 @@ CDP_PORT=9224 node scripts/website/demo/load-demo.mjs /tmp/demo-assets --db /tmp
 - `load-demo.mjs` und `capture.mjs` brechen ab, wenn die Instanz die echten Daten unter
   `~/.therascript` nutzt (`demo/guard.mjs`); `load-demo.mjs` zusätzlich, wenn sie schon
   Sitzungen hat.
-- Die Modelle werden beim ersten Start per APFS-Klon aus `~/.therascript/models` übernommen.
+- Die Modelle werden beim ersten Start per APFS-Klon aus `~/.therascript/models` übernommen,
+  auch das Suchmodell: Ohne es zeigen `suche-*` und `bedeutung-*` keine Treffer nach Bedeutung.
+  Nach dem Einspielen eine Minute warten, bis die Vektoren im Hintergrund berechnet sind.
+- Den Demo-Ordner nie löschen, während die Instanz läuft: erst die Instanz beenden
+  (`pkill -f <sandbox>/app`), dann `home/.therascript/{data,pdf,audio,…}` und `userData` entfernen.
 
 ### Bilder aufnehmen
 
 ```bash
-CDP_PORT=9224 node scripts/website/capture.mjs stills /tmp/cap
+CDP_PORT=9224 node scripts/website/capture.mjs stills /tmp/cap    # inkl. Dossiers und Suche
 CDP_PORT=9224 node scripts/website/capture.mjs editor /tmp/cap
 CDP_PORT=9224 node scripts/website/capture.mjs pdf /tmp/cap /tmp/demo-assets/bericht-scan.pdf
 # Aufnahme-Animation: Instanz mit Fake-Mikrofon neu starten
@@ -96,6 +106,10 @@ CDP_PORT=9224 node scripts/website/capture.mjs aufnahme /tmp/cap
 scripts/website/build-gifs.sh /tmp/cap
 ```
 
+- Das Fenster ist 1100 × 726 px (Seitenverhältnis wie die ausgelieferten 1600 × 1056): Mit der
+  248 px breiten Seitenleiste bleiben 852 px Inhalt, genug für die zwei Spalten der Dossier-Seite.
+  Navigiert wird über die Seitenleiste (`sidebarGo`); «Zuletzt geöffnet» füllt sich nur durch
+  echtes Öffnen, deshalb geht `stills` zuerst einmal durch Dossiers und Sitzungen.
 - Die Aufnahme läuft über CDP mit echten Maus-Events auf der echten Oberfläche. Der
   Screencast enthält nur den Fensterinhalt; Ampel-Knöpfe und Mauszeiger blendet
   `capture.mjs` als Overlay ein.

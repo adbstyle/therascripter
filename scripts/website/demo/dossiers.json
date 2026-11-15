@@ -1,0 +1,134 @@
+{
+  "_hinweis": "Frei erfundene Patientendossiers der Demo (Epic #172). Kein Bezug zu realen Personen. Stammdaten sind in der App bewusst nicht pseudonymisiert; die Namen passen zu den Gesprächen in sitzungen.json.",
+  "dossiers": [
+    {
+      "id": "brunner",
+      "firstName": "Lea",
+      "lastName": "Brunner",
+      "externalId": "PD-0412",
+      "birthDate": "1991-02-14",
+      "diagnoses": "Panikstörung (F41.0), Schlafstörung",
+      "medication": "Sertralin 100 mg morgens",
+      "note": "Ziel: Reise zur Schwester nach Bern ohne Ausweichen. Atemübung abends fortsetzen.",
+      "sitzungen": [
+        "haupt"
+      ],
+      "pdfs": [
+        "bericht.pdf",
+        "bericht-scan.pdf"
+      ]
+    },
+    {
+      "id": "steiner",
+      "firstName": "Thomas",
+      "lastName": "Steiner",
+      "externalId": "PD-0398",
+      "birthDate": "1982-06-22",
+      "diagnoses": "Erschöpfungsdepression, mittelgradig",
+      "medication": "",
+      "note": "Stufenweise Rückkehr an den Arbeitsplatz, aktuell 50 %.",
+      "sitzungen": [
+        "steiner"
+      ],
+      "pdfs": []
+    },
+    {
+      "id": "meier",
+      "firstName": "Jonas",
+      "lastName": "Meier",
+      "externalId": "PD-0431",
+      "birthDate": "2008-09-09",
+      "diagnoses": "Prüfungsangst",
+      "medication": "",
+      "note": "Elterngespräche nach Absprache mit der Mutter.",
+      "sitzungen": [
+        "meier"
+      ],
+      "pdfs": []
+    },
+    {
+      "id": "hofer",
+      "firstName": "Lukas",
+      "lastName": "Hofer",
+      "externalId": "PD-1188",
+      "birthDate": "1978-02-03",
+      "diagnoses": "",
+      "medication": "",
+      "note": "",
+      "sitzungen": [],
+      "pdfs": []
+    },
+    {
+      "id": "vogt",
+      "firstName": "Elena",
+      "lastName": "Vogt",
+      "externalId": "PD-0377",
+      "birthDate": "1969-06-11",
+      "diagnoses": "",
+      "medication": "",
+      "note": "",
+      "sitzungen": [],
+      "pdfs": []
+    },
+    {
+      "id": "berger",
+      "firstName": "Maya",
+      "lastName": "Berger",
+      "externalId": "PD-0455",
+      "birthDate": "1996-03-30",
+      "diagnoses": "",
+      "medication": "",
+      "note": "",
+      "sitzungen": [],
+      "pdfs": []
+    },
+    {
+      "id": "zimmermann",
+      "firstName": "Pascal",
+      "lastName": "Zimmermann",
+      "externalId": "PD-0361",
+      "birthDate": "1974-11-02",
+      "diagnoses": "",
+      "medication": "",
+      "note": "",
+      "sitzungen": [],
+      "pdfs": []
+    },
+    {
+      "id": "frei",
+      "firstName": "Sandra",
+      "lastName": "Frei",
+      "externalId": "PD-0420",
+      "birthDate": "1988-08-19",
+      "diagnoses": "",
+      "medication": "",
+      "note": "",
+      "sitzungen": [],
+      "pdfs": []
+    },
+    {
+      "id": "weber",
+      "firstName": "Julia",
+      "lastName": "Weber",
+      "externalId": "PD-0388",
+      "birthDate": "2001-01-25",
+      "diagnoses": "",
+      "medication": "",
+      "note": "",
+      "sitzungen": [],
+      "pdfs": []
+    },
+    {
+      "id": "gerber",
+      "firstName": "Anja",
+      "lastName": "Gerber",
+      "externalId": "PD-0447",
+      "birthDate": "1985-05-07",
+      "diagnoses": "",
+      "medication": "",
+      "note": "",
+      "sitzungen": [],
+      "pdfs": []
+    }
+  ]
+}

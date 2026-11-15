@@ -605,6 +605,10 @@ p {
   border: 1px solid var(--border);
 }
 
+.nav-image {
+  margin-top: var(--space-xl);
+}
+
 /* === Installation in 3 Schritten === */
 
 .steps h2 {
