@@ -257,7 +257,7 @@ The queue does not continue to the next task for that session once any task fail
 | NER | Fixed 900 s (15 minutes) |
 | OCR (per page) | Fixed 120 s per page (Vision cold start on macOS 27: 25–35 s) |
 
-On timeout, `SIGTERM` is sent to the child process and the executor rejects with a timeout error, triggering the same failure path as a non-zero exit code.
+On timeout, `SIGTERM` is sent to the child's process group, escalating to `SIGKILL` after 5 s (`runSubprocess`), and the executor rejects with a timeout error, triggering the same failure path as a non-zero exit code.
 
 ### Startup Recovery
 

@@ -151,11 +151,19 @@ function warmUpVision({ appPath, home, pdf, scanWord, log }) {
   const result = spawnSync(
     'sandbox-exec',
     ['-f', profilePath, bin, '--pdf', pdf, '--page', String(SCAN_PAGE)],
-    { env: toolEnv(home), encoding: 'utf8', timeout: WARM_UP_TIMEOUT_MS }
+    {
+      env: toolEnv(home),
+      encoding: 'utf8',
+      timeout: WARM_UP_TIMEOUT_MS,
+      // sandbox-exec ersetzt sich per exec durch vision-ocr (gleiche PID):
+      // SIGKILL beendet ein hängendes vision-ocr sicher
+      killSignal: 'SIGKILL'
+    }
   )
   const seconds = ((Date.now() - started) / 1000).toFixed(1)
   if (result.error || result.status !== 0) {
-    const reason = result.error?.message ?? `Exit ${result.status}: ${result.stderr?.slice(0, 300)}`
+    const ended = result.signal ? `Signal ${result.signal}` : `Exit ${result.status}`
+    const reason = result.error?.message ?? `${ended}: ${result.stderr?.slice(0, 300)}`
     throw new Error(`Seed: Vision-Vorwärmen nach ${seconds} s gescheitert — ${reason}`)
   }
   if (!result.stdout.includes(scanWord)) {
