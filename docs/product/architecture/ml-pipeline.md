@@ -154,8 +154,8 @@ Session status during this step: `extracting`.
 - Skipped entirely if no pages are classified as `scanned`.
 - For each scanned page, spawns the `vision-ocr` Swift CLI helper (`resources/bin/vision-ocr`) via `nice -n 10`.
 - Arguments: `--pdf {path}`, `--page {number}`.
-- Per-page timeout: 30 seconds.
-- Output: JSON with `text`, `confidence`, `language`, `pageNumber`. If JSON parsing fails, raw stdout is used as the page text.
+- Per-page timeout: 120 seconds (`OCR_PAGE_TIMEOUT_MS`, `src/main/ml/ocr-limits.ts`) — covers the 25–35 s cold start of Apple Vision on macOS 27 (see `features/pdf-import.md`). vision-ocr reports nothing during a page; the watchdog's OCR stall threshold (`OCR_STALL_THRESHOLD_MS` = page timeout + 30 s) therefore lies above page timeout + SIGTERM→SIGKILL grace + poll interval, so a hanging page always ends with the timeout message and the watchdog stays a safety net.
+- Output: JSON with `text`, `confidence`, `language`, `pageNumber`. Unparsable output fails the page (`parseVisionOCROutput`), it is never taken as page text.
 - OCR results are merged back into the `ExtractionResult` pages array, then `buildPDFTranscript()` writes a unified `TranscriptData` file.
 
 Session status during this step: `extracting`.
@@ -255,9 +255,9 @@ The queue does not continue to the next task for that session once any task fail
 | Transcription | 4x estimated audio duration, min 60 s |
 | Diarization | 4x estimated audio duration, min 120 s |
 | NER | Fixed 900 s (15 minutes) |
-| OCR (per page) | Fixed 30 s per page |
+| OCR (per page) | Fixed 120 s per page (Vision cold start on macOS 27: 25–35 s) |
 
-On timeout, `SIGTERM` is sent to the child process and the executor rejects with a timeout error, triggering the same failure path as a non-zero exit code.
+On timeout, `SIGTERM` is sent to the child's process group, escalating to `SIGKILL` after 5 s (`runSubprocess`), and the executor rejects with a timeout error, triggering the same failure path as a non-zero exit code.
 
 ### Startup Recovery
 

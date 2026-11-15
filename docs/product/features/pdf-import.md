@@ -77,7 +77,7 @@ For each scanned page:
 2. Passes `--pdf <path> --page <number>` arguments.
 3. Parses JSON output containing `text`, `confidence`, `language`, and `pageNumber`.
 4. Updates the extraction data with the OCR text for that page.
-5. Each page has a 30-second timeout (`PAGE_TIMEOUT_MS`); on timeout, the process is killed and the task fails.
+5. Each page has a 120-second timeout (`OCR_PAGE_TIMEOUT_MS` in `src/main/ml/ocr-limits.ts`); on timeout, the process is killed and the task fails («OCR für Seite N abgebrochen: Timeout nach 120s»). The limit covers the cold start of Apple Vision: on macOS 27 the first call without a Vision cache takes 25–35 s (the neural-engine models are compiled into `~/Library/Caches/vision-ocr/com.apple.e5rt.e5bundlecache/<OS build>/` of the user account), every later call ~0.25 s. The cache can be gone again after a longer pause or an OS update, so the slow first page is not a one-off. Up to v0.10.1 the limit was 30 s and the first scanned page could fail.
 
 After all scanned pages are processed, the combined transcript (text extraction + OCR results) is built and stored.
 

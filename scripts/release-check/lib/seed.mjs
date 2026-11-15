@@ -25,7 +25,7 @@
  * Einstellungen und expectations.json — was die neue Version unverändert
  * zeigen muss.
  */
-import { execFileSync } from 'child_process'
+import { execFileSync, spawnSync } from 'child_process'
 import { createHash } from 'crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
@@ -39,7 +39,7 @@ import {
   buildDossierSeedExpectations,
   supportsDossierSeed
 } from './dossier-search.mjs'
-import { launchInstance } from './instance.mjs'
+import { launchInstance, prepareSandbox, toolEnv } from './instance.mjs'
 import {
   BASE,
   SEED_HOME,
@@ -114,6 +114,64 @@ function editDocument(doc) {
   return doc
 }
 
+/** Seite des Test-PDFs, die nur als Bild vorliegt (build-fixtures.mjs). */
+const SCAN_PAGE = 2
+const WARM_UP_TIMEOUT_MS = 180_000
+
+/**
+ * Wärmt Apple Vision vor, bevor die Vorversion das Seed-PDF verarbeitet.
+ *
+ * Warum: Auf macOS 27 dauert der erste Vision-Aufruf ohne Cache 25–35 s
+ * (Modell-Kompilierung für die Neural Engine, Cache unter
+ * ~/Library/Caches/vision-ocr/com.apple.e5rt.e5bundlecache/<OS-Build>/),
+ * jeder weitere ~0.25 s. Die Vorversionen haben ein Seiten-Timeout von 30 s
+ * fest eingebaut — mit kaltem Cache scheiterte der Seed deterministisch
+ * («OCR für Seite 2 abgebrochen: Timeout nach 30s»). Ab dem Fix hat die App
+ * 120 s; die geprüfte NEUE Version braucht deshalb kein Vorwärmen, und eine
+ * veröffentlichte Vorversion lässt sich nicht mehr ändern.
+ *
+ * Wo der Cache liegt: NICHT im Test-Home. Die App startet vision-ocr mit
+ * ihrer Whitelist-Umgebung ohne CFFIXED_USER_HOME (siehe toolEnv), Vision legt
+ * den Cache deshalb im echten Home des Benutzerkontos an — gemessen: ein Lauf
+ * mit HOME=<frisches Verzeichnis> ohne CFFIXED_USER_HOME nutzt den warmen Cache
+ * des echten Homes (0.36 s) und legt im frischen Verzeichnis nichts an; MIT
+ * CFFIXED_USER_HOME entstünde ein eigener, kalter Cache im Test-Home, den der
+ * spätere Aufruf aus der App nie liest. Das Vorwärmen startet vision-ocr
+ * deshalb genau wie die App: dasselbe Binary (aus der Vorversion), dieselbe
+ * Umgebung, dieselbe Sandbox. Weil der Cache im echten Home liegt, sind danach
+ * auch die frischen Homes der übrigen Prüfungen warm. Dass dabei ein
+ * Vision-Cache im echten Home entsteht, ist kein Bruch der Isolation: die
+ * App tut während der Prüfung dasselbe, Nutzerdaten berührt es nicht.
+ */
+function warmUpVision({ appPath, home, pdf, scanWord, log }) {
+  const bin = join(appPath, 'Contents', 'Resources', 'bin', 'vision-ocr')
+  if (!existsSync(bin)) throw new Error(`Seed: vision-ocr fehlt in der Vorversion (${bin})`)
+  const profilePath = prepareSandbox(home)
+  const started = Date.now()
+  const result = spawnSync(
+    'sandbox-exec',
+    ['-f', profilePath, bin, '--pdf', pdf, '--page', String(SCAN_PAGE)],
+    {
+      env: toolEnv(home),
+      encoding: 'utf8',
+      timeout: WARM_UP_TIMEOUT_MS,
+      // sandbox-exec ersetzt sich per exec durch vision-ocr (gleiche PID):
+      // SIGKILL beendet ein hängendes vision-ocr sicher
+      killSignal: 'SIGKILL'
+    }
+  )
+  const seconds = ((Date.now() - started) / 1000).toFixed(1)
+  if (result.error || result.status !== 0) {
+    const ended = result.signal ? `Signal ${result.signal}` : `Exit ${result.status}`
+    const reason = result.error?.message ?? `${ended}: ${result.stderr?.slice(0, 300)}`
+    throw new Error(`Seed: Vision-Vorwärmen nach ${seconds} s gescheitert — ${reason}`)
+  }
+  if (!result.stdout.includes(scanWord)) {
+    throw new Error(`Seed: Vision-Vorwärmen erkannte «${scanWord}» auf Seite ${SCAN_PAGE} nicht`)
+  }
+  log(`Seed: Apple Vision vorgewärmt (${seconds} s)`)
+}
+
 /**
  * Baut den Seed mit der App `appPath` (Vorversion), falls er für `tag` noch
  * nicht im Cache liegt. Danach liegt er entpackt in SEED_HOME.
@@ -129,6 +187,14 @@ export async function ensureSeed({ tag, appPath, fixtures, logFile, log }) {
   resetHome(SEED_HOME)
   cloneModels(SEED_HOME)
   writeModelSettings(SEED_HOME)
+
+  warmUpVision({
+    appPath,
+    home: SEED_HOME,
+    pdf: fixtures.pdf,
+    scanWord: fixtures.pdfScanPageWord,
+    log
+  })
 
   const app = await launchInstance({ appPath, home: SEED_HOME, logFile, label: `Seed ${tag}` })
   const { page } = app

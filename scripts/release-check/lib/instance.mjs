@@ -136,14 +136,46 @@ async function connectPage(port) {
   return null
 }
 
+/** Legt TMPDIR und das Sandbox-Profil im Test-Home an, liefert den Profilpfad. */
+export function prepareSandbox(home) {
+  mkdirSync(join(home, 'tmp'), { recursive: true })
+  const profilePath = join(home, 'sandbox.sb')
+  writeFileSync(profilePath, sandboxProfile())
+  return profilePath
+}
+
+/** Umgebung der App-Instanz (siehe Kopfkommentar, Schicht 1). */
+function instanceEnv(home) {
+  return { ...toolEnv(home), CFFIXED_USER_HOME: home }
+}
+
+/**
+ * Umgebung, mit der die App in diesem Test-Home ihre Werkzeuge startet:
+ * buildSubprocessEnv (src/main/utils/subprocess.ts) reicht nur eine Whitelist
+ * weiter — CFFIXED_USER_HOME gehört NICHT dazu. Ein Werkzeug sieht deshalb
+ * zwar HOME und TMPDIR des Test-Homes, CoreFoundation löst sein Home aber
+ * über das Benutzerkonto auf: Caches, die macOS-Frameworks selbst anlegen
+ * (z. B. Apple Vision unter ~/Library/Caches/vision-ocr), liegen im echten
+ * Home. Wer ein Werkzeug so starten will wie die App, nimmt diese Umgebung.
+ */
+export function toolEnv(home) {
+  return {
+    HOME: home,
+    USER: process.env.USER,
+    LOGNAME: process.env.LOGNAME ?? process.env.USER,
+    SHELL: '/bin/zsh',
+    TMPDIR: join(home, 'tmp') + '/',
+    PATH: '/usr/bin:/bin:/usr/sbin:/sbin',
+    __CF_USER_TEXT_ENCODING: process.env.__CF_USER_TEXT_ENCODING ?? '0x1F5:0x0:0x0'
+  }
+}
+
 /**
  * Startet die App und wartet, bis `window.api` im Renderer bereitsteht.
  * @param {{ appPath: string, home: string, logFile: string, label: string }} opts
  */
 export async function launchInstance({ appPath, home, logFile, label }) {
-  mkdirSync(join(home, 'tmp'), { recursive: true })
-  const profilePath = join(home, 'sandbox.sb')
-  writeFileSync(profilePath, sandboxProfile())
+  const profilePath = prepareSandbox(home)
   const port = await freePort()
 
   const log = createWriteStream(logFile, { flags: 'a' })
@@ -160,16 +192,7 @@ export async function launchInstance({ appPath, home, logFile, label }) {
       `--remote-debugging-port=${port}`
     ],
     {
-      env: {
-        HOME: home,
-        CFFIXED_USER_HOME: home,
-        USER: process.env.USER,
-        LOGNAME: process.env.LOGNAME ?? process.env.USER,
-        SHELL: '/bin/zsh',
-        TMPDIR: join(home, 'tmp') + '/',
-        PATH: '/usr/bin:/bin:/usr/sbin:/sbin',
-        __CF_USER_TEXT_ENCODING: process.env.__CF_USER_TEXT_ENCODING ?? '0x1F5:0x0:0x0'
-      },
+      env: instanceEnv(home),
       stdio: ['ignore', 'pipe', 'pipe']
     }
   )

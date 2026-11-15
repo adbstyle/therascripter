@@ -303,10 +303,12 @@ export async function checkSeededRun({ appPath, logFile, expectations, fixtures,
       const status = await page.eval('window.api.modelDownload.status()')
       if (!status.modelsReady)
         throw new Error('App verlangt die Ersteinrichtung (Modelle nicht erkannt)')
+      // Seitentitel ist seit der Seitenleiste (#213) ein h1 im PageHeader,
+      // vorher ein h2 — beides zählt, entscheidend sind Titel und Karten
       const shown = await waitFor(
         () =>
           page.eval(`(() => {
-            const title = [...document.querySelectorAll('main h2')].some((h) => h.textContent === 'Transkriptionen')
+            const title = [...document.querySelectorAll('main h1, main h2')].some((h) => h.textContent === 'Transkriptionen')
             const ids = [...document.querySelectorAll('[data-session-id]')].map((e) => e.dataset.sessionId)
             return title && ids.length >= ${expectedIds.length} ? ids : null
           })()`),
