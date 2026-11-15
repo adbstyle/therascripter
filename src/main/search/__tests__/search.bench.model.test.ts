@@ -321,7 +321,7 @@ describe.skipIf(!ENABLED)('search benchmark with 2,000 documents (real model)', 
     const mainAfter = footprintOf(process.pid)
     const arrayAfter = process.memoryUsage().arrayBuffers
     report.push(
-      `search:open → erste Antwort nach Bedeutung (frischer Suchprozess, Datei-Cache warm): ${(tFirst / 1000).toFixed(2)} s`,
+      `search:open → erste Antwort nach Bedeutung (frischer Suchprozess, Datei-Cache warm): ${(tFirst / 1000).toFixed(2)} s (Grenze 5 s, #209 AK 14)`,
       `Vektorspeicher im Main-Prozess: ${rt.store.chunkCount} Abschnitte, ${(rt.store.bytes / MiB).toFixed(1)} MiB (ArrayBuffer +${((arrayAfter - arrayBefore) / MiB).toFixed(1)} MiB, phys_footprint des Node-Prozesses ${mainBefore && mainAfter ? `+${((mainAfter - mainBefore) / MiB).toFixed(0)} MiB` : 'nicht messbar'})`
     )
 
@@ -345,8 +345,13 @@ describe.skipIf(!ENABLED)('search benchmark with 2,000 documents (real model)', 
       `phys_footprint Suchprozess bei den Suchen: zuletzt ${((rt.worker.footprint.last ?? 0) / GiB).toFixed(2)} GiB, Spitze ${(rt.worker.footprint.peak / GiB).toFixed(2)} GiB`
     )
     expect(semStats.max).toBeLessThan(2_000)
-    // #209 AK 14: erste Antwort nach Bedeutung samt Modellladen unter 5 s
-    // (auf dem M5 Pro 4.6–4.9 s gemessen — knapp; auf 8 GB nicht gemessen)
+    // #209 AK 14: erste Antwort nach Bedeutung samt Modellladen unter 5 s. Die
+    // Grenze ist die des Akzeptanzkriteriums und bleibt. Der Messwert steht im
+    // Bericht (afterAll, auch wenn diese Prüfung scheitert): auf dem M5 Pro
+    // 4.6–4.9 s, also knapp darunter; auf einem 8-GB-Mac nie gemessen — dort
+    // ist ein Überschreiten wahrscheinlich und eine Produktfrage, kein
+    // Testfehler, der sich durch Anheben der Grenze lösen liesse.
+    console.log(`[Messung] erste Antwort nach Bedeutung: ${(tFirst / 1000).toFixed(2)} s`)
     expect(tFirst).toBeLessThan(5_000)
     // #209 AK 15: Suchprozess plus Zusatzspeicher des Main-Prozesses (Vektoren)
     // unter 3.5 GiB. Spitze des Suchprozesses aus Aufbereitung und Suche; der
