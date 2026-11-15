@@ -132,20 +132,22 @@ for (const d of dossiers) {
       birthDate: d.birthDate
     })})`
   )
-  const dossierId = r.dossier?.id ?? r.id
-  if (!dossierId) throw new Error(`Dossier «${d.lastName}» nicht angelegt: ${JSON.stringify(r)}`)
+  if (!r.ok) throw new Error(`Dossier «${d.lastName}» nicht angelegt: ${JSON.stringify(r)}`)
+  const dossierId = r.dossier.id
   for (const field of ['diagnoses', 'medication', 'note']) {
     if (!d[field]) continue
-    await evalInApp(
+    const u = await evalInApp(
       `window.api.dossiers.update(${JSON.stringify(dossierId)}, ${JSON.stringify({ [field]: d[field] })})`
     )
+    if (!u.ok) throw new Error(`«${d.lastName}»: ${field} nicht gespeichert: ${JSON.stringify(u)}`)
   }
   for (const key of [...d.sitzungen, ...d.pdfs]) {
     const c = created.find((x) => x.key === key)
     if (!c) throw new Error(`Inhalt «${key}» für «${d.lastName}» nicht gefunden`)
-    await evalInApp(
+    const a = await evalInApp(
       `window.api.dossiers.assign(${JSON.stringify(c.id)}, ${JSON.stringify(dossierId)})`
     )
+    if (!a.ok) throw new Error(`«${d.lastName}»: «${key}» nicht zugeordnet: ${JSON.stringify(a)}`)
   }
 }
 closeCdp()

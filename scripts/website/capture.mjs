@@ -18,8 +18,9 @@
  * das Skript als Overlay ein (die Ampel liegt bei hiddenInset an trafficLightPosition
  * 16/16, siehe createWindow in src/main/index.ts).
  */
-import { mkdirSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import { send as rawSend, evalInApp, onEvent, closeCdp } from '../e2e/cdp.mjs'
 import { assertDemoInstance } from './demo/guard.mjs'
 
@@ -351,11 +352,13 @@ function startScreencast(name) {
 
 // ── Szenarien ────────────────────────────────────────────────────────────────
 
-/** Suchfenster (⌘K, #209) öffnen — derselbe Knopf wie in der Seitenleiste. */
+/** Suchfenster (⌘K, #209) öffnen — mit Mausklick auf den Knopf der Seitenleiste. */
 async function openSearch() {
-  await evalInApp(
-    `document.querySelector('${SIDEBAR} button[aria-keyshortcuts="Meta+K"]').click(); true`
-  )
+  const p = await evalInApp(`(() => {
+    const b = document.querySelector('${SIDEBAR} button[aria-keyshortcuts="Meta+K"]').getBoundingClientRect()
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2 }
+  })()`)
+  await click(p.x, p.y)
   await sleep(700)
 }
 async function typeInFocus(text) {
@@ -375,9 +378,11 @@ async function waitForSearchResults() {
     const state = await evalInApp(`(() => {
       const d = document.querySelector('[role="dialog"][aria-label^="Patientendossiers"]')
       if (!d) return { open: false }
-      return { open: true, text: d.innerText }
+      return { open: true, status: d.querySelector('[role="status"]')?.textContent?.trim() ?? '' }
     })()`)
-    if (state.open && /Treffer|Sitzung|Nach Bedeutung/i.test(state.text) && !/Suche läuft|Wird gesucht/i.test(state.text)) return state.text
+    // Fertig, wenn die Live-Region eine Trefferzahl nennt und die Suche nach Bedeutung
+    // nicht mehr aussteht («Treffer nach Bedeutung werden gesucht»).
+    if (state.open && state.status && !/werden gesucht/.test(state.status)) return state.status
     await sleep(500)
   }
   throw new Error('Suchtreffer erscheinen nicht')
@@ -401,18 +406,18 @@ async function stills() {
     if (theme === 'light') {
       await openSession(steiner.title)
       await toDossiers()
-      await openDossier('Meier, Jonas')
+      await openDossier(dossierName('meier'))
       await toList()
       await openSession(multi.title)
       await toDossiers()
-      await openDossier('Steiner, Thomas')
+      await openDossier(dossierName('steiner'))
     }
     await toList()
     await showCursor(false)
     await still(`sitzungen-${theme}`)
     await toDossiers()
     await still(`dossiers-${theme}`)
-    await openDossier('Brunner, Lea')
+    await openDossier(dossierName('brunner'))
     await still(`dossier-${theme}`)
     await toList()
     await openSession(haupt.title)
@@ -436,8 +441,20 @@ async function stills() {
     }
   }
 }
+// Namen und Nachnamen kommen aus dossiers.json, damit Umbenennungen dort genügen.
+const DEMO_DOSSIERS = JSON.parse(
+  readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), 'demo', 'dossiers.json'),
+    'utf8'
+  )
+).dossiers
+function dossierName(id) {
+  const d = DEMO_DOSSIERS.find((x) => x.id === id)
+  if (!d) throw new Error(`Demo-Dossier «${id}» fehlt in dossiers.json`)
+  return `${d.lastName}, ${d.firstName}`
+}
 const SEARCHES = [
-  ['suche', 'Brunner'],
+  ['suche', DEMO_DOSSIERS.find((x) => x.id === 'brunner').lastName],
   ['bedeutung', 'Prüfungsangst']
 ]
 

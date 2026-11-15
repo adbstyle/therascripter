@@ -121,6 +121,8 @@ scripts/website/build-gifs.sh /tmp/cap
 
 - Jede Funktionsaussage muss auf die veröffentlichte App zutreffen. Bei UI-Änderungen
   Bilder neu aufnehmen.
+- Die Grösse des Suchmodells («rund 0.43 GB») steht zweimal in `website/index.html` und kommt aus
+  `src/shared/model-catalog.ts`: bei einem neuen Suchmodell dort und auf der Seite nachführen.
 - Die Lizenzübersicht `THIRD_PARTY_LICENSES.md` im Repository-Root ist von der Seite
   verlinkt. Neue Modelle oder Abhängigkeiten dort nachführen.
 - Nach einem neuen `og-image.png` den Cache-Buster `?v=N` am `og:image` erhöhen.
