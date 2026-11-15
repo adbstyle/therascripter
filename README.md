@@ -28,8 +28,8 @@ Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufni
 - Mac mit Apple-Chip (M1 oder neuer)
 - Mindestens 8 GB RAM
 - ~5 GB freier Speicherplatz (App ~1 GB + ML-Modelle ~2.4 GB inkl. Suchmodell; dazu der
-  Suchindex, bis ~0.7 GB bei 2'000 Sitzungen; der Erststart prüft 5 GB für Download und
-  Entpacken; zusätzlich ~3.4 GB optional für Zusammenfassung)
+  Suchindex, bis ~0.7 GB bei 2'000 Sitzungen; der Erststart prüft 5.4 GB für Download und
+  Entpacken; zusätzlich ~3.3 GB optional für Zusammenfassung)
 
 ## Installation
 
