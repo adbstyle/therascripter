@@ -24,7 +24,7 @@ Models are never loaded simultaneously. Each subprocess exits before the next ta
 | flair/ner-german-large | `~/.therascript/models/ner/` | fp16 on disk (artifact v3) and at inference on MPS; fp32 only on the CPU path | F1 ~92% | German |
 | Apple Vision OCR | system framework (no download) | n/a | n/a | Multilingual |
 
-All model directories are created at startup by `initDatabase()`. Total download size on first launch is approximately 2.1 GB (Whisper 0.6 GB + pyannote 0.06 GB + flair NER 1.0 GB + search model 0.43 GB; ~1.7 GB as long as the search model is `published: false`; source of truth: `src/shared/model-catalog.ts`). The search model lives in `models/search-embeddinggemma-2-text-v1/` (top level: the manifest only allows archives in their own folder directly under `models/`) and is created on its first download.
+All model directories are created at startup by `initDatabase()`. Total download size on first launch is approximately 2.1 GB (Whisper 0.6 GB + pyannote 0.06 GB + flair NER 1.0 GB + search model 0.43 GB; source of truth: `src/shared/model-catalog.ts`). The search model lives in `models/search-embeddinggemma-2-text-v1/` (top level: the manifest only allows archives in their own folder directly under `models/`) and is created on its first download.
 
 ---
 

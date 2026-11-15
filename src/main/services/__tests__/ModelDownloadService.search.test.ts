@@ -115,7 +115,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  search.published = false
+  delete search.published
   delete process.env.THERASCRIPT_SEARCH_MODEL_DIR
 })
 

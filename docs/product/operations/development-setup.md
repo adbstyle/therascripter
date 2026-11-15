@@ -120,7 +120,7 @@ Note: The `dev` script uses `env -u ELECTRON_RUN_AS_NODE` to unset that environm
 | EmbeddingGemma 2 text encoder (search) | ~0.58 GB extracted | `~/.therascript/models/search-embeddinggemma-2-text-v1/` (or `THERASCRIPT_SEARCH_MODEL_DIR`) |
 | **Total** | **~3.4 GB** | |
 
-End users download less (~2.1 GB): the NER artifact ships fp16 (~1.0 GB), see `docs/product/operations/model-pipeline.md`. The search model is not on R2 yet (`published: false`): for local work extract the artifact from `scripts/package-models.sh search` into the folder above, or point `THERASCRIPT_SEARCH_MODEL_DIR` at it (development builds only); either way it counts as installed.
+End users download less (~2.1 GB): the NER artifact ships fp16 (~1.0 GB), see `docs/product/operations/model-pipeline.md`. The search model is on R2 since 2026-11-15 and is downloaded like the others; for local work you can also extract the artifact from `scripts/package-models.sh search` into the folder above, or point `THERASCRIPT_SEARCH_MODEL_DIR` at it (development builds only); either way it counts as installed.
 
 Models are stored in `~/.therascript/models/` and persist across app builds and updates.
 

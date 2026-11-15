@@ -75,9 +75,10 @@ Aufnahme und PDF bis zur Zusammenfassung. Ist sie rot, bricht der Release ab.
 landet in der Tag-Nachricht und im Release-Text. Interaktiv fragt das Skript
 bei Rot nach einer Begründung.
 
-Vorbedingung: kein Pflichtmodell im Katalog trägt noch published: false
-(scripts/check-unpublished-models.ts) — README und Website beschreiben es
-schon. --allow-unpublished-models übersteuert das bewusst mit Begründung.
+Vorbedingung: kein Pflichtmodell im Katalog trägt published: false
+(scripts/check-unpublished-models.ts, Mechanismus für künftige Modelle) —
+README und Website beschreiben jedes Pflichtmodell schon. Der Smoke-Schritt
+läuft mit --require-search: das Suchmodell muss auf dem Release-Mac liegen. --allow-unpublished-models übersteuert das bewusst mit Begründung.
 EOF
 }
 
@@ -156,7 +157,7 @@ elif [ -n "$NOTES_ARG" ]; then
   NOTES_BODY="$NOTES_ARG"
 fi
 
-# Pflichtmodell mit published: false (Suchmodell, Epic #192): README und
+# Pflichtmodell mit published: false (Mechanismus für künftige Modelle): README und
 # Website nennen es schon — vor dem Build abbrechen, nicht nach 10 Minuten.
 if ! (cd "$ROOT_DIR" && npx --no-install tsx scripts/check-unpublished-models.ts); then
   if [ -z "$UNPUBLISHED_OVERRIDE" ]; then
@@ -293,7 +294,7 @@ echo "  DMG: $DMG_PATH"
 
 echo ""
 echo "→ Verifiziere Bundles + Runtime-Smoke …"
-if ! "$ROOT_DIR/scripts/verify-bundles.sh" --app "$ROOT_DIR/dist/mac-arm64/Therascript.app" --smoke; then
+if ! "$ROOT_DIR/scripts/verify-bundles.sh" --app "$ROOT_DIR/dist/mac-arm64/Therascript.app" --smoke --require-search; then
   echo ""
   echo "❌ Verifikation fehlgeschlagen — Release abgebrochen."
   echo "   Nichts wurde gepusht. Fix committen (Version-Commit ggf. amenden) und erneut starten."

@@ -109,9 +109,9 @@ describe('Suchmodell im Manifest (Review PR #224)', () => {
     expect(bundle?.models ?? []).toEqual([])
   })
 
-  it('unveröffentlicht steht es gar nicht im Manifest', () => {
+  it('mit published: false steht es gar nicht im Manifest', () => {
     const manifest = buildManifest({
-      catalog: MODEL_DEFINITIONS,
+      catalog: MODEL_DEFINITIONS.map((m) => (m.id === SEARCH_ID ? { ...m, published: false } : m)),
       live: {},
       appVersion: '1.0.0',
       dmg,

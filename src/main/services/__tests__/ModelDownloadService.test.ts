@@ -69,9 +69,13 @@ describe('ModelDownloadService catalog helpers', () => {
     expect(asrs.every((m) => m.group === 'asr')).toBe(true)
   })
 
-  it('getRequiredModels returns pyannote-suite and flair', () => {
+  it('getRequiredModels returns pyannote-suite, flair and the search model', () => {
     const required = getRequiredModels()
-    expect(required.map((m) => m.id).sort()).toEqual(['flair-ner-german-large', 'pyannote-suite'])
+    expect(required.map((m) => m.id).sort()).toEqual([
+      'embeddinggemma-2-text',
+      'flair-ner-german-large',
+      'pyannote-suite'
+    ])
   })
 
   it('getModelById returns definition or null', () => {
@@ -85,7 +89,8 @@ describe('ModelDownloadService catalog helpers', () => {
     expect(loaded.map((m) => m.id)).toEqual([
       'whisper-large-v3-turbo',
       'pyannote-suite',
-      'flair-ner-german-large'
+      'flair-ner-german-large',
+      'embeddinggemma-2-text'
     ])
   })
 
@@ -96,7 +101,8 @@ describe('ModelDownloadService catalog helpers', () => {
       expect(getModelsToLoadOnFirstLaunch(id).map((m) => m.id)).toEqual([
         'whisper-large-v3-turbo',
         'pyannote-suite',
-        'flair-ner-german-large'
+        'flair-ner-german-large',
+        'embeddinggemma-2-text'
       ])
     }
   })
@@ -105,7 +111,8 @@ describe('ModelDownloadService catalog helpers', () => {
     expect(getModelsToLoadOnFirstLaunch(null).map((m) => m.id)).toEqual([
       'whisper-large-v3-turbo',
       'pyannote-suite',
-      'flair-ner-german-large'
+      'flair-ner-german-large',
+      'embeddinggemma-2-text'
     ])
   })
 })

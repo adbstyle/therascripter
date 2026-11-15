@@ -245,7 +245,7 @@ usage() {
 Usage: scripts/sim-clean-install.sh [A|B|C] [--launch-clean] [--status | --restore | --help]
 
 Szenario als Argument (nicht-interaktiv) oder ohne Argument interaktiv:
-  A — Brand-neu (FirstLaunchScreen + voller ~2.1 GB Modell-Download, ~1.7 GB solange das Suchmodell unveröffentlicht ist)
+  A — Brand-neu (FirstLaunchScreen + voller ~2.1 GB Modell-Download inkl. Suchmodell)
   B — Update v0.7.x → neu (Daten + Modelle bleiben, nur App wird ersetzt)
   C — Nur Modelle neu (Sessions + Settings bleiben)
 

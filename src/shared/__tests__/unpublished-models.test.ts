@@ -18,9 +18,8 @@ describe('unpublishedRequiredModels', () => {
     ).toEqual(['a', 'd'])
   })
 
-  it('heute: das Suchmodell blockiert den Release, bis es veröffentlicht ist', () => {
-    // Nach dem Umlegen des Schalters wird diese Liste leer — Test dann anpassen
-    expect(unpublishedRequiredModels(MODEL_DEFINITIONS)).toEqual(['embeddinggemma-2-text'])
+  it('der echte Katalog hat kein unveröffentlichtes Pflichtmodell (Suchmodell auf R2 seit 2026-11-15)', () => {
+    expect(unpublishedRequiredModels(MODEL_DEFINITIONS)).toEqual([])
   })
 
   it('release.sh prüft die Vorbedingung vor dem Build, mit Übersteuerung nur per Flag', () => {
