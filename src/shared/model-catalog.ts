@@ -184,8 +184,7 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
   },
   {
     // Suchmodell (Epic #192, #209/#210): Text-Encoder von EmbeddingGemma 2
-    // (Apache 2.0), gepackt von scripts/package-models.sh search. Grösse und
-    // sha256 sind die des lokal erzeugten, reproduzierbaren Pakets — das
+    // (Apache 2.0), gepackt von scripts/package-models.sh search. Das
     // Artefakt liegt seit 2026-11-15 auf R2; Grösse und sha256 sind gegen das
     // HOCHGELADENE Objekt geprüft (model-hash-sync gotcha,
     // docs/product/operations/model-pipeline.md), der Eintrag ist damit

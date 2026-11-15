@@ -77,8 +77,14 @@ bei Rot nach einer Begründung.
 
 Vorbedingung: kein Pflichtmodell im Katalog trägt published: false
 (scripts/check-unpublished-models.ts, Mechanismus für künftige Modelle) —
-README und Website beschreiben jedes Pflichtmodell schon. Der Smoke-Schritt
-läuft mit --require-search: das Suchmodell muss auf dem Release-Mac liegen. --allow-unpublished-models übersteuert das bewusst mit Begründung.
+README und Website beschreiben jedes Pflichtmodell schon.
+--allow-unpublished-models übersteuert das bewusst mit Begründung.
+
+Vorbedingung: Der Release-Mac braucht das Suchmodell unter
+~/.therascript/models/search-embeddinggemma-2-text-v1 (READY und
+model.safetensors). Das Skript prüft es vor Bump und Build und nennt bei
+Fehlen den Weg; der Smoke-Schritt läuft mit --require-search. Diese
+Vorbedingung ist nicht übersteuerbar.
 EOF
 }
 
@@ -165,6 +171,22 @@ if ! (cd "$ROOT_DIR" && npx --no-install tsx scripts/check-unpublished-models.ts
     exit 1
   fi
   echo "⚠️  Übersteuert: $UNPUBLISHED_OVERRIDE"
+fi
+
+# Suchmodell auf dem Release-Mac (smoke-packaged.sh --require-search): vor Bump
+# und Build prüfen, nicht erst im Smoke-Schritt nach dem Packen. Nur lesend.
+SEARCH_DIR_NAME="$(sed -n "s/^export const SEARCH_MODEL_DIR_NAME = '\([^']*\)'.*/\1/p" "$ROOT_DIR/src/shared/model-catalog.ts")"
+SEARCH_DIR="$HOME/.therascript/models/${SEARCH_DIR_NAME:-search-embeddinggemma-2-text-v1}"
+if [ ! -f "$SEARCH_DIR/READY" ] || [ ! -f "$SEARCH_DIR/model.safetensors" ]; then
+  echo "❌ Suchmodell fehlt auf diesem Mac: $SEARCH_DIR (READY / model.safetensors)"
+  echo "   Der Smoke-Schritt läuft mit --require-search und wäre nach dem Build rot."
+  echo "   Weg 1: Archiv von R2 laden, sha256 gegen den Katalog prüfen, entpacken"
+  echo "   (das Archiv enthält keinen Ordner, nur die Dateien):"
+  echo "     curl -fL -o /tmp/embeddinggemma-2-text-v1.tar.gz https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/embeddinggemma-2-text-v1.tar.gz"
+  echo "     shasum -a 256 /tmp/embeddinggemma-2-text-v1.tar.gz   # Soll: sha256 des Eintrags embeddinggemma-2-text in src/shared/model-catalog.ts"
+  echo "     mkdir -p \"$SEARCH_DIR\" && tar -xzf /tmp/embeddinggemma-2-text-v1.tar.gz -C \"$SEARCH_DIR\""
+  echo "   Weg 2: die App mit dem neuen Katalog starten (SearchModelProvisioner lädt es im Hintergrund)."
+  exit 1
 fi
 
 if [ ! -f "$INSTALL_GUIDE_FILE" ]; then
