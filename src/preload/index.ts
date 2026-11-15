@@ -41,6 +41,7 @@ function readInitialViewMode(): ViewMode {
   }
 }
 import { dossierApi } from './api/dossiers'
+import { SKIP, subscribeChannel } from './api/channelHub'
 import { pendingEditsApi } from './api/pendingEdits'
 
 /** Epic #192 — gespeicherte Seitenleiste vor dem ersten Render; im Zweifel eingeblendet. */
@@ -59,16 +60,15 @@ const api: IpcApi = {
     rename: (sessionId, title) => ipcRenderer.invoke('session:rename', { sessionId, title }),
     setDocumentDate: (sessionId, documentDate) =>
       ipcRenderer.invoke('session:setDocumentDate', { sessionId, documentDate }),
-    onChanged: (callback) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: unknown): void => {
-        const parsed = SessionsChangedSchema.safeParse(data)
-        if (parsed.success) callback(parsed.data)
-      }
-      ipcRenderer.on('sessions:changed', handler)
-      return () => {
-        ipcRenderer.removeListener('sessions:changed', handler)
-      }
-    }
+    onChanged: (callback) =>
+      subscribeChannel(
+        'sessions:changed',
+        (data) => {
+          const parsed = SessionsChangedSchema.safeParse(data)
+          return parsed.success ? parsed.data : SKIP
+        },
+        callback
+      )
   },
   recording: {
     start: (options) =>
@@ -110,56 +110,36 @@ const api: IpcApi = {
     getSessionTasks: (sessionId) => ipcRenderer.invoke('task:getSessionTasks', { sessionId }),
     isProcessing: () => ipcRenderer.invoke('task:isProcessing'),
     retry: (sessionId) => ipcRenderer.invoke('task:retry', { sessionId }),
-    onProgress: (callback) => {
-      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
-        const data: TaskProgressData = TaskProgressDataSchema.parse(raw)
-        callback(data)
-      }
-      ipcRenderer.on('task:progress', handler)
-      return () => {
-        ipcRenderer.removeListener('task:progress', handler)
-      }
-    },
-    onStarted: (callback) => {
-      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
-        const data: TaskStartedData = TaskStartedDataSchema.parse(raw)
-        callback(data)
-      }
-      ipcRenderer.on('task:started', handler)
-      return () => {
-        ipcRenderer.removeListener('task:started', handler)
-      }
-    },
-    onCompleted: (callback) => {
-      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
-        const data: TaskCompletedData = TaskCompletedDataSchema.parse(raw)
-        callback(data)
-      }
-      ipcRenderer.on('task:completed', handler)
-      return () => {
-        ipcRenderer.removeListener('task:completed', handler)
-      }
-    },
-    onError: (callback) => {
-      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
-        const data: TaskErrorData = TaskErrorDataSchema.parse(raw)
-        callback(data)
-      }
-      ipcRenderer.on('task:error', handler)
-      return () => {
-        ipcRenderer.removeListener('task:error', handler)
-      }
-    },
-    onQueuePositions: (callback) => {
-      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
-        const data: QueuePositionsData = QueuePositionsDataSchema.parse(raw)
-        callback(data)
-      }
-      ipcRenderer.on('queue:positions', handler)
-      return () => {
-        ipcRenderer.removeListener('queue:positions', handler)
-      }
-    }
+    onProgress: (callback) =>
+      subscribeChannel(
+        'task:progress',
+        (raw): TaskProgressData => TaskProgressDataSchema.parse(raw),
+        callback
+      ),
+    onStarted: (callback) =>
+      subscribeChannel(
+        'task:started',
+        (raw): TaskStartedData => TaskStartedDataSchema.parse(raw),
+        callback
+      ),
+    onCompleted: (callback) =>
+      subscribeChannel(
+        'task:completed',
+        (raw): TaskCompletedData => TaskCompletedDataSchema.parse(raw),
+        callback
+      ),
+    onError: (callback) =>
+      subscribeChannel(
+        'task:error',
+        (raw): TaskErrorData => TaskErrorDataSchema.parse(raw),
+        callback
+      ),
+    onQueuePositions: (callback) =>
+      subscribeChannel(
+        'queue:positions',
+        (raw): QueuePositionsData => QueuePositionsDataSchema.parse(raw),
+        callback
+      )
   },
   blocklist: {
     list: () => ipcRenderer.invoke('blocklist:list'),
@@ -264,16 +244,15 @@ const api: IpcApi = {
     missingReason: (sessionId: string) =>
       ipcRenderer.invoke('summary:missingReason', { sessionId }),
     regenerate: (sessionId: string) => ipcRenderer.invoke('summary:regenerate', { sessionId }),
-    onChanged: (callback) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: unknown): void => {
-        const parsed = SummaryChangedSchema.safeParse(data)
-        if (parsed.success) callback(parsed.data.sessionId)
-      }
-      ipcRenderer.on('summary:changed', handler)
-      return () => {
-        ipcRenderer.removeListener('summary:changed', handler)
-      }
-    }
+    onChanged: (callback) =>
+      subscribeChannel(
+        'summary:changed',
+        (data) => {
+          const parsed = SummaryChangedSchema.safeParse(data)
+          return parsed.success ? parsed.data.sessionId : SKIP
+        },
+        callback
+      )
   },
   microphone: {
     getState: () => ipcRenderer.invoke('microphone:getState'),
