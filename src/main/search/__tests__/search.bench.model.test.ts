@@ -280,6 +280,7 @@ describe.skipIf(!ENABLED)('search benchmark with 2,000 documents (real model)', 
       `Aufbereitung einer 50-Minuten-Sitzung (${newChunks} Abschnitte): Textphase ${ms(tText)}, Vektorphase ${(tVec / 1000).toFixed(1)} s (${(tVec / newChunks).toFixed(0)} ms pro Abschnitt, Suchprozess schon geladen)`,
       `phys_footprint Suchprozess beim Aufbereiten: Spitze ${(worker.footprint.peak / GiB).toFixed(2)} GiB (vorher ${(peakBefore / GiB).toFixed(2)} GiB)`
     )
+    const peakDuringIndexing = worker.footprint.peak
     await worker.stop('test')
 
     // 5. Exakte Suche (sofort, ohne Modell)
@@ -344,7 +345,24 @@ describe.skipIf(!ENABLED)('search benchmark with 2,000 documents (real model)', 
       `phys_footprint Suchprozess bei den Suchen: zuletzt ${((rt.worker.footprint.last ?? 0) / GiB).toFixed(2)} GiB, Spitze ${(rt.worker.footprint.peak / GiB).toFixed(2)} GiB`
     )
     expect(semStats.max).toBeLessThan(2_000)
+    // #209 AK 14: erste Antwort nach Bedeutung samt Modellladen unter 5 s
+    // (auf dem M5 Pro 4.6–4.9 s gemessen — knapp; auf 8 GB nicht gemessen)
+    expect(tFirst).toBeLessThan(5_000)
+    // #209 AK 15: Suchprozess plus Zusatzspeicher des Main-Prozesses (Vektoren)
+    // unter 3.5 GiB. Spitze des Suchprozesses aus Aufbereitung und Suche; der
+    // Zuwachs im Main-Prozess als phys_footprint, ohne `footprint` als
+    // ArrayBuffer-Zuwachs (unterschätzt nicht: die Vektoren liegen dort)
+    const searchPeak = Math.max(peakDuringIndexing, rt.worker.footprint.peak)
+    const mainExtra = Math.max(
+      mainBefore !== null && mainAfter !== null ? mainAfter - mainBefore : 0,
+      arrayAfter - arrayBefore,
+      rt.store.bytes
+    )
+    report.push(
+      `Suchprozess (Spitze) + Zusatzspeicher Main-Prozess: ${((searchPeak + mainExtra) / GiB).toFixed(2)} GiB (Grenze 3.5 GiB)`
+    )
     expect(rt.worker.footprint.peak).toBeLessThan(3.5 * GiB)
+    expect(searchPeak + mainExtra).toBeLessThan(3.5 * GiB)
     await rt.worker.stop('test')
     rt.dispose()
     db.close()
