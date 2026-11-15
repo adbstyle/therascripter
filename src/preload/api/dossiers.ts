@@ -1,7 +1,12 @@
 import { ipcRenderer } from 'electron'
 import type { DossierApi } from '../../shared/types/ipc/DossierApi'
 import { DossiersChangedSchema } from '../../shared/validation/dossier-schemas'
-import { SKIP, subscribeChannel } from './channelHub'
+import { SKIP, createChannel } from './channelHub'
+
+const onDossiersChanged = createChannel('dossiers:changed', (raw) => {
+  const parsed = DossiersChangedSchema.safeParse(raw)
+  return parsed.success ? parsed.data : SKIP
+})
 
 /** Patientendossiers (#204, #205). Eingehende Events werden mit Zod geprüft, einmal pro Ereignis (channelHub). */
 export const dossierApi: DossierApi = {
@@ -17,13 +22,5 @@ export const dossierApi: DossierApi = {
   assign: (sessionId, dossierId) => ipcRenderer.invoke('dossier:assign', { sessionId, dossierId }),
   unassign: (sessionId, dossierId) =>
     ipcRenderer.invoke('dossier:unassign', { sessionId, dossierId }),
-  onChanged: (callback) =>
-    subscribeChannel(
-      'dossiers:changed',
-      (raw) => {
-        const parsed = DossiersChangedSchema.safeParse(raw)
-        return parsed.success ? parsed.data : SKIP
-      },
-      callback
-    )
+  onChanged: (callback) => onDossiersChanged(callback)
 }

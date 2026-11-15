@@ -41,7 +41,7 @@ function readInitialViewMode(): ViewMode {
   }
 }
 import { dossierApi } from './api/dossiers'
-import { SKIP, subscribeChannel } from './api/channelHub'
+import { SKIP, createChannel } from './api/channelHub'
 import { pendingEditsApi } from './api/pendingEdits'
 
 /** Epic #192 — gespeicherte Seitenleiste vor dem ersten Render; im Zweifel eingeblendet. */
@@ -53,6 +53,37 @@ function readInitialSidebarOpen(): boolean {
   }
 }
 
+// Event-Kanäle mit vielen Abonnenten: ein ipcRenderer.on pro Kanal, die
+// Prüfung einmal hier festgelegt (api/channelHub.ts)
+const onSessionsChanged = createChannel('sessions:changed', (data) => {
+  const parsed = SessionsChangedSchema.safeParse(data)
+  return parsed.success ? parsed.data : SKIP
+})
+const onTaskProgress = createChannel(
+  'task:progress',
+  (raw): TaskProgressData => TaskProgressDataSchema.parse(raw)
+)
+const onTaskStarted = createChannel(
+  'task:started',
+  (raw): TaskStartedData => TaskStartedDataSchema.parse(raw)
+)
+const onTaskCompleted = createChannel(
+  'task:completed',
+  (raw): TaskCompletedData => TaskCompletedDataSchema.parse(raw)
+)
+const onTaskError = createChannel(
+  'task:error',
+  (raw): TaskErrorData => TaskErrorDataSchema.parse(raw)
+)
+const onQueuePositions = createChannel(
+  'queue:positions',
+  (raw): QueuePositionsData => QueuePositionsDataSchema.parse(raw)
+)
+const onSummaryChanged = createChannel('summary:changed', (data) => {
+  const parsed = SummaryChangedSchema.safeParse(data)
+  return parsed.success ? parsed.data.sessionId : SKIP
+})
+
 const api: IpcApi = {
   sessions: {
     list: () => ipcRenderer.invoke('session:list'),
@@ -60,15 +91,7 @@ const api: IpcApi = {
     rename: (sessionId, title) => ipcRenderer.invoke('session:rename', { sessionId, title }),
     setDocumentDate: (sessionId, documentDate) =>
       ipcRenderer.invoke('session:setDocumentDate', { sessionId, documentDate }),
-    onChanged: (callback) =>
-      subscribeChannel(
-        'sessions:changed',
-        (data) => {
-          const parsed = SessionsChangedSchema.safeParse(data)
-          return parsed.success ? parsed.data : SKIP
-        },
-        callback
-      )
+    onChanged: (callback) => onSessionsChanged(callback)
   },
   recording: {
     start: (options) =>
@@ -110,36 +133,11 @@ const api: IpcApi = {
     getSessionTasks: (sessionId) => ipcRenderer.invoke('task:getSessionTasks', { sessionId }),
     isProcessing: () => ipcRenderer.invoke('task:isProcessing'),
     retry: (sessionId) => ipcRenderer.invoke('task:retry', { sessionId }),
-    onProgress: (callback) =>
-      subscribeChannel(
-        'task:progress',
-        (raw): TaskProgressData => TaskProgressDataSchema.parse(raw),
-        callback
-      ),
-    onStarted: (callback) =>
-      subscribeChannel(
-        'task:started',
-        (raw): TaskStartedData => TaskStartedDataSchema.parse(raw),
-        callback
-      ),
-    onCompleted: (callback) =>
-      subscribeChannel(
-        'task:completed',
-        (raw): TaskCompletedData => TaskCompletedDataSchema.parse(raw),
-        callback
-      ),
-    onError: (callback) =>
-      subscribeChannel(
-        'task:error',
-        (raw): TaskErrorData => TaskErrorDataSchema.parse(raw),
-        callback
-      ),
-    onQueuePositions: (callback) =>
-      subscribeChannel(
-        'queue:positions',
-        (raw): QueuePositionsData => QueuePositionsDataSchema.parse(raw),
-        callback
-      )
+    onProgress: (callback) => onTaskProgress(callback),
+    onStarted: (callback) => onTaskStarted(callback),
+    onCompleted: (callback) => onTaskCompleted(callback),
+    onError: (callback) => onTaskError(callback),
+    onQueuePositions: (callback) => onQueuePositions(callback)
   },
   blocklist: {
     list: () => ipcRenderer.invoke('blocklist:list'),
@@ -244,15 +242,7 @@ const api: IpcApi = {
     missingReason: (sessionId: string) =>
       ipcRenderer.invoke('summary:missingReason', { sessionId }),
     regenerate: (sessionId: string) => ipcRenderer.invoke('summary:regenerate', { sessionId }),
-    onChanged: (callback) =>
-      subscribeChannel(
-        'summary:changed',
-        (data) => {
-          const parsed = SummaryChangedSchema.safeParse(data)
-          return parsed.success ? parsed.data.sessionId : SKIP
-        },
-        callback
-      )
+    onChanged: (callback) => onSummaryChanged(callback)
   },
   microphone: {
     getState: () => ipcRenderer.invoke('microphone:getState'),

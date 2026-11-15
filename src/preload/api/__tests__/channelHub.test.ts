@@ -28,7 +28,7 @@ vi.mock('electron', () => ({
   ipcRenderer: { on: ipc.on, removeListener: ipc.removeListener, invoke: vi.fn() }
 }))
 
-import { _subscriberCount } from '../channelHub'
+import { SKIP, _subscriberCount, createChannel } from '../channelHub'
 import { dossierApi } from '../dossiers'
 import { recentApi } from '../recent'
 import { searchApi } from '../search'
@@ -121,5 +121,31 @@ describe('channelHub — ein ipcRenderer.on pro Kanal', () => {
     expect(second).toHaveBeenCalledTimes(2)
     off2()
     expect(ipc.count('dossiers:changed')).toBe(0)
+  })
+
+  it('die Prüfung ist pro Kanal einmal festgelegt — kein Abonnent kann sie ändern', () => {
+    const parse = vi.fn((raw: unknown) => (typeof raw === 'number' ? raw * 2 : SKIP))
+    const subscribe = createChannel('test:fixed', parse)
+    const first = vi.fn()
+    const second = vi.fn()
+    const off1 = subscribe(first)
+    // Der zweite Abonnent übergibt nur einen Callback; ein Versuch, über einen
+    // zweiten Kanal mit anderer Prüfung zu gehen, scheitert
+    expect(() => createChannel('test:fixed', () => 'anders')).toThrow(/bereits festgelegt/)
+    const off2 = subscribe(second)
+    ipc.emit('test:fixed', 21)
+    ipc.emit('test:fixed', 'kein Wert')
+    expect(first.mock.calls).toEqual([[42]])
+    expect(second.mock.calls).toEqual([[42]])
+    // einmal geprüft pro Ereignis, nicht pro Abonnent
+    expect(parse).toHaveBeenCalledTimes(2)
+    off1()
+    off2()
+    expect(ipc.count('test:fixed')).toBe(0)
+  })
+
+  it('ein Kanal wird erst mit dem ersten Abonnenten angemeldet, nicht beim Festlegen', () => {
+    createChannel('test:lazy', (raw) => raw)
+    expect(ipc.count('test:lazy')).toBe(0)
   })
 })
