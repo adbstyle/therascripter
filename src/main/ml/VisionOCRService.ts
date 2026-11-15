@@ -9,9 +9,7 @@ import { getDatabase, getDataDir } from '../db/connection'
 import { buildPDFTranscript } from '../utils/pdf-transcript-builder'
 import { runSubprocess } from '../utils/subprocess'
 import { throwIfToolBlocked } from '../services/ToolHealthService'
-
-/** Timeout per OCR page in milliseconds */
-const PAGE_TIMEOUT_MS = 30_000
+import { OCR_PAGE_TIMEOUT_MS } from './ocr-limits'
 
 /**
  * Merge hyphenated line breaks produced by OCR (e.g. "Al-\ntersheim" → "Altersheim").
@@ -141,7 +139,7 @@ export class VisionOCRService implements TaskExecutor {
         bin: binaryPath,
         args: ['--pdf', pdfPath, '--page', pageNumber.toString()],
         nice: 10,
-        timeoutMs: PAGE_TIMEOUT_MS,
+        timeoutMs: OCR_PAGE_TIMEOUT_MS,
         signal
       })
     } catch (error) {
@@ -155,7 +153,7 @@ export class VisionOCRService implements TaskExecutor {
     }
     if (result.timedOut) {
       throw new Error(
-        `OCR für Seite ${pageNumber} abgebrochen: Timeout nach ${Math.round(PAGE_TIMEOUT_MS / 1000)}s`
+        `OCR für Seite ${pageNumber} abgebrochen: Timeout nach ${Math.round(OCR_PAGE_TIMEOUT_MS / 1000)}s`
       )
     }
     if (result.code !== 0) {

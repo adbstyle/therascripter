@@ -1,4 +1,5 @@
 import type { TaskType } from '../../shared/types'
+import { OCR_STALL_THRESHOLD_MS } from '../ml/ocr-limits'
 
 const POLL_INTERVAL_MS = 15_000
 
@@ -13,7 +14,13 @@ const STALL_THRESHOLDS: Partial<Record<TaskType, number>> = {
   // statt Fortschritt — ein wirklich wedged Prozess fliegt weiterhin nach
   // 2 min raus. Die harte Zeitwall ist das Subprocess-Timeout (15 min).
   anonymization: 120_000,
-  ocr: 60_000,
+  // vision-ocr meldet pro Seite nichts; der Kaltstart von Apple Vision auf
+  // macOS 27 dauert 25–35 s. Die Schwelle liegt über dem Seiten-Timeout
+  // (runSubprocess, die harte Wall), damit eine hängende Seite mit der
+  // verständlichen Timeout-Meldung endet statt mit «reagiert nicht mehr».
+  // Ein Timer-Heartbeat im Main-Prozess brächte nichts: er bewiese nur, dass
+  // Node lebt, nicht vision-ocr. Herleitung in ocr-limits.ts.
+  ocr: OCR_STALL_THRESHOLD_MS,
   // pdf.js läuft in-process; onProgress feuert pro Seite. Eine einzelne
   // Seite, die >2 min hängt, ist pathologisch — Abort settlet den Executor
   // über abortable() (PDFExtractionExecutor), sonst wedged die Queue.

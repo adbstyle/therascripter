@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { ProcessWatchdog } from '../ProcessWatchdog'
+import { OCR_PAGE_TIMEOUT_MS, OCR_STALL_THRESHOLD_MS } from '../../ml/ocr-limits'
 
 describe('ProcessWatchdog', () => {
   beforeEach(() => {
@@ -181,21 +182,31 @@ describe('ProcessWatchdog', () => {
     watchdog.stop()
   })
 
-  it('uses 60s threshold for OCR tasks', () => {
+  // Kaltstart von Apple Vision auf macOS 27: 25–35 s ohne jedes Lebenszeichen
+  // für die erste Seite. Der Watchdog darf dabei nicht eingreifen.
+  it('does not abort OCR during a 35 s Vision cold start', () => {
     const onStall = vi.fn()
-    const watchdog = new ProcessWatchdog({
-      taskType: 'ocr',
-      onStall
-    })
+    const watchdog = new ProcessWatchdog({ taskType: 'ocr', onStall })
 
     watchdog.start()
-
-    // At 45s — should NOT have fired
-    vi.advanceTimersByTime(45_000)
+    vi.advanceTimersByTime(35_000)
     expect(onStall).not.toHaveBeenCalled()
 
-    // At 75s — should have fired (past 60s threshold)
-    vi.advanceTimersByTime(30_000)
+    watchdog.stop()
+  })
+
+  // Eine hängende Seite muss über das Seiten-Timeout (inkl. SIGTERM→SIGKILL-
+  // Gnadenfrist von 5 s) enden, nicht über den Watchdog.
+  it('lets the OCR page timeout fire before the watchdog', () => {
+    const onStall = vi.fn()
+    const watchdog = new ProcessWatchdog({ taskType: 'ocr', onStall })
+
+    watchdog.start()
+    vi.advanceTimersByTime(OCR_PAGE_TIMEOUT_MS + 5_000)
+    expect(onStall).not.toHaveBeenCalled()
+
+    // Echte Stalls fängt er weiterhin (Schwelle + ein Poll-Intervall)
+    vi.advanceTimersByTime(OCR_STALL_THRESHOLD_MS - OCR_PAGE_TIMEOUT_MS - 5_000 + 15_000)
     expect(onStall).toHaveBeenCalledOnce()
 
     watchdog.stop()
