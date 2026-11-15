@@ -1,7 +1,9 @@
+import type { PendingEditsApi } from './ipc/PendingEditsApi'
 import type { Session, SessionType } from './Session'
 import type { Task, TaskType } from './Task'
 import type { BlocklistEntry } from './NerTypes'
-import type { EntityMap, PlaceholderType } from './EntityMap'
+import type { EntityMap, PlaceholderSnapshot, PlaceholderType } from './EntityMap'
+import type { ViewMode } from './ViewMode'
 import type { TipTapDocument } from './TipTapDocument'
 import type { AppUpdateInstallResult, AppUpdateState } from './AppUpdate'
 import type { ReconcileEvent } from './ReconcileEvent'
@@ -9,19 +11,63 @@ import type { MicrophoneState, MicrophoneStatus } from './Microphone'
 import type { ProcessedModelsSnapshot, AudioStats } from './Provenance'
 import type {
   ModelCatalogEntry,
-  ModelGroup,
+  SlotModelGroup,
   DiarizationPipeline
 } from '../validation/model-catalog-schemas'
 import type { ToolHealthState } from '../tool-blocked'
+import type { NavCommand, SessionsChangedData } from '../validation/change-event-schemas'
+import type { DossierApi } from './ipc/DossierApi'
+import type { SessionListItem, SetDocumentDateResult } from './Dossier'
+import type { SearchApi } from './ipc/SearchApi'
+import type { RecentApi } from './ipc/RecentApi'
 
 export interface SessionApi {
-  list(): Promise<Session[]>
+  /** #205 — mit den Patientendossiers jeder Sitzung (Plaketten). */
+  list(): Promise<SessionListItem[]>
   delete(sessionId: string): Promise<boolean>
   rename(sessionId: string, title: string): Promise<Session | null>
+  /** #205 — Dokumentdatum eines PDFs (ISO-Tag, nicht nach heute). */
+  setDocumentDate(sessionId: string, documentDate: string): Promise<SetDocumentDateResult>
+  /** Epic #192 — Sitzungen geändert (gebündelt); `deletedIds` nennt gelöschte. */
+  onChanged(callback: (data: SessionsChangedData) => void): () => void
+}
+
+/**
+ * #206 — Zuordnung einer aus einem Patientendossier heraus gestarteten
+ * Aufnahme bzw. importierten PDFs: 'none' ohne Dossier, 'failed', wenn die
+ * Zuordnung scheiterte (Aufnahme bzw. Import laufen trotzdem, PC 1/2).
+ */
+export type DossierAssignmentOutcome = 'none' | 'assigned' | 'failed'
+
+export interface RecordingStartOptions {
+  /** #206 — Patientendossier, dem die Sitzung ab Beginn zugeordnet wird. */
+  dossierId?: string
+}
+
+export interface RecordingStartResult {
+  sessionId: string
+  assignment: DossierAssignmentOutcome
+  /** Titel der neuen Sitzung («Aufnahme 14.11.2026 10:05»). */
+  title: string
+  /** Zeitpunkt der Sitzung (ISO UTC); der Hinweis «nicht zugeordnet» nennt ihn (#206 AK 2). */
+  createdAt: string
+}
+
+export interface ImportPdfOptions {
+  /** #206 — Patientendossier, dem jedes PDF vor seiner Verarbeitung zugeordnet wird. */
+  dossierId?: string
+}
+
+export interface ImportPdfResult {
+  sessions: Session[]
+  /** #206 AK 2 — importiert, aber dem Patientendossier nicht zugeordnet. */
+  unassigned: Array<{ sessionId: string; title: string }>
+  /** Nicht importiert (fehlende Datei, Kopierfehler, …), mit Grund für den USER. */
+  failed: Array<{ title: string; reason: string }>
 }
 
 export interface RecordingApi {
-  start(): Promise<{ sessionId: string }>
+  start(options?: RecordingStartOptions): Promise<RecordingStartResult>
   stop(sessionId: string): Promise<{ durationSeconds: number }>
   sendData(sessionId: string, samples: ArrayBuffer): void
   onDuration(callback: (data: { seconds: number }) => void): () => void
@@ -84,7 +130,7 @@ export interface BlocklistApi {
 }
 
 export interface ImportApi {
-  pdf(filePaths: string[]): Promise<Session[]>
+  pdf(filePaths: string[], options?: ImportPdfOptions): Promise<ImportPdfResult>
   showPDFDialog(): Promise<string[]>
   getPathForFile(file: File): string
 }
@@ -94,6 +140,12 @@ export interface ReviewData {
   entityMap: EntityMap
   sessionType: SessionType
   sessionTitle: string
+  /** #205 — recording time resp. import time (ISO UTC); the PDF import date derives from it. */
+  createdAt: string
+  /** #205 — document date of a PDF (ISO day); null: the import date counts. */
+  documentDate: string | null
+  /** #203 — meaning of the tokens in `sessionTitle` when it was written. */
+  titleSnapshot: PlaceholderSnapshot | null
   /**
    * Issue #84 Story I — captured at pipeline-start. NULL for sessions that
    * reached 'review' before this column was introduced; the renderer surfaces
@@ -196,12 +248,16 @@ export interface SummaryRecord {
   text: string
   modelId: string | null
   summarizedAt: string | null
+  /** #203 — meaning of the tokens in title / text when they were written. */
+  titleSnapshot: PlaceholderSnapshot | null
+  textSnapshot: PlaceholderSnapshot | null
 }
 
 export interface SummaryApi {
   get(sessionId: string): Promise<SummaryRecord | null>
-  updateTitle(sessionId: string, title: string): Promise<void>
-  updateText(sessionId: string, text: string): Promise<void>
+  /** Resolves with the updated record (new token snapshot, #203). */
+  updateTitle(sessionId: string, title: string): Promise<SummaryRecord | null>
+  updateText(sessionId: string, text: string): Promise<SummaryRecord | null>
   /** #168 — 'tool-blocked', wenn die Zusammenfassung an einem blockierten Werkzeug scheiterte. */
   missingReason(sessionId: string): Promise<'tool-blocked' | null>
   /** #168 — Zusammenfassung nachholen; false, wenn nichts zu tun ist. */
@@ -233,15 +289,23 @@ export interface MicrophoneApi {
 
 export interface NavApi {
   onOpenSettings(callback: () => void): () => void
+  /**
+   * Epic #192 — gespeicherter Zustand der Seitenleiste, vom Preload synchron
+   * gelesen (wie `viewMode.initial`): kein Aufblitzen beim Start. Fallback true.
+   */
+  initialSidebarOpen: boolean
+  /** Epic #192 — Menü «Gehe zu» (Zurück/Vorwärts) und Seitenleiste ein-/ausblenden. */
+  onCommand(callback: (command: NavCommand) => void): () => void
 }
 
 export interface ModelCatalogApi {
-  list(group: ModelGroup): Promise<ModelCatalogEntry[]>
+  /** Nur Gruppen mit Slot — das Suchmodell zeigt eine Statuskarte (search.open). */
+  list(group: SlotModelGroup): Promise<ModelCatalogEntry[]>
   listAsr(): Promise<ModelCatalogEntry[]>
   download(id: string): Promise<ModelCatalogEntry[]>
   delete(id: string): Promise<ModelCatalogEntry[]>
-  setActive(group: ModelGroup, id: string): Promise<ModelCatalogEntry[]>
-  clearActive(group: ModelGroup): Promise<ModelCatalogEntry[]>
+  setActive(group: SlotModelGroup, id: string): Promise<ModelCatalogEntry[]>
+  clearActive(group: SlotModelGroup): Promise<ModelCatalogEntry[]>
   cancelDownload(): Promise<void>
 }
 
@@ -258,6 +322,17 @@ export interface ModelReconcileApi {
   markSeen(): Promise<ReconcileEvent[]>
   /** Permanently dismiss all reconcile events — call from the "Verstanden" button. */
   dismiss(): Promise<void>
+}
+
+/** #203 — globale Ansicht (pseudonymisiert / Klartext). */
+export interface ViewModeApi {
+  /**
+   * Saved view, read synchronously while the preload runs — known before the
+   * first render, so no content ever paints in the other view (AK 12).
+   * Falls back to 'pseudonymized' when it cannot be determined (AK 11).
+   */
+  initial: ViewMode
+  set(mode: ViewMode): Promise<void>
 }
 
 export interface IpcApi {
@@ -278,4 +353,9 @@ export interface IpcApi {
   microphone: MicrophoneApi
   toolHealth: ToolHealthApi
   nav: NavApi
+  viewMode: ViewModeApi
+  dossiers: DossierApi
+  search: SearchApi
+  recent: RecentApi
+  pendingEdits: PendingEditsApi
 }

@@ -1,11 +1,12 @@
 import { Editor } from '@tiptap/core'
-import type { EditorView } from '@tiptap/pm/view'
+import type { EditorProps, EditorView } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import {
   PlaceholderChipNode,
   SpeakerLabelNode,
   TimestampNode
 } from '../renderer/src/extensions/transcriptNodes'
+import { SearchHighlight } from '../renderer/src/extensions/searchHighlight'
 import type { TipTapDocument } from '../shared/types/TipTapDocument'
 import type { EntitySource, PlaceholderType } from '../shared/types'
 
@@ -34,6 +35,8 @@ export interface TestEditorHandle {
 export interface CreateTestEditorOptions {
   initialDoc?: TipTapDocument
   handleKeyDown?: (view: EditorView, event: KeyboardEvent) => boolean | void
+  /** The Review Editor's text/plain serializer (`serializeClipboardText`), for copy tests. */
+  clipboardTextSerializer?: EditorProps['clipboardTextSerializer']
 }
 
 export function createTestEditor(
@@ -58,12 +61,16 @@ export function createTestEditor(
       }),
       PlaceholderChipNode,
       SpeakerLabelNode,
-      TimestampNode
+      TimestampNode,
+      SearchHighlight
     ],
     content: opts.initialDoc ?? { type: 'doc', content: [{ type: 'paragraph' }] }
   }
-  if (opts.handleKeyDown) {
-    editorConfig.editorProps = { handleKeyDown: opts.handleKeyDown }
+  if (opts.handleKeyDown || opts.clipboardTextSerializer) {
+    editorConfig.editorProps = {
+      handleKeyDown: opts.handleKeyDown,
+      clipboardTextSerializer: opts.clipboardTextSerializer
+    }
   }
   const editor = new Editor(editorConfig)
 

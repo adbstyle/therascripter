@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
 import type { Session } from '../../../shared/types'
+import type { SessionListItem } from '../../../shared/types/Dossier'
+import { useLiveQuery, type LiveQueryEvent } from './useLiveQuery'
 
 interface UseSessionsResult {
-  sessions: Session[]
+  sessions: SessionListItem[]
   loading: boolean
   error: string | null
   refresh: () => Promise<void>
@@ -10,67 +12,59 @@ interface UseSessionsResult {
   renameSession: (sessionId: string, title: string) => Promise<Session | null>
 }
 
+const fetchSessions = (): Promise<SessionListItem[]> => window.api.sessions.list()
+
+// Der Main-Prozess meldet jede Änderung an einer Sitzung (angelegt, Status,
+// Titel, Zusammenfassung, gelöscht) gebündelt über `sessions:changed`
+// (Epic #192). Der Fortschritt innerhalb eines Schritts kommt weiterhin über
+// die Task-Events (useTaskProgress), die Liste muss dafür nicht neu laden.
+// `dossiers:changed`: die Plaketten zeigen Dossier-Namen (#205 AK 5).
+const SESSION_EVENTS: LiveQueryEvent[] = [
+  (callback) => window.api.sessions.onChanged(callback),
+  (callback) => window.api.dossiers.onChanged(callback)
+]
+
 export function useSessions(): UseSessionsResult {
-  const [sessions, setSessions] = useState<Session[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const query = useLiveQuery(fetchSessions, SESSION_EVENTS, [] as SessionListItem[])
+  const { setData } = query
 
-  const refresh = useCallback(async () => {
-    try {
-      setError(null)
-      const result = await window.api.sessions.list()
-      setSessions(result)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Transkriptionen konnten nicht geladen werden')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    refresh()
-  }, [refresh])
-
-  // Refresh session list when tasks change phase. Issue #80: also listen to
-  // task:started so that the renderer learns about queued → processing
-  // transitions without waiting for the first task:completed (~12s+ for
-  // diarization). Without this, SessionCard mounts only after step 1 finishes
-  // and misses the early task:started events.
-  useEffect(() => {
-    const cleanupStarted = window.api.tasks.onStarted(() => {
-      refresh()
-    })
-    const cleanupCompleted = window.api.tasks.onCompleted(() => {
-      refresh()
-    })
-    const cleanupError = window.api.tasks.onError(() => {
-      refresh()
-    })
-    return () => {
-      cleanupStarted()
-      cleanupCompleted()
-      cleanupError()
-    }
-  }, [refresh])
-
-  const deleteSession = useCallback(async (sessionId: string): Promise<boolean> => {
-    const result = await window.api.sessions.delete(sessionId)
-    if (result) {
-      setSessions((prev) => prev.filter((s) => s.id !== sessionId))
-    }
-    return result
-  }, [])
+  const deleteSession = useCallback(
+    async (sessionId: string): Promise<boolean> => {
+      const result = await window.api.sessions.delete(sessionId)
+      if (result) {
+        setData((prev) => prev.filter((s) => s.id !== sessionId))
+      }
+      return result
+    },
+    [setData]
+  )
 
   const renameSession = useCallback(
     async (sessionId: string, title: string): Promise<Session | null> => {
       const updated = await window.api.sessions.rename(sessionId, title)
       if (updated) {
-        setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+        setData((prev) =>
+          prev.map((s) => (s.id === updated.id ? { ...updated, dossiers: s.dossiers } : s))
+        )
       }
       return updated
     },
-    []
+    [setData]
   )
 
-  return { sessions, loading, error, refresh, deleteSession, renameSession }
+  const error =
+    query.error == null
+      ? null
+      : query.error instanceof Error
+        ? query.error.message
+        : 'Transkriptionen konnten nicht geladen werden'
+
+  return {
+    sessions: query.data,
+    loading: query.loading,
+    error,
+    refresh: query.refresh,
+    deleteSession,
+    renameSession
+  }
 }

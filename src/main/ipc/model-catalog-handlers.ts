@@ -17,11 +17,22 @@ import {
   ListModelsPayloadSchema,
   ModelIdPayloadSchema,
   SetActiveModelPayloadSchema,
+  isSlotModelGroup,
   type ModelCatalogEntry,
-  type ModelGroup
+  type ModelGroup,
+  type SlotModelGroup
 } from '../../shared/validation/model-catalog-schemas'
 
-function buildCatalogEntries(group: ModelGroup): ModelCatalogEntry[] {
+/**
+ * Gruppe, deren Liste nach einer Aktion zurückgeht. Das Suchmodell hat keine
+ * Liste (Statuskarte statt Katalog) — Aktionen darauf scheitern ohnehin
+ * vorher (Pflichtmodell, nicht löschbar).
+ */
+function listGroupOf(group: ModelGroup | undefined): SlotModelGroup {
+  return group && isSlotModelGroup(group) ? group : 'asr'
+}
+
+function buildCatalogEntries(group: SlotModelGroup): ModelCatalogEntry[] {
   // Issue #84 Story E follow-up — read the raw settings belief, not the
   // disk-filtered active id. The two flags must be reported independently
   // so the renderer's <ModelStatusBadge> can surface the `inconsistent`
@@ -60,13 +71,12 @@ export function registerModelCatalogHandlers(): void {
     const updates = getAppUpdateService()
     if (updates) await updates.withStagingPaused(() => downloadSingleModel(id))
     else await downloadSingleModel(id)
-    const def = getModelById(id)
-    return buildCatalogEntries(def?.group ?? 'asr')
+    return buildCatalogEntries(listGroupOf(getModelById(id)?.group))
   })
 
   ipcMain.handle('modelCatalog:delete', async (_event, payload: unknown) => {
     const { id } = validateIpc(ModelIdPayloadSchema, payload, 'modelCatalog:delete')
-    const groupBefore = getModelById(id)?.group ?? 'asr'
+    const groupBefore = listGroupOf(getModelById(id)?.group)
     try {
       await deleteModel(id)
     } finally {

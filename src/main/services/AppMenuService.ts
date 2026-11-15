@@ -1,8 +1,13 @@
 import { app, Menu } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
+import type { NavCommand } from '../../shared/validation/change-event-schemas'
 
 interface InitOptions {
   onOpenSettings: () => void
+  /** Menü «Gehe zu» und «Seitenleiste ein-/ausblenden» (Epic #192). */
+  onNavCommand?: (command: NavCommand) => void
+  /** Verstecktes App-Fenster zeigen (vor «Suchen …», wie bei den Einstellungen). */
+  onShowWindow?: () => void
 }
 
 let currentOptions: InitOptions | null = null
@@ -25,6 +30,7 @@ function rebuild(): void {
 
   const appName = app.getName()
   const onOpenSettings = currentOptions.onOpenSettings
+  const onNavCommand = currentOptions.onNavCommand ?? (() => {})
 
   const template: MenuItemConstructorOptions[] = [
     {
@@ -71,7 +77,39 @@ function rebuild(): void {
               { role: 'toggleDevTools', label: 'Entwicklertools' },
               { type: 'separator' }
             ] as MenuItemConstructorOptions[])),
+        {
+          // ⌃⌘S statt ⌘B (Prototyp): ⌘B macht im Editor fett (Epic #192)
+          label: 'Seitenleiste ein-/ausblenden',
+          accelerator: 'Control+Command+S',
+          click: () => onNavCommand('toggleSidebar')
+        },
+        { type: 'separator' },
         { role: 'togglefullscreen', label: 'Vollbild' }
+      ]
+    },
+    {
+      label: 'Gehe zu',
+      submenu: [
+        {
+          // Suchfenster (#209): öffnet und schliesst es, auch mit Fokus im Editor
+          label: 'Suchen …',
+          accelerator: 'Command+K',
+          click: () => {
+            currentOptions?.onShowWindow?.()
+            onNavCommand('search')
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Zurück',
+          accelerator: 'Command+[',
+          click: () => onNavCommand('back')
+        },
+        {
+          label: 'Vorwärts',
+          accelerator: 'Command+]',
+          click: () => onNavCommand('forward')
+        }
       ]
     },
     {

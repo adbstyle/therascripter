@@ -1,0 +1,243 @@
+import type { SessionType } from './Session'
+import type { DossierRef } from './Dossier'
+
+/**
+ * Suche (Epic #192 — #209, #211). Typen für Main und Renderer.
+ *
+ * Ausschnitte und Anker stehen immer im Klartext: indexiert ist nur der
+ * Klartext (Chips mit ihrem Original), Platzhalter sind pro Sitzung nummeriert
+ * und als Suchbegriff sinnlos (Epic OOS 9).
+ */
+
+/** Suche über alle Inhalte oder nur in einem Patientendossier (#211). */
+export type SearchScope = { kind: 'all' } | { kind: 'dossier'; dossierId: string }
+
+export interface SearchQueryInput {
+  /** Vom Renderer vergeben; veraltete Antworten werden daran verworfen. */
+  requestId: number
+  query: string
+  scope: SearchScope
+}
+
+/** Feld einer Sitzung, in dem ein Treffer liegt (#209 AK 5). */
+export type SearchField = 'title' | 'summary' | 'body'
+
+/** Treffer über die exakte Suche oder nach Bedeutung (ab PR S4). */
+export type SearchHitKind = 'exact' | 'semantic'
+
+/** Bereich `[start, end)` in einem Text (UTF-16-Einheiten). */
+export interface SearchMark {
+  start: number
+  end: number
+}
+
+export interface SearchSnippet {
+  /** Klartext-Ausschnitt (#209 AK 9). */
+  text: string
+  /** Exakte Treffer im Ausschnitt; leer bei Treffern nach Bedeutung. */
+  marks: SearchMark[]
+  /** Der Ausschnitt beginnt bzw. endet mitten im Abschnitt («…» anzeigen). */
+  truncatedStart: boolean
+  truncatedEnd: boolean
+}
+
+/**
+ * Bereich im Klartext eines Absatzes `p` des TipTap-Dokuments: Text zählt mit
+ * seiner Länge, ein Chip mit der Länge seines `original` (ohne Original mit
+ * seinem Platzhalter-Token), Sprecher- und Zeit-Knoten zählen nicht.
+ */
+export interface SearchParagraphRange {
+  p: number
+  s: number
+  e: number
+}
+
+/**
+ * Wohin «zur Fundstelle springen» führt (#209 AK 11). PR S5 übernimmt das in
+ * `SessionFocus` der Navigation.
+ */
+export type SearchFocus =
+  | { kind: 'title' }
+  | { kind: 'summary' }
+  | {
+      kind: 'hit'
+      /** Absätze des Abschnitts (Indizes in `doc.content`), als ganze hinterlegt. */
+      paraFrom: number
+      paraTo: number
+      /** Exakte Wörter zum Markieren; fehlt bei Treffern nach Bedeutung. */
+      ranges?: SearchParagraphRange[]
+      /**
+       * Text, an dem die Stelle nach einer Bearbeitung wiedergefunden wird:
+       * das erste exakte Wort bzw. der Anfang der Unit.
+       */
+      anchor: string
+    }
+
+export interface SearchHit {
+  field: SearchField
+  kind: SearchHitKind
+  /** Sprecher und Zeitmarke der Unit, sofern vorhanden (PDFs: keine). */
+  label: { speaker?: string; timestamp?: string }
+  snippet: SearchSnippet
+  focus: SearchFocus
+  /**
+   * true: der Treffer stammt aus einem früheren Stand der Sitzung (Vektoren
+   * der Fassung vor einer Bearbeitung, bis die neuen fertig sind — #212 AK 1).
+   * `paraFrom`/`paraTo`/`ranges` beziehen sich dann auf die alte
+   * Absatzstruktur: die Oberfläche sucht die Stelle über `anchor` im aktuellen
+   * Dokument und meldet sonst, dass es sie nicht mehr gibt.
+   */
+  fromEarlierVersion?: boolean
+}
+
+/** Eine Sitzung bzw. ein PDF-Dokument mit Treffern (#209 AK 7, AK 9). */
+export interface SearchDocumentResult {
+  sessionId: string
+  type: SessionType
+  /** Titel, wie gespeichert (pseudonymisiert, sofern er Platzhalter trägt). */
+  title: string
+  /** Titel im Klartext — der Renderer wählt nach der Ansicht. */
+  titlePlain: string
+  /** Tag im Verlauf (`YYYY-MM-DD`): Dokumentdatum bei PDFs, sonst Aufnahmetag. */
+  sortDay: string
+  dossiers: DossierRef[]
+  /** Bis zu SEARCH_MAX_HITS_PER_DOCUMENT Fundstellen, die passendste zuerst. */
+  hits: SearchHit[]
+}
+
+/** Gefundenes Patientendossier (#209 AK 23–26): ID · Geburtsdatum unterscheiden. */
+export interface SearchDossierResult extends DossierRef {
+  /** Zugeordnete Sitzungen und PDF-Dokumente (ohne solche im Löschen), wie in der Übersicht. */
+  entryCount: number
+}
+
+/**
+ * Warum die Suche nach Bedeutung gerade nicht geht (PR S4):
+ * - processing: eine Verarbeitung läuft oder steht an (#209 AK 18)
+ * - model-missing: das Suchmodell ist (noch) nicht installiert
+ * - tool-blocked: macOS hat das Python-Werkzeug blockiert (#168)
+ * - error: der Suchprozess ist abgestürzt bzw. liess sich nicht starten;
+ *   ein neuer Versuch folgt nach kurzer Pause von selbst
+ */
+export type SearchUnavailableReason = 'processing' | 'model-missing' | 'tool-blocked' | 'error'
+
+/**
+ * Stand der Suche nach Bedeutung in einer Antwort.
+ * - pending (`search:query`): sie folgt — der Renderer ruft `search:semantic`
+ * - complete (`search:semantic`): `results` enthält exakte und Treffer nach Bedeutung
+ * - superseded (`search:semantic`): eine neuere Anfrage desselben Fensters hat
+ *   diese abgelöst; die Antwort enthält nur die exakten Treffer
+ * - sonst: nicht verfügbar, `results` enthält nur die exakten Treffer
+ */
+export type SemanticSearchStatus =
+  | 'pending'
+  | 'complete'
+  | 'superseded'
+  | 'unavailable-processing'
+  | 'model-missing'
+  | 'tool-blocked'
+  | 'error'
+
+/** Zustand des Suchprozesses (Worker, Main-Prozess); nach aussen als `SearchAvailability.semantic`. */
+export type SearchProcessPhase = 'stopped' | 'starting' | 'ready' | 'busy' | 'stopping'
+
+export interface SearchProcessState {
+  phase: SearchProcessPhase
+  /** null = die Suche nach Bedeutung ist möglich (der Prozess startet bei Bedarf). */
+  reason: SearchUnavailableReason | null
+}
+
+export interface SearchQueryResult {
+  requestId: number
+  /** Getrennt und vor den Inhalten anzeigen (#209 AK 24). */
+  dossiers: SearchDossierResult[]
+  results: SearchDocumentResult[]
+  /** true, wenn mehr Sitzungen getroffen wurden als SEARCH_MAX_DOCUMENT_RESULTS. */
+  truncated: boolean
+  semantic: SemanticSearchStatus
+}
+
+/** Eine der fünf letzten Suchanfragen (#209 AK 27). */
+export interface RecentSearchQuery {
+  query: string
+  usedAt: string
+}
+
+/**
+ * Warum das Suchmodell nicht geladen werden konnte (#210 AK 5). Texte für die
+ * Oberfläche: `SEARCH_MODEL_FAILURE_TEXT` in `shared/search-model-texts.ts`.
+ */
+export type SearchModelFailureReason =
+  | 'network'
+  | 'server'
+  | 'disk-space'
+  | 'checksum'
+  | 'extract'
+  | 'unknown'
+
+/** Warum das fehlende Suchmodell gerade nicht geladen wird. */
+export type SearchModelWaitReason = 'busy' | 'setup' | 'starting'
+
+/**
+ * Bereitstellung des Suchmodells (#210 AK 2–5, PC 1), geführt vom
+ * SearchModelProvisioner im Main-Prozess.
+ *
+ * - `ready`: liegt vollständig auf dem Mac.
+ * - `waiting`: fehlt, wird aber gerade nicht geladen — `busy` (Aufnahme oder
+ *   Verarbeitung läuft; neuer Anlauf um `nextAttemptAt`), `setup`
+ *   (Ersteinrichtung noch nicht abgeschlossen, sie lädt es selbst) oder
+ *   `starting` (der erste Versuch nach dem Start folgt gleich).
+ * - `downloading`: Download läuft wirklich; `progress` 0–100.
+ * - `retry-scheduled`: ein Versuch ist gescheitert, der nächste folgt von
+ *   selbst um `nextAttemptAt` (ISO-Zeit; Staffel 1, 5, 30 Minuten).
+ * - `failed`: auch die kurzen Wiederholungen sind gescheitert. Die App
+ *   versucht es weiter alle 6 Stunden still im Hintergrund; die Oberfläche
+ *   zeigt den Grund und «Erneut versuchen».
+ * - `unpublished`: diese Version kennt das Suchmodell, es ist aber noch nicht
+ *   zum Download freigegeben (`published: false` im Katalog).
+ */
+export type SearchModelState =
+  | { status: 'ready' }
+  | {
+      status: 'waiting'
+      reason: SearchModelWaitReason
+      /** Nur bei 'busy': wann der Dienst wieder prüft (ISO-Zeit). */
+      nextAttemptAt?: string
+    }
+  | { status: 'downloading'; progress: number }
+  | { status: 'retry-scheduled'; reason: SearchModelFailureReason; nextAttemptAt: string }
+  | { status: 'failed'; reason: SearchModelFailureReason }
+  | { status: 'unpublished' }
+
+/**
+ * Antwort von `search:open` und Inhalt von `search:availabilityChanged`.
+ * Ein Objekt mit einem Feld pro Teil: `model` (PR S2) und `semantic`
+ * (Verarbeitung und Suchprozess, PR S4).
+ */
+export interface SearchAvailability {
+  /** Ohne Modell keine Suche nach Bedeutung; die exakte Suche geht immer. */
+  model: SearchModelState
+  /** Suche nach Bedeutung gerade möglich? (PR S4: Verarbeitung und Suchprozess) */
+  semantic: SemanticAvailability
+  /** Verständlicher Grund zu `semantic` 'error' bzw. 'tool-blocked' (Sie-Form). */
+  semanticMessage?: string
+}
+
+/**
+ * Stand der Suche nach Bedeutung in `SearchAvailability` (PR S4):
+ * - ready: möglich; der Suchprozess läuft oder startet bei der nächsten Anfrage
+ * - loading: der Suchprozess lädt gerade das Modell (nach `search:open`)
+ * - unavailable-processing: eine Verarbeitung läuft oder steht an (#209 AK 18)
+ * - model-missing: das Suchmodell ist nicht (vollständig) installiert — den
+ *   Grund sagt `model`
+ * - tool-blocked: macOS hat das Python-Werkzeug blockiert (#168)
+ * - error: der Suchprozess ist abgestürzt bzw. startete nicht; ein neuer
+ *   Versuch folgt nach kurzer Pause von selbst
+ */
+export type SemanticAvailability =
+  | 'ready'
+  | 'loading'
+  | 'unavailable-processing'
+  | 'model-missing'
+  | 'tool-blocked'
+  | 'error'

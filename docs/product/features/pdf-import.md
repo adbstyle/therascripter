@@ -8,34 +8,38 @@ Therascript can anonymize existing PDF documents (e.g. reports, referrals, disch
 
 ### Drag-and-Drop
 
-The `SessionDashboard` component registers drag-and-drop handlers on its root container. When the user drags files over the dashboard, a visual overlay appears ("PDF hier ablegen" with a dashed border and highlighted background). On drop, the component filters for `.pdf` files, resolves native file paths via `webUtils.getPathForFile()`, and calls `window.api.import.pdf(pdfPaths)`. Non-PDF files in the drop are silently ignored.
+The `SessionDashboard` component registers drag-and-drop handlers on its root container. When the user drags files over the dashboard, a visual overlay appears ("PDF hier ablegen" with a dashed border and highlighted background). On drop, the component filters for `.pdf` files, resolves native file paths via `webUtils.getPathForFile()`, and calls `importPdfs(pdfPaths)` from `useWorkspaceActions()`. Non-PDF files in the drop are silently ignored.
 
 ### File Picker Button
 
-The header bar contains an import button that triggers `handleImportPDF()` in `App.tsx`. This calls `window.api.import.showPDFDialog()`, which opens a native macOS file dialog (`dialog.showOpenDialog`) configured for multi-selection with a `.pdf` file filter. The dialog title reads "PDF-Dokumente zum Anonymisieren auswahlen". If the user cancels, an empty array is returned and no session is created.
+The «PDF importieren» button in the page header of «Transkriptionen» and the import icon next to «Transkriptionen» in the sidebar both call `importPdfs()` from `useWorkspaceActions()` (`src/renderer/src/contexts/WorkspaceActionsContext.tsx`, Epic #192). Without paths it calls `window.api.import.showPDFDialog()`, which opens a native macOS file dialog (`dialog.showOpenDialog`) configured for multi-selection with a `.pdf` file filter. The dialog title reads "PDF-Dokumente zum Anonymisieren auswahlen". If the user cancels, an empty array is returned and no session is created.
 
-Both methods set an `isImporting` flag that prevents concurrent imports. The flag is cleared in a `finally` block so it resets even if the import fails.
+**Import from a patient dossier (#206):** «PDF importieren» in the head of a dossier page and PDFs dropped onto its timeline call `importPdfs(paths?, { dossierId, dossierName })`. The main process assigns every PDF to the dossier right after creating its session and **before** `enqueuePipeline` — no processing step ever runs on an unassigned PDF from a dossier (PC 2). If the assignment fails (dossier deleted meanwhile, database error), the PDF is imported anyway; `import:pdf` returns it in `unassigned` and the renderer shows a 10-second error toast naming every such PDF by title and the dossier «Nachname, Vorname» (AK 2). Importing outside a dossier never asks for one (OOS 1).
+
+All entry points share one `isImporting` flag that prevents concurrent imports. The flag is cleared in a `finally` block so it resets even if the import fails. The list shows the new sessions because the main process fires `sessions:changed` on session creation — no manual refresh.
 
 ## File Handling and Session Creation
 
 For each selected file, the `import:pdf` IPC handler in `pdf-handlers.ts` performs these steps:
 
-1. **Validation** -- Checks that the file exists on disk and has a `.pdf` extension. Throws a German-language error if either check fails.
+1. **Validation** -- Checks that the file exists and has a `.pdf` extension; otherwise it lands in `failed` («Datei nicht gefunden», «Keine PDF-Datei») and the next file follows. **Every file is handled in its own try/catch** (review #225): a missing file, a copy failure or a database error never aborts the whole import — earlier and later PDFs stay imported and reported.
 2. **Session creation** -- Calls `SessionService.createSession(title, 'pdf')`, which inserts a new session with status `extracting` (audio sessions start as `recording`). The session title is derived from the PDF filename; if the name is empty or literally "document", a timestamp-based fallback is used (`PDF DD.MM.YYYY HH:MM`).
+2a. **Dossier assignment (#206)** -- With `dossierId`: `SessionDossierService.assign(session.id, dossierId)`; a failure (result or exception) adds `{ sessionId, title }` to `unassigned` and the import goes on.
 3. **File copy** -- Copies the source file to `~/.therascript/pdf/<sessionId>.pdf` using `copyFileSync`. The original file is never moved or modified.
 4. **Path storage** -- Updates the session record with the `pdfPath` pointing to the copied file.
 5. **Pipeline enqueue** -- Calls `taskQueue.enqueuePipeline(sessionId, 'pdf')` to schedule the three processing tasks.
-6. **Session list refresh** -- After all files are imported, the renderer refreshes the session list.
+6. **Deleted while waiting** -- After the `await` of the scanned-pages check the handler checks that the session still exists. If the user deleted the PDF (or its only dossier, which takes the PDF along) meanwhile, it is skipped silently — no error, no enqueue.
+7. **Result** -- `{ sessions, unassigned, failed: {title, reason}[] }`; lists and timelines reload on `sessions:changed`/`dossiers:changed`. The renderer shows one error toast (stays while hovered or focused, close button) naming how many PDFs were imported, which could not be imported and why, and which could not be assigned; a rejected call shows «Der Import ist fehlgeschlagen. Bitte versuchen Sie es erneut.». The shared `isImporting` guard is unchanged.
 
 PDF import is also available while an audio recording is running; the imported session then stays in `queued` ("Wartet") until the recording stops, because the task queue is paused for the duration of the recording (see [transcription-pipeline.md](transcription-pipeline.md)).
 
 ### Copy Failure Rollback
 
-If `copyFileSync` fails (e.g. source is on an ejected volume, permission denied, disk full), the handler rolls back immediately:
+If `copyFileSync` fails (e.g. source is on an ejected volume, permission denied, disk full), the handler rolls back that file and continues with the next:
 
 - Deletes the just-created session via `sessionService.deleteSession(session.id)`.
 - Attempts to remove any partial file at the target path (`unlinkSync`, errors silently ignored).
-- Throws an error with the message: "PDF konnte nicht kopiert werden. Bitte stellen Sie sicher, dass die Datei lokal verfugbar ist." followed by the filename and system error.
+- Reports the file in `failed` with «Die Datei konnte nicht kopiert werden. Ist sie lokal verfügbar?» (the system error goes to the log).
 
 ### Orphaned Session Recovery
 
@@ -85,6 +89,10 @@ The same NER anonymization pipeline used for audio sessions runs on the PDF tran
 
 Not supported. When `pdfjs-dist` encounters an encrypted/password-protected PDF, the error message is detected (checking for "password" or "encrypted" in the error string) and a clear German-language error is thrown: "Passwortgeschutzte PDFs werden nicht unterstutzt."
 
+## Document Date (#205)
+
+A PDF document carries exactly one document date (OOS 6), which places it in the timeline of every patient dossier it is assigned to (`sessions.document_date`, ISO day). As long as the user has not set one, the local day of the import counts; cards, the timeline and the Review Editor header then show «08.11.2026 · Importdatum» (AK 19/20). Clicking the date opens «Dokumentdatum festlegen» (`DocumentDateDialog`): input `TT.MM.JJJJ`, only a complete, valid calendar day from 1900 on and not after today is accepted (AK 21, checked in the renderer and again in the main process). A set date can be changed but not reset to the import date (OOS 3). Therascript does not read or suggest a date from the PDF (OOS 5). Setting the date changes neither text, pseudonymization, title nor summary, and neither the order nor the groups of the session list. Channel: `session:setDocumentDate`.
+
 ## PDF Session vs. Audio Session
 
 | Aspect | Audio Session | PDF Session |
@@ -93,6 +101,7 @@ Not supported. When `pdfjs-dist` encounters an encrypted/password-protected PDF,
 | Source file location | `~/.therascript/audio/` | `~/.therascript/pdf/` |
 | Pipeline steps | transcription, diarization, alignment, anonymization | extraction, ocr, anonymization |
 | Session title | Date/time of recording | PDF filename (or date/time fallback) |
+| Place in a dossier timeline (#205) | Local day of the recording | Document date, else local day of the import |
 | Speaker labels | Yes (from diarization) | No |
 | Timestamps | Yes (from ASR) | No |
 
@@ -129,4 +138,4 @@ The `extraction` and `ocr` task completions both map to session status `anonymiz
 | `src/main/ml/VisionOCRService.ts` | Stage 2: Apple Vision OCR for scanned pages |
 | `src/main/services/TaskQueueService.ts` | Pipeline definition and task orchestration |
 | `src/renderer/src/components/SessionDashboard.tsx` | Drag-and-drop UI |
-| `src/renderer/src/App.tsx` | File picker button handler |
+| `src/renderer/src/contexts/WorkspaceActionsContext.tsx` | `importPdfs` for button, sidebar icon and drag-and-drop |

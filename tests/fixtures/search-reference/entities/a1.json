@@ -1,0 +1,45 @@
+{
+  "doc": "a1",
+  "entities": [
+    {
+      "text": "Meier",
+      "type": "PERSON",
+      "canonical": "Sandra Meier"
+    },
+    {
+      "text": "Oerlikon",
+      "type": "ORT",
+      "canonical": "Oerlikon"
+    },
+    {
+      "text": "Reto",
+      "type": "PERSON",
+      "canonical": "Reto"
+    },
+    {
+      "text": "Bellevue",
+      "type": "ORT",
+      "canonical": "Bellevue"
+    },
+    {
+      "text": "Herzinsuffizienz",
+      "type": "MEDIZINISCH",
+      "canonical": "Herzinsuffizienz"
+    },
+    {
+      "text": "Winterthur",
+      "type": "ORT",
+      "canonical": "Winterthur"
+    },
+    {
+      "text": "Sertralin",
+      "type": "MEDIZINISCH",
+      "canonical": "Sertralin"
+    },
+    {
+      "text": "achtzehnte",
+      "type": "DATUM",
+      "canonical": "achtzehnte"
+    }
+  ]
+}

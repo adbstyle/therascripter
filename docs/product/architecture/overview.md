@@ -16,12 +16,12 @@ Therascript is an Electron-based macOS desktop application for on-device transcr
 │  │   Renderer Process   │      │      Main Process         │   │
 │  │   (React 19 + Vite)  │◄────►│  (Node.js / Electron API) │   │
 │  │                      │ IPC  │                           │   │
-│  │  App.tsx (view state)│      │  IPC handlers             │   │
+│  │  AppShell + history  │      │  IPC handlers             │   │
 │  │  TipTap editor       │      │  TaskQueueService         │   │
 │  │  Tailwind CSS v4     │      │  better-sqlite3 (WAL)     │   │
 │  └──────────────────────┘      │  electron-store           │   │
 │                                │  TrayService              │   │
-│         Preload Script         │  AutoDeletionService      │   │
+│         Preload Script         │  SourceFileCleanupService │   │
 │   (Context Bridge / Zod IPC)   │  UpdateCheckService       │   │
 │                                └──────────┬────────────────┘   │
 └───────────────────────────────────────────│────────────────────┘
@@ -67,14 +67,15 @@ All three subprocess types communicate with the Main Process only. The Renderer 
 
 | Process | Entry Point | Responsibility | ML Load |
 |---|---|---|---|
-| **Main** | `src/main/index.ts` | App lifecycle, window creation, CSP injection, SQLite database, task queue, IPC handler registration, tray, auto-deletion, update checks | None directly — orchestrates subprocess ML executors |
+| **Main** | `src/main/index.ts` | App lifecycle, window creation, CSP injection, SQLite database, task queue, IPC handler registration, tray, source-file cleanup and completion of interrupted deletions, update checks | None directly — orchestrates subprocess ML executors |
 | **Preload** | `src/preload/index.ts` | Exposes typed `window.api` surface via `contextBridge`; all channels pass through Zod schema validation | None |
 | **Renderer** | `src/renderer/src/main.tsx` | React UI — view navigation, recording controls, review editor, settings | None |
 | **whisper.cpp subprocess** | `resources/bin/whisper-cli` | ASR: audio → raw transcript (RTTM/JSON). Runs Metal GPU acceleration. One instance at a time. | Whisper Large V3 Turbo Q5_0 (~0.6 GB) |
 | **Python sidecar** | `python_sidecar/` | Speaker diarization (pyannote.audio), alignment, and NER anonymization (flair). Shared across pipeline stages. | pyannote speaker-diarization-3.1 (~0.06 GB) + flair/ner-german-large (~1.1 GB, fp16 on disk) |
+| **Search process** (long-lived) | `python_sidecar/search_service.py serve` | Embeds search queries and transcript sections for the search by meaning (Epic #192). The only long-lived child process: started on demand (opening the search, vector phase), stopped after 5 min idle and **before every task of the queue**; JSON lines over stdin/stdout (`src/main/utils/line-process.ts`, `src/main/search/SearchWorker.ts`). Vectors stay in the Main process (`VectorStore`). | EmbeddingGemma 2 text encoder (~0.54 GB bf16, ~1.6 GiB process) |
 | **Swift Vision OCR CLI** | `resources/bin/vision-ocr` | OCR for scanned PDF pages using Apple Vision Framework. Invoked per page only when pdfjs-dist finds no text. | Apple Vision (OS-provided, no model file) |
 
-The task queue enforces strict sequential execution — only one ML executor runs at any given time, respecting the 8 GB RAM budget (~3.5 GB process peak during flair NER on 8-GB Macs).
+The task queue enforces strict sequential execution — only one ML executor runs at any given time, respecting the 8 GB RAM budget (~3.5 GB process peak during flair NER on 8-GB Macs). The search process never runs next to a pipeline step: a hook before every task stops it, and it does not start while processing runs or waits.
 
 ---
 
@@ -100,7 +101,7 @@ All application data lives under `~/.therascript/`. Directories are created with
     └── ner/                    # flair/ner-german-large (~1.1 GB fp16; v1/v2 installs: 2.2 GB + 1.1 GB fp16 fast copy, 2.1 GB on the CPU path)
 ```
 
-Models persist across app updates. Total disk requirement: ~2.8 GB (app ~1 GB + models ~1.8 GB) (first launch checks for 5 GB free to cover download + extraction).
+Models persist across app updates. Total disk requirement: ~3.4 GB (app ~1 GB + models ~2.4 GB incl. the search model under `search-embeddinggemma-2-text-v1/`), plus the search index in the database (up to ~0.7 GB at 2'000 sessions). First launch checks for 5 GB free to cover download + extraction (reasoning in `docs/product/features/model-management.md`, «Disk Space Check»).
 
 ---
 
@@ -140,24 +141,43 @@ Key details:
 
 ## Navigation Model
 
-Therascript does not use a client-side router. Navigation is managed via a single `View` state in `App.tsx`:
+Since Epic #192 the app has a **page history** with back/forward instead of a single view state — still without a router library. Everything lives in `src/renderer/src/navigation/`.
 
 ```ts
-type View = 'sessions' | 'settings' | 'review'
+type Route =
+  | { kind: 'sessions' }
+  | { kind: 'dossiers' }                       // overview «Alle Patientendossiers» (#204)
+  | { kind: 'dossier'; dossierId: string }     // page of one patient dossier (#204)
+  | { kind: 'dossierSearch'; dossierId: string } // search in one patient dossier (#211)
+  | { kind: 'session'; sessionId: string; focus?: SessionFocus } // focus = a search hit (#209 AK 11)
+  | { kind: 'settings'; subpage: SubPage | null }
 ```
 
-**Rendering logic (priority order):**
+- `navReducer.ts` — pure history `{ back, current, forward }`, at most 50 entries, kept in memory only (#213 OOS 1). `navigate(route, { anchorId })` writes the anchor onto the entry being left, `{ targetAnchorId }` onto the new entry (#213: an unfinished «Zuletzt geöffnet» entry opens the sessions list with its card highlighted; on the same page it replaces the current entry with a fresh id so the page re-mounts and redeems the anchor); navigating to the same page creates no entry (a new `focus` replaces the current one, without `reopenOverlay`); `{ reopenOverlay: 'search' }` marks the entry being left, so going back to it reopens the search window (#209 AK 12, consumed once via `consumeOverlay`); `back`/`forward` skip invalid entries; `purge` removes entries of deleted objects and replaces the current one (dossier or dossier search → overview, session → previous entry, otherwise the sessions list).
+- `NavigationContext.tsx` — `useNavigation()` with `route`, `entryId`, `anchorId`, `reopenOverlay`, `canBack`, `canForward`, `navigate`, `back`, `forward`. Subscribes to `nav:command` (menu «Gehe zu»), `nav:openSettings` (app menu ⌘, and tray, always the Settings overview), `sessions:changed` and `dossiers:changed` (`deletedIds` → `purge`, #213 PC 3).
+- `useScrollRestoration(ready)` — `PageScroll` is the shell's only scroll container and is keyed by `entryId`; it stores `scrollTop` per entry. Once a page's data is loaded, the position is restored and the card of `anchorId` (`data-session-id`, or `data-anchor-id` for other rows such as dossiers) is highlighted (scrolled into view only if hidden) — e.g. after closing a session (#205 AK 16).
+- «Zuletzt geöffnet» (#213, `components/shell/RecentList.tsx`) sits below «Alle Patientendossiers» in the sidebar: at most eight dossiers, sessions and PDFs mixed, newest first, the running recording first with a pulsing dot. Each entry is a button with an icon whose accessible name is its kind («Patientendossier», «Sitzung», «PDF-Dokument») and the name — dossiers «Nachname, Vorname», sessions/PDFs their title in the chosen view (`sessionTitleIn`; no clear name in the pseudonymized view, also not in `title`/`aria-label`). A dossier or a processed session opens directly; anything else (recording, processing, error) navigates to the sessions list with `targetAnchorId`. `useRememberOpenedRoute()` in `AppShell` calls `recent:touch` on every dossier/session route — also with the sidebar hidden. The list reloads on `recent:changed`, `sessions:changed` and `dossiers:changed`; users cannot remove entries (OOS 2).
+- The sidebar entry «Alle Patientendossiers» stays highlighted on a dossier page (`aria-current` only on the overview); its «+» and the overview button call `useWorkspaceActions().openNewDossier()`, which renders `NewDossierDialog` and navigates to the new dossier. Details: [patient-dossiers.md](../features/patient-dossiers.md) «User interface».
+
+**Rendering:**
 
 | Condition | What renders |
 |---|---|
-| `modelsReady === null` | Empty loading screen (transparent, no flash) |
-| `modelsReady === false` | `FirstLaunchScreen` — model download wizard |
-| `isRecording === true` | No dedicated view — the sessions list renders a live `RecordingSessionCard`; other views show the `RecordingBar` |
-| `currentView === 'review'` | `ReviewEditor` (full-screen, own header) |
-| `currentView === 'sessions'` | `SessionDashboard` |
-| `currentView === 'settings'` | `Settings` (tabbed: Sperrliste / Darstellung / Modelle / Über) |
+| `modelsReady === null` | Title bar (`minimal`) and an empty area |
+| `modelsReady === false` | Title bar (`minimal`) + `FirstLaunchScreen` — no sidebar, no navigation |
+| otherwise | `AppShell`: `TitleBar` (sidebar button, ‹ ›, wordmark, view toggle) above `Sidebar` + content column (banners, `RecordingBar`, `PageScroll` → `RouteView`) |
+| route `sessions` | `SessionsPage` (`PageHeader` with «PDF importieren» / «Aufnahme starten», `ConsentBanner`, `SessionDashboard`) |
+| route `session` | `ReviewEditor` (own header, scrolls internally; no close button — Esc, ‹ or ⌘[ go back) |
+| route `settings` | `Settings` with the sub-page from the route |
+| route `dossiers` | `DossiersPage` (heading with count and «Neues Patientendossier», name filter, list sorted by last name; empty state with instructions) |
+| route `dossierSearch` | `DossierSearchPage` (search limited to the dossier, scope always named; [search.md](../features/search.md) «Search in a patient dossier») |
+| always in the shell | `SearchHost` → `SearchModal` (⌘K / «Suchen» in the sidebar / back to an entry with `reopenOverlay`) |
+| route `dossier` | `DossierPage` (`DossierHeader` + `DossierHeaderActions` with «Im Dossier suchen» (#211), «PDF importieren» / «Aufnahme starten» into this dossier (#206) and the menu «…», `ConsentBanner` while its timeline shows the recording, `DossierTimeline` on the left (drop PDFs to import them into the dossier), `DossierMasterDataForm` with autosave on the right; wraps below ~800 px) |
 
 **Navigation constraints:**
-- Sidebar navigation (Sitzungen / Einstellungen) is disabled during recording and during review.
+- The app stays fully navigable during recording; the sessions list and the page of every dossier the recording is assigned to show the live `RecordingSessionCard`, every other route the `RecordingBar`. Starting a recording navigates to the sessions list — except from a dossier page, which stays (#206).
+- The sidebar can be hidden (title-bar button, ⌃⌘S); the state is stored as `sidebarOpen` in electron-store and read synchronously by the preload before the first render.
 - The app stays alive in the macOS menu bar when the window is closed (standard macOS behavior via `TrayService`).
-- Updates (app and models as one, #167) show as «Update bereit» / «Update verfügbar» in the bottom bar, which opens Settings → Updates; installing restarts the app once.
+- Quitting the app (not closing the window, which only hides it) first asks the renderer to save pending edits (`app:flushPendingEdits`, at most 3 s, `src/main/services/PendingEditsFlush.ts`; renderer registry `src/renderer/src/services/pendingEdits.ts` with the dossier drafts and the review editor), then closes the database and, if due, swaps in the update.
+- Lists reload on the bundled main-process event `sessions:changed` (`src/main/services/ChangeEvents.ts`) via `hooks/useLiveQuery`.
+- Updates (app and models as one, #167) show as «Update bereit» / «Update verfügbar» in the sidebar footer, which opens Settings → Updates; installing restarts the app once.

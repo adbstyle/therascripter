@@ -1,13 +1,28 @@
 import { randomUUID } from 'crypto'
-import { existsSync, mkdirSync, rmSync, unlinkSync } from 'fs'
-import { dirname, join } from 'path'
-import { BrowserWindow } from 'electron'
+import { existsSync, mkdirSync, renameSync, rmSync, statSync, unlinkSync } from 'fs'
+import { dirname, join, relative } from 'path'
+import { app, BrowserWindow } from 'electron'
 import { getDataDir } from '../db/connection'
 import { getSettings, type AppSettings } from './SettingsService'
 import { deleteInstalledVersion, setInstalledVersion } from './InstalledVersionsStore'
-import { downloadFile, verifyFileSha256, extractTarGz } from './DownloadService'
-import type { ModelGroup } from '../../shared/validation/model-catalog-schemas'
-import { MODEL_DEFINITIONS, RETIRED_MODELS, type ModelDefinition } from '../../shared/model-catalog'
+import {
+  downloadFile,
+  verifyFileSha256,
+  extractTarGz,
+  type DownloadProgress
+} from './DownloadService'
+import {
+  isSlotModelGroup,
+  type ModelGroup,
+  type SlotModelGroup
+} from '../../shared/validation/model-catalog-schemas'
+import {
+  MODEL_DEFINITIONS,
+  RETIRED_MODELS,
+  isPublished,
+  type ModelDefinition
+} from '../../shared/model-catalog'
+import type { SearchModelFailureReason } from '../../shared/types/Search'
 import type { ReconcileEvent, ReconcileReason } from '../../shared/types/ReconcileEvent'
 
 export type { ModelGroup, ModelDefinition }
@@ -38,24 +53,18 @@ export function isModelDownloadRunning(): boolean {
   return abortSignal !== null
 }
 
-// Sentinel for "hash not yet synced from R2 manifest" — keeps the catalog entry in
-// the source for IDE navigation + manifest extraction (publish-manifest.sh reads
-// MODEL_DEFINITIONS directly), but hides the model from runtime accessors so the
-// Settings UI doesn't list it and isModelInstalled returns false. Once the model
-// is uploaded and the hash is synced via scripts/publish-manifest.sh, the entry
-// becomes live automatically.
-const PLACEHOLDER_SHA256 = '0'.repeat(64)
+// Noch nicht veröffentlichte Einträge (`published: false` oder Platzhalter-
+// Hash, siehe `isPublished` in model-catalog.ts) stehen im Katalog, sind aber
+// für alle Laufzeit-Zugriffe unsichtbar: kein Download, keine Zeile in den
+// Einstellungen, isModelInstalled liefert false. Einzige Ausnahme ist das
+// Suchmodell, wenn es von Hand am checkPath liegt (`getSearchModelLocation`).
+const isPublishable = isPublished
 
-function isPublishable(m: ModelDefinition): boolean {
-  return m.sha256 !== PLACEHOLDER_SHA256
-}
-
-const _placeholderEntries = MODEL_DEFINITIONS.filter((m) => !isPublishable(m))
-if (_placeholderEntries.length > 0) {
-  console.warn(
-    `[ModelDownloadService] ${_placeholderEntries.length} catalog entries have placeholder sha256 ` +
-      `and are filtered from runtime accessors: ${_placeholderEntries.map((m) => m.id).join(', ')}. ` +
-      `Sync hashes from manifest.json after scripts/publish-manifest.sh.`
+const _unpublishedEntries = MODEL_DEFINITIONS.filter((m) => !isPublishable(m))
+if (_unpublishedEntries.length > 0) {
+  console.log(
+    `[ModelDownloadService] noch nicht veröffentlicht (für Laufzeit-Zugriffe ausgeblendet): ` +
+      _unpublishedEntries.map((m) => m.id).join(', ')
   )
 }
 
@@ -115,14 +124,11 @@ export function getActiveModelId(group: ModelGroup): string | null {
  * trust gap this epic closes.
  */
 export function getActiveModelIdBelief(group: ModelGroup): string | null {
+  // Gruppen ohne Slot (search) haben nie ein «aktives» Modell — kein Wurf:
+  // Aufrufer wie Provenienz oder Auto-Activate laufen über alle Gruppen
+  if (!isSlotModelGroup(group)) return null
   const active = getSettings().get('activeModels')
-  let id: string | null
-  if (group === 'asr') id = active.transcription
-  else if (group === 'diarization') id = active.diarization
-  else if (group === 'ner') id = active.ner
-  else if (group === 'summarization') id = active.summarization
-  else throw new Error(`Keine aktive Modell-Konfiguration für Gruppe "${group}"`)
-
+  const id: string | null = active[GROUP_TO_SETTINGS_KEY[group]] ?? null
   if (id === null || id === '') return null
   return id
 }
@@ -145,7 +151,9 @@ export function getActiveModelPath(group: ModelGroup): string | null {
  * Modelle, die auf First-Launch heruntergeladen werden müssen, in Pipeline-Reihenfolge:
  *   1. aktives ASR-Modell (Transkription, User-wählbar; ohne gültiges aktives der Standard)
  *   2. alle isRequired-Modelle in Definition-Reihenfolge
- *      (derzeit: pyannote-suite für Sprechererkennung, flair für Anonymisierung)
+ *      (derzeit: pyannote-suite für Sprechererkennung, flair für Pseudonymisierung)
+ *   3. zuletzt die `deferrable`-Pflichtmodelle (Suchmodell, sobald veröffentlicht,
+ *      #209 AK 21) — scheitert nur eines davon, öffnet sich die App trotzdem
  *
  * Die Pipeline-Wahl innerhalb der pyannote-Suite (3.1 vs community-1) ist
  * eine Runtime-Konfiguration und beeinflusst den Download nicht — die Suite
@@ -169,7 +177,11 @@ export function getModelsToLoadOnFirstLaunch(
     seen.add(activeAsr.id)
     out.push(activeAsr)
   }
-  for (const m of getRequiredModels()) {
+  const required = getRequiredModels()
+  for (const m of [
+    ...required.filter((r) => r.deferrable !== true),
+    ...required.filter((r) => r.deferrable === true)
+  ]) {
     if (!seen.has(m.id)) {
       seen.add(m.id)
       out.push(m)
@@ -182,6 +194,10 @@ export function getModelsToLoadOnFirstLaunch(
  * Prüft, ob die Minimal-Menge (required + aktives ASR + aktives Diarization) installiert ist.
  * Wenn `activeAsrId` null ist (z. B. nach Reconcile auf einer frisch installierten App),
  * fehlt strukturell ein ASR-Modell → false; FirstLaunchScreen wird angezeigt.
+ *
+ * `deferrable`-Modelle zählen NICHT (#210 AK 3): ein Bestandsnutzer ohne
+ * Suchmodell sieht nie den Ersteinrichtungs-Bildschirm, der
+ * SearchModelProvisioner lädt es im Hintergrund nach.
  */
 export function checkRequiredAndActiveExist(
   activeAsrId: string | null,
@@ -189,7 +205,9 @@ export function checkRequiredAndActiveExist(
 ): boolean {
   if (activeAsrId === null) return false
   const modelsDir = getModelsDir()
-  const toCheck = getModelsToLoadOnFirstLaunch(activeAsrId, activeDiarId)
+  const toCheck = getModelsToLoadOnFirstLaunch(activeAsrId, activeDiarId).filter(
+    (m) => m.deferrable !== true
+  )
   return toCheck.every((m) => existsSync(join(modelsDir, m.checkPath)))
 }
 
@@ -204,6 +222,72 @@ export function isModelInstalled(id: string): boolean {
 
 export function getModelsDir(): string {
   return join(getDataDir(), 'models')
+}
+
+// ─── Suchmodell (Epic #192) ───────────────────────────────────────────────────
+
+/** Übersteuert den Modellpfad der Suche — nur ausserhalb der gepackten App. */
+export const SEARCH_MODEL_DIR_ENV = 'THERASCRIPT_SEARCH_MODEL_DIR'
+
+/**
+ * Katalogeintrag des Suchmodells — auch, wenn er noch nicht veröffentlicht
+ * ist (`published: false`). Wer laden oder anbieten will, prüft
+ * `isPublished` selbst; für «liegt es schon da?» zählt der Schalter nicht.
+ */
+export function getSearchModelDefinition(): ModelDefinition | null {
+  return MODEL_DEFINITIONS.find((m) => m.group === 'search') ?? null
+}
+
+export interface SearchModelLocation {
+  def: ModelDefinition
+  /** Verzeichnis des entpackten Modells (config.json, model.safetensors, tokenizer.json). */
+  dir: string
+  /** Datei, deren Existenz «vollständig entpackt» bedeutet (READY). */
+  readyPath: string
+  /** true = per THERASCRIPT_SEARCH_MODEL_DIR übersteuert (nur Entwicklung). */
+  overridden: boolean
+}
+
+function isPackagedApp(): boolean {
+  try {
+    return app.isPackaged === true
+  } catch {
+    // Ohne Electron (Tests, Skripte): wie die Entwicklung behandeln
+    return false
+  }
+}
+
+/**
+ * Wo das Suchmodell liegt bzw. hingehört. In der Entwicklung (`app.isPackaged
+ * === false`) übersteuert `THERASCRIPT_SEARCH_MODEL_DIR` den Ort — in der
+ * gepackten App nie, sonst könnte eine geerbte Umgebungsvariable ein
+ * fremdes Modell unterschieben.
+ */
+export function getSearchModelLocation(): SearchModelLocation | null {
+  const def = getSearchModelDefinition()
+  if (!def) return null
+  const marker = relative(def.relativePath, def.checkPath)
+  const override = isPackagedApp() ? undefined : process.env[SEARCH_MODEL_DIR_ENV]
+  if (override && override.trim() !== '') {
+    return { def, dir: override, readyPath: join(override, marker), overridden: true }
+  }
+  const modelsDir = getModelsDir()
+  return {
+    def,
+    dir: join(modelsDir, def.relativePath),
+    readyPath: join(modelsDir, def.checkPath),
+    overridden: false
+  }
+}
+
+/**
+ * Ist das Suchmodell vollständig da? Unabhängig vom Veröffentlichungs-
+ * Schalter: von Hand am checkPath entpackt (oder per Umgebungsvariable in
+ * der Entwicklung) zählt es als installiert.
+ */
+export function isSearchModelInstalled(): boolean {
+  const loc = getSearchModelLocation()
+  return loc !== null && existsSync(loc.readyPath)
 }
 
 /**
@@ -258,52 +342,202 @@ function assertFinalSha256(model: ModelDefinition): void {
   }
 }
 
+/** Warum ein Modell nicht installiert werden konnte — 'aborted' = abgebrochen, kein Fehler. */
+export type ModelInstallFailureReason = SearchModelFailureReason | 'aborted'
+
+export type ModelInstallResult =
+  | {
+      ok: true
+      /** Liegt der checkPath nach dem Entpacken wirklich da? Nur dann ist die Fassung eingetragen. */
+      installed: boolean
+    }
+  | { ok: false; reason: ModelInstallFailureReason; error: string }
+
+export interface ModelInstallOptions {
+  signal: { aborted: boolean }
+  /**
+   * Bricht das Signal auch das Entpacken ab (tar wird beendet)? Nur der
+   * SearchModelProvisioner setzt das — beim Beenden soll kein tar weiterlaufen.
+   * Ersteinrichtung und Einstellungen bleiben, wie sie waren. Ein halb
+   * entpacktes Modell heilt sich ohnehin selbst: READY ist der letzte Eintrag
+   * im Tarball, ohne READY gilt es als nicht installiert.
+   */
+  abortExtraction?: boolean
+  onProgress?: (progress: DownloadProgress) => void
+  onPhase?: (phase: 'verifying' | 'extracting') => void
+}
+
+const DISK_FULL = /ENOSPC|No space left|Kein Platz/i
+const LOCAL_FILE_ERROR = /EACCES|EPERM|EROFS|EISDIR|nicht finalisiert/i
+
+/** Antwort des Servers mit Fehlerstatus (downloadFile meldet «HTTP <Status>»). */
+const HTTP_STATUS = /^HTTP \d{3}\b/
+
+/** Ordnet die Fehlermeldung von downloadFile einem Grund zu. */
+export function classifyDownloadError(error: string): ModelInstallFailureReason {
+  if (error === 'Aborted') return 'aborted'
+  if (HTTP_STATUS.test(error)) return 'server'
+  if (DISK_FULL.test(error)) return 'disk-space'
+  if (LOCAL_FILE_ERROR.test(error)) return 'unknown'
+  return 'network'
+}
+
+function fileSize(path: string): number | null {
+  try {
+    return existsSync(path) ? statSync(path).size : null
+  } catch {
+    return null
+  }
+}
+
+function tryUnlink(path: string): void {
+  try {
+    unlinkSync(path)
+  } catch {
+    /* non-fatal */
+  }
+}
+
+/**
+ * Lädt, prüft und entpackt ein Katalog-Modell an seinen Platz — der gemeinsame
+ * Kern von Ersteinrichtung, Einstellungen und SearchModelProvisioner. Wirft
+ * nie; das Ergebnis nennt den Grund eines Fehlschlags. Fasst den globalen
+ * Download-Zustand (`isModelDownloadRunning`, WorkGuard) NICHT an — das tun
+ * die Aufrufer, die als Arbeit zählen sollen.
+ */
+export async function installCatalogModel(
+  def: ModelDefinition,
+  opts: ModelInstallOptions
+): Promise<ModelInstallResult> {
+  const modelsDir = getModelsDir()
+  try {
+    assertFinalSha256(def)
+  } catch (err) {
+    return { ok: false, reason: 'unknown', error: err instanceof Error ? err.message : String(err) }
+  }
+
+  // Archive: erst nach models/<id>.tar.gz, dann entpacken; flache Dateien direkt ans Ziel
+  const targetPath = def.archive
+    ? join(modelsDir, `${def.id}.tar.gz`)
+    : join(modelsDir, def.relativePath)
+  try {
+    // Ordner optionaler Gruppen (summarization, search) legt erst der erste Download an
+    mkdirSync(dirname(targetPath), { recursive: true })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { ok: false, reason: DISK_FULL.test(message) ? 'disk-space' : 'unknown', error: message }
+  }
+
+  const partial = `${targetPath}.partial`
+  let result: { success: boolean; error?: string; sha256?: string }
+  // Eine .partial in voller (oder zu grosser) Länge liesse den Range-Request
+  // mit HTTP 416 scheitern — und das bei jedem Versuch. Passt sie exakt, wird
+  // sie geprüft und übernommen, sonst verworfen.
+  const partialSize = fileSize(partial)
+  if (partialSize !== null && partialSize >= def.sizeBytes) {
+    if (partialSize === def.sizeBytes && (await verifyFileSha256(partial, def.sha256))) {
+      try {
+        renameSync(partial, targetPath)
+      } catch {
+        rmSync(partial, { force: true })
+      }
+    } else {
+      rmSync(partial, { force: true })
+    }
+  }
+  if (existsSync(targetPath) && !existsSync(partial) && fileSize(targetPath) === def.sizeBytes) {
+    // Schon vollständig geladen (übernommene .partial oder Abbruch vor dem Entpacken)
+    result = { success: true }
+  } else {
+    result = await downloadFile(def.url, targetPath, (p) => opts.onProgress?.(p), opts.signal)
+    if (!result.success && result.error?.startsWith('HTTP 416')) {
+      // Range passt nicht zum Objekt auf dem Server: neu ohne Range
+      rmSync(partial, { force: true })
+      result = await downloadFile(def.url, targetPath, (p) => opts.onProgress?.(p), opts.signal)
+    }
+  }
+  if (!result.success) {
+    const error = result.error ?? 'Download fehlgeschlagen'
+    return { ok: false, reason: classifyDownloadError(error), error }
+  }
+
+  // Bevorzugt den beim Streamen mitberechneten Hash — erspart den zweiten
+  // Full-Read; Fallback (Resume-Downloads) liest die Datei nochmal.
+  opts.onPhase?.('verifying')
+  const valid = result.sha256
+    ? result.sha256 === def.sha256
+    : await verifyFileSha256(targetPath, def.sha256)
+  if (!valid) {
+    tryUnlink(targetPath)
+    return {
+      ok: false,
+      reason: 'checksum',
+      error: `SHA-256-Prüfung fehlgeschlagen für ${def.label}`
+    }
+  }
+
+  if (def.archive) {
+    opts.onPhase?.('extracting')
+    const extractDir = join(modelsDir, def.relativePath)
+    let extract: { success: boolean; error?: string }
+    try {
+      mkdirSync(extractDir, { recursive: true })
+      extract = await extractTarGz(
+        targetPath,
+        extractDir,
+        opts.abortExtraction ? opts.signal : undefined
+      )
+    } catch (err) {
+      extract = { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+    if (!extract.success && extract.error === 'Aborted') {
+      // Archiv bleibt liegen: der nächste Versuch entpackt es ohne neuen Download
+      return { ok: false, reason: 'aborted', error: 'Aborted' }
+    }
+    if (!extract.success) {
+      tryUnlink(targetPath)
+      const error = extract.error ?? 'Entpacken fehlgeschlagen'
+      return { ok: false, reason: DISK_FULL.test(error) ? 'disk-space' : 'extract', error }
+    }
+  }
+
+  // Only record the install hash once `checkPath` is observable on disk —
+  // a successful tar exit doesn't guarantee the inner file we use as the
+  // installed-marker actually landed (malformed archive, disk-full mid-write).
+  // Skipping the recordInstalledVersion call here lets `migrateInstalledVersions`
+  // / lazy heal recover on the next manifest check rather than persisting a
+  // hash for a half-installed model.
+  const installed = existsSync(join(modelsDir, def.checkPath))
+  if (installed) recordInstalledVersion(def.id, def.sha256)
+  return { ok: true, installed }
+}
+
 export async function startModelDownload(): Promise<void> {
   if (abortSignal && !abortSignal.aborted) return // Already downloading
 
-  abortSignal = { aborted: false }
+  const signal = { aborted: false }
+  abortSignal = signal
   const modelsDir = getModelsDir()
   const overallTotal = getOverallModelSize()
   let overallDownloaded = 0
 
   for (const model of getModelsToLoad()) {
-    const checkTarget = join(modelsDir, model.checkPath)
-
     // Skip already downloaded/extracted models
-    if (existsSync(checkTarget)) {
+    if (existsSync(join(modelsDir, model.checkPath))) {
       overallDownloaded += model.sizeBytes
       continue
     }
 
-    if (abortSignal.aborted) {
+    if (signal.aborted) {
       sendProgress({ state: 'error', error: 'Download abgebrochen', modelId: model.id })
-      return
-    }
-
-    try {
-      assertFinalSha256(model)
-    } catch (err) {
-      sendProgress({
-        state: 'error',
-        error: err instanceof Error ? err.message : String(err),
-        modelId: model.id
-      })
       abortSignal = null
       return
     }
 
-    // For archives: download to a temp .tar.gz file, then extract
-    // For flat files: download directly to the target path
-    const targetPath = model.archive
-      ? join(modelsDir, `${model.id}.tar.gz`)
-      : join(modelsDir, model.relativePath)
-
     const baseOverall = overallDownloaded
-
-    const result = await downloadFile(
-      model.url,
-      targetPath,
-      (progress) => {
+    const result = await installCatalogModel(model, {
+      signal,
+      onProgress: (progress) => {
         sendProgress({
           state: 'downloading',
           progress: {
@@ -320,73 +554,22 @@ export async function startModelDownload(): Promise<void> {
           }
         })
       },
-      abortSignal
-    )
+      onPhase: (phase) => sendProgress({ state: phase, modelId: model.id })
+    })
 
-    if (!result.success) {
-      sendProgress({
-        state: 'error',
-        error: result.error ?? 'Download fehlgeschlagen',
-        modelId: model.id
-      })
+    if (!result.ok) {
+      // Ein aufschiebbares Modell (Suche) sperrt die Ersteinrichtung nicht:
+      // die App öffnet sich, der SearchModelProvisioner versucht es weiter
+      if (model.deferrable === true && result.reason !== 'aborted') {
+        console.warn(
+          `[first-launch] ${model.id} übersprungen (${result.reason}): ${result.error} — Provisioner übernimmt`
+        )
+        overallDownloaded += model.sizeBytes
+        continue
+      }
+      sendProgress({ state: 'error', error: result.error, modelId: model.id })
       abortSignal = null
       return
-    }
-
-    // SHA-256 verification (skip if hash not configured). Bevorzugt den beim
-    // Streamen mitberechneten Hash — erspart den zweiten Full-Read; Fallback
-    // (Resume-Downloads) liest die Datei nochmal.
-    if (model.sha256) {
-      sendProgress({ state: 'verifying', modelId: model.id })
-      const valid = result.sha256
-        ? result.sha256 === model.sha256
-        : await verifyFileSha256(targetPath, model.sha256)
-      if (!valid) {
-        try {
-          unlinkSync(targetPath)
-        } catch {
-          /* non-fatal */
-        }
-        sendProgress({
-          state: 'error',
-          error: `SHA-256-Prüfung fehlgeschlagen für ${model.label}`,
-          modelId: model.id
-        })
-        abortSignal = null
-        return
-      }
-    }
-
-    // Extract tar.gz archives
-    if (model.archive) {
-      sendProgress({ state: 'extracting', modelId: model.id })
-      const extractDir = join(modelsDir, model.relativePath)
-      mkdirSync(extractDir, { recursive: true })
-      const extractResult = await extractTarGz(targetPath, extractDir)
-      if (!extractResult.success) {
-        try {
-          unlinkSync(targetPath)
-        } catch {
-          /* non-fatal */
-        }
-        sendProgress({
-          state: 'error',
-          error: extractResult.error ?? 'Entpacken fehlgeschlagen',
-          modelId: model.id
-        })
-        abortSignal = null
-        return
-      }
-    }
-
-    // Only record the install hash once `checkPath` is observable on disk —
-    // a successful tar exit doesn't guarantee the inner file we use as the
-    // installed-marker actually landed (malformed archive, disk-full mid-write).
-    // Skipping the recordInstalledVersion call here lets `migrateInstalledVersions`
-    // / lazy heal recover on the next manifest check rather than persisting a
-    // hash for a half-installed model.
-    if (existsSync(join(modelsDir, model.checkPath))) {
-      recordInstalledVersion(model.id, model.sha256)
     }
     overallDownloaded += model.sizeBytes
   }
@@ -412,7 +595,8 @@ export function abortModelDownload(): void {
 /**
  * Lädt ein einziges optionales Modell herunter (z.B. ASR-Variante oder
  * Summarization-Modell). Pflicht-Modelle (`isRequired`) laufen via
- * startModelDownload auf First-Launch und werden hier abgewiesen.
+ * startModelDownload auf First-Launch (bzw. das Suchmodell über den
+ * SearchModelProvisioner) und werden hier abgewiesen.
  *
  * Sendet denselben `modelDownload:status`-Channel wie startModelDownload,
  * damit die bestehende UI-Progress-Anzeige wiederverwendbar bleibt.
@@ -431,37 +615,18 @@ export async function downloadSingleModel(id: string): Promise<void> {
     throw new Error('Download: bereits aktiv — zuerst abbrechen')
   }
 
-  abortSignal = { aborted: false }
-  const modelsDir = getModelsDir()
-  const checkTarget = join(modelsDir, def.checkPath)
+  const signal = { aborted: false }
+  abortSignal = signal
 
-  if (existsSync(checkTarget)) {
+  if (existsSync(join(getModelsDir(), def.checkPath))) {
     sendProgress({ state: 'complete' })
     abortSignal = null
     return
   }
 
-  try {
-    assertFinalSha256(def)
-  } catch (err) {
-    abortSignal = null
-    throw err
-  }
-
-  const targetPath = def.archive
-    ? join(modelsDir, `${def.id}.tar.gz`)
-    : join(modelsDir, def.relativePath)
-  // Required-group dirs (asr/diarization/ner) are bootstrapped at startup by
-  // initDatabase. Optional groups (summarization, …) are not — first
-  // download for such a group lands in a parent that does not exist yet.
-  // Mirroring the same defensive mkdirSync used in executeUpdates' atomic
-  // swap path, the entry point for download owns the parent.
-  mkdirSync(dirname(targetPath), { recursive: true })
-
-  const result = await downloadFile(
-    def.url,
-    targetPath,
-    (progress) => {
+  const result = await installCatalogModel(def, {
+    signal,
+    onProgress: (progress) => {
       sendProgress({
         state: 'downloading',
         progress: {
@@ -476,58 +641,20 @@ export async function downloadSingleModel(id: string): Promise<void> {
         }
       })
     },
-    abortSignal
-  )
+    onPhase: (phase) => sendProgress({ state: phase, modelId: def.id })
+  })
 
   // Error-Reporting läuft ausschliesslich via thrown Error → IPC-Rejection → Renderer-Toast.
   // Kein sendProgress({state:'error'}) hier, sonst würde der Renderer den Toast doppelt zeigen
   // (einmal via modelDownload:status-Subscription, einmal via IPC-Catch in ModelsSettings).
-  if (!result.success) {
+  if (!result.ok) {
     abortSignal = null
-    throw new Error(result.error ?? 'Download fehlgeschlagen')
+    throw new Error(result.error)
   }
 
-  sendProgress({ state: 'verifying', modelId: def.id })
-  const valid = result.sha256
-    ? result.sha256 === def.sha256
-    : await verifyFileSha256(targetPath, def.sha256)
-  if (!valid) {
-    try {
-      unlinkSync(targetPath)
-    } catch {
-      /* non-fatal */
-    }
-    abortSignal = null
-    throw new Error(`SHA-256-Prüfung fehlgeschlagen für ${def.label}`)
-  }
-
-  if (def.archive) {
-    sendProgress({ state: 'extracting', modelId: def.id })
-    const extractDir = join(modelsDir, def.relativePath)
-    mkdirSync(extractDir, { recursive: true })
-    const extractResult = await extractTarGz(targetPath, extractDir)
-    if (!extractResult.success) {
-      try {
-        unlinkSync(targetPath)
-      } catch {
-        /* non-fatal */
-      }
-      abortSignal = null
-      throw new Error(extractResult.error ?? 'Entpacken fehlgeschlagen')
-    }
-  }
-
-  // Disk-presence guard before recording — see startModelDownload for the
-  // reasoning. A successful tar exit isn't a guarantee that `checkPath` is
-  // populated.
-  if (existsSync(join(modelsDir, def.checkPath))) {
-    recordInstalledVersion(def.id, def.sha256)
-    // Auto-activate optional models with empty slots. MUST run inside the
-    // disk-presence guard, sonst würde setActiveModel mit "nicht installiert"
-    // werfen, wenn checkPath nach erfolgreichem Download doch fehlt (z.B.
-    // tar-Extract-Edge-Case).
-    autoActivateAfterDownload(def.id)
-  }
+  // Auto-activate optional models with empty slots — only when checkPath is
+  // really on disk, sonst würde setActiveModel mit "nicht installiert" werfen.
+  if (result.installed) autoActivateAfterDownload(def.id)
   sendProgress({ state: 'complete' })
   abortSignal = null
 }
@@ -577,6 +704,11 @@ export async function deleteModel(id: string): Promise<void> {
   if (!def) {
     throw new Error(`Löschen: unbekanntes Modell "${id}"`)
   }
+  // Das Suchmodell wird weder aktiviert noch gelöscht — ohne es gäbe es keine
+  // Suche nach Bedeutung, und der Provisioner lüde es sofort wieder
+  if (def.group === 'search') {
+    throw new Error(`Löschen: "${def.label}" gehört zur Suche und ist nicht löschbar`)
+  }
   if (def.isRequired) {
     throw new Error(`Löschen: "${def.label}" ist ein Pflicht-Modell und nicht löschbar`)
   }
@@ -596,7 +728,7 @@ export async function deleteModel(id: string): Promise<void> {
   // damit die UI nicht „Aktiv" auf etwas Nichtexistentem anzeigt. Erlaubt durch
   // OPTIONAL_GROUPS-Whitelist — Pflichtgruppen sind durch isRequired+ASR-Guard
   // bereits oben geschützt.
-  if (def.group && OPTIONAL_GROUPS.has(def.group)) {
+  if (def.group && isSlotModelGroup(def.group) && OPTIONAL_GROUPS.has(def.group)) {
     const slot = GROUP_TO_SETTINGS_KEY[def.group]
     if (active[slot] === id) {
       settings.set('activeModels', { ...settings.get('activeModels'), [slot]: null })
@@ -612,7 +744,10 @@ export async function deleteModel(id: string): Promise<void> {
 // Mapping-Werte automatisch synchron bleiben mit den Property-Namen in den
 // Settings — Tippfehler oder umbenannte Felder werden vom Compiler gefangen,
 // statt dass eine zweite hand-gepflegte Union nötig wäre.
-const GROUP_TO_SETTINGS_KEY: Record<ModelGroup, keyof AppSettings['activeModels']> = {
+//
+// Nur Gruppen MIT Slot (SlotModelGroup) — `search` hat keinen; wer eine Gruppe
+// auf einen Slot abbildet, muss das vorher mit isSlotModelGroup prüfen.
+const GROUP_TO_SETTINGS_KEY: Record<SlotModelGroup, keyof AppSettings['activeModels']> = {
   asr: 'transcription',
   diarization: 'diarization',
   ner: 'ner',
@@ -625,7 +760,7 @@ const GROUP_TO_SETTINGS_KEY: Record<ModelGroup, keyof AppSettings['activeModels'
  *   - in der angegebenen Gruppe liegen
  *   - auf Disk installiert sein
  */
-export function setActiveModel(group: ModelGroup, id: string): void {
+export function setActiveModel(group: SlotModelGroup, id: string): void {
   const def = getModelById(id)
   if (!def) {
     throw new Error(`Aktivieren: unbekanntes Modell "${id}"`)
@@ -649,9 +784,9 @@ export function setActiveModel(group: ModelGroup, id: string): void {
  * Erlaubt nur für optionale Gruppen, damit ASR/Diarization/NER nie versehentlich
  * deaktiviert werden können.
  */
-const OPTIONAL_GROUPS: ReadonlySet<ModelGroup> = new Set(['summarization'])
+const OPTIONAL_GROUPS: ReadonlySet<SlotModelGroup> = new Set(['summarization'])
 
-export function clearActiveModel(group: ModelGroup): void {
+export function clearActiveModel(group: SlotModelGroup): void {
   if (!OPTIONAL_GROUPS.has(group)) {
     throw new Error(`Deaktivieren: Gruppe "${group}" ist nicht optional`)
   }
@@ -681,7 +816,7 @@ export function autoActivateAfterDownload(modelId: string): void {
   const def = getModelById(modelId)
   if (!def || !def.group) return
   const group = def.group
-  if (!OPTIONAL_GROUPS.has(group)) return
+  if (!isSlotModelGroup(group) || !OPTIONAL_GROUPS.has(group)) return
   const currentBelief = getActiveModelIdBelief(group)
   if (currentBelief !== null) return
   // setActiveModel verifiziert isModelInstalled — wenn Download teilweise fehlschlug
@@ -706,7 +841,7 @@ export function autoActivateAfterDownload(modelId: string): void {
  * Modell in jeder dieser Gruppen ist die Audio-Pipeline nicht ausführbar.
  * `summarization` lebt in OPTIONAL_GROUPS (oben definiert).
  */
-const REQUIRED_GROUPS_FOR_RECONCILE: ReadonlySet<ModelGroup> = new Set([
+const REQUIRED_GROUPS_FOR_RECONCILE: ReadonlySet<SlotModelGroup> = new Set([
   'asr',
   'diarization',
   'ner'
@@ -733,12 +868,12 @@ const REQUIRED_GROUP_DEFAULTS: Record<'asr' | 'diarization' | 'ner', string> = {
  * Konstante in SettingsService selbst hardcodet die Werte parallel — Helper kann
  * dort wegen zirkulärer Modul-Init nicht aufgerufen werden.
  */
-export function defaultActiveModelFor(group: ModelGroup): string | null {
+export function defaultActiveModelFor(group: SlotModelGroup): string | null {
   if (OPTIONAL_GROUPS.has(group)) return null
   return REQUIRED_GROUP_DEFAULTS[group as 'asr' | 'diarization' | 'ner']
 }
 
-function pickInstalledForGroup(group: ModelGroup): string | null {
+function pickInstalledForGroup(group: SlotModelGroup): string | null {
   const preferred = REQUIRED_GROUP_DEFAULTS[group as 'asr' | 'diarization' | 'ner']
   if (preferred && isModelInstalled(preferred)) return preferred
   for (const m of getModelsByGroup(group)) {
@@ -748,7 +883,7 @@ function pickInstalledForGroup(group: ModelGroup): string | null {
 }
 
 export interface ReconcileRepair {
-  group: ModelGroup
+  group: SlotModelGroup
   fromModelId: string | null
   toModelId: string | null
   reason: ReconcileReason
@@ -774,7 +909,7 @@ export interface ReconcileRepair {
  * Wird auf wirklich frischen Installationen (`modelsDownloaded === false`)
  * komplett übersprungen — dort ist der FirstLaunchScreen das Gate. Jede
  * Reparatur wird als `pending` ReconcileEvent persistiert, was den Dot im
- * BottomNav und das Banner in Settings → Modelle treibt.
+ * den Hinweispunkt der Seitenleiste und das Banner in Settings → Modelle treibt.
  *
  * Performance: nur `existsSync`-Calls (≤ Katalog-Größe, derzeit 6), kein I/O
  * darüber hinaus. Crash-sicher per design — Disk ist Source of Truth,
@@ -785,7 +920,9 @@ export function reconcileActiveModels(): ReadonlyArray<ReconcileRepair> {
   const settings = getSettings()
   if (settings.get('modelsDownloaded') !== true) return []
 
-  const groups: readonly ModelGroup[] = ['asr', 'diarization', 'ner', 'summarization']
+  // Nur Gruppen mit Slot — das Suchmodell hat keinen, über ihn wacht der
+  // SearchModelProvisioner (fehlt es, wird es nachgeladen, nicht «repariert»)
+  const groups: readonly SlotModelGroup[] = ['asr', 'diarization', 'ner', 'summarization']
   const repairs: ReconcileRepair[] = []
   let nextActive = { ...settings.get('activeModels') }
   let activeChanged = false
@@ -902,7 +1039,7 @@ function newReconcileEvent(repair: ReconcileRepair): ReconcileEvent {
  * Datei samt Download-/Update-Resten (`removeModelArtifacts` — kennt sonst
  * niemand mehr), den Installed-Version-Eintrag (No-op, wenn schon weg) und —
  * falls das Modell aktiv war — leert den Slot und meldet ein
- * `model-retired`-ReconcileEvent (BottomNav-Dot → Banner in Einstellungen →
+ * `model-retired`-ReconcileEvent (Hinweispunkt der Seitenleiste → Banner in Einstellungen →
  * Modelle). Vorgemerkte Updates für die ID verwirft das Update-System selbst
  * (`selectBundle` überspringt ausgemusterte IDs).
  *
@@ -932,6 +1069,8 @@ export function retireObsoleteModels(): void {
     }
     deleteInstalledVersion(retired.id)
 
+    // Ein ausgemustertes Modell ohne Slot (z. B. ein altes Suchmodell) braucht nur das Löschen
+    if (!isSlotModelGroup(retired.group)) continue
     const slot = GROUP_TO_SETTINGS_KEY[retired.group]
     if (active[slot] !== retired.id) continue
     active = { ...active, [slot]: null }
@@ -958,7 +1097,7 @@ export function getReconcileEvents(): ReconcileEvent[] {
   return getSettings().get('reconcileEvents') ?? []
 }
 
-/** Renderer hat Settings → Modelle gemountet — Banner gesehen, BottomNav-Dot kann weg. */
+/** Renderer hat Settings → Modelle gemountet — Banner gesehen, Hinweispunkt der Seitenleiste kann weg. */
 export function markReconcileEventsSeen(): ReconcileEvent[] {
   const settings = getSettings()
   const events = settings.get('reconcileEvents') ?? []

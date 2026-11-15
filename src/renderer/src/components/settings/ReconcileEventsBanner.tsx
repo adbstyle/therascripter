@@ -11,7 +11,9 @@ const GROUP_LABEL: Record<ModelGroup, string> = {
   asr: 'Spracherkennung',
   diarization: 'Sprechererkennung',
   ner: 'Pseudonymisierung',
-  summarization: 'Zusammenfassung'
+  summarization: 'Zusammenfassung',
+  // Kein Slot, also heute kein Reconcile-Event — der Eintrag hält die Map vollständig
+  search: 'Suche'
 }
 
 const REASON_LABEL: Record<ReconcileReason, string> = {
@@ -48,7 +50,7 @@ function formatTimestamp(iso: string): string {
  * Issue #84 / Story C — surfaces invariant repairs the bootstrap reconciler
  * made (active model deleted from disk → promoted to default / cleared) and
  * models retired from the catalog (`retireObsoleteModels`). The
- * BottomNav dot routed the user here; this banner explains *what* was changed
+ * sidebar dot routed the user here; this banner explains *what* was changed
  * and lets them dismiss the notice. Persisted reconcile events are deleted
  * server-side when the user clicks "Verstanden".
  */
@@ -97,7 +99,7 @@ export default function ReconcileEventsBanner({ events, onDismiss }: Props): Rea
             <button
               type="button"
               onClick={onDismiss}
-              className="titlebar-no-drag rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-hover"
+              className="titlebar-no-drag rounded-md bg-primary-solid px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-solid-hover"
             >
               Verstanden
             </button>

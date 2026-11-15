@@ -20,6 +20,7 @@ All incoming IPC arguments are typed as `unknown` and parsed through Zod schemas
 | import (pdf) | `src/shared/validation/import-schemas.ts` |
 | settings | `src/shared/validation/settings-schemas.ts` |
 | system | `src/shared/validation/system-schemas.ts` |
+| dossier | `src/shared/validation/dossier-schemas.ts` |
 | model-update, app-update | `src/shared/validation/model-update-schemas.ts` |
 | model-download | _(no input schemas — all channels are parameterless)_ |
 
@@ -36,18 +37,23 @@ The `api` object contains the following namespaces:
 
 | Namespace | Methods |
 |---|---|
-| `api.sessions` | `list()`, `delete(sessionId)`, `rename(sessionId, title)` |
-| `api.recording` | `start()`, `stop(sessionId)`, `sendData(sessionId, samples)`, `onDuration(cb)`, `onError(cb)`, `onAutoStopped(cb)` |
+| `api.sessions` | `list()`, `delete(sessionId)`, `rename(sessionId, title)`, `setDocumentDate(sessionId, documentDate)`, `onChanged(cb)` |
+| `api.recording` | `start(options?)` (`{ dossierId? }`, #206), `stop(sessionId)`, `sendData(sessionId, samples)`, `onDuration(cb)`, `onError(cb)`, `onAutoStopped(cb)` |
 | `api.settings` | `get(key)`, `set(key, value)` |
 | `api.tasks` | `getSessionTasks(sessionId)`, `isProcessing()`, `onProgress(cb)`, `onCompleted(cb)`, `onError(cb)` |
 | `api.blocklist` | `list()`, `add(term, placeholderType)`, `update(id, term, placeholderType)`, `delete(id)` |
-| `api.import` | `pdf(filePaths)`, `showPDFDialog()`, `getPathForFile(file)` |
+| `api.import` | `pdf(filePaths, options?)` (`{ dossierId? }`, #206), `showPDFDialog()`, `getPathForFile(file)` |
 | `api.review` | `load(sessionId)`, `save(sessionId, document, entityMap)`, `exportClipboard(text)` |
 | `api.system` | `aboutInfo()`, `uninstall()`, `openInFinder(path)` |
 | `api.modelDownload` | `status()`, `checkDiskSpace()`, `start()`, `onStatus(cb)` |
 | `api.appUpdate` | `getState()`, `check()`, `download()`, `cancelDownload()`, `install()`, `setAutoUpdate(enabled)`, `openInstallGuide()`, `onState(cb)` |
+| `api.dossiers` | `list()`, `get(dossierId)`, `create(input)`, `update(dossierId, patch)`, `deletePreview(dossierId)`, `delete(dossierId, fingerprint)`, `timeline(dossierId)`, `listForSession(sessionId)`, `assign(sessionId, dossierId)`, `unassign(sessionId, dossierId)`, `onChanged(cb)` — preload in `src/preload/api/dossiers.ts` |
+| `api.search` | `query(input)`, `semantic(input)`, `recentList()`, `recentRemember(query)`, `recentClear()` — preload in `src/preload/api/search.ts` |
+| `api.recent` | `list()`, `touch(target)`, `onChanged(cb)` — «Zuletzt geöffnet» (#213), preload in `src/preload/api/recent.ts` |
 
 All `on*` listener methods return an unsubscribe function `() => void`.
+
+**One `ipcRenderer.on` per event channel.** Channels with many subscribers — `sessions:changed`, `dossiers:changed`, `recent:changed`, `search:availabilityChanged`, `summary:changed`, `task:progress`/`started`/`completed`/`error`, `queue:positions` — go through `src/preload/api/channelHub.ts`: each channel and its validation are defined once when the preload module loads (`createChannel(channel, parse)`, a second definition throws — no subscriber can change the validation), the first subscriber registers the channel once, every renderer subscriber lands in a distribution list, the event is validated once per event, a throwing subscriber does not stop the others, and the last unsubscribe removes the listener. Before, every card and popover registered its own listener (`MaxListenersExceededWarning: 11 dossiers:changed listeners added` with a filled list). Tests: `src/preload/api/__tests__/channelHub.test.ts`.
 
 Note: `api.import.getPathForFile(file)` is a local call to `webUtils.getPathForFile()` — it does not use IPC.
 
@@ -61,9 +67,25 @@ Source: `src/main/ipc/session-handlers.ts`
 
 | Channel | Direction | Input Schema | Return Type | Description |
 |---|---|---|---|---|
-| `session:list` | invoke | _(none)_ | `Session[]` | List all sessions ordered by creation date |
+| `session:list` | invoke | _(none)_ | `SessionListItem[]` | All sessions (list projection) ordered by creation date, each with `dossiers: DossierRef[]` (alphabetical) for the badges (#205 AK 5) — a second query over all assignments, merged in `SessionDossierService.listSessions` |
+| `session:setDocumentDate` | invoke | `SessionDocumentDateSchema` — `{ sessionId, documentDate: IsoDate }` (valid day, not after today, never `null`) | `{ok:true} \| {ok:false, reason:'not-found' \| 'not-pdf'}` | Document date of a PDF (#205 AK 18–22); sends `sessions:changed` and `dossiers:changed` |
 | `session:delete` | invoke | `SessionDeleteSchema` — `{ sessionId: string }` | `void` | Delete a session and its associated files |
 | `session:rename` | invoke | `SessionRenameSchema` — `{ sessionId: string, title: string(1..200) }` | `void` | Rename a session title |
+
+**Event channels (main -> renderer, Epic #192):**
+
+| Channel | Payload | Description |
+|---|---|---|
+| `sessions:changed` | `SessionsChangedSchema` — `{ deletedIds: string[] (max. 1000) }` | A session was created, or its status, title or summary changed, or it was deleted (`deletedIds`). Sent by `ChangeEvents.notifySessionsChanged` (`src/main/services/ChangeEvents.ts`), bundled per `setImmediate` so one tick yields one event; larger deletions are split. Lists reload via `useLiveQuery`; the navigation history removes deleted sessions (#213 PC 3). Path-only updates (pipeline intermediates) do not fire it. |
+
+### Navigation (Epic #192)
+
+Source: `src/main/services/AppMenuService.ts`, `src/main/index.ts`
+
+| Channel | Direction | Payload | Description |
+|---|---|---|---|
+| `nav:command` | event | `NavCommandSchema` — `'back' \| 'forward' \| 'toggleSidebar'` | Menu «Gehe zu» → Zurück (⌘[) / Vorwärts (⌘]), «Darstellung» → Seitenleiste ein-/ausblenden (⌃⌘S). #209 adds `'search'`. |
+| `nav:openSettings` | event | _(none)_ | App menu «Einstellungen…» (⌘,) and tray: opens the Settings overview |
 
 ### Recording Handlers
 
@@ -71,7 +93,7 @@ Source: `src/main/ipc/recording-handlers.ts`
 
 | Channel | Direction | Input Schema | Return Type | Description |
 |---|---|---|---|---|
-| `recording:start` | invoke | _(none)_ | `{ sessionId: string }` | Create a new audio session and begin recording. Starts duration timer, power save blocker, 2h auto-stop timer, and tray indicator. Throws if a recording is already active. |
+| `recording:start` | invoke | `RecordingStartSchema` — none or `{ dossierId? }` (strict) | `RecordingStartResult` — `{ sessionId, assignment: 'none' \| 'assigned' \| 'failed', title, createdAt }` | Create a new audio session and begin recording. With `dossierId` the session is assigned to that dossier once the WAV file exists and the session is active — before any audio arrives (#206 PC 1); a failing `initWavFile` leaves neither an assignment nor a «Zuletzt» entry; a failed assignment does not stop the recording (`'failed'`, AK 2). Starts duration timer, power save blocker, 2h auto-stop timer, and tray indicator. Throws if a recording is already active. |
 | `recording:stop` | invoke | `RecordingStopSchema` — `{ sessionId: string }` | `{ durationSeconds: number }` | Stop the active recording, finalize WAV file, set session status to `transcribing`, and enqueue ML pipeline. Throws if sessionId does not match the active recording. |
 | `recording:data` | send (one-way) | `RecordingDataSchema` — `{ sessionId: string, samples: ArrayBuffer }` | _(none)_ | Stream raw audio samples from the renderer's MediaRecorder to the main process for WAV writing. Uses `ipcMain.on` (fire-and-forget). |
 
@@ -131,8 +153,58 @@ Source: `src/main/ipc/pdf-handlers.ts`
 
 | Channel | Direction | Input Schema | Return Type | Description |
 |---|---|---|---|---|
-| `import:pdf` | invoke | `ImportPDFSchema` — `{ filePaths: string[](1..20) }` | `Session[]` | Import one or more PDF files. Copies each to `~/.therascript/pdf/`, creates a session, and enqueues the PDF processing pipeline. Rolls back on copy failure. |
+| `import:pdf` | invoke | `ImportPDFSchema` — `{ filePaths: string[](1..20), dossierId? }` (strict) | `ImportPdfResult` — `{ sessions: Session[], unassigned: {sessionId, title}[], failed: {title, reason}[] }` | Import one or more PDF files, each in its own try/catch (missing file, copy failure → `failed`; a PDF deleted while its scanned-pages check runs is skipped silently). Copies each to `~/.therascript/pdf/`, creates a session, assigns it to `dossierId` (if given) BEFORE enqueuing the PDF processing pipeline (#206 PC 2); PDFs whose assignment failed are imported anyway and listed in `unassigned` (AK 2). Rolls back on copy failure. |
 | `import:showPDFDialog` | invoke | _(none)_ | `string[]` | Open a native file picker dialog for PDF selection. Returns selected file paths, or empty array if canceled. |
+
+### Dossier Handlers
+
+Source: `src/main/ipc/dossier-handlers.ts`, service `src/main/services/DossierService.ts`, types `src/shared/types/Dossier.ts` and `src/shared/types/ipc/DossierApi.ts`. Every handler validates with `validateIpc`; all objects are `.strict()`. Results are typed unions instead of exceptions, because Electron mangles error messages of `invoke`. Conventions: `Id` = string 1–64, names 1–100 (whitespace only counts as empty), dossier ID ≤ 50, free text ≤ 20 000, dates `YYYY-MM-DD` and a valid calendar day not after today (local time, checked on every call).
+
+| Channel | Direction | Input Schema | Return Type | Description |
+|---|---|---|---|---|
+| `dossier:list` | invoke | _(none)_ | `DossierListItem[]` | Overview sorted by last name, first name (normalized). Each item: `id, firstName, lastName, externalId, birthDate, entryCount, lastEntryDay` — no diagnoses, medication or note |
+| `dossier:get` | invoke | `DossierIdInputSchema` — `{ dossierId }` | `Dossier \| null` | All fields of one dossier |
+| `dossier:create` | invoke | `DossierCreateSchema` — `{ firstName, lastName, externalId?: string \| null, birthDate?: IsoDate \| null, confirmDuplicate?: boolean }` | `CreateDossierResult` | `{ok:true, dossier}` · `{ok:false, reason:'external-id-taken', ownerName}` (owner as «Nachname, Vorname») · `{ok:false, reason:'duplicate-name', duplicates: DossierRef[]}` until called again with `confirmDuplicate: true` |
+| `dossier:update` | invoke | `DossierUpdateSchema` — `{ dossierId, patch }`, patch = at least one of `firstName, lastName, externalId (string \| null), birthDate (IsoDate \| null), diagnoses, medication, note` | `UpdateDossierResult` | Autosave per field. `{ok:true, dossier, duplicates}` — a duplicate name is saved and only reported · `{ok:false, reason:'external-id-taken', ownerName}` (nothing saved) · `{ok:false, reason:'not-found'}` |
+| `dossier:deletePreview` | invoke | `DossierIdInputSchema` | `DossierDeletePreview \| null` | `{dossierId, displayName, exclusive:{sessions, pdfs}, shared:{sessions, pdfs, otherDossiers}, search:{exclusiveSearchable, recentQueries}, blockedByRecording, fingerprint}` — `search` names the search data the dialog lists (#207) |
+| `dossier:timeline` | invoke | `DossierIdInputSchema` | `TimelineEntry[]` | Timeline (#205): list projection + `dossiers` + `sortDay` (`YYYY-MM-DD`, local day: session = recording, PDF = document date or import day). Order: `sortDay` DESC, sessions before PDFs, `created_at` DESC, `id` DESC. Sessions being deleted are left out |
+| `dossier:listForSession` | invoke | `SessionIdInputSchema` — `{ sessionId }` | `DossierRef[]` | Dossiers of one session, alphabetical (editor header) |
+| `dossier:assign` / `dossier:unassign` | invoke | `DossierAssignmentSchema` — `{ sessionId, dossierId }` | `{ok:true} \| {ok:false, reason:'not-found'}` | No status check (assign also while recording/processing/after an error); assign is idempotent; unassign is followed by a WAL checkpoint. Both send `sessions:changed` and `dossiers:changed` when something changed |
+| `dossier:delete` | invoke | `DossierDeleteSchema` — `{ dossierId, fingerprint: string(≤128) }` | `DeleteDossierResult` | `{ok:true, deletedSessionIds, incomplete}` · `{ok:false, reason:'changed', preview}` (nothing deleted) · `{ok:false, reason:'blocked-recording' \| 'not-found'}` — see storage.md «Deleting a patient dossier» |
+
+**Events (main → renderer):**
+
+| Channel | Payload | Description |
+|---|---|---|
+| `dossiers:changed` | `{ deletedIds: string[] }` (≤ 1000, parsed with `DossiersChangedSchema` in the preload) | After create, after an update of name, dossier ID or birth date (not for free text — it is shown nowhere else), after a deletion with the deleted ID, after assigning/unassigning and after setting a document date (#205) |
+| `sessions:changed` | `{ deletedIds: string[] }` | Also sent by the dossier deletion with the IDs of the sessions it deleted (via `DossierService`; `SessionService.finishDeletion` itself does not notify, so nothing is sent twice). All other triggers: see «Session Handlers» |
+
+Both events go through `src/main/services/ChangeEvents.ts` (`notifyDossiersChanged`, `notifySessionsChanged`): bundled with `setImmediate`, so one tick yields at most one event per channel with the union of deleted IDs; more than 1000 IDs are split. Without a window nothing is sent. Limit and schemas: `src/shared/validation/change-event-schemas.ts`. The renderer removes deleted dossiers from its page history (current page → `dossiers` overview).
+
+### Search Handlers (Epic #192)
+
+Source: `src/main/ipc/search-handlers.ts`, service `src/main/search/SearchService.ts`, types `src/shared/types/Search.ts` and `src/shared/types/ipc/SearchApi.ts`, schemas `src/shared/validation/search-schemas.ts` (all `.strict()`). Feature description: `docs/product/features/search.md`. `search:open`, `search:retryModel` and the event `search:availabilityChanged` carry the search model availability; `search:semantic` runs the search by meaning, the field `semantic` of `SearchAvailability` reports processing and the search process, and `search:open` also starts preloading the model.
+
+| Channel | Direction | Input Schema | Return Type | Description |
+|---|---|---|---|---|
+| `search:query` | invoke | `SearchQueryInputSchema` — `{ requestId: int ≥ 0, query: string(1..200, not blank, no control characters), scope: {kind:'all'} \| {kind:'dossier', dossierId} }` | `SearchQueryResult` | `{requestId, dossiers, results, truncated, semantic}`. `dossiers` (only for `scope.kind === 'all'`, ≤ 20): `DossierRef[]` matched by name parts or dossier ID. `results` (≤ 100): one `SearchDocumentResult` per session/PDF — `sessionId, type, title, titlePlain, sortDay, dossiers, hits` with ≤ 3 `SearchHit {field, kind, label {speaker?, timestamp?}, snippet {text, marks, truncatedStart, truncatedEnd}, focus}`; `focus` = `{kind:'title'}` · `{kind:'summary'}` · `{kind:'hit', paraFrom, paraTo, ranges?: {p,s,e}[], anchor}`. `semantic`: `'pending'` (call `search:semantic`) or why the search by meaning is unavailable: `'unavailable-processing'` · `'model-missing'` · `'tool-blocked'` · `'error'` |
+| `search:semantic` | invoke | `SearchQueryInputSchema` | `SearchQueryResult` | Search by meaning merged with the exact hits (exact first, inside by cosine, all sections ≥ threshold, dossier filter after the ranking). `semantic`: `'complete'`; `'superseded'` when a newer request of the same window and scope replaced it; a hit from the previous vector generation carries `fromEarlierVersion: true` (find it by `anchor`); otherwise the reason as above — `results` then holds the exact hits |
+| `search:recent:list` | invoke | _(none)_ | `RecentSearchQuery[]` | The five last searches, newest first: `{query, usedAt}` |
+| `search:recent:remember` | invoke | `SearchRecentRememberSchema` — `{ query }` | `void` | Put a query on top (deduplicated by its normalized form, at most five). Only from the search over everything (#211 OOS 3) |
+| `search:recent:clear` | invoke | _(none)_ | `void` | Delete all recent searches, then WAL checkpoint (#209 PC 3) |
+| `search:open` | invoke | _(none)_ | `SearchAvailability` | Starts preloading the search model and vectors when the search by meaning is possible (#209 AK 16) and answers at once. `{ model: SearchModelState, semantic }` — `semantic`: `ready` · `loading` · `unavailable-processing` · `model-missing` · `tool-blocked` · `error`, optional `semanticMessage` (German sentence for `error`/`tool-blocked`); `model`: `ready` · `downloading {progress}` · `retry-scheduled {reason, nextAttemptAt}` · `failed {reason}` · `unpublished`; reasons `network \| disk-space \| checksum \| extract \| unknown` (#210 AK 4/5) |
+| `search:retryModel` | invoke | _(none)_ | `SearchAvailability` | «Erneut versuchen»: download the search model now, resolves after the attempt |
+| `search:availabilityChanged` | send (main → renderer) | — | `SearchAvailability` | Every change of the model (including download progress, whole percent) or of the search process / processing |
+
+### Recent Handlers (Epic #192, #213)
+
+`src/main/ipc/recent-handlers.ts`, service `src/main/services/RecentService.ts`, repository `src/main/db/repositories/RecentRepository.ts`.
+
+| Channel | Type | Payload | Returns | Description |
+|---|---|---|---|---|
+| `recent:list` | invoke | _(none)_ | `RecentEntry[]` | At most eight entries, newest first; the running recording (`getActiveSessionId`) always first, even if it fell out of the eight. `{kind:'dossier', dossier: DossierRef}` or `{kind:'session', session: Session (list projection incl. `titlePlain`), recording}`. Sessions with `deleting_at` are never listed |
+| `recent:touch` | invoke | `RecentTouchSchema` — `{kind:'dossier'\|'session', id}` (strict, discriminated) | `void` | Put an opened dossier or session on top (upsert, strictly increasing `opened_at`), keep eight; unknown or deleting targets are ignored. Sent by the renderer on every dossier/session route (`useRememberOpenedRoute` in `AppShell`); `recording:start` touches the new session itself. Imported PDFs are not touched (not opened) |
+| `recent:changed` | event | `RecentChangedSchema` — `{ deletedIds: [] }` | – | After a touch; `RecentList` also reloads on `sessions:changed`/`dossiers:changed` (titles, status, deletions) |
 
 ### Model Download Handlers
 
@@ -179,7 +251,15 @@ Source: `src/main/ipc/settings-handlers.ts`
 | `settings:get` | invoke | `SettingsGetSchema` — `{ key: SettingsKey }` | `unknown` | Read a setting value from electron-store |
 | `settings:set` | invoke | `SettingsSetSchema` — `{ key: SettingsKey, value: unknown }` | `void` | Write a setting value. When `key` is `"theme"`, also syncs Electron's `nativeTheme.themeSource`. |
 
-`SettingsKey` is an enum: `activeModels | firstLaunchDone | consentReminderShown | modelsDownloaded | theme`.
+`SettingsKey` is an enum: `activeModels | firstLaunchDone | consentReminderShown | modelsDownloaded | theme | reviewPanelOpen | sidebarOpen` (`sidebarOpen`: sidebar shown, default `true`, Epic #192).
+
+#### View mode (Issue #203)
+
+| Channel | Direction | Input Schema | Return Type | Description |
+|---|---|---|---|---|
+| `viewMode:getSync` | sendSync | _(none)_ | `ViewMode` | Read by the preload **synchronously** before the renderer runs (`window.api.viewMode.initial`), so the first render already shows the saved view. Unknown/unreadable → `'pseudonymized'` |
+| `sidebarOpen:getSync` | sendSync | _(none)_ | `boolean` | Read by the preload synchronously (`window.api.nav.initialSidebarOpen`, Epic #192) so the sidebar never flashes at start. Anything but `false` → `true` |
+| `viewMode:set` | invoke | `ViewModeSetSchema` — `{ mode: 'pseudonymized' \| 'plain' }` | `void` | Persist the chosen view (electron-store `viewMode`) |
 
 ### System Handlers
 
@@ -230,6 +310,15 @@ Source: `src/main/ipc/system-handlers.ts`
 | `system:aboutInfo` | system |
 | `system:openInFinder` | system |
 | `system:uninstall` | system |
+| `search:query` | search |
+| `search:semantic` | search |
+| `search:recent:list` | search |
+| `search:recent:remember` | search |
+| `search:recent:clear` | search |
+| `search:open` | search |
+| `search:retryModel` | search |
+| `recent:list` | recent |
+| `recent:touch` | recent |
 
 ### All send channels (renderer -> main, fire-and-forget)
 
@@ -249,6 +338,11 @@ Source: `src/main/ipc/system-handlers.ts`
 | `task:error` | task |
 | `modelDownload:status` | model-download |
 | `appUpdate:state` | app-update |
+| `sessions:changed` | session (ChangeEvents) |
+| `recent:changed` | recent (ChangeEvents) |
+| `nav:command` | app menu |
+| `nav:openSettings` | app menu / tray |
+| `search:availabilityChanged` | search (SearchModelProvisioner, SearchWorker) |
 
 ### Tool Health (Issue #168)
 
@@ -267,4 +361,6 @@ Source: `src/main/ipc/tool-health-handlers.ts`
 |---|---|---|---|---|
 | `summary:missingReason` | invoke | `SummaryGetInputSchema` | `'tool-blocked' \| null` | Why the summary is missing: the last attempt failed on a tool blocked by macOS |
 | `summary:regenerate` | invoke | `SummaryGetInputSchema` | `boolean` | Enqueue one summarization task for a review session; false if nothing to do |
+
+Since Issue #203, `summary:updateTitle` and `summary:updateText` resolve with the updated `SummaryRecord` (incl. `titleSnapshot`/`textSnapshot`), and `session:list` rows carry `titlePlain`/`summaryPlain`, resolved in the main process.
 | `summary:changed` | event | — | `{ sessionId }` (`SummaryChangedSchema`) | A summarization attempt failed — reload the hint |

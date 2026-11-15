@@ -71,6 +71,10 @@ export class PDFExtractionExecutor implements TaskExecutor {
       }
     }
 
+    // Nach einem Abbruch (z. B. Sitzung gelöscht) nichts mehr schreiben (#202)
+    if (signal?.aborted) {
+      throw new Error('Verarbeitung abgebrochen')
+    }
     const extractedPath = join(getDataDir(), 'extracted', `${task.sessionId}.json`)
     writeFileAtomic(extractedPath, JSON.stringify(extractionResult))
 
@@ -133,6 +137,11 @@ async function readPages(
     onProgress(0.1 + (i / totalPages) * 0.85)
   }
 
-  const pdfMetadata = await doc.getMetadata().catch(() => null)
+  // Metadaten sind optional (Fehler → null), ein Abbruch aber nicht: sonst
+  // schriebe der Executor nach dem Löschen der Sitzung noch Dateien (#202).
+  const pdfMetadata = await abortable(doc.getMetadata(), signal).catch(() => null)
+  if (signal?.aborted) {
+    throw new Error('Verarbeitung abgebrochen')
+  }
   return { pages, info: pdfMetadata?.info as PdfInfo | undefined }
 }

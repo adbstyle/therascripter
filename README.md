@@ -1,31 +1,35 @@
 # Therascript
 
-Lokale Therapiesitzungs-Transkription, Anonymisierung und Zusammenfassung für macOS.
+Lokale Therapiesitzungs-Transkription, Pseudonymisierung und Zusammenfassung für macOS.
 
-Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufnimmt, automatisch transkribiert, Sprecher erkennt, personenbezogene Daten anonymisiert und optional eine Zusammenfassung erstellt. Die gesamte Verarbeitung erfolgt lokal auf dem Mac, die App übermittelt keine Inhalte aus Sitzungen. Mit dem Internet verbindet sich die App nur für Modell-Downloads und die Suche nach neuen Versionen (siehe [Datenschutz](#datenschutz-und-internetverbindung)).
+Therascript ist eine Electron-basierte Desktop-App, die Therapiegespräche aufnimmt, automatisch transkribiert, Sprecher erkennt, personenbezogene Daten pseudonymisiert und optional eine Zusammenfassung erstellt. Die gesamte Verarbeitung erfolgt lokal auf dem Mac, die App übermittelt keine Inhalte aus Sitzungen. Mit dem Internet verbindet sich die App nur für Modell-Downloads und die Suche nach neuen Versionen (siehe [Datenschutz](#datenschutz-und-internetverbindung)).
 
 ## Features
 
 - **Aufnahme & Transkription** — Live-Aufnahme mit automatischer Transkription (Hochdeutsch + Schweizerdeutsch)
 - **Sprechererkennung** — Automatische Unterscheidung von bis zu 4 Sprechern (Einzel- und Paartherapie)
-- **Anonymisierung** — Automatische Erkennung und Ersetzung von Personen, Orten, Kontaktdaten, medizinischen Identifikatoren und Geburtsdaten durch Platzhalter
-- **Zusammenfassung** — Optionale lokale Zusammenfassung anonymisierter Sitzungen via llama.cpp
+- **Pseudonymisierung** — Automatische Erkennung und Ersetzung von Personen, Orten, Kontaktdaten, medizinischen Identifikatoren und Geburtsdaten durch Platzhalter
+- **Zusammenfassung** — Optionale lokale Zusammenfassung pseudonymisierter Sitzungen via llama.cpp
 - **Sperrliste** — Persönliche Blocklist für wiederkehrende Begriffe mit bidirektionaler Umlaut-Normalisierung
-- **PDF-Import** — Import und Anonymisierung von PDFs inkl. gescannter Dokumente via OCR
+- **PDF-Import** — Import und Pseudonymisierung von PDFs inkl. gescannter Dokumente via OCR
 - **Review-Editor** — TipTap-basierter Editor zur Nachbearbeitung mit Clipboard-Export und Quick-Add zur Sperrliste
+- **Patientendossiers** — Pro Person ein Patientendossier mit Vor- und Nachnamen, optional Dossier-ID, Geburtsdatum, Diagnosen, Medikation und Notiz; Übersicht «Alle Patientendossiers» mit Filter nach Namen, Änderungen werden laufend gespeichert. Die Angaben liegen nur lokal auf dem Mac und bleiben erhalten, bis Sie das Dossier löschen oder Therascript mit «TheraScript vollständig entfernen» vom Mac entfernen (die App nur in den Papierkorb zu legen, löscht sie nicht). Beim Löschen eines Dossiers löscht die App die Sitzungen und PDF-Dokumente mit, die nur ihm zugeordnet sind; was auch einem anderen Dossier zugeordnet ist, bleibt erhalten
+- **Klartext-Ansicht** — Sitzungen, Titel und Zusammenfassungen wahlweise pseudonymisiert oder mit den Klarnamen lesen und kopieren; Umschalter in der Titelleiste, die Wahl gilt für alle Sitzungen und bleibt nach einem Neustart erhalten
+- **Suche** — Mit `⌘ K` oder «Suchen» in der Seitenleiste alle Sitzungen und PDF-Dokumente durchsuchen: nach Bedeutung (auch mit anderen Worten als im Text), nach genauen Begriffen (auch Wortteile, unabhängig von Gross-/Kleinschreibung und Umlaut-Schreibweise) und nach den Klarnamen pseudonymisierter Angaben, in Text, Titel und Zusammenfassung (Titel nach genauen Begriffen und Klarnamen, nicht nach Bedeutung); Patientendossiers über Teile des Namens oder die Dossier-ID. «Im Dossier suchen» beschränkt die Suche auf ein Patientendossier. Ein Treffer öffnet die Fundstelle hervorgehoben. Die Ausschnitte in den Treffern stehen immer im Klartext, auch in der pseudonymisierten Ansicht. Suchanfragen und Suchindex bleiben auf dem Mac; die fünf letzten Suchanfragen speichert die App lokal, bis Sie sie mit «Verlauf löschen» entfernen. Während einer Verarbeitung findet die Suche genaue Begriffe, Klarnamen und Patientendossiers, die Suche nach Bedeutung erst danach
 - **Modell-Management** — Austauschbare ML-Modelle pro Pipeline-Schritt, verwaltbar im Einstellungen-Bereich
 - **Updates in der App** — signierte Update-Beschreibung (Ed25519) auf Cloudflare R2; neue App-Versionen und neue Fassungen der Sprachmodelle kommen als **ein** Update: im Hintergrund geladen, geprüft und beim Beenden, nach 10 min Leerlauf oder auf Klick gemeinsam installiert, mit einem Neustart (abschaltbar; scheitert ein Teil, bleibt alles beim bisherigen Stand)
 - **Datenschutz** — keine Übermittlung von Sitzungsinhalten; Renderer ohne Netzwerkzugriff (CSP `connect-src 'none'`), Netzwerk nur im Main-Prozess für Modelle und Versionsprüfung, Electron Fuses gehärtet, FileVault-Prüfung
 - **System-Tray** — App läuft im Hintergrund weiter, Aufnahme über Menüleisten-Icon stoppbar
-- **Auto-Löschung** — Sitzungen werden 30 Tage nach Erstellung automatisch gelöscht
+- **Aufbewahrung** — Der Text von Sitzungen und PDF-Dokumenten bleibt erhalten, bis Sie ihn selbst löschen. Audioaufnahmen und Original-PDFs werden frühestens 24 Stunden nach erfolgreicher Verarbeitung gelöscht, sobald die App das nächste Mal aufräumt (beim Start und alle 6 Stunden, solange sie läuft); schlägt die Verarbeitung fehl, bleiben sie erhalten, bis Sie die Sitzung selbst löschen. Inhalte mit Aufbewahrungspflicht gehören weiterhin in die rechtlich führende Praxissoftware. Beim Löschen einer Sitzung entfernt die App alle zugehörigen Daten aus ihren Dateien (nicht aus Backups des Macs), auch ihre Einträge im Suchindex. Der Suchindex liegt nur lokal auf dem Mac
 
 ## Systemvoraussetzungen
 
 - macOS 26 (Tahoe) oder neuer (die mitgelieferte Metal-GPU-Bibliothek für die Spracherkennung wurde gegen das macOS-26-SDK gebaut; eine niedrigere Untergrenze ist als [Issue #97](https://github.com/adbstyle/therascripter/issues/97) erfasst)
 - Mac mit Apple-Chip (M1 oder neuer)
 - Mindestens 8 GB RAM
-- ~5 GB freier Speicherplatz (App ~1 GB + ML-Modelle ~1.8 GB; der Erststart prüft 5 GB für
-  Download und Entpacken; zusätzlich ~3.4 GB optional für Zusammenfassung)
+- ~5 GB freier Speicherplatz (App ~1 GB + ML-Modelle ~2.4 GB inkl. Suchmodell; dazu der
+  Suchindex, bis ~0.7 GB bei 2'000 Sitzungen; der Erststart prüft 5 GB für Download und
+  Entpacken; zusätzlich ~3.3 GB optional für Zusammenfassung)
 
 ## Installation
 
@@ -34,7 +38,7 @@ Ausführliche Anleitung mit Erklärungen: [adbstyle.github.io/therascripter/inst
 1. [`Therascript.dmg` herunterladen](https://github.com/adbstyle/therascripter/releases/latest/download/Therascript.dmg), doppelklicken und Therascript auf den Ordner **Programme** ziehen.
 2. Therascript im Ordner **Programme** öffnen. macOS meldet, Apple könne nicht überprüfen, ob die App frei von Schadsoftware ist. Auf **Fertig** klicken, nicht auf «In den Papierkorb legen».
 3. Programm-Freigabe erteilen: direkt danach in **Systemeinstellungen → Datenschutz & Sicherheit** ganz nach unten scrollen, beim Hinweis zu Therascript auf **Dennoch öffnen** klicken und mit Passwort oder Touch ID bestätigen. macOS bietet die Freigabe nur kurze Zeit nach dem blockierten Start an. Fehlt der Hinweis, Therascript erneut öffnen (Schritt 2) und gleich danach zurückkehren.
-4. Beim ersten Start lädt Therascript die Sprachmodelle herunter (~1.7 GB; das Zusammenfassungs-Modell ist optional und kann später nachgeladen werden).
+4. Beim ersten Start lädt Therascript die Sprachmodelle herunter (~2.1 GB inkl. Suchmodell; das Zusammenfassungs-Modell ist optional und kann später nachgeladen werden).
 
 **Warum die Programm-Freigabe?** Apple bestätigt Apps nur gegen eine jährliche Gebühr. Therascript ist kostenlos und quelloffen und verzichtet auf diese Beglaubigung. Die Freigabe gilt für die ganze App samt der eingebauten Werkzeuge für Transkription, Sprechererkennung, Pseudonymisierung, Texterkennung und Zusammenfassung. Niemand bestätigt unabhängig, dass die heruntergeladene Datei vom Projekt stammt: Laden Sie Therascript nur über die Website oder die [Release-Seite](https://github.com/adbstyle/therascripter/releases).
 
@@ -48,9 +52,11 @@ Ausführliche Anleitung mit Erklärungen: [adbstyle.github.io/therascripter/inst
 
 Aufnahmen, Transkripte, PDFs und Zusammenfassungen übermittelt Therascript nie; sie verlassen den Mac nur, wenn man sie selbst kopiert. Mit dem Internet verbindet sich Therascript nur in drei Fällen:
 
-- **Sprachmodelle herunterladen:** bei der Ersteinrichtung, beim Hinzufügen eines Modells in den Einstellungen und mit Updates: neue Fassungen der installierten Modelle und Modelle, die eine neue Version braucht, lädt Therascript automatisch zusammen mit dem Update; nach dem Ausschalten der automatischen Updates (Einstellungen → Updates) nur auf Klick.
+- **Sprachmodelle herunterladen:** bei der Ersteinrichtung, beim Hinzufügen eines Modells in den Einstellungen und mit Updates: neue Fassungen der installierten Modelle und Modelle, die eine neue Version braucht, lädt Therascript automatisch zusammen mit dem Update; nach dem Ausschalten der automatischen Updates (Einstellungen → Updates) nur auf Klick. Fehlt das Suchmodell (~0.43 GB; z. B. nach dem Update von einer Version ohne Suche oder wenn der Download bei der Ersteinrichtung scheiterte), lädt Therascript es selbständig im Hintergrund nach, auch wenn die automatischen Updates ausgeschaltet sind, und versucht es bei einem Fehlschlag später erneut; bis dahin ist nur die Suche nach Bedeutung nicht verfügbar.
 - **Nach neuen Versionen suchen:** beim Start, danach alle 4 Stunden und auf Klick unter Einstellungen → Updates.
 - **Neue Versionen herunterladen:** automatisch, sobald eine erscheint; nach dem Ausschalten der automatischen Updates (Einstellungen → Updates) nur auf Klick.
+
+**Kopieren und Zwischenablage:** Kopiert wird immer die gewählte Ansicht (Umschalter «Pseudonymisiert | Klartext» oben rechts) — gleich ob über den Kopieren-Knopf im Editor, mit `⌘ C`/`⌘ X`, durch Ziehen von Text oder aus Titel und Zusammenfassung. In der pseudonymisierten Ansicht erscheinen pseudonymisierte Angaben als Platzhalter wie `[PERSON 1]`; was die Pseudonymisierung nicht erfasst hat (übersehene oder selbst getippte Namen), steht auch dort im Klartext. In der Klartext-Ansicht stehen an Stelle der Platzhalter die Originale. Kopierter Text verlässt Therascript über die Zwischenablage des Macs: Andere Apps können ihn dort lesen, und macOS kann ihn über die «Universelle Zwischenablage» an Ihre anderen Apple-Geräte weitergeben. Therascript leert die Zwischenablage nicht.
 
 Modelle und Versionsliste kommen von Cloudflare R2 (Cloudflare, Inc., USA; Speicherort Osteuropa, Auslieferung über das weltweite Cloudflare-Netz), das Installationspaket neuer Versionen von GitHub (GitHub Inc., USA). Beide sehen dabei IP-Adresse, Zeitpunkt und abgerufene Datei. Die App sendet kein Konto, keine Kennung und keine Nutzungsdaten. Links zu GitHub oder Hugging Face öffnen sich nur auf Klick im Browser. Nach der Ersteinrichtung funktioniert Therascript auch ohne Internet. Die vollständigen Angaben stehen in der [Datenschutzerklärung](https://adbstyle.github.io/therascripter/impressum.html#app-datenschutz).
 

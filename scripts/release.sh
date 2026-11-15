@@ -59,6 +59,7 @@ usage() {
 Usage: scripts/release.sh [--bump patch|minor|major | --version X.Y.Z]
                           [--notes "text" | --notes-file <pfad>]
                           [--override-release-check "<Begründung>"]
+                          [--allow-unpublished-models "<Begründung>"]
 
 Ohne Argumente: interaktiver Modus (Fragen wie bisher).
 Mit --bump oder --version: nicht-interaktiv, keine Rückfragen; läuft nur auf
@@ -73,6 +74,17 @@ Aufnahme und PDF bis zur Zusammenfassung. Ist sie rot, bricht der Release ab.
 --override-release-check gibt einen roten Lauf bewusst frei; die Begründung
 landet in der Tag-Nachricht und im Release-Text. Interaktiv fragt das Skript
 bei Rot nach einer Begründung.
+
+Vorbedingung: kein Pflichtmodell im Katalog trägt published: false
+(scripts/check-unpublished-models.ts, Mechanismus für künftige Modelle) —
+README und Website beschreiben jedes Pflichtmodell schon.
+--allow-unpublished-models übersteuert das bewusst mit Begründung.
+
+Vorbedingung: Der Release-Mac braucht das Suchmodell unter
+~/.therascript/models/search-embeddinggemma-2-text-v1 (READY und
+model.safetensors). Das Skript prüft es vor Bump und Build und nennt bei
+Fehlen den Weg; der Smoke-Schritt läuft mit --require-search. Diese
+Vorbedingung ist nicht übersteuerbar.
 EOF
 }
 
@@ -81,9 +93,10 @@ VERSION_ARG=""
 NOTES_ARG=""
 NOTES_FILE_ARG=""
 RELEASE_CHECK_OVERRIDE=""
+UNPUBLISHED_OVERRIDE=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --bump|--version|--notes|--notes-file|--override-release-check)
+    --bump|--version|--notes|--notes-file|--override-release-check|--allow-unpublished-models)
       if [ $# -lt 2 ]; then
         echo "❌ Option $1 braucht einen Wert."
         usage
@@ -98,6 +111,13 @@ while [ $# -gt 0 ]; do
           RELEASE_CHECK_OVERRIDE="$2"
           if [ -z "${RELEASE_CHECK_OVERRIDE// /}" ]; then
             echo "❌ --override-release-check braucht eine Begründung."
+            exit 1
+          fi
+          ;;
+        --allow-unpublished-models)
+          UNPUBLISHED_OVERRIDE="$2"
+          if [ -z "${UNPUBLISHED_OVERRIDE// /}" ]; then
+            echo "❌ --allow-unpublished-models braucht eine Begründung."
             exit 1
           fi
           ;;
@@ -141,6 +161,32 @@ if [ -n "$NOTES_FILE_ARG" ]; then
   NOTES_BODY="$(cat "$NOTES_FILE_ARG")"
 elif [ -n "$NOTES_ARG" ]; then
   NOTES_BODY="$NOTES_ARG"
+fi
+
+# Pflichtmodell mit published: false (Mechanismus für künftige Modelle): README und
+# Website nennen es schon — vor dem Build abbrechen, nicht nach 10 Minuten.
+if ! (cd "$ROOT_DIR" && npx --no-install tsx scripts/check-unpublished-models.ts); then
+  if [ -z "$UNPUBLISHED_OVERRIDE" ]; then
+    echo "   Bewusst trotzdem releasen: --allow-unpublished-models \"<Begründung>\""
+    exit 1
+  fi
+  echo "⚠️  Übersteuert: $UNPUBLISHED_OVERRIDE"
+fi
+
+# Suchmodell auf dem Release-Mac (smoke-packaged.sh --require-search): vor Bump
+# und Build prüfen, nicht erst im Smoke-Schritt nach dem Packen. Nur lesend.
+SEARCH_DIR_NAME="$(sed -n "s/^export const SEARCH_MODEL_DIR_NAME = '\([^']*\)'.*/\1/p" "$ROOT_DIR/src/shared/model-catalog.ts")"
+SEARCH_DIR="$HOME/.therascript/models/${SEARCH_DIR_NAME:-search-embeddinggemma-2-text-v1}"
+if [ ! -f "$SEARCH_DIR/READY" ] || [ ! -f "$SEARCH_DIR/model.safetensors" ]; then
+  echo "❌ Suchmodell fehlt auf diesem Mac: $SEARCH_DIR (READY / model.safetensors)"
+  echo "   Der Smoke-Schritt läuft mit --require-search und wäre nach dem Build rot."
+  echo "   Weg 1: Archiv von R2 laden, sha256 gegen den Katalog prüfen, entpacken"
+  echo "   (das Archiv enthält keinen Ordner, nur die Dateien):"
+  echo "     curl -fL -o /tmp/embeddinggemma-2-text-v1.tar.gz https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/embeddinggemma-2-text-v1.tar.gz"
+  echo "     shasum -a 256 /tmp/embeddinggemma-2-text-v1.tar.gz   # Soll: sha256 des Eintrags embeddinggemma-2-text in src/shared/model-catalog.ts"
+  echo "     mkdir -p \"$SEARCH_DIR\" && tar -xzf /tmp/embeddinggemma-2-text-v1.tar.gz -C \"$SEARCH_DIR\""
+  echo "   Weg 2: die App mit dem neuen Katalog starten (SearchModelProvisioner lädt es im Hintergrund)."
+  exit 1
 fi
 
 if [ ! -f "$INSTALL_GUIDE_FILE" ]; then
@@ -270,7 +316,7 @@ echo "  DMG: $DMG_PATH"
 
 echo ""
 echo "→ Verifiziere Bundles + Runtime-Smoke …"
-if ! "$ROOT_DIR/scripts/verify-bundles.sh" --app "$ROOT_DIR/dist/mac-arm64/Therascript.app" --smoke; then
+if ! "$ROOT_DIR/scripts/verify-bundles.sh" --app "$ROOT_DIR/dist/mac-arm64/Therascript.app" --smoke --require-search; then
   echo ""
   echo "❌ Verifikation fehlgeschlagen — Release abgebrochen."
   echo "   Nichts wurde gepusht. Fix committen (Version-Commit ggf. amenden) und erneut starten."

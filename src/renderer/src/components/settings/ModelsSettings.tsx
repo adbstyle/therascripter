@@ -8,6 +8,7 @@ import { formatBytes } from '../../utils/formatBytes'
 import ModelCard from './ModelCard'
 import DiarizationPipelineSection from './DiarizationPipelineSection'
 import ReconcileEventsBanner from './ReconcileEventsBanner'
+import SearchModelCard from './SearchModelCard'
 
 /**
  * Issue #84 / Story E — sort by status (active first, then installed, then
@@ -37,7 +38,7 @@ export default function ModelsSettings(): React.JSX.Element {
   const [deleteCandidate, setDeleteCandidate] = useState<ModelCatalogEntry | null>(null)
 
   // Mark reconcile events as seen on mount — the banner stays visible until
-  // the user clicks "Verstanden", but the BottomNav dot disappears immediately
+  // the user clicks "Verstanden", but the sidebar dot disappears immediately
   // because the user has now reached the surface that explains the change.
   // Dep is the events array (changes when the hook refreshes) + the stable
   // markSeen callback. The `.some` guard short-circuits subsequent runs once
@@ -150,7 +151,7 @@ export default function ModelsSettings(): React.JSX.Element {
   const diarizationInstalled = diarizationSuite?.isInstalled === true
 
   return (
-    <div className="space-y-8 p-6">
+    <div className="space-y-8">
       {reconcile.events.length > 0 && (
         <ReconcileEventsBanner events={reconcile.events} onDismiss={reconcile.dismiss} />
       )}
@@ -216,7 +217,7 @@ export default function ModelsSettings(): React.JSX.Element {
           <p className="text-sm text-text-secondary">
             Erkennt Personen, Orte und andere sensible Entitäten und ersetzt sie durch typisierte
             Platzhalter (z.&nbsp;B. [PERSON&nbsp;1]). DSGVO-rechtlich Pseudonymisierung — die
-            Originale bleiben lokal und werden nach 30&nbsp;Tagen automatisch gelöscht.
+            Originale bleiben lokal gespeichert, bis Sie die Sitzung selbst löschen.
           </p>
         </div>
 
@@ -236,6 +237,19 @@ export default function ModelsSettings(): React.JSX.Element {
             />
           ))}
         </div>
+      </section>
+
+      {/* ── Suche (Epic #192) — Statuskarte, kein Aktivieren/Löschen ──── */}
+      <section className="space-y-3">
+        <div>
+          <h2 className="mb-1 text-lg font-semibold">Suche</h2>
+          <p className="text-sm text-text-secondary">
+            Findet Textstellen in Ihren Sitzungen und PDF-Dokumenten nach ihrer Bedeutung. Gehört
+            zur Grundausstattung und wird bei Bedarf im Hintergrund geladen; der Suchindex liegt nur
+            auf Ihrem Mac.
+          </p>
+        </div>
+        <SearchModelCard />
       </section>
 
       {/* ── Zusammenfassung ───────────────────────────────────────────── */}

@@ -34,7 +34,8 @@ export function BlocklistConfirmDialog({
   return (
     <DialogShell ariaLabel="Zur Sperrliste hinzufügen" onDismiss={onCancel}>
       <h3 className="mb-2 text-base font-semibold text-text-primary">Zur Sperrliste hinzufügen</h3>
-      <p className="mb-3 text-sm text-text-secondary">
+      {/* select-none: the term is a clear name (#203 AK 9) */}
+      <p className="mb-3 select-none text-sm text-text-secondary">
         &bdquo;{term}&ldquo; als <span className="font-medium">{TYPE_LABELS[type]}</span> zur
         Sperrliste hinzufügen?
       </p>
@@ -52,7 +53,7 @@ export function BlocklistConfirmDialog({
         </button>
         <button
           ref={confirmRef}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover"
+          className="rounded-lg bg-primary-solid px-4 py-2 text-sm font-medium text-white hover:bg-primary-solid-hover"
           onClick={onConfirm}
         >
           Hinzufügen

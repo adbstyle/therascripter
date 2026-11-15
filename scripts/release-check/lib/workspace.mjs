@@ -95,8 +95,9 @@ export function query(home, sql) {
 
 /**
  * Verschiebt alle Zeitstempel so, dass die jüngste Sitzung «jetzt» angelegt
- * wurde — Abstände bleiben. Sonst löscht die App einen gecachten Seed nach 30
- * Tagen (Auto-Löschung) bzw. seine Quelldateien nach 24 h, und die Prüfung
+ * wurde — Abstände bleiben. Sonst löscht die App die Quelldateien eines
+ * gecachten Seeds 24 h nach der Verarbeitung, und Versionen vor #202 löschen
+ * ihn nach 30 Tagen ganz (der Seed entsteht mit der Vorversion) — die Prüfung
  * hinge vom Tag ab (NFR 5).
  */
 export function shiftTimestampsToNow(home) {

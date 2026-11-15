@@ -4,6 +4,8 @@ import { rmSync, statSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { release, totalmem } from 'os'
 import { getDatabase, getDataDir, closeDatabase } from '../db/connection'
+import { getSearchIndexService } from '../search/SearchIndexService'
+import { getSearchRuntime } from '../search/searchRuntime'
 import { OpenInFinderSchema } from '../../shared/validation/system-schemas'
 import type { AboutInfo } from '../../shared/types'
 
@@ -104,6 +106,8 @@ export function registerSystemHandlers(): void {
       detail:
         '• ML-Modelle (mehrere GB)\n' +
         '• Alle Transkriptionen und Audiodateien\n' +
+        '• Alle Patientendossiers (Stammdaten, Diagnosen, Medikation, Notizen)\n' +
+        '• Suchindex und letzte Suchanfragen\n' +
         '• Sperrliste\n' +
         '• Einstellungen\n\n' +
         'Die App-Datei (TheraScript.app) muss anschliessend ' +
@@ -122,6 +126,9 @@ export function registerSystemHandlers(): void {
       // DB may already be in error state
     }
 
+    // Epic #192 — keine Aufbereitung für die Suche mehr auf die gelöschte DB
+    getSearchIndexService()?.stop()
+    void getSearchRuntime()?.worker.stop('quit')
     closeDatabase()
 
     const errors: string[] = []

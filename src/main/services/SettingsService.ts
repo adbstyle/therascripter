@@ -1,5 +1,5 @@
 import Store from 'electron-store'
-import type { ThemePreference } from '../../shared/types'
+import type { ThemePreference, ViewMode } from '../../shared/types'
 import type { InstalledModelVersion } from '../../shared/types/ModelUpdate'
 import type { PersistedUpdate } from './AppUpdateService'
 import type { ReconcileEvent } from '../../shared/types/ReconcileEvent'
@@ -34,6 +34,10 @@ export interface AppSettings {
   modelsDownloaded: boolean
   theme: ThemePreference
   reviewPanelOpen: boolean
+  /** Epic #192 — Seitenleiste der App eingeblendet (nicht schutzbedürftig). */
+  sidebarOpen: boolean
+  /** Issue #203 — zuletzt gewählte Ansicht, gilt für alle Sitzungen. */
+  viewMode: ViewMode
   installedModelVersions: Record<string, InstalledModelVersion>
   /** Issue #165 — automatische Updates (Download und Installation), standardmässig an. */
   autoUpdate: boolean
@@ -73,6 +77,8 @@ const defaults: AppSettings = {
   modelsDownloaded: false,
   theme: 'system',
   reviewPanelOpen: false,
+  sidebarOpen: true,
+  viewMode: 'pseudonymized',
   installedModelVersions: {},
   autoUpdate: true,
   appUpdate: null,

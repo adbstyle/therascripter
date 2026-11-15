@@ -32,6 +32,7 @@ import {
   swapModelsIn
 } from './model-staging'
 import type { BusyReason } from './WorkGuard'
+import { ceilGigabytes } from '../../shared/utils/format-bytes'
 
 /**
  * Updates in der App (Issues #164, #165, #167, ADR-009). App und Modelle sind
@@ -146,6 +147,8 @@ export interface AppUpdateDeps {
   /** Ablage der Modelle im Katalog dieser App. */
   localLayouts: () => LocalLayout[]
   retiredIds: () => ReadonlySet<string>
+  /** Pflichtmodelle, die diese App selbst nachlädt (Suchmodell) — nie als neues Modell im Update. */
+  selfProvisionedIds?: () => ReadonlySet<string>
   /** Installierte Fassung eines Modells ('' = unbekannt, null = kein Eintrag). */
   installedSha: (id: string) => string | null
   /** Neue Fassung eintragen — erst, wenn der Austausch nachweislich gelungen ist. */
@@ -176,6 +179,13 @@ export interface AppUpdateDeps {
   currentWork: () => BusyReason | null
   idleSeconds: () => number
   isWindowVisible: () => boolean
+  /**
+   * Epic #192 (#210 AK 7): Hintergrundarbeit der Suche anhalten (Aufbereitung,
+   * Suchprozess), bevor die App für den Tausch beendet wird. Die Suche zählt
+   * NICHT als Arbeit (`currentWork`) — sie verzögert ein Update nie; das
+   * Beenden wartet in runQuitCleanup begrenzt auf den Suchprozess.
+   */
+  stopBackgroundWork?: () => void
   /** Beendet die App über den normalen Weg (before-quit). */
   quitApp: () => void
   relaunch: () => void
@@ -414,6 +424,7 @@ export class AppUpdateService {
       appInstallable: blocker === null,
       localLayouts: this.deps.localLayouts(),
       retiredIds: this.deps.retiredIds(),
+      selfProvisionedIds: this.deps.selfProvisionedIds?.(),
       installedSha: this.deps.installedSha,
       isOnDisk: (checkPath) => existsSync(join(this.deps.modelsDir, checkPath))
     })
@@ -621,7 +632,7 @@ export class AppUpdateService {
     this.autoDeferred = false
     const need = this.stagingNeed(bundle)
     if (!this.hasFree(need + MIN_FREE_AFTER_DOWNLOAD)) {
-      const gb = Math.ceil((need + MIN_FREE_AFTER_DOWNLOAD) / 1024 ** 3)
+      const gb = ceilGigabytes(need + MIN_FREE_AFTER_DOWNLOAD)
       const what = bundle.app ? `auf Version ${bundle.app.version}` : 'der Modelle'
       this.message = `Für das automatische Update ${what} fehlt Speicherplatz (mindestens ${gb} GB frei). Sie können es hier selbst herunterladen oder Platz freigeben.`
       return false
@@ -652,7 +663,7 @@ export class AppUpdateService {
     if (manual) {
       const need = this.stagingNeed(bundle)
       if (!this.hasFree(need)) {
-        const gb = Math.ceil(need / 1024 ** 3)
+        const gb = ceilGigabytes(need)
         this.message = `Nicht genügend Speicherplatz. Bitte geben Sie mindestens ${gb} GB frei und versuchen Sie es erneut.`
         this.emit()
         return
@@ -807,6 +818,13 @@ export class AppUpdateService {
     this.installPending = false
     this.quitPlan = { relaunch: true, startHidden: !this.deps.isWindowVisible() }
     this.deps.log('AppUpdate: Installation mit Neustart')
+    try {
+      this.deps.stopBackgroundWork?.()
+    } catch (err) {
+      this.deps.log(
+        `AppUpdate: Hintergrundarbeit nicht angehalten: ${err instanceof Error ? err.message : err}`
+      )
+    }
     this.deps.quitApp()
   }
 

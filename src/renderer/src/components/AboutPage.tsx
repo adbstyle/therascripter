@@ -29,7 +29,7 @@ export default function AboutPage(): React.JSX.Element {
   }, [info?.dataDir])
 
   return (
-    <div className="p-8">
+    <div>
       <div className="max-w-lg space-y-6">
         {/* Version / Logo */}
         <div>
@@ -47,13 +47,14 @@ export default function AboutPage(): React.JSX.Element {
           </p>
           <p>
             Mit dem Internet verbindet sich TheraScript nur, um Sprachmodelle herunterzuladen (bei
-            der Ersteinrichtung und beim Hinzufügen eines Modells), um nach neuen Versionen zu
-            suchen (beim Start und alle 4 Stunden) und um Updates herunterzuladen — neue Versionen
-            samt neuen Fassungen der Sprachmodelle, automatisch oder auf Klick (siehe Einstellungen
-            → Updates). Dabei sehen die Anbieter Cloudflare und GitHub Ihre IP-Adresse, den
-            Zeitpunkt und die abgerufene Datei. TheraScript sendet kein Konto, keine Kennung und
-            keine Nutzungsdaten. Nach der Ersteinrichtung funktioniert TheraScript auch ohne
-            Internet.
+            der Ersteinrichtung, beim Hinzufügen eines Modells und, falls es noch fehlt, das
+            Suchmodell mit rund 0.43&nbsp;GB im Hintergrund, auch wenn die automatischen Updates
+            ausgeschaltet sind), um nach neuen Versionen zu suchen (beim Start und alle 4 Stunden)
+            und um Updates herunterzuladen — neue Versionen samt neuen Fassungen der Sprachmodelle,
+            automatisch oder auf Klick (siehe Einstellungen → Updates). Dabei sehen die Anbieter
+            Cloudflare und GitHub Ihre IP-Adresse, den Zeitpunkt und die abgerufene Datei.
+            TheraScript sendet kein Konto, keine Kennung und keine Nutzungsdaten. Nach der
+            Ersteinrichtung funktioniert TheraScript auch ohne Internet.
           </p>
         </div>
 
@@ -73,12 +74,12 @@ export default function AboutPage(): React.JSX.Element {
           </p>
           <p className="mb-2 text-sm text-text-secondary">
             DSGVO-rechtlich heisst das <span className="font-medium">Pseudonymisierung</span> — die
-            Originaldaten bleiben in Ihrem lokalen Backup vorhanden, sind aber im exportierten Text
-            nicht mehr enthalten.
+            Originaldaten bleiben lokal auf Ihrem Mac gespeichert; in der pseudonymisierten Ansicht
+            und im dort kopierten Text stehen an ihrer Stelle die Platzhalter.
           </p>
           <p className="text-sm text-text-secondary">
             Echte Anonymisierung wäre, die Originale zu löschen — das machen wir bewusst nicht,
-            damit Sie Korrekturen rückgängig machen können.
+            damit Sie Korrekturen rückgängig machen und Sitzungen im Klartext lesen können.
           </p>
         </section>
 
@@ -145,14 +146,53 @@ export default function AboutPage(): React.JSX.Element {
           )}
         </div>
 
+        {/* Kopieren — Issue #203 */}
+        <div className="rounded-lg border border-border bg-surface-1 p-4">
+          <h4 className="mb-1 text-sm font-medium text-text-secondary">Kopieren</h4>
+          <p className="text-sm text-text-secondary">
+            Kopiert wird immer die gewählte Ansicht. In «Pseudonymisiert» erscheinen
+            pseudonymisierte Angaben als Platzhalter wie [PERSON 1]; was die Pseudonymisierung nicht
+            erfasst hat, etwa übersehene oder selbst getippte Namen, bleibt stehen. In «Klartext»
+            stehen an Stelle der Platzhalter die Originale.
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
+            Kopierter Text verlässt Therascript über die Zwischenablage Ihres Macs. Andere Apps
+            können ihn dort lesen, und macOS kann ihn an Ihre anderen Apple-Geräte weitergeben.
+          </p>
+        </div>
+
         {/* Daten info box */}
         <div className="rounded-lg border border-border bg-surface-1 p-4">
           <h4 className="mb-1 text-sm font-medium text-text-secondary">Daten</h4>
           <p className="text-sm text-text-secondary">
-            Transkriptionen werden automatisch 30 Tage nach Erstellung gelöscht.
+            Der Text Ihrer Sitzungen und PDF-Dokumente bleibt erhalten, bis Sie ihn selbst löschen.
           </p>
           <p className="mt-1 text-sm text-text-secondary">
-            Sie sind verantwortlich, den kopierten Text extern zu sichern.
+            Audioaufnahmen und Original-PDFs werden frühestens 24&nbsp;Stunden nach erfolgreicher
+            Verarbeitung gelöscht, sobald TheraScript das nächste Mal aufräumt (beim Start und alle
+            6&nbsp;Stunden, solange die App läuft). Schlägt die Verarbeitung fehl, bleiben sie
+            erhalten, bis Sie die Sitzung selbst löschen.
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
+            Der Suchindex liegt nur lokal auf Ihrem Mac (bis ~0.7&nbsp;GB bei 2&apos;000 Sitzungen).
+            Löschen Sie eine Sitzung, entfernt TheraScript auch ihre Einträge im Suchindex.
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
+            Die Suche (⌘K) läuft nur auf Ihrem Mac; Suchanfragen verlassen ihn nicht. Ausschnitte in
+            den Treffern stehen immer im Klartext, auch in der pseudonymisierten Ansicht. Die fünf
+            letzten Suchanfragen bleiben lokal gespeichert, bis Sie sie mit «Verlauf löschen»
+            entfernen.
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
+            Patientendossiers mit Stammdaten, Diagnosen, Medikation und Notiz bleiben lokal
+            gespeichert, bis Sie sie löschen oder TheraScript vollständig entfernen. TheraScript nur
+            in den Papierkorb zu legen, löscht sie nicht. Löschen Sie ein Patientendossier, löscht
+            TheraScript die Sitzungen und PDF-Dokumente mit, die nur ihm zugeordnet sind; was auch
+            einem anderen Dossier zugeordnet ist, bleibt erhalten.
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
+            Inhalte mit Aufbewahrungspflicht gehören weiterhin in Ihre rechtlich führende
+            Praxissoftware.
           </p>
         </div>
 
@@ -179,6 +219,8 @@ export default function AboutPage(): React.JSX.Element {
           details={[
             'ML-Modelle (mehrere GB)',
             'Alle Transkriptionen und Audiodateien',
+            'Alle Patientendossiers (Stammdaten, Diagnosen, Medikation, Notizen)',
+            'Suchindex und letzte Suchanfragen',
             'Sperrliste',
             'Einstellungen'
           ]}

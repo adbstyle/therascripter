@@ -2,9 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AudioRecorder } from '../services/AudioRecorder'
 import { createValueStore, type ValueStore } from '../utils/valueStore'
 import type { MicrophoneStatus } from '../../../shared/types/Microphone'
+import type { RecordingStartOptions, RecordingStartResult } from '../../../shared/types/IpcApi'
 
 interface UseRecordingResult {
   isRecording: boolean
+  /** Sitzung der laufenden Aufnahme (Epic #192: «Zuletzt geöffnet», Dossier-Zuordnung). */
+  sessionId: string | null
+  /** #206 — Patientendossier, dem die laufende Aufnahme beim Start zugeordnet wurde. */
+  dossierId: string | null
   // Pegel und Dauer liegen bewusst NICHT im React-State: sonst rendert die
   // ganze App mit jedem Wert neu (Issue #140) — beim Pegel ~60× pro Sekunde.
   // Nur die Anzeigen abonnieren sie (VUMeter, RecordingSessionCard, RecordingBar).
@@ -13,7 +18,12 @@ interface UseRecordingResult {
   /** Aufnahmedauer in Sekunden, sekündlich vom Main-Prozess */
   duration: ValueStore<number>
   error: string | null
-  startRecording: () => Promise<void>
+  /**
+   * Startet eine Aufnahme, optional aus einem Patientendossier heraus (#206).
+   * Liefert die Antwort des Main-Prozesses (u. a. ob die Zuordnung gelang),
+   * null, wenn keine Aufnahme startete.
+   */
+  startRecording: (options?: RecordingStartOptions) => Promise<RecordingStartResult | null>
   stopRecording: () => Promise<void>
 }
 
@@ -29,6 +39,8 @@ interface UseRecordingOptions {
 
 export function useRecording({ onMicrophoneStatus }: UseRecordingOptions = {}): UseRecordingResult {
   const [isRecording, setIsRecording] = useState(false)
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [dossierId, setDossierId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const recorderRef = useRef<AudioRecorder | null>(null)
   const startingRef = useRef(false)
@@ -54,47 +66,61 @@ export function useRecording({ onMicrophoneStatus }: UseRecordingOptions = {}): 
       setError(err instanceof Error ? err.message : 'Fehler beim Stoppen der Aufnahme')
     } finally {
       setIsRecording(false)
+      setSessionId(null)
+      setDossierId(null)
       duration.set(0)
       level.set(0)
       stoppingRef.current = false
     }
   }, [duration, level])
 
-  const startRecording = useCallback(async () => {
-    if (startingRef.current || recorderRef.current) return
-    startingRef.current = true
+  const startRecording = useCallback(
+    async (options?: RecordingStartOptions) => {
+      // Zweite Aufnahme bleibt blockiert (der Main-Prozess lehnt sie ebenso ab)
+      if (startingRef.current || recorderRef.current) return null
+      startingRef.current = true
 
-    setError(null)
-    // Ein verspätetes Dauer-Event der vorigen Aufnahme (nach dem Reset beim
-    // Stopp) darf die neue Karte nicht mit der alten Zeit starten lassen.
-    duration.set(0)
+      setError(null)
+      // Ein verspätetes Dauer-Event der vorigen Aufnahme (nach dem Reset beim
+      // Stopp) darf die neue Karte nicht mit der alten Zeit starten lassen.
+      duration.set(0)
 
-    try {
-      // Vor getUserMedia klären: Ist noch nichts festgelegt, fragt macOS
-      // jetzt; nach einer Ablehnung fragt es nie wieder, dann bleibt nur der
-      // Weg über die Systemeinstellungen. So entsteht auch keine Session.
-      const micStatus = await window.api.microphone.ensureAccess()
-      onMicrophoneStatusRef.current?.(micStatus)
-      if (micStatus === 'denied' || micStatus === 'restricted') return
+      try {
+        // Vor getUserMedia klären: Ist noch nichts festgelegt, fragt macOS
+        // jetzt; nach einer Ablehnung fragt es nie wieder, dann bleibt nur der
+        // Weg über die Systemeinstellungen. So entsteht auch keine Session.
+        const micStatus = await window.api.microphone.ensureAccess()
+        onMicrophoneStatusRef.current?.(micStatus)
+        if (micStatus === 'denied' || micStatus === 'restricted') return null
 
-      const recorder = new AudioRecorder()
-      recorderRef.current = recorder
-      await recorder.start(level.set)
-      setIsRecording(true)
-    } catch (err) {
-      recorderRef.current = null
+        const recorder = new AudioRecorder()
+        recorderRef.current = recorder
+        const result = options?.dossierId
+          ? await recorder.start(level.set, { dossierId: options.dossierId })
+          : await recorder.start(level.set)
+        setSessionId(result.sessionId)
+        setDossierId(
+          result.assignment === 'assigned' && options?.dossierId ? options.dossierId : null
+        )
+        setIsRecording(true)
+        return result
+      } catch (err) {
+        recorderRef.current = null
 
-      if (err instanceof DOMException && err.name === 'NotAllowedError') {
-        onMicrophoneStatusRef.current?.('denied')
-      } else if (err instanceof DOMException && err.name === 'NotFoundError') {
-        setError('Kein Mikrofon gefunden. Bitte schliessen Sie ein Mikrofon an.')
-      } else {
-        setError(err instanceof Error ? err.message : 'Aufnahme konnte nicht gestartet werden')
+        if (err instanceof DOMException && err.name === 'NotAllowedError') {
+          onMicrophoneStatusRef.current?.('denied')
+        } else if (err instanceof DOMException && err.name === 'NotFoundError') {
+          setError('Kein Mikrofon gefunden. Bitte schliessen Sie ein Mikrofon an.')
+        } else {
+          setError(err instanceof Error ? err.message : 'Aufnahme konnte nicht gestartet werden')
+        }
+        return null
+      } finally {
+        startingRef.current = false
       }
-    } finally {
-      startingRef.current = false
-    }
-  }, [duration, level])
+    },
+    [duration, level]
+  )
 
   // Listen for duration updates from main process
   useEffect(() => {
@@ -132,6 +158,8 @@ export function useRecording({ onMicrophoneStatus }: UseRecordingOptions = {}): 
         recorderRef.current = null
       }
       setIsRecording(false)
+      setSessionId(null)
+      setDossierId(null)
       duration.set(0)
       level.set(0)
       stoppingRef.current = false
@@ -149,5 +177,14 @@ export function useRecording({ onMicrophoneStatus }: UseRecordingOptions = {}): 
     }
   }, [])
 
-  return { isRecording, level, duration, error, startRecording, stopRecording }
+  return {
+    isRecording,
+    sessionId,
+    dossierId,
+    level,
+    duration,
+    error,
+    startRecording,
+    stopRecording
+  }
 }

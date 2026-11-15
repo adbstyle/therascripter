@@ -6,6 +6,8 @@ import { dirname, join, resolve } from 'path'
 import { getSettings } from './SettingsService'
 import { downloadFile } from './DownloadService'
 import { currentWork } from './WorkGuard'
+import { getSearchIndexService } from '../search/SearchIndexService'
+import { getSearchRuntime } from '../search/searchRuntime'
 import { runSubprocess } from '../utils/subprocess'
 import { sendToRenderer } from '../utils/ipc-helpers'
 import { AppUpdateService, type AppUpdateDeps } from './AppUpdateService'
@@ -183,6 +185,14 @@ export function createAppUpdateDeps(onState: (state: AppUpdateState) => void): A
         required: d.isRequired === true
       })),
     retiredIds: () => new Set(RETIRED_MODELS.map((m) => m.id)),
+    // Das Suchmodell lädt der SearchModelProvisioner (getModelDefinitions
+    // enthält nur veröffentlichte Einträge)
+    selfProvisionedIds: () =>
+      new Set(
+        getModelDefinitions()
+          .filter((d) => d.deferrable === true)
+          .map((d) => d.id)
+      ),
     installedSha: (id) => getInstalledVersion(id)?.sha256 ?? null,
     recordInstalledModel: (model) =>
       setInstalledVersion(model.id, {
@@ -218,6 +228,11 @@ export function createAppUpdateDeps(onState: (state: AppUpdateState) => void): A
     currentWork,
     idleSeconds: () => powerMonitor.getSystemIdleTime(),
     isWindowVisible: () => BrowserWindow.getAllWindows()[0]?.isVisible() ?? false,
+    stopBackgroundWork: () => {
+      // Aufbereitung für die Suche und Suchprozess (#210 AK 7)
+      void getSearchIndexService()?.stopForUpdate()
+      void getSearchRuntime()?.worker.stop('update')
+    },
     quitApp: () => app.quit(),
     relaunch: () => app.relaunch(),
     onStateChange: (state) => {

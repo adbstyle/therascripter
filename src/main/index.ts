@@ -1,6 +1,22 @@
-import { app, BrowserWindow, dialog, nativeTheme, Notification, session, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  Notification,
+  session,
+  shell
+} from 'electron'
 import { join } from 'path'
-import { initDatabase, getDatabase, closeDatabase } from './db/connection'
+import {
+  initDatabase,
+  getDatabase,
+  closeDatabase,
+  getDataDir,
+  isDatabaseOpen
+} from './db/connection'
+import { requestRendererFlush, runQuitCleanup } from './services/PendingEditsFlush'
 import { initSettings, getSettings } from './services/SettingsService'
 import { initTaskQueue, getTaskQueue } from './services/TaskQueueService'
 import { registerSessionHandlers } from './ipc/session-handlers'
@@ -25,11 +41,7 @@ import { registerPipelineHandlers } from './ipc/pipeline-handlers'
 import { initTray, getTray } from './services/TrayService'
 import { initAppMenu } from './services/AppMenuService'
 import { sendToRenderer } from './utils/ipc-helpers'
-import {
-  startAutoDeletion,
-  stopAutoDeletion,
-  ensureSpotlightExclusion
-} from './services/AutoDeletionService'
+import { startSourceFileCleanup, stopSourceFileCleanup } from './services/SourceFileCleanupService'
 import { checkFileVaultOnStartup } from './services/FileVaultService'
 import { backfillAnonymizationCounts } from './services/AnonymizationCountBackfillService'
 import { registerAppUpdateHandlers } from './ipc/app-update-handlers'
@@ -39,7 +51,11 @@ import {
   migrateInstalledVersions,
   checkForUpdates
 } from './services/UpdateCheckService'
-import { sweepStaleArtifactsAtStartup } from './services/StartupCleanupService'
+import {
+  ensureSpotlightExclusion,
+  sweepOrphanedSessionFiles,
+  sweepStaleArtifactsAtStartup
+} from './services/StartupCleanupService'
 import { WhisperService } from './ml/WhisperService'
 import { PyannoteSidecar } from './ml/PyannoteSidecar'
 import { AlignmentService } from './ml/AlignmentService'
@@ -58,6 +74,20 @@ import {
 } from './services/ModelDownloadService'
 import { registerSummaryHandlers } from './ipc/summary-handlers'
 import { startToolCheck } from './services/ToolHealthService'
+import { registerDossierAssignmentHandlers, registerDossierHandlers } from './ipc/dossier-handlers'
+import { registerSearchHandlers } from './ipc/search-handlers'
+import { registerRecentHandlers } from './ipc/recent-handlers'
+import {
+  getSearchAvailability,
+  getSearchModelProvisioner,
+  initSearchModelProvisioner,
+  openSearch,
+  sendSearchAvailability
+} from './services/search-model-provisioner-deps'
+import { initSearchIndexService, getSearchIndexService } from './search/SearchIndexService'
+import { createBeforeTaskHook, getSearchRuntime, initSearchRuntime } from './search/searchRuntime'
+import { onSessionsDeleted } from './services/ChangeEvents'
+import { getActiveSessionId } from './ipc/recording-handlers'
 
 // Set in before-quit so the close-handler can distinguish "user closed window"
 // (hide) from "app is shutting down" (allow destroy).
@@ -103,7 +133,7 @@ function createWindow(): void {
     title: 'TheraScript',
     show: !startHidden,
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 15, y: 11 },
+    trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: isDark ? '#0f1117' : '#ffffff',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -248,6 +278,32 @@ app.whenReady().then(() => {
   // reconcileActiveModels().
   reconcileActiveModels()
 
+  // Epic #192 (#209/#210) — Suchmodell bereitstellen: nach Retire/Reconcile
+  // (ein ausgemustertes Suchmodell ist dann schon weg). Gestartet wird der
+  // Hintergrund-Download erst nach dem Fenster, siehe unten.
+  const searchModel = initSearchModelProvisioner()
+
+  // Issue #202 — ein bestätigtes Löschen, das ein Absturz unterbrochen hat oder
+  // das nicht alle Dateien entfernen konnte, hier abschliessen; danach Dateien
+  // entfernen, deren Sitzung es nicht mehr gibt. Vor der Task-Queue und vor den
+  // IPC-Handlern: keine laufende Verarbeitung, keine gerade angelegte Sitzung.
+  try {
+    const startupSessions = new SessionService(getDatabase())
+    const finished = startupSessions.finishPendingDeletions()
+    if (finished > 0) {
+      console.log(`Session deletion: ${finished} interrupted deletion(s) completed`)
+    }
+    const swept = sweepOrphanedSessionFiles(
+      getDataDir(),
+      new Set(startupSessions.getAllSessionIds())
+    )
+    if (swept > 0) {
+      console.log(`Session deletion: ${swept} file(s) of deleted sessions removed`)
+    }
+  } catch (error) {
+    console.error('Completing interrupted session deletions failed:', error)
+  }
+
   // Initialize task queue + crash recovery (before IPC handlers that may enqueue tasks)
   const taskQueue = initTaskQueue(getDatabase())
   const recovered = taskQueue.recoverStuckTasks()
@@ -264,7 +320,9 @@ app.whenReady().then(() => {
   // ~600 Programmdateien); die Oberfläche wartet nicht, nur die Verarbeitung —
   // sonst scheiterte die erste Aufgabe an einem Werkzeug, das gleich repariert
   // wird. Höchstens 10 s, danach läuft die Verarbeitung trotzdem an.
-  startToolCheck(initToolHealth(), taskQueue)
+  // Epic #192: der Suchprozess wartet auf dieselbe Prüfung (kein Python-Start
+  // mitten in die Quarantäne-Reparatur nach einem Update)
+  const toolCheckGate = startToolCheck(initToolHealth(), taskQueue)
 
   // Register real ML executors (replacing stubs)
   taskQueue.registerExecutor('transcription', new WhisperService())
@@ -324,6 +382,17 @@ app.whenReady().then(() => {
   registerAppUpdateHandlers()
   registerMicrophoneHandlers()
   registerToolHealthHandlers()
+  registerDossierHandlers()
+  registerDossierAssignmentHandlers()
+  registerSearchHandlers({
+    get: getSearchAvailability,
+    open: openSearch,
+    retryModel: async () => {
+      await searchModel.retryNow()
+      return getSearchAvailability()
+    }
+  })
+  registerRecentHandlers()
   registerSummaryHandlers({
     sessionService,
     summaries: {
@@ -376,14 +445,51 @@ app.whenReady().then(() => {
     onOpenSettings: () => {
       tray.showWindow()
       sendToRenderer('nav:openSettings')
-    }
+    },
+    // Epic #192 — Zurück/Vorwärts und Seitenleiste; der Renderer führt den Verlauf
+    onNavCommand: (command) => sendToRenderer('nav:command', command),
+    // «Suchen …» (⌘K) bei verstecktem Fenster: erst zeigen (#209)
+    onShowWindow: () => tray.showWindow()
   })
 
   // Start task queue processing
   taskQueue.start()
 
-  // Start auto-deletion (30-day cleanup at startup + every 6h)
-  startAutoDeletion()
+  // Audio/Original-PDF 24 h nach erfolgreicher Verarbeitung löschen (beim
+  // Start + alle 6 h). Sitzungen selbst bleiben bis zum manuellen Löschen (#202).
+  startSourceFileCleanup()
+
+  // Epic #192 (#209/#210/#212) — Textphase der Aufbereitung für die Suche:
+  // nach Recovery und Löschabschluss, holt Ausstehendes (auch den Bestand vor
+  // dem Update) im Hintergrund nach; pausiert während einer Aufnahme.
+  // PR S4: Suchprozess (Worker) und Vektorspeicher. Nie gleichzeitig mit
+  // NER/whisper/llama: der Hook vor jedem Task beendet den Prozess und bricht
+  // die Vektorphase ab, BEVOR der Task beginnt (#209 AK 17).
+  const searchRuntime = initSearchRuntime(getDatabase(), {
+    isProcessingActive: () => taskQueue.hasActiveWork(),
+    // Ein Event für Modell und Suchprozess (search:availabilityChanged)
+    onStateChange: () => sendSearchAvailability(),
+    startGate: () => toolCheckGate
+  })
+  const searchIndex = initSearchIndexService(getDatabase(), {
+    // Gestaffeltes Löschen: sind die Indexzeilen weg, schliesst die Sitzung ab
+    finishDeletion: (id) => {
+      new SessionService(getDatabase()).finishDeletion(id)
+    },
+    vectors: searchRuntime.vectorPhaseDeps
+  })
+  taskQueue.setBeforeTaskHook(createBeforeTaskHook(searchRuntime, searchIndex))
+  // Verarbeitung beginnt/endet: sofort melden, nicht erst im nächsten Takt
+  taskQueue.setActivityListener(() => searchRuntime.worker.refreshState())
+  // Gelöscht: kein Klartext der Sitzung mehr an den Suchprozess (#209 PC 1)
+  onSessionsDeleted((ids) => searchIndex.noteSessionsDeleted(ids))
+  searchIndex.setRecordingPause(getActiveSessionId() !== null)
+  searchIndex.start()
+
+  // Fehlt das Suchmodell (Bestand nach dem Update, gescheiterter Download in
+  // der Ersteinrichtung), lädt es der Provisioner im Hintergrund nach — nicht
+  // vor abgeschlossener Ersteinrichtung, die lädt es selbst (#210 AK 2/3).
+  searchModel.start()
 
   // Non-blocking: check for model + app updates on startup
   checkForUpdates().catch(() => {
@@ -445,19 +551,39 @@ app.on('before-quit', (event) => {
   // Aufnahme nicht mehr erkennbar (#164 AK 14)
   const installPlan = getAppUpdateService()?.prepareQuitInstall() ?? null
   void (async () => {
-    cleanupRecordingOnQuit()
-    stopAutoDeletion()
-    try {
-      await getTaskQueue().shutdown(8_000)
-    } catch {
-      // TaskQueue may not have been initialized
-    }
-    try {
-      getTray().destroy()
-    } catch {
-      // Tray may not have been initialized
-    }
-    closeDatabase()
+    await runQuitCleanup({
+      // Vor dem Schliessen der Datenbank und vor einem Update-Tausch: der
+      // Renderer speichert ausstehende Änderungen (höchstens 3 s). Nach der
+      // Deinstallation ist die Datenbank schon zu — dann nichts anfragen.
+      flushRendererEdits: () =>
+        isDatabaseOpen()
+          ? requestRendererFlush({
+              getTargets: () =>
+                BrowserWindow.getAllWindows().map((win) => ({
+                  isDestroyed: () => win.isDestroyed() || win.webContents.isDestroyed(),
+                  send: (channel, requestId) => win.webContents.send(channel, requestId)
+                })),
+              replies: ipcMain
+            })
+          : Promise.resolve(),
+      cleanupRecording: cleanupRecordingOnQuit,
+      // Epic #192 — keine Aufbereitung für die Suche mehr (nach dem Renderer-Flush)
+      // … und ausstehendes gestaffeltes Löschen noch abschliessen (höchstens
+      // 2 s, der Rest beim nächsten Start; Review S3)
+      stopSearchIndex: () => {
+        const index = getSearchIndexService()
+        index?.finishPurgesForQuit()
+        index?.stop()
+      },
+      stopSearchWorker: () => getSearchRuntime()?.worker.shutdown(3_000) ?? Promise.resolve(),
+      // Hintergrund-Download des Suchmodells abbrechen — zählt nicht als
+      // Arbeit, ein Update wartet nicht darauf (#210 AK 7)
+      stopSearchModelProvisioner: () => getSearchModelProvisioner()?.stop(),
+      stopSourceFileCleanup,
+      shutdownTaskQueue: () => getTaskQueue().shutdown(8_000),
+      destroyTray: () => getTray().destroy(),
+      closeDatabase
+    })
     quitCleanupDone = true
     if (installPlan) {
       // Nur Umbenennungen — die neue Version liegt schon geprüft bereit (NFR 5).

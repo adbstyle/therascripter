@@ -491,11 +491,38 @@
         <h2 id="privacy-h">Daten bleiben in Ihrer Hand</h2>
         <div class="privacy-grid">
           <article>
-            <h3>Automatische Löschung nach 30 Tagen</h3>
+            <h3>Aufbewahrt, bis Sie löschen</h3>
             <p>
-              Sitzungen werden 30 Tage nach Erstellung automatisch gelöscht, die Aufnahme oder das
-              PDF bereits 24 Stunden nach der Verarbeitung. Was Sie aufbewahren müssen, kopieren Sie
-              vorher in Ihre Praxis-Software oder Ihre Dokumentation.
+              Der Text Ihrer Sitzungen und PDF-Dokumente bleibt erhalten, bis Sie ihn selbst
+              löschen. Audioaufnahmen und Original-PDFs werden frühestens 24 Stunden nach
+              erfolgreicher Verarbeitung gelöscht, sobald TheraScript das nächste Mal aufräumt (beim
+              Start und alle 6 Stunden, solange die App läuft); schlägt die Verarbeitung fehl, bleiben sie erhalten, bis Sie
+              die Sitzung selbst löschen. Inhalte mit Aufbewahrungspflicht gehören weiterhin in Ihre
+              rechtlich führende Praxissoftware.
+            </p>
+          </article>
+          <article>
+            <h3>Suche auf Ihrem Mac</h3>
+            <p>
+              Mit ⌘K durchsuchen Sie alle Sitzungen und PDF-Dokumente nach Bedeutung, nach genauen
+              Begriffen und nach den Klarnamen pseudonymisierter Angaben, und Sie finden
+              Patientendossiers über Name oder Dossier-ID; «Im Dossier suchen» bleibt in einem
+              Patientendossier. Suchanfragen und Suchindex verlassen Ihren Mac nicht. Die Ausschnitte
+              in den Treffern stehen immer im Klartext, auch in der pseudonymisierten Ansicht. Die
+              fünf letzten Suchanfragen bleiben lokal gespeichert, bis Sie sie löschen.
+            </p>
+          </article>
+          <article>
+            <h3>Patientendossiers</h3>
+            <p>
+              Für jede Patientin und jeden Patienten legen Sie ein Patientendossier an: Name,
+              Dossier-ID, Geburtsdatum, Diagnosen, Medikation und eine freie Notiz. Diese Angaben
+              speichert TheraScript ausschliesslich lokal auf Ihrem Mac und bewahrt sie auf, bis
+              Sie das Patientendossier löschen oder TheraScript mit «TheraScript vollständig
+              entfernen» von Ihrem Mac entfernen. Die App nur in den Papierkorb zu legen, löscht sie nicht.
+              Löschen Sie ein Patientendossier, löscht TheraScript die Sitzungen und PDF-Dokumente
+              mit, die nur ihm zugeordnet sind; was auch einem anderen Dossier zugeordnet ist, bleibt
+              erhalten.
             </p>
           </article>
           <article>
@@ -520,8 +547,10 @@
             <p>
               Im Transkript werden echte Namen durch Platzhalter wie [PERSON 1] oder [ORT 1]
               ersetzt. Die Zuordnung zwischen Platzhalter und Original bleibt lokal auf Ihrem Mac
-              gespeichert – im Editor sehen Sie jederzeit, wer mit [PERSON 1] gemeint ist. Kopierter
-              Text enthält nur die Platzhalter.
+              gespeichert – im Editor sehen Sie jederzeit, wer mit [PERSON 1] gemeint ist. Mit dem
+              Umschalter «Pseudonymisiert | Klartext» lesen Sie Sitzungen wahlweise mit Platzhaltern
+              oder mit den Klarnamen.
+              <a href="#faq-kopieren">Was beim Kopieren in die Zwischenablage gelangt</a>
             </p>
           </article>
         </div>
@@ -533,7 +562,7 @@
           <li>Mac mit Apple-Chip (M1 oder neuer)</li>
           <li>macOS 26 (Tahoe) oder neuer</li>
           <li>8 GB Arbeitsspeicher (RAM) oder mehr</li>
-          <li>5 GB freier Festplattenspeicher</li>
+          <li>5 GB freier Festplattenspeicher (Sprachmodelle ~2.1 GB Download)</li>
         </ul>
       </section>
 
@@ -543,9 +572,14 @@
         <details>
           <summary>Wo werden meine Daten gespeichert?</summary>
           <p>
-            Sämtliche Audio-, Transkript- und PDF-Daten werden ausschliesslich lokal auf Ihrem Mac
-            gespeichert (Standardpfad: <code>~/.therascript/</code>). TheraScript übermittelt keine
-            Inhalte aus Ihren Sitzungen – sie verlassen Ihren Mac nur, wenn Sie sie selbst kopieren.
+            Sämtliche Audio-, Transkript- und PDF-Daten sowie Ihre Patientendossiers mit Stammdaten,
+            Diagnosen, Medikation und Notiz werden ausschliesslich lokal auf Ihrem Mac gespeichert
+            (Standardpfad: <code>~/.therascript/</code>). Patientendossiers bleiben erhalten, bis
+            Sie sie löschen oder TheraScript in den Einstellungen unter «Über» vollständig
+            entfernen; die App nur in den Papierkorb zu legen, löscht sie nicht. Auch der Suchindex
+            (bis ~0.7 GB bei 2'000 Sitzungen) liegt nur auf Ihrem Mac und wird mit der Sitzung
+            gelöscht. TheraScript übermittelt keine Inhalte aus Ihren Sitzungen – sie verlassen Ihren Mac nur, wenn Sie
+            sie selbst kopieren.
           </p>
         </details>
 
@@ -559,6 +593,9 @@
                 den Einstellungen ein Modell hinzufügen, und mit Updates: Neue Fassungen Ihrer Modelle
                 und Modelle, die eine neue Version braucht, lädt TheraScript automatisch zusammen mit
                 dem Update – oder nur auf Klick, wenn Sie die automatischen Updates ausschalten.
+                Fehlt das Suchmodell (rund 0.43 GB, etwa nach dem Update von einer Version ohne
+                Suche), lädt TheraScript es selbständig im Hintergrund nach, auch wenn die
+                automatischen Updates ausgeschaltet sind.
               </li>
               <li>
                 <strong>Nach neuen Versionen suchen:</strong> bei jedem Start, danach alle 4 Stunden
@@ -585,11 +622,36 @@
         </details>
 
         <details>
-          <summary>Wie übernehme ich Inhalte vor der automatischen Löschung?</summary>
+          <summary>Wie lange bewahrt TheraScript meine Sitzungen auf?</summary>
           <p>
-            Im Review-Editor kopiert der Knopf «Kopieren» den pseudonymisierten Text in die
-            Zwischenablage. Von dort übernehmen Sie ihn in Ihre Praxis-Software oder Ihre
-            Dokumentation, bevor die Sitzung nach 30 Tagen automatisch gelöscht wird.
+            Bis Sie sie selbst löschen. Der Text von Sitzungen und PDF-Dokumenten bleibt ohne
+            zeitliche Begrenzung erhalten. Audioaufnahmen und Original-PDFs löscht TheraScript 24
+            Stunden nach erfolgreicher Verarbeitung; schlägt die Verarbeitung fehl, bleiben sie
+            erhalten, bis Sie die Sitzung selbst löschen.
+          </p>
+          <p>
+            TheraScript ersetzt Ihre rechtlich führende Praxissoftware nicht: Inhalte mit
+            Aufbewahrungspflicht gehören weiterhin dorthin. Im Review-Editor kopiert der
+            Kopieren-Knopf den Text in der gewählten Ansicht in die Zwischenablage, von dort
+            übernehmen Sie ihn in Ihre Praxissoftware.
+          </p>
+        </details>
+
+        <details id="faq-kopieren">
+          <summary>Was gelangt beim Kopieren in die Zwischenablage?</summary>
+          <p>
+            Immer die Ansicht, die Sie oben rechts gewählt haben – gleich ob Sie den Kopieren-Knopf,
+            ⌘ C oder ⌘ X verwenden, Text herausziehen oder aus Titel und Zusammenfassung kopieren. In
+            der Ansicht «Pseudonymisiert» erscheinen pseudonymisierte Angaben als Platzhalter wie
+            [PERSON 1], etwa für ein Cloud-Sprachmodell; was die Pseudonymisierung nicht erfasst hat
+            – übersehene oder selbst getippte Namen –, bleibt auch dort stehen. In der Ansicht
+            «Klartext» stehen an Stelle der Platzhalter die Originale, etwa für Ihre
+            Praxissoftware.
+          </p>
+          <p>
+            Kopierter Text verlässt TheraScript über die Zwischenablage Ihres Macs. Dort können ihn
+            andere Apps lesen, und macOS kann ihn über die «Universelle Zwischenablage» an Ihre
+            anderen Apple-Geräte weitergeben. TheraScript leert die Zwischenablage nicht.
           </p>
         </details>
 

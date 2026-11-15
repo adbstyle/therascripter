@@ -12,6 +12,8 @@ import { ChipActionMenu } from './ChipActionMenu'
 
 interface AnonymizationPanelProps {
   data: AnonymizationOverviewData
+  /** Issue #203 — Klartext view: identities without the actions that change them. */
+  readOnly?: boolean
   onRevert: (entityId: string) => void
   onChangeType: (entityId: string, newType: PlaceholderType) => void
   onAddToBlocklist: (entityId: string, original: string, type: PlaceholderType) => void
@@ -25,6 +27,7 @@ interface AnonymizationPanelProps {
  */
 export function AnonymizationPanel({
   data,
+  readOnly = false,
   onRevert,
   onChangeType,
   onAddToBlocklist
@@ -41,6 +44,7 @@ export function AnonymizationPanel({
         <TypeGroupSection
           key={group.type}
           group={group}
+          readOnly={readOnly}
           onRevert={onRevert}
           onChangeType={onChangeType}
           onAddToBlocklist={onAddToBlocklist}
@@ -52,11 +56,13 @@ export function AnonymizationPanel({
 
 function TypeGroupSection({
   group,
+  readOnly,
   onRevert,
   onChangeType,
   onAddToBlocklist
 }: {
   group: EntityTypeGroup
+  readOnly: boolean
   onRevert: (entityId: string) => void
   onChangeType: (entityId: string, newType: PlaceholderType) => void
   onAddToBlocklist: (entityId: string, original: string, type: PlaceholderType) => void
@@ -75,6 +81,7 @@ function TypeGroupSection({
           <IdentityRow
             key={identity.entityId}
             identity={identity}
+            readOnly={readOnly}
             onRevert={onRevert}
             onChangeType={onChangeType}
             onAddToBlocklist={onAddToBlocklist}
@@ -87,11 +94,13 @@ function TypeGroupSection({
 
 function IdentityRow({
   identity,
+  readOnly,
   onRevert,
   onChangeType,
   onAddToBlocklist
 }: {
   identity: AnonymizedIdentity
+  readOnly: boolean
   onRevert: (entityId: string) => void
   onChangeType: (entityId: string, newType: PlaceholderType) => void
   onAddToBlocklist: (entityId: string, original: string, type: PlaceholderType) => void
@@ -138,40 +147,42 @@ function IdentityRow({
         <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${chipStyle}`}>
           {displayLabel}
         </span>
-        <div className="flex items-center gap-0.5">
-          <button
-            ref={triggerRef}
-            type="button"
-            className="flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:bg-surface-2 focus-visible:text-text-primary focus-visible:outline-none"
-            onClick={openMenu}
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            aria-label={`Weitere Aktionen für ${displayLabel}`}
-            title={`Weitere Aktionen für ${displayLabel}`}
-          >
-            <MoreHorizontal className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          </button>
-          <button
-            type="button"
-            className="flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:bg-surface-2 focus-visible:text-text-primary focus-visible:outline-none"
-            onClick={() => onRevert(identity.entityId)}
-            aria-label={`Pseudonym ${displayLabel} rückgängig machen`}
-            title={
-              identity.totalCount > 1
-                ? `Pseudonym rückgängig machen (${identity.totalCount} Vorkommen)`
-                : 'Pseudonym rückgängig machen'
-            }
-          >
-            <Undo2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="flex items-center gap-0.5">
+            <button
+              ref={triggerRef}
+              type="button"
+              className="flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:bg-surface-2 focus-visible:text-text-primary focus-visible:outline-none"
+              onClick={openMenu}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label={`Weitere Aktionen für ${displayLabel}`}
+              title={`Weitere Aktionen für ${displayLabel}`}
+            >
+              <MoreHorizontal className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="flex h-6 w-6 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-surface-2 hover:text-text-primary focus-visible:bg-surface-2 focus-visible:text-text-primary focus-visible:outline-none"
+              onClick={() => onRevert(identity.entityId)}
+              aria-label={`Pseudonym ${displayLabel} rückgängig machen`}
+              title={
+                identity.totalCount > 1
+                  ? `Pseudonym rückgängig machen (${identity.totalCount} Vorkommen)`
+                  : 'Pseudonym rückgängig machen'
+              }
+            >
+              <Undo2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+            </button>
+          </div>
+        )}
       </div>
       <div className="mt-1.5 flex flex-col gap-1">
         {identity.variants.map((variant) => (
           <VariantRow key={`${variant.source}::${variant.text}`} variant={variant} />
         ))}
       </div>
-      {menuRect && (
+      {menuRect && !readOnly && (
         <ChipActionMenu
           anchorRect={menuRect}
           entityId={identity.entityId}
@@ -196,7 +207,9 @@ function VariantRow({ variant }: { variant: OriginalVariant }): React.JSX.Elemen
 
   return (
     <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-      <span className="truncate" title={variant.text}>
+      {/* select-none: originals must not ride along on a native ⌘A + ⌘C in
+          the pseudonymized view (#203 AK 9) */}
+      <span className="select-none truncate" title={variant.text} data-original>
         &ldquo;{variant.text}&rdquo;
       </span>
       {variant.count > 1 && (

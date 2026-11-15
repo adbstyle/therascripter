@@ -67,7 +67,7 @@ export const SOFTWARE_ACKNOWLEDGMENTS: Acknowledgment[] = [
   {
     name: 'Python',
     description:
-      'Laufzeit für Sprechererkennung und Pseudonymisierung, mit Open-Source-Bibliotheken',
+      'Laufzeit für Sprechererkennung, Pseudonymisierung und Suche, mit Open-Source-Bibliotheken',
     license: 'je Bibliothek',
     notice:
       'TheraScript nutzt Python und verschiedene Open-Source-Bibliotheken. Jede steht unter ihrer eigenen Lizenz; die Lizenztexte liegen den Bibliotheken im App-Paket bei.'
@@ -178,6 +178,18 @@ export const MODEL_ACKNOWLEDGMENTS: Acknowledgment[] = [
     description: 'Teil der Pseudonymisierung — © Facebook, Inc. and its affiliates',
     license: 'MIT',
     notice: FAIRSEQ_XLM_ROBERTA
+  },
+  {
+    name: 'EmbeddingGemma 2',
+    catalogIds: ['embeddinggemma-2-text'],
+    description: 'Suche nach Bedeutung — © Google LLC',
+    license: 'Apache License 2.0',
+    notice:
+      'google/embeddinggemma-2, https://huggingface.co/google/embeddinggemma-2\n\n' +
+      'TheraScript verteilt nur den Text-Teil des Modells weiter (Gewichte unverändert in bfloat16, ohne Bild- und Audio-Teil). ' +
+      'Die Model Card verlangt, dass Einsätze die Gemma Prohibited Use Policy einhalten (https://ai.google.dev/gemma/prohibited_use_policy); die Lizenz selbst enthält keine Einsatzbeschränkung. ' +
+      'TheraScript nutzt das Modell nur, um Ihre eigenen Sitzungen auf Ihrem Mac zu durchsuchen.\n\n' +
+      APACHE_2_0
   },
   {
     name: 'Gemma 4 E2B',

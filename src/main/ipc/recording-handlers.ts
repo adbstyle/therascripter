@@ -1,10 +1,18 @@
 import { dialog, ipcMain, Notification, powerSaveBlocker } from 'electron'
 import { getDatabase } from '../db/connection'
 import { SessionService } from '../services/SessionService'
+import { SessionDossierService } from '../services/SessionDossierService'
+import { RecentService } from '../services/RecentService'
 import { AudioFileService } from '../services/AudioFileService'
 import { getTray } from '../services/TrayService'
 import { getTaskQueue } from '../services/TaskQueueService'
-import { RecordingStopSchema, RecordingDataSchema } from '../../shared/validation/recording-schemas'
+import { getSearchIndexService } from '../search/SearchIndexService'
+import {
+  RecordingStartSchema,
+  RecordingStopSchema,
+  RecordingDataSchema
+} from '../../shared/validation/recording-schemas'
+import type { DossierAssignmentOutcome, RecordingStartResult } from '../../shared/types/IpcApi'
 import { AUTO_STOP_SECONDS } from '../../shared/constants/recording'
 import { sendToRenderer } from '../utils/ipc-helpers'
 
@@ -93,6 +101,8 @@ function stopRecordingInternal(sessionId: string): { durationSeconds: number } {
     } catch {
       // TaskQueue may not be initialized in tests
     }
+    // Epic #192 (#209 AK 19, #212 AK 3) — Aufbereitung für die Suche ebenso
+    getSearchIndexService()?.setRecordingPause(false)
 
     try {
       getTray().setRecordingState(false)
@@ -139,8 +149,32 @@ export function getActiveSessionId(): string | null {
   return activeSessionId
 }
 
+/**
+ * #206 PC 1 — ordnet die neue Sitzung dem Patientendossier zu, aus dem heraus
+ * der USER die Aufnahme startet. Scheitert die Zuordnung (Dossier inzwischen
+ * gelöscht, Datenbankfehler), läuft die Aufnahme trotzdem: das Ergebnis
+ * 'failed' meldet es dem Renderer, der es dem USER nennt (AK 2).
+ */
+function assignToDossier(
+  sessionId: string,
+  dossierId: string | undefined
+): DossierAssignmentOutcome {
+  if (dossierId === undefined) return 'none'
+  try {
+    const result = new SessionDossierService(getDatabase()).assign(sessionId, dossierId)
+    return result.ok ? 'assigned' : 'failed'
+  } catch (error) {
+    console.error(
+      `[Recording] Zuordnung der Sitzung ${sessionId} zum Dossier fehlgeschlagen:`,
+      error
+    )
+    return 'failed'
+  }
+}
+
 export function registerRecordingHandlers(): void {
-  ipcMain.handle('recording:start', () => {
+  ipcMain.handle('recording:start', (_event, args?: unknown): RecordingStartResult => {
+    const options = RecordingStartSchema.parse(args)
     if (activeSessionId) {
       throw new Error('A recording is already in progress')
     }
@@ -155,6 +189,17 @@ export function registerRecordingHandlers(): void {
     activeSessionId = session.id
     recordingStartTime = Date.now()
 
+    // Ab Beginn der Aufnahme zugeordnet (#206 PC 1): vor dem ersten
+    // Audio-Chunk, aber erst nach dem Anlegen der Datei — scheitert dort
+    // etwas, bleiben keine Zuordnung und kein «Zuletzt»-Eintrag zurück
+    const assignment = assignToDossier(session.id, options?.dossierId)
+    // «Zuletzt geöffnet» (#213 AK 2): die gestartete Aufnahme gehört dazu
+    try {
+      new RecentService(getDatabase()).touch({ kind: 'session', id: session.id })
+    } catch (error) {
+      console.error('[Recording] «Zuletzt geöffnet» nicht aktualisiert:', error)
+    }
+
     // Queue pausieren: keine neuen ML-Tasks während der Aufnahme.
     // Nach dem Point-of-no-Return, damit ein Throw bei der Session-
     // Erstellung keine pausierte Queue ohne Aufnahme hinterlässt.
@@ -163,6 +208,8 @@ export function registerRecordingHandlers(): void {
     } catch {
       // TaskQueue may not be initialized in tests
     }
+    // Epic #192 (#209 AK 19, #212 AK 3) — Aufbereitung für die Suche ebenso
+    getSearchIndexService()?.setRecordingPause(true)
 
     // Start power save blocker (NFR-24)
     startPowerBlocker()
@@ -189,7 +236,9 @@ export function registerRecordingHandlers(): void {
       // Tray may not be initialized in tests
     }
 
-    return { sessionId: session.id }
+    // Titel und Zeitpunkt der Sitzung: der Hinweis «nicht zugeordnet» nennt
+    // genau diese, nicht die Zeit vor dem Mikrofondialog (#206 AK 2)
+    return { sessionId: session.id, assignment, title: session.title, createdAt: session.createdAt }
   })
 
   ipcMain.handle('recording:stop', (_event, args: unknown) => {
@@ -239,6 +288,8 @@ export function cleanupRecordingOnQuit(): void {
     } catch {
       // Best effort cleanup on quit
     }
+    // Epic #192 (#209 AK 19, #212 AK 3) — Aufbereitung für die Suche ebenso
+    getSearchIndexService()?.setRecordingPause(false)
   }
 }
 

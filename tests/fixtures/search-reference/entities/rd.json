@@ -1,0 +1,210 @@
+{
+  "doc": "rd",
+  "entities": [
+    {
+      "text": "Monika Rüttimann",
+      "type": "PERSON",
+      "canonical": "Monika Rüttimann"
+    },
+    {
+      "text": "Rebhaldenstrasse 140",
+      "type": "KONTAKT",
+      "canonical": "Rebhaldenstrasse 140"
+    },
+    {
+      "text": "8400 Winterthur",
+      "type": "KONTAKT",
+      "canonical": "8400 Winterthur"
+    },
+    {
+      "text": "Winterthur",
+      "type": "ORT",
+      "canonical": "Winterthur"
+    },
+    {
+      "text": "052 213 67 42",
+      "type": "KONTAKT",
+      "canonical": "052 213 67 42"
+    },
+    {
+      "text": "079 641 08 55",
+      "type": "KONTAKT",
+      "canonical": "079 641 08 55"
+    },
+    {
+      "text": "Claudia Brunner",
+      "type": "PERSON",
+      "canonical": "Claudia Brunner"
+    },
+    {
+      "text": "Brunner",
+      "type": "PERSON",
+      "canonical": "Claudia Brunner"
+    },
+    {
+      "text": "Merkurgasse 4",
+      "type": "KONTAKT",
+      "canonical": "Merkurgasse 4"
+    },
+    {
+      "text": "Seraina Caflisch",
+      "type": "PERSON",
+      "canonical": "Seraina Caflisch"
+    },
+    {
+      "text": "Caflisch",
+      "type": "PERSON",
+      "canonical": "Seraina Caflisch"
+    },
+    {
+      "text": "Frauenpraxis Neuwiesen",
+      "type": "ORGANISATION",
+      "canonical": "Frauenpraxis Neuwiesen"
+    },
+    {
+      "text": "052 224 51 30",
+      "type": "KONTAKT",
+      "canonical": "052 224 51 30"
+    },
+    {
+      "text": "26. Februar 2026",
+      "type": "DATUM",
+      "canonical": "26. Februar 2026"
+    },
+    {
+      "text": "Fatma Yilmaz",
+      "type": "PERSON",
+      "canonical": "Fatma Yilmaz"
+    },
+    {
+      "text": "Yilmaz",
+      "type": "PERSON",
+      "canonical": "Fatma Yilmaz"
+    },
+    {
+      "text": "17. Februar 1994",
+      "type": "DATUM",
+      "canonical": "17. Februar 1994"
+    },
+    {
+      "text": "Lindenrainweg 23",
+      "type": "KONTAKT",
+      "canonical": "Lindenrainweg 23"
+    },
+    {
+      "text": "8406 Winterthur",
+      "type": "KONTAKT",
+      "canonical": "8406 Winterthur"
+    },
+    {
+      "text": "076 529 84 13",
+      "type": "KONTAKT",
+      "canonical": "076 529 84 13"
+    },
+    {
+      "text": "Elif",
+      "type": "PERSON",
+      "canonical": "Elif Yilmaz"
+    },
+    {
+      "text": "Elif Yilmaz",
+      "type": "PERSON",
+      "canonical": "Elif Yilmaz"
+    },
+    {
+      "text": "9. Oktober 2025",
+      "type": "DATUM",
+      "canonical": "9. Oktober 2025"
+    },
+    {
+      "text": "24. Februar",
+      "type": "DATUM",
+      "canonical": "24. Februar 2026"
+    },
+    {
+      "text": "Eisenmangelanämie",
+      "type": "MEDIZINISCH",
+      "canonical": "Eisenmangelanämie"
+    },
+    {
+      "text": "Spital Eulachtal",
+      "type": "ORGANISATION",
+      "canonical": "Spital Eulachtal"
+    },
+    {
+      "text": "Mastitis",
+      "type": "MEDIZINISCH",
+      "canonical": "Mastitis"
+    },
+    {
+      "text": "Flucloxacillin",
+      "type": "MEDIZINISCH",
+      "canonical": "Flucloxacillin"
+    },
+    {
+      "text": "24. Februar 2026",
+      "type": "DATUM",
+      "canonical": "24. Februar 2026"
+    },
+    {
+      "text": "Petra Huwiler",
+      "type": "PERSON",
+      "canonical": "Petra Huwiler"
+    },
+    {
+      "text": "Deniz Yilmaz",
+      "type": "PERSON",
+      "canonical": "Deniz Yilmaz"
+    },
+    {
+      "text": "Emine Yilmaz",
+      "type": "PERSON",
+      "canonical": "Emine Yilmaz"
+    },
+    {
+      "text": "Winterthur-Seen",
+      "type": "ORT",
+      "canonical": "Winterthur-Seen"
+    },
+    {
+      "text": "Albis Assekuranz",
+      "type": "ORGANISATION",
+      "canonical": "Albis Assekuranz"
+    },
+    {
+      "text": "Maltofer",
+      "type": "MEDIZINISCH",
+      "canonical": "Maltofer"
+    },
+    {
+      "text": "postpartale Depression",
+      "type": "MEDIZINISCH",
+      "canonical": "postpartale Depression"
+    },
+    {
+      "text": "F53.0",
+      "type": "MEDIZINISCH",
+      "canonical": "F53.0"
+    },
+    {
+      "text": "F32.1",
+      "type": "MEDIZINISCH",
+      "canonical": "F32.1"
+    },
+    {
+      "text": "Mütter- und Väterberatung Winterthur",
+      "type": "ORGANISATION",
+      "canonical": "Mütter- und Väterberatung Winterthur"
+    },
+    {
+      "text": "052 267 39 00",
+      "type": "KONTAKT",
+      "canonical": "052 267 39 00"
+    },
+    {
+      "text": "Wochenbett-Netz Ostschweiz",
+      "type": "ORGANISATION",
+      "canonical": "Wochenbett-Netz Ostschweiz"
+    }
+  ]
+}

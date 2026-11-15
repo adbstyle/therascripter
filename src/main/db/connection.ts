@@ -2,7 +2,8 @@ import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { join } from 'path'
 import { chmodSync, existsSync, mkdirSync } from 'fs'
-import { migrations } from './migrations'
+import { migrations, type Migration } from './migrations'
+import { runStartupMaintenance } from './maintenance'
 
 let db: Database.Database | null = null
 
@@ -52,8 +53,15 @@ export function initDatabase(dbPath?: string): Database.Database {
     db.pragma('foreign_keys = ON')
     db.pragma('synchronous = NORMAL')
     db.pragma('temp_store = MEMORY')
+    // Issue #202: gelöschte Inhalte (Sitzungen, Pseudonymisierung samt
+    // Originaltexten) werden in der Datei mit Nullen überschrieben statt als
+    // freie Seiten liegen zu bleiben. Gilt pro Verbindung, nicht persistent —
+    // deshalb bei jedem Öffnen. Zusammen mit dem WAL-Checkpoint nach jedem
+    // Löschen (SessionService) bleibt keine Kopie in .db oder -wal zurück.
+    db.pragma('secure_delete = ON')
 
     runMigrations(db)
+    runStartupMaintenance(db)
   } catch (error) {
     db.close()
     db = null
@@ -63,6 +71,11 @@ export function initDatabase(dbPath?: string): Database.Database {
   return db
 }
 
+/** Ob die Datenbank offen ist (nach der Deinstallation z. B. nicht mehr). */
+export function isDatabaseOpen(): boolean {
+  return db !== null
+}
+
 export function closeDatabase(): void {
   if (db) {
     db.close()
@@ -70,7 +83,20 @@ export function closeDatabase(): void {
   }
 }
 
-function runMigrations(database: Database.Database): void {
+/**
+ * Applies every migration whose version is not yet recorded in schema_version,
+ * in ascending order, each in its own transaction (Epic #192 review of #217).
+ *
+ * Earlier versions only ran migrations ABOVE the highest recorded version. A
+ * migration number that was merged later than a higher one (e.g. 019 landing
+ * after a database already had 020) was then skipped forever. Checking each
+ * version individually closes that gap; already applied versions never run
+ * twice.
+ */
+export function runMigrations(
+  database: Database.Database,
+  list: readonly Migration[] = migrations
+): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS schema_version (
       version INTEGER PRIMARY KEY,
@@ -78,14 +104,15 @@ function runMigrations(database: Database.Database): void {
     )
   `)
 
-  const row = database.prepare('SELECT MAX(version) as version FROM schema_version').get() as
-    | { version: number | null }
-    | undefined
-  const currentVersion = row?.version ?? 0
+  const applied = new Set(
+    (database.prepare('SELECT version FROM schema_version').all() as { version: number }[]).map(
+      (r) => r.version
+    )
+  )
 
-  for (const migration of migrations) {
-    if (migration.version <= currentVersion) continue
+  const pending = list.filter((m) => !applied.has(m.version)).sort((a, b) => a.version - b.version)
 
+  for (const migration of pending) {
     database.transaction(() => {
       database.exec(migration.sql)
       database.prepare('INSERT INTO schema_version (version) VALUES (?)').run(migration.version)

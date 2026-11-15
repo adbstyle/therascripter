@@ -68,7 +68,7 @@ The header bar contains:
 - **Back button** ("Zurück"): Returns to the session dashboard. Triggers a session list refresh.
 - **Session icon**: Microphone for audio sessions, document icon for PDF sessions.
 - **Session title**: Displayed as a heading.
-- **Copy button** ("Kopieren"): Exports the anonymized document to the system clipboard (see Clipboard Export below).
+- **Copy button** ("Pseudonymisiert kopieren" / "Klartext kopieren"): Exports the document in the chosen view to the system clipboard (see Clipboard Export below); the label names what is copied.
 - **Three-dot menu** ("Weitere Optionen"): A dropdown with two actions:
   - **Umbenennen** (Rename): Opens a rename dialog to change the session title.
   - **Löschen** (Delete): Opens a destructive confirmation dialog. Deleting removes the audio file, original text, anonymized text, and placeholder mapping. On confirmation, navigates back to the dashboard.
@@ -100,12 +100,22 @@ The context menu closes on Escape, on click outside, or after selecting an actio
 
 Pressing Delete or Backspace when a placeholder chip is selected (ProseMirror NodeSelection) triggers batch removal of all chips with the same `entityId`, identical to the context menu's "Rückgängig machen" action.
 
+## Klartext view (Issue #203)
+
+A global view — `'pseudonymized'` (default) or `'plain'` — chosen with `ViewModeToggle` in the `TitleBar` (segmented control «Pseudonymisiert | Klartext», `aria-pressed`, available in every screen). It applies to all sessions and survives restarts (electron-store `viewMode`).
+
+- **No flash in the wrong view:** the preload reads the saved view synchronously (`viewMode:getSync`) before any renderer code runs; `viewMode/viewModeStore.ts` starts with it. Unknown or unreadable values yield the pseudonymized view.
+- **One source:** `viewModeStore` (a `ValueStore`) — React reads it via `useViewMode()`, the ProseMirror plugin `viewModeClipboardPlugin` via `getViewMode()`. Switching is synchronous; every visible text changes in the same frame.
+- **Editor:** the same editor instance stays (undo history, autosave untouched). In Klartext it is `setEditable(false, false)` — the second argument suppresses TipTap's `update` event, which would otherwise bump the autosave counter: a view switch neither changes nor saves the session. `PlaceholderChipView` renders a chip as plain running text with its `original` (its token `[PERSON 1]` when none is stored) — no chip styling, tooltip, menu or focus stop, and no hidden token for screen readers. SelectionToolbar, chip menus, title/summary editing, «Zusammenfassung erstellen» and the side panel actions are hidden; every mutating handler in `ReviewEditor` also returns early in Klartext (`isReadOnlyView`).
+- **Title and summary:** tokens there are plain text without `entityId`. `resolvePlaceholders` (shared) replaces a token only while the current EntityMap gives it the meaning recorded when the text was written (`title_entity_snapshot`/`summary_entity_snapshot`, see storage.md) — a token whose meaning changed since (type change, number reused) stays. The editor resolves against its live EntityMap; the session list reads `title_plain`/`summary_plain`, stored on every write that can change them (no EntityMap parse, no snapshot in the renderer). In the pseudonymized view, originals shown in the side panel, the chip tooltip/menus and the Sperrliste dialog are `select-none`, so a native ⌘A + ⌘C outside the editor never copies them.
+- Word and pseudonymization counters are the same in both views.
+
 ## Clipboard Export
 
-The "Kopieren" button in the header exports the full document as anonymized plain text to the system clipboard via the `review:exportClipboard` IPC channel (which calls `clipboard.writeText` in the main process).
+The copy button in the header exports the full document in the chosen view as plain text to the system clipboard via the `review:exportClipboard` IPC channel (which calls `clipboard.writeText` in the main process).
 
 The serialization logic (`serializeDocument`) converts the TipTap JSON document to plain text:
-- **Placeholder chips** become their bracket notation: `[PERSON 1]`, `[ORT 2]`, etc.
+- **Placeholder chips** become their bracket notation: `[PERSON 1]`, `[ORT 2]`, etc. — in the Klartext view their `original` (`chips: 'original'` option of the walker; token where no original is stored).
 - **Speaker labels** become `[Person A]:` (audio sessions only; omitted for PDF sessions).
 - **Timestamps** become `[00:12:34]` (audio sessions only; omitted for PDF sessions).
 - **Regular text** is preserved as-is.
@@ -115,7 +125,9 @@ A toast notification confirms success ("In Zwischenablage kopiert") or reports f
 
 ### Copy and paste inside the editor
 
-Cmd+C / Cmd+X on a selection writes two clipboard flavors, both pseudonymized:
+**Klartext view:** `viewModeClipboardPlugin` (`extensions/viewModeClipboard.ts`) replaces every chip by plain text (`original`, else token) in ProseMirror's `transformCopied`, which runs for Cmd+C, Cmd+X and the start of a drag before both flavors are built. text/plain and text/html therefore carry the clear names as ordinary text — no chip markup, so pasting Klartext anywhere (also back into a session) yields ordinary text. The editor is read-only there; the plugin turns Cmd+X into a copy without deleting. In the pseudonymized view the slice passes unchanged and everything below holds exactly as before.
+
+Cmd+C / Cmd+X on a selection in the pseudonymized view writes two clipboard flavors, both pseudonymized:
 
 - **text/plain** — the custom `clipboardTextSerializer` (`serializeClipboardText` in `utils/clipboardText.ts`) uses the same bracket notation for chips, speaker labels, and timestamps within the copied range — copied verbatim, without trimming.
 - **text/html** — ProseMirror's default serializer over each node's `renderHTML`. Chips, speaker labels and timestamps render as `<span data-type=…>` carrying their visible token as text (`[PERSON 1]`, `[Person A]:`, `[00:12:34]`, via `clipboardNodeText`), so mail, Word or web forms show the same text as the plain flavor. The chip's `original` attribute is `rendered: false` and never appears in the HTML; `entityId`, `type`, `number` and `source` do (pseudonymous metadata, needed to rebuild the chip on paste).
@@ -133,7 +145,7 @@ All text outputs of a transcript — this export, the Cmd+C serializer (both fla
 
 ## Undo / Redo
 
-Standard ProseMirror undo/redo is available via **Cmd+Z** (undo) and **Cmd+Shift+Z** (redo). These keyboard shortcuts are displayed in the footer status bar.
+Standard ProseMirror undo/redo is available via **Cmd+Z** (undo) and **Cmd+Shift+Z** (redo). The footer status bar shows them in German with macOS symbols («⌘Z Widerrufen · ⇧⌘Z Wiederholen»). Opening a session never saves it: `setContent` runs with `emitUpdate: false`, so only a user edit reaches `review:save`. In a narrow editor column (row narrower than 720 px) the right panel overlays the text instead of sitting beside it; Esc closes it first.
 
 The initial document content loaded from disk is not undoable — the editor resets its undo history after loading by creating a fresh `EditorState` with the loaded document but empty history.
 
@@ -145,9 +157,23 @@ The editor auto-saves to disk 2 seconds after the last edit (debounced via `useA
 
 ## Navigation
 
-The Review Editor is not a routed page — it is rendered conditionally in `App.tsx` when `currentView` is `'review'` and a `reviewSessionId` is set. Users enter the editor by clicking a session card that is in `review` status on the Session Dashboard. This sets the view state and passes the session ID as a prop.
+The editor is the page of the route `{ kind: 'session', sessionId }` (Epic #192, `src/renderer/src/navigation/`). Users open it by clicking a session card in `review` status; the sessions list remembers that card on its history entry (`anchorId`). Opening works during a recording too — the `RecordingBar` then sits above the editor.
 
-Exiting happens via the "Zurück" button in the header, which resets `reviewSessionId` to null, switches the view back to `'sessions'`, and triggers a session list refresh. Navigation into the review editor is disabled during active recording.
+The header button that shows or hides the editor's right panel (overview of placeholders, provenance) is labelled «Übersicht ein-/ausblenden» (`aria-pressed`, setting `reviewPanelOpen`) — distinct from «Seitenleiste», the app sidebar toggle in the title bar. Pressing Esc while editing the title only cancels the title edit; it does not leave the editor.
+
+There is **no close button** (decision in Epic #192, as in the approved prototype). Users go back with ‹ in the title bar, ⌘[ («Gehe zu → Zurück») or Esc (menu commands are ignored while a modal dialog is open; the focused element is blurred before every page change, so a title being edited is saved); «Zurück» remains only in the load-error view. `RouteView` passes `onBack = back({ fromEntryId, fallback: sessions })`: it acts only while the editor is still the current page (a deletion may already have removed the entry from the history) and falls back to the sessions list if the history holds nothing. Back on the list, the scroll position is restored and the card you came from is highlighted. The list reloads on its own via `sessions:changed` — a title edit in the editor shows there without a manual refresh.
+
+## Jump to a search hit (#209)
+
+A hit from the search opens the editor with `route.focus` (`SessionFocus` = the hit's `SearchFocus`, see [search.md](search.md#opening-a-hit-and-coming-back-209-ak-1112)). `ReviewEditor` resolves it against the **current** document once it has loaded (and again when another hit of the same session is opened while the editor is mounted):
+
+- **Plugin** `extensions/searchHighlight.ts` (in `EDITOR_EXTENSIONS` and `createTestEditor`): decorations only — for an **exact** hit a node decoration `search-hit-paragraph` («als ganzer Absatz hinterlegt», prototype) only on the paragraphs of `paraFrom..paraTo` that contain a marked word (from `ranges`; the whole section — several paragraphs, in a short session the whole session — was too broad, second visual review); for a hit **by meaning** (no `ranges`) a subtle `search-hit-paragraph-semantic` on every paragraph of the section (a 3 px bar in the left margin, no background); inline decorations `search-hit-term` for exact words and a node decoration `search-hit-chip` on a chip a word falls into (partly or wholly). The meta-only transaction (`addToHistory: false`) changes neither document nor selection: TipTap emits no `update`, so there is no autosave, no `review:save` and no new `search_rev`. The decorations only set classes — never text, `title` or `aria-*` — so in the pseudonymized view a chip stays its placeholder.
+- **Offsets → positions** (`paragraphTextMap`, `mapTextRange`): the same rule as `paragraphSearchText` in the main process — text counts with its UTF-16 length (as ProseMirror does, so emoji and decomposed umlauts line up), a chip with `original.length` (without an original with its token), speaker and timestamp nodes count zero. A parity test compares both.
+- **Robust against edits** (`resolveSearchFocus`): if the text at the first range still equals the `anchor` (normalized like the search) — or, for hits by meaning, one of the paragraphs still contains it — the delivered paragraphs and ranges apply — except for a hit from an earlier version of the session (`fromEarlierVersion`), whose paragraph numbers belong to the old text and are skipped. Otherwise the anchor is searched in the current document, nearest paragraph to the original first; if it is gone, the session opens at the top with a neutral info toast «Die Fundstelle gibt es in der aktuellen Fassung nicht mehr.». A resolved focus is consumed (`onFocusConsumed` → `consumeFocus` drops it from the route), so a later return to the session neither highlights nor reports it again.
+- **Title / summary hits** highlight the title row or the summary block (`search-hit-field`) instead.
+- **Scrolling:** the paragraph holding the first mark (by meaning: the first paragraph of the section) is scrolled to the centre (`scrollIntoView({block:'center'})`); for 1.5 s after the jump a `ResizeObserver` on the summary above (same scroll container, loads late) re-centres it. An open overlay panel (narrow column) is closed so it does not cover the hit. Focus goes to the text area (`tabIndex=-1`, no selection), and a polite live region announces «Fundstelle in Absatz 4 von 40 hervorgehoben.» (by meaning «Fundstelle ab Absatz 4 von 40 …»; with «…, nach einer Bearbeitung wiedergefunden» after relocating) — never the text itself.
+- **Ends** with the first edit (`docChanged` in the plugin; the field highlight on the next edit counter) or the first scroll by the user (wheel, touch, scrollbar click, scroll keys outside the text), as in the prototype. There is no «Fundstelle n von m» stepper (not in the prototype); each of up to three hits per document is its own entry in the result list.
+- **Esc order:** search window → popovers/overlay panel → editor. The window takes Esc for itself (`preventDefault` + `stopPropagation`); the editor's window-level Esc handler ignores prevented events.
 
 ## Backend (Main Process)
 

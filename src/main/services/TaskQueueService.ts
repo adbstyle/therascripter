@@ -12,6 +12,7 @@ import { AUDIO_PIPELINE, PDF_PIPELINE } from '../../shared/constants/pipeline'
 import { getActiveModelId } from './ModelDownloadService'
 import { captureProcessedModels } from './ProvenanceCapture'
 import { isToolBlockedMessage } from '../../shared/tool-blocked'
+import { stripAbsolutePaths } from '../utils/userFacingError'
 
 // Issue #80 / DR-5: tasks[] is the source of truth for "current step".
 // SessionStatus only carries lifecycle phase (queued / processing / review / error / recording).
@@ -73,6 +74,19 @@ export class TaskQueueService {
   // abortRunningForSession() (called from SessionService.deleteSession) can
   // signal the executor to stop cleanly. See DR-6 in plans/2026-04-29-pipeline-progress-ui-issue-80.md.
   private runningController: { sessionId: string; controller: AbortController } | null = null
+  /**
+   * Läuft vor jedem Task, bevor er als running gilt (Epic #192): beendet den
+   * Suchprozess und bricht die Vektorphase ab — nie gleichzeitig mit NER,
+   * whisper oder llama (8-GB-Budget, #209 AK 17).
+   */
+  private beforeTask: (() => Promise<unknown>) | null = null
+  /**
+   * Epic #192: ob Tasks warten — im Speicher, höchstens 1 s alt (die
+   * Vektorphase fragt vor jedem Batch; keine DB-Abfrage pro Batch). Jeder
+   * neue Task setzt ihn sofort auf true.
+   */
+  private pendingCache: { value: boolean; at: number } | null = null
+  private activityListener: (() => void) | null = null
 
   constructor(private readonly db: Database.Database) {
     this.repository = new TaskRepository(db)
@@ -113,6 +127,7 @@ export class TaskQueueService {
       const created: Task[] = []
       for (const type of plannedSteps) {
         created.push(this.repository.create({ sessionId, type }))
+        this.pendingCache = { value: true, at: Date.now() }
       }
       return created
     })()
@@ -209,6 +224,7 @@ export class TaskQueueService {
       // Create pending tasks for remaining pipeline steps
       for (const type of remainingSteps) {
         this.repository.create({ sessionId, type })
+        this.pendingCache = { value: true, at: Date.now() }
       }
 
       // Transition session: error → queued. The first task's start will then push
@@ -264,6 +280,8 @@ export class TaskQueueService {
       .some((t) => t.type === 'summarization' && (t.status === 'pending' || t.status === 'running'))
     if (running) return false
     this.repository.create({ sessionId, type: 'summarization' })
+    this.pendingCache = { value: true, at: Date.now() }
+    this.notifyActivity()
     this.scheduleNext()
     return true
   }
@@ -424,6 +442,51 @@ export class TaskQueueService {
   }
 
   /**
+   * Hook vor jedem Task (Epic #192). Der Task beginnt erst, wenn das Promise
+   * erfüllt ist; ein Fehler darin hält ihn nicht auf.
+   */
+  setBeforeTaskHook(hook: (() => Promise<unknown>) | null): void {
+    this.beforeTask = hook
+  }
+
+  /**
+   * Läuft eine Verarbeitung oder steht eine an, die nicht auf das Ende einer
+   * Aufnahme wartet? Solange das gilt, startet der Suchprozess nicht
+   * (#209 AK 18): eine Aufnahme selbst sperrt die Suche nach Bedeutung nicht.
+   */
+  hasActiveWork(): boolean {
+    if (this.processing) return true
+    if (this.pausedForRecording) return false
+    const now = Date.now()
+    if (this.pendingCache && now - this.pendingCache.at < 1_000) return this.pendingCache.value
+    let value = false
+    try {
+      value = this.repository.findPending() !== null
+    } catch {
+      value = false
+    }
+    this.pendingCache = { value, at: now }
+    return value
+  }
+
+  /**
+   * Epic #192: informiert, sobald sich `hasActiveWork()` ändern kann
+   * (Verarbeitung beginnt/endet, Tasks eingereiht, Aufnahme-Pause) — die
+   * Oberfläche erfährt so sofort, dass die Suche nach Bedeutung (nicht) geht.
+   */
+  setActivityListener(listener: (() => void) | null): void {
+    this.activityListener = listener
+  }
+
+  private notifyActivity(): void {
+    try {
+      this.activityListener?.()
+    } catch (err) {
+      console.error('[TaskQueue] Aktivitäts-Beobachter fehlgeschlagen:', err)
+    }
+  }
+
+  /**
    * Läuft ein Schritt oder wartet einer? Anders als isProcessing() auch true
    * zwischen zwei Pipeline-Schritten und während die Warteschlange für eine
    * Aufnahme pausiert — ein App-Update darf dann nicht neu starten (#164).
@@ -446,11 +509,13 @@ export class TaskQueueService {
     if (this.pausedForRecording === paused) return
     this.pausedForRecording = paused
     console.log(`[TaskQueue] Recording pause ${paused ? 'ON' : 'OFF'}`)
+    this.notifyActivity()
     if (!paused) this.scheduleNext()
   }
 
   /** Fire-and-forget wrapper that swallows rejections during shutdown */
   private scheduleNext(): void {
+    this.notifyActivity()
     this.processNext().catch(() => {
       // Swallow errors during shutdown (e.g., DB closed)
     })
@@ -467,9 +532,42 @@ export class TaskQueueService {
       // DB may be closed during shutdown
       return
     }
-    if (!task) return
+    if (!task) {
+      if (this.pendingCache?.value) {
+        this.pendingCache = { value: false, at: Date.now() }
+        this.notifyActivity()
+      }
+      return
+    }
 
     this.processing = true
+    this.notifyActivity()
+
+    if (this.beforeTask) {
+      try {
+        await this.beforeTask()
+      } catch (err) {
+        console.error('[TaskQueue] Hook vor dem Task fehlgeschlagen:', err)
+      }
+      // Während des Hooks können Beenden, eine Aufnahme oder ein Löschen
+      // dazwischengekommen sein — dann den Task (noch) nicht starten.
+      let current: Task | null = null
+      try {
+        current = this.repository.findPending()
+      } catch {
+        // DB während des Beendens geschlossen
+      }
+      if (this.shouldStop || this.pausedForRecording || current?.id !== task.id) {
+        this.processing = false
+        this.pendingCache = null
+        this.notifyActivity()
+        if (!this.shouldStop && !this.pausedForRecording && current) {
+          setTimeout(() => this.scheduleNext(), 0)
+        }
+        return
+      }
+    }
+
     console.log(`[TaskQueue] Starting task ${task.type} for session ${task.sessionId}`)
 
     const executor = this.executors.get(task.type)
@@ -629,7 +727,20 @@ export class TaskQueueService {
     } finally {
       watchdog.stop()
       this.runningController = null
+
+      // Issue #202: wurde die Sitzung während des Laufs gelöscht, kann ein
+      // Executor, der den Abbruch nicht sofort beachtet, danach noch Dateien
+      // geschrieben haben — diese hier mit demselben Code wie beim Löschen
+      // erneut entfernen.
+      try {
+        this.sessionService.removeFilesIfDeleted(task.sessionId)
+      } catch (cleanupErr) {
+        console.error('[TaskQueue] Nachräumen einer gelöschten Sitzung fehlgeschlagen:', cleanupErr)
+      }
+
       this.processing = false
+      this.pendingCache = null
+      this.notifyActivity()
 
       // Phase D.4 — task ended (success or fail), queue positions may have shifted
       this.broadcastQueuePositions()
@@ -724,11 +835,15 @@ export class TaskQueueService {
       console.log(`[TaskQueue] Cancelled ${cancelled} pending tasks for session ${task.sessionId}`)
     }
 
+    // Sichtbar ohne absolute Pfade (Benutzername, Installationsort); die
+    // vollständige Meldung steht im Log und in der Task-Zeile
+    const visibleMessage = stripAbsolutePaths(errorMessage) || 'Verarbeitung fehlgeschlagen.'
+
     // Set session to error state
     try {
       this.sessionService.updateSession(task.sessionId, {
         status: 'error',
-        errorMessage
+        errorMessage: visibleMessage
       })
     } catch (err) {
       console.error(`[TaskQueue] Failed to set session ${task.sessionId} to error state:`, err)
@@ -738,7 +853,7 @@ export class TaskQueueService {
     sendToRenderer('task:error', {
       sessionId: task.sessionId,
       taskType: task.type,
-      error: errorMessage
+      error: visibleMessage
     })
   }
 

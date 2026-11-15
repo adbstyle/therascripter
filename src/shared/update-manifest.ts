@@ -1,3 +1,5 @@
+import { isPublished } from './model-catalog'
+
 /**
  * Baut die Update-Beschreibung (manifest.json) aus dem Modell-Katalog des
  * Releases (Issue #163). Reine Funktion — scripts/manifest-from-catalog.ts
@@ -45,6 +47,8 @@ export interface CatalogModel {
   archive?: boolean
   group?: string
   isRequired?: boolean
+  /** false = noch nicht auf R2 — fehlt im Manifest (model-catalog.ts, `isPublished`). */
+  published?: boolean
 }
 
 export interface BuildManifestInput {
@@ -62,7 +66,9 @@ export function buildManifest(input: BuildManifestInput): UpdateManifest {
   const today = now.toISOString().slice(0, 10)
   const liveModels = new Map((live.models ?? []).map((m) => [m.id, m]))
 
-  const models = catalog.map((m): ManifestModel => {
+  // Ein noch nicht veröffentlichtes Artefakt liegt nicht auf R2 — ein
+  // Manifest-Eintrag würde es jeder App als Download anbieten
+  const models = catalog.filter(isPublished).map((m): ManifestModel => {
     const previous = liveModels.get(m.id)
     const unchanged = previous !== undefined && previous.sha256 === m.sha256
     return {

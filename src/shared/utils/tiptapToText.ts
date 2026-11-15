@@ -27,6 +27,13 @@ export interface TipTapTextOptions {
    * whole text trimmed (export — mirrors the editor layout).
    */
   compact: boolean
+  /**
+   * Issue #203 — what a placeholder chip contributes. 'token' (default):
+   * `[PERSON 1]`, the only form that may reach LLM input or the pseudonymized
+   * clipboard. 'original': the clear name the chip replaces (Klartext view);
+   * a chip without a stored original falls back to its token (AK 6).
+   */
+  chips?: 'token' | 'original'
 }
 
 interface JsonNode {
@@ -54,6 +61,14 @@ function walk(value: unknown, into: string[], options: TipTapTextOptions): void 
       into.push(typeof node.text === 'string' ? node.text : '')
       return
     case 'placeholderChip':
+      if (
+        options.chips === 'original' &&
+        typeof attrs.original === 'string' &&
+        attrs.original.length > 0
+      ) {
+        into.push(attrs.original)
+        return
+      }
       // `!= null`: persistiertes JSON kennt kein undefined, wohl aber null.
       if (attrs.type != null && attrs.number != null) {
         into.push(

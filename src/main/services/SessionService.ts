@@ -3,16 +3,33 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { SessionRepository } from '../db/repositories/SessionRepository'
 import { getDataDir } from '../db/connection'
-import { removeFile } from '../utils/file-ops'
+import { removeFile, removeFileReporting } from '../utils/file-ops'
 import { tiptapToPlainText } from '../ml/tiptap-plain-text'
-import type { Session, SessionStatus, UpdateSessionInput } from '../../shared/types'
+import type { EntityMap, Session, SessionStatus, UpdateSessionInput } from '../../shared/types'
+import { buildPlaceholderSnapshot } from '../../shared/utils/resolvePlaceholders'
 import type { SummaryRecord } from '../../shared/types/IpcApi'
 // Cyclic import: TaskQueueService imports SessionService too. The cycle is broken
 // at call-time — getTaskQueue() is only invoked inside deleteSession() at runtime,
 // not during module initialisation. Bundlers and ts-node handle this correctly.
 import { getTaskQueue } from './TaskQueueService'
+import { notifyDossiersChanged, notifySessionsChanged } from './ChangeEvents'
+import { isValidIsoDateNotAfter, localTodayIso } from '../../shared/utils/calendar-date'
+import type { SetDocumentDateResult } from '../../shared/types/Dossier'
+import { getSearchIndexService } from '../search/SearchIndexService'
+import { SearchIndexRepository } from '../db/repositories/SearchIndexRepository'
 
 export type { SummaryRecord }
+
+/**
+ * Felder, die keine Liste anzeigt (Dateipfade, Herkunft). Ihre Änderung löst
+ * kein `sessions:changed` aus — sonst lüde die Sitzungsliste bei jedem
+ * Pipeline-Zwischenschritt neu (Epic #192).
+ */
+function touchesListedFields(input: UpdateSessionInput): boolean {
+  return Object.entries(input).some(
+    ([key, value]) => value !== undefined && !key.endsWith('Path') && key !== 'processedWithModels'
+  )
+}
 
 const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
   recording: ['queued', 'error'],
@@ -29,17 +46,19 @@ const VALID_TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
 export class SessionService {
   private repository: SessionRepository
 
-  constructor(db: Database.Database) {
+  constructor(private db: Database.Database) {
     this.repository = new SessionRepository(db)
   }
 
   createSession(title: string, type: 'audio' | 'pdf', pdfPath?: string): Session {
-    return this.repository.create({
+    const session = this.repository.create({
       title,
       type,
       status: type === 'audio' ? 'recording' : 'queued',
       pdfPath
     })
+    notifySessionsChanged()
+    return session
   }
 
   getSession(id: string): Session | null {
@@ -64,38 +83,213 @@ export class SessionService {
         input = { ...input, reviewAt: new Date().toISOString() }
       }
     }
-    return this.repository.update(id, input)
+    const updated = this.repository.update(id, input)
+    if (updated && touchesListedFields(input)) notifySessionsChanged()
+    return updated
   }
 
   renameSession(id: string, title: string): Session | null {
-    return this.repository.update(id, { title })
+    const session = this.repository.findById(id)
+    if (!session) return null
+    return this.updateAndNotify(id, {
+      title,
+      titleEntitySnapshot: buildPlaceholderSnapshot(
+        title,
+        session.entityMap,
+        session.titleEntitySnapshot ?? null,
+        session.title
+      )
+    })
   }
 
-  deleteSession(id: string): boolean {
+  /**
+   * #205 AK 18–22 — document date of a PDF (ISO day, not after today in local
+   * time). Changes neither text, pseudonymization, title nor summary (PC 2).
+   * Throws on an invalid date (the IPC schema rejects it before).
+   */
+  setDocumentDate(id: string, documentDate: string): SetDocumentDateResult {
+    if (!isValidIsoDateNotAfter(documentDate, localTodayIso())) {
+      throw new Error('Ungültiges Dokumentdatum')
+    }
     const session = this.repository.findById(id)
+    if (!session) return { ok: false, reason: 'not-found' }
+    if (session.type !== 'pdf') return { ok: false, reason: 'not-pdf' }
+    if (!this.repository.setDocumentDate(id, documentDate))
+      return { ok: false, reason: 'not-found' }
+    // Liste und Verlauf zeigen das Datum, die Dossier-Übersicht den jüngsten Tag
+    notifySessionsChanged()
+    notifyDossiersChanged()
+    return { ok: true }
+  }
+
+  /** Update for fields every list shows (title, summary) — always notifies. */
+  private updateAndNotify(id: string, input: UpdateSessionInput): Session | null {
+    const updated = this.repository.update(id, input)
+    if (updated) notifySessionsChanged()
+    return updated
+  }
+
+  /**
+   * Issue #203 — EntityMap as persisted right now. The summarization step
+   * reads it together with the transcript text, so the meaning recorded for
+   * the summary's tokens is the one the LLM saw (the user may keep editing
+   * while the model runs).
+   */
+  getEntityMap(sessionId: string): EntityMap | null {
+    return this.repository.findById(sessionId)?.entityMap ?? null
+  }
+
+  /**
+   * Deletes a session with everything derived from it (Issue #202).
+   *
+   * Two phases, so an interrupted deletion is finished at the next start:
+   * 1. mark the row (deleting_at) — durable, from now on every read that
+   *    reaches the user treats the session as gone;
+   * 2. abort its tasks, remove its files, delete the row, checkpoint the WAL.
+   * If a file cannot be removed, the mark stays and finishPendingDeletions()
+   * retries at the next start; the row's text content is scrubbed right away.
+   *
+   * Returns true once the deletion is confirmed (also when phase 2 has to be
+   * finished later), false only if the session does not exist.
+   */
+  deleteSession(id: string): boolean {
+    const session = this.repository.findByIdIncludingDeleting(id)
     if (!session) return false
 
+    this.repository.markDeleting(id)
+    this.finishMarkedDeletion(session)
+    // Ab der Markierung gilt die Sitzung als gelöscht — auch wenn Phase 2
+    // erst beim nächsten Start fertig wird. Der Dossier-Löschpfad
+    // (markForDeletion/finishDeletion) meldet seine IDs selbst (DossierService).
+    notifySessionsChanged([id])
+    return true
+  }
+
+  /**
+   * Phase 1 for several sessions at once (#204/#207: deleting a patient dossier
+   * takes its exclusively assigned sessions along). Only marks the rows — call
+   * it inside the caller's transaction so the marks commit together with the
+   * caller's own change; then run finishDeletion() per id after the commit.
+   * Unknown ids are ignored.
+   */
+  markForDeletion(ids: string[]): void {
+    for (const id of ids) this.repository.markDeleting(id)
+  }
+
+  /**
+   * Phase 2 for a session marked via markForDeletion(): aborts its tasks,
+   * removes its files and its row, checkpoints the WAL. Returns true if the
+   * session is completely gone (also if it no longer exists), false if
+   * something is left — the mark then stays and finishPendingDeletions()
+   * completes it at the next start. An unmarked session is never touched.
+   */
+  finishDeletion(id: string): boolean {
+    const session = this.repository.findByIdIncludingDeleting(id)
+    if (!session) return true
+    if (!this.repository.isMarkedForDeletion(id)) return false
+    return this.finishMarkedDeletion(session)
+  }
+
+  private finishMarkedDeletion(session: Session): boolean {
     // Issue #80 DR-6: abort any running pipeline + cancel pending tasks BEFORE
     // file cleanup, so the executor's writes don't race the unlink calls.
     // getTaskQueue() returns the singleton or throws if not initialised — guard.
     try {
-      getTaskQueue().abortRunningForSession(id)
+      getTaskQueue().abortRunningForSession(session.id)
     } catch {
       // TaskQueue not initialised (e.g. during isolated SessionService tests) — skip
     }
 
-    this.cleanupSessionFiles(session)
-    return this.repository.delete(id)
+    return this.completeDeletion(session)
   }
 
-  cleanupOldSessions(): number {
-    const expired = this.repository.findOlderThan(30)
-    let deleted = 0
-    for (const session of expired) {
-      this.cleanupSessionFiles(session)
-      if (this.repository.delete(session.id)) deleted++
+  /**
+   * Startup step (before the task queue runs): finishes every deletion that
+   * was interrupted or could not remove all files. Returns the number of
+   * sessions that are now completely gone.
+   */
+  finishPendingDeletions(): number {
+    let finished = 0
+    const ids: string[] = []
+    for (const session of this.repository.findMarkedForDeletion()) {
+      ids.push(session.id)
+      if (this.completeDeletion(session)) finished++
     }
-    return deleted
+    if (ids.length > 0) notifySessionsChanged(ids)
+    return finished
+  }
+
+  /**
+   * Called by the task queue after every executor run (#202): if the session
+   * was deleted meanwhile, an executor that ignored the abort may have written
+   * files after the deletion removed them. Removes them again with the same
+   * code as the deletion; a still-marked row is finished. No-op for an
+   * existing, unmarked session. Returns true if the session was deleted.
+   */
+  removeFilesIfDeleted(id: string): boolean {
+    const row = this.repository.findByIdIncludingDeleting(id)
+    if (row && !this.repository.isMarkedForDeletion(id)) return false
+    if (row) {
+      this.completeDeletion(row)
+    } else if (!this.removeSessionFiles(id, [])) {
+      console.error(
+        `[SessionService] Nachträglich geschriebene Dateien der gelöschten Sitzung ${id} konnten nicht alle entfernt werden — der Start-Sweep holt das nach`
+      )
+    }
+    return true
+  }
+
+  /** IDs of every session row, including rows still marked for deletion. */
+  getAllSessionIds(): string[] {
+    return this.repository.findAllIds()
+  }
+
+  private completeDeletion(session: Session): boolean {
+    const filesGone = this.removeSessionFiles(session.id, [
+      session.audioPath,
+      session.transcriptPath,
+      session.anonymizedPath,
+      session.diarizationPath,
+      session.alignedTranscriptPath,
+      session.pdfPath,
+      session.extractedPath
+    ])
+    // Epic #192 (#209 PC 1) — Indexzeilen der Suche: mit FTS5 'secure-delete'
+    // kostet jeder Abschnitt ~40 ms; die Kaskade beim Löschen der Zeile
+    // blockierte bei einer langen Sitzung Sekunden. Läuft die Schleife des
+    // Suchindex, entfernt sie die Abschnitte in Zeitscheiben und ruft danach
+    // finishDeletion — ohne weiteres Zutun, binnen Sekunden. Unsichtbar ist die
+    // Sitzung schon ab der Markierung. Ohne Schleife (Start-Pfad
+    // finishPendingDeletions, Tests) löscht die Kaskade am Stück.
+    const indexer = getSearchIndexService()
+    const stagedPurge =
+      indexer !== null &&
+      indexer.isStarted() &&
+      new SearchIndexRepository(this.db).hasChunks(session.id)
+    if (filesGone && !stagedPurge) {
+      this.repository.delete(session.id)
+    } else {
+      // Titel, Zusammenfassung, EntityMap, Klartexte sofort leeren
+      this.repository.scrubMarkedContent(session.id)
+      if (stagedPurge) indexer.schedulePurge(session.id, filesGone)
+      if (!filesGone) {
+        console.error(
+          `[SessionService] Dateien der Sitzung ${session.id} konnten nicht alle entfernt werden — Löschen wird beim nächsten Start abgeschlossen`
+        )
+      }
+    }
+    // Ein blockierter Checkpoint (busy) wird beim nächsten Löschen und beim
+    // nächsten Start nachgeholt (initDatabase checkpointet immer).
+    try {
+      if (!this.repository.checkpoint()) {
+        console.error(
+          '[SessionService] WAL-Checkpoint nach dem Löschen blockiert — wird beim nächsten Löschen bzw. Start nachgeholt'
+        )
+      }
+    } catch (error) {
+      console.error('[SessionService] WAL-Checkpoint nach dem Löschen fehlgeschlagen:', error)
+    }
+    return filesGone
   }
 
   cleanupSourceFiles(): number {
@@ -109,28 +303,38 @@ export class SessionService {
           : this.repository.update(session.id, { pdfPath: null })
       if (update) cleaned++
     }
+    // Die Liste (u. a. die Aufzählung im Löschdialog) liest audio_path/pdf_path
+    if (cleaned > 0) notifySessionsChanged()
     return cleaned
   }
 
-  private cleanupSessionFiles(session: Session): void {
+  /**
+   * Removes every file a session can have: the stored paths plus the
+   * convention paths (a deletion during import or mid-pipeline may happen
+   * before the path was written to the row). Returns false if any file still
+   * exists afterwards.
+   */
+  private removeSessionFiles(id: string, storedPaths: (string | null)[]): boolean {
     const dataDir = getDataDir()
-    const filePaths = [
-      session.audioPath,
-      session.transcriptPath,
-      session.anonymizedPath,
-      session.diarizationPath,
-      session.alignedTranscriptPath,
-      session.pdfPath,
-      session.extractedPath ??
-        (session.type === 'pdf' ? join(dataDir, 'extracted', `${session.id}.json`) : null),
-      join(dataDir, 'recovery', `${session.id}.pcm`)
-    ]
+    const filePaths = new Set(
+      [
+        ...storedPaths,
+        join(dataDir, 'audio', `${id}.wav`),
+        join(dataDir, 'transcripts', `${id}.json`),
+        join(dataDir, 'transcripts', `${id}-aligned.json`),
+        join(dataDir, 'diarization', `${id}.json`),
+        join(dataDir, 'anonymized', `${id}.json`),
+        join(dataDir, 'pdf', `${id}.pdf`),
+        join(dataDir, 'extracted', `${id}.json`),
+        join(dataDir, 'recovery', `${id}.pcm`)
+      ].filter((p): p is string => typeof p === 'string' && p.length > 0)
+    )
 
+    let allGone = true
     for (const filePath of filePaths) {
-      if (filePath) {
-        removeFile(filePath)
-      }
+      if (!removeFileReporting(filePath)) allGone = false
     }
+    return allGone
   }
 
   private deleteSourceFile(session: Session): void {
@@ -202,28 +406,42 @@ export class SessionService {
       title: hasTitle ? session.title : null,
       text: session.summary ?? '',
       modelId: session.summaryModelId,
-      summarizedAt: session.summarizedAt
+      summarizedAt: session.summarizedAt,
+      titleSnapshot: session.titleEntitySnapshot ?? null,
+      textSnapshot: session.summaryEntitySnapshot ?? null
     }
   }
 
-  /** Persists LLM-generated title + summary in one update. */
+  /**
+   * Persists LLM-generated title + summary in one update, together with what
+   * their placeholder tokens mean (#203). `entityMapAtRead` is the EntityMap
+   * read alongside the LLM input; without it the current one is used.
+   */
   saveGeneratedSummary(
     sessionId: string,
     title: string,
     text: string,
-    modelId: string
+    modelId: string,
+    entityMapAtRead?: EntityMap | null
   ): Session | null {
-    return this.repository.update(sessionId, {
+    const entityMap = entityMapAtRead !== undefined ? entityMapAtRead : this.getEntityMap(sessionId)
+    // Fresh texts: no previous snapshot — every token means what it means now.
+    return this.updateAndNotify(sessionId, {
       title,
       summary: text,
       summaryModelId: modelId,
-      summarizedAt: new Date().toISOString()
+      summarizedAt: new Date().toISOString(),
+      titleEntitySnapshot: buildPlaceholderSnapshot(title, entityMap),
+      summaryEntitySnapshot: buildPlaceholderSnapshot(text, entityMap)
     })
   }
 
-  /** User-edited title. Empty string is rendered as a placeholder in the view layer (createdAt is shown separately). */
+  /**
+   * User-edited title. Empty string is rendered as a placeholder in the view layer (createdAt is shown separately).
+   * Tokens already in the title keep their recorded meaning; newly typed ones get the current one (#203).
+   */
   updateTitle(sessionId: string, title: string): Session | null {
-    return this.repository.update(sessionId, { title: title.trim() })
+    return this.renameSession(sessionId, title.trim())
   }
 
   /**
@@ -232,10 +450,19 @@ export class SessionService {
    * be regenerated automatically.
    */
   updateSummaryText(sessionId: string, text: string): Session | null {
+    const session = this.repository.findById(sessionId)
+    if (!session) return null
     const trimmed = text.trim()
-    return this.repository.update(sessionId, {
-      summary: trimmed.length > 0 ? trimmed : null,
-      summaryModelId: null
+    const summary = trimmed.length > 0 ? trimmed : null
+    return this.updateAndNotify(sessionId, {
+      summary,
+      summaryModelId: null,
+      summaryEntitySnapshot: buildPlaceholderSnapshot(
+        summary,
+        session.entityMap,
+        session.summaryEntitySnapshot ?? null,
+        session.summary
+      )
     })
   }
 }

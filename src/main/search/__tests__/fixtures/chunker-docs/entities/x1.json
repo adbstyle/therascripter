@@ -1,0 +1,30 @@
+{
+  "doc": "x1",
+  "entities": [
+    {
+      "text": "Brunner",
+      "type": "PERSON",
+      "canonical": "Brunner"
+    },
+    {
+      "text": "Jana",
+      "type": "PERSON",
+      "canonical": "Jana"
+    },
+    {
+      "text": "Uster",
+      "type": "ORT",
+      "canonical": "Uster"
+    },
+    {
+      "text": "Lina",
+      "type": "PERSON",
+      "canonical": "Lina"
+    },
+    {
+      "text": "Winterthur",
+      "type": "ORT",
+      "canonical": "Winterthur"
+    }
+  ]
+}

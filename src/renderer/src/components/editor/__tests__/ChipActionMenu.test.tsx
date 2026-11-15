@@ -211,3 +211,10 @@ describe('ChipActionMenu', () => {
     expect(onUndo).toHaveBeenCalledWith('person-1')
   })
 })
+
+describe('ChipActionMenu — original not selectable (#203 AK 9)', () => {
+  it('the menu naming the original is select-none', () => {
+    setup()
+    expect(screen.getByRole('menu')).toHaveClass('select-none')
+  })
+})

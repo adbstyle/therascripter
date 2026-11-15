@@ -4,7 +4,9 @@
  * gescheitert (AK 7).
  */
 import { deepStrictEqual } from 'assert'
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import {
   importPdf,
   listSessions,
@@ -12,11 +14,26 @@ import {
   stopRecording,
   waitUntilProcessed
 } from './app-actions.mjs'
+import {
+  EXACT_PROBES,
+  FEATURES_EXPRESSION,
+  SEMANTIC_PROBE,
+  compareDossierSeed,
+  evaluateSearchModel,
+  evaluateSemantic,
+  searchModelDirFromCatalog,
+  leftoverQueries,
+  leftoversAfterDossierDelete,
+  lifecycleDossier,
+  missingInResults,
+  skipped
+} from './dossier-search.mjs'
 import { launchInstance, waitFor } from './instance.mjs'
 import { SEED_SETTINGS_KEYS } from './seed.mjs'
 import {
   FRESH_HOME,
   SEED_HOME,
+  dataDir,
   query,
   resetHome,
   settingsPath,
@@ -70,10 +87,206 @@ export async function checkFreshStart({ appPath, logFile }) {
   }
 }
 
+const json = (value) => JSON.stringify(value)
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+let requestId = 0
+const search = (page, query, scope = { kind: 'all' }) =>
+  page.eval(`window.api.search.query(${json({ requestId: ++requestId, query, scope })})`)
+
+/**
+ * Epic #192: Dossier-Teil des Seeds erhalten — nur wenn die Vorversion ihn
+ * anlegen konnte. Zuordnungen, Dokumentdatum und «Zuletzt» direkt aus der
+ * Datenbank (lesend), Dossier und Suchanfragen über die App.
+ */
+async function checkDossierSeed(page, expectations, record, results) {
+  const expected = expectations.dossierSeed
+  if (!expected) {
+    results.push(
+      skipped(
+        'Patientendossiers und Suchdaten der Vorversion erhalten',
+        `Vorversion ${expectations.tag} kennt keine Patientendossiers`
+      )
+    )
+    return
+  }
+  const actual = {
+    dossier: await page.eval(`window.api.dossiers.get(${json(expected.dossier.id)})`),
+    assignments: query(
+      SEED_HOME,
+      'SELECT session_id, dossier_id, assigned_at FROM session_dossiers'
+    ),
+    documentDates: Object.fromEntries(
+      query(
+        SEED_HOME,
+        'SELECT id, document_date FROM sessions WHERE document_date IS NOT NULL'
+      ).map((r) => [r.id, r.document_date])
+    ),
+    recentQueries: await page.eval('window.api.search.recentList()'),
+    recentItems: query(
+      SEED_HOME,
+      'SELECT dossier_id, session_id FROM recent_items ORDER BY opened_at DESC, id DESC'
+    )
+  }
+  for (const { name, error } of compareDossierSeed(expected, actual)) record(name, error)
+}
+
+/**
+ * Epic #192 (#210 AK 1): Die Bestandssitzungen werden nach dem Update ohne
+ * Zutun durchsuchbar — exakt immer; nach Bedeutung nur, wenn das Suchmodell
+ * auf dem Release-Mac installiert ist (sonst «nicht geprüft», nie grün).
+ */
+async function checkSearchOfSeed(page, expectations, record, results, log) {
+  const [audioId, pdfId] = expectations.reviewIds
+  const idFor = { audio: audioId, pdf: pdfId }
+
+  log('Exakte Suche über die Sitzungen der Vorversion …')
+  const missing = new Map(EXACT_PROBES.map((p) => [p.query, [idFor[p.seed]]]))
+  const deadline = Date.now() + 120_000
+  while (missing.size > 0 && Date.now() < deadline) {
+    for (const [q, ids] of missing) {
+      if (missingInResults(await search(page, q), ids).length === 0) missing.delete(q)
+    }
+    if (missing.size > 0) await sleep(3000)
+  }
+  for (const probe of EXACT_PROBES) {
+    record(
+      `Exakte Suche «${probe.query}» findet die Sitzung der Vorversion (${probe.seed === 'pdf' ? 'PDF' : 'Aufnahme'})`,
+      missing.has(probe.query) ? 'Nach 120 s nicht gefunden — Bestand nicht indexiert' : null
+    )
+  }
+
+  const name = `Suche nach Bedeutung «${SEMANTIC_PROBE}» findet die Sitzung der Vorversion`
+  // «Installiert» vom Datenträger, nicht aus dem Status: ein vorhandenes, aber
+  // kaputtes Modell muss rot werden, nicht «nicht geprüft» (Review PR #234)
+  const installed = existsSync(join(dataDir(SEED_HOME), 'models', searchModelDir()))
+  let model = evaluateSearchModel({ installed, availability: null })
+  if (model.state === 'skipped') {
+    results.push(skipped(name, model.detail))
+    return
+  }
+  log('Suchmodell liegt auf dem Datenträger — warte, bis es bereit ist …')
+  const modelDeadline = Date.now() + 180_000
+  for (;;) {
+    model = evaluateSearchModel({
+      installed,
+      availability: await page.eval('window.api.search.open()')
+    })
+    if (model.state !== 'waiting' || Date.now() > modelDeadline) break
+    await sleep(5000)
+  }
+  if (model.state !== 'ok') {
+    record(
+      name,
+      model.state === 'waiting'
+        ? `Suchmodell liegt auf dem Datenträger, wird aber nach 180 s nicht bereit (${model.detail})`
+        : model.detail
+    )
+    return
+  }
+
+  log('Suche nach Bedeutung (wartet auf die Vektoren) …')
+  let verdict = evaluateSemantic({ result: null, sessionId: pdfId })
+  const semanticDeadline = Date.now() + 300_000
+  while (verdict.state === 'waiting' && Date.now() < semanticDeadline) {
+    const result = await page.eval(
+      `window.api.search.semantic(${json({ requestId: ++requestId, query: SEMANTIC_PROBE, scope: { kind: 'all' } })})`,
+      { timeoutMs: 120_000 }
+    )
+    verdict = evaluateSemantic({ result, sessionId: pdfId })
+    if (verdict.state === 'waiting') await sleep(5000)
+  }
+  record(
+    name,
+    verdict.state === 'ok'
+      ? null
+      : verdict.state === 'waiting'
+        ? `Nach 300 s kein Treffer nach Bedeutung (${verdict.detail})`
+        : verdict.detail,
+    verdict.detail
+  )
+}
+
+/** Ordner des Suchmodells laut Katalog dieses Checkouts (siehe searchModelDirFromCatalog). */
+function searchModelDir() {
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+  return searchModelDirFromCatalog(
+    readFileSync(join(root, 'src', 'shared', 'model-catalog.ts'), 'utf8')
+  )
+}
+
+/**
+ * Epic #192 (#204, #205, #207): In der neuen Version ein Dossier anlegen,
+ * eine Sitzung zuordnen, sie im Verlauf sehen, das Dossier samt dieser
+ * (exklusiven) Sitzung löschen — danach ist beides nirgends mehr auffindbar:
+ * nicht in der Liste, nicht in der Suche, keine Zeile in der Datenbank.
+ */
+async function checkDossierLifecycle(page, sessionId, record, log) {
+  const name = 'Neues Dossier: anlegen, zuordnen, Verlauf, mit exklusiver Sitzung löschen'
+  log('Dossier anlegen, zuordnen, löschen …')
+  const input = lifecycleDossier(Date.now().toString(36))
+  const created = await page.eval(`window.api.dossiers.create(${json(input)})`)
+  if (!created?.ok) return record(name, `Anlegen gescheitert: ${json(created)}`)
+  const dossierId = created.dossier.id
+
+  const assigned = await page.eval(
+    `window.api.dossiers.assign(${json(sessionId)}, ${json(dossierId)})`
+  )
+  if (!assigned?.ok) return record(name, `Zuordnen gescheitert: ${json(assigned)}`)
+
+  const timeline = await page.eval(`window.api.dossiers.timeline(${json(dossierId)})`)
+  if (!timeline.some((e) => e.id === sessionId)) {
+    return record(name, 'Zugeordnete Sitzung fehlt im Verlauf des Dossiers')
+  }
+  const found = await waitFor(
+    async () => {
+      const r = await search(page, input.lastName)
+      return r.dossiers.some((d) => d.id === dossierId) ? r : null
+    },
+    { what: 'Neues Dossier in der Suche', timeoutMs: 30_000, intervalMs: 1000 }
+  ).catch(() => null)
+  if (!found) return record(name, 'Neues Dossier wird von der Suche nicht gefunden')
+
+  const preview = await page.eval(`window.api.dossiers.deletePreview(${json(dossierId)})`)
+  if (preview?.exclusive?.sessions + preview?.exclusive?.pdfs !== 1) {
+    return record(
+      name,
+      `Löschvorschau nennt nicht genau die eine Sitzung: ${json(preview?.exclusive)}`
+    )
+  }
+  const deleted = await page.eval(
+    `window.api.dossiers.delete(${json(dossierId)}, ${json(preview.fingerprint)})`
+  )
+  if (!deleted?.ok || !deleted.deletedSessionIds.includes(sessionId)) {
+    return record(name, `Löschen gescheitert: ${json(deleted)}`)
+  }
+
+  // Die Indexzeilen entfernt die Suche gestaffelt (Sekunden), deshalb mit Frist
+  const sql = leftoverQueries(dossierId, sessionId)
+  let left = []
+  const deadline = Date.now() + 60_000
+  do {
+    if (left.length) await sleep(2000)
+    left = leftoversAfterDossierDelete({
+      dossierId,
+      sessionId,
+      state: {
+        listedSessionIds: (await listSessions(page)).map((s) => s.id),
+        dossierSearch: await search(page, input.lastName),
+        contentSearch: await search(page, EXACT_PROBES[0].query),
+        dbCounts: Object.fromEntries(
+          Object.entries(sql).map(([table, q]) => [table, query(SEED_HOME, q)[0].n])
+        )
+      }
+    })
+  } while (left.length && Date.now() < deadline)
+  record(name, left.length ? `Nach 60 s noch auffindbar: ${left.join(', ')}` : null)
+}
+
 /**
  * AK 2–4: Die neue Version startet auf dem Seed der Vorversion, zeigt alle
  * Sitzungen, behält alle Inhalte, verarbeitet die wartende Sitzung und
- * danach eine neue Aufnahme und ein PDF bis zur Zusammenfassung.
+ * danach eine neue Aufnahme und ein PDF bis zur Zusammenfassung. Epic #192:
+ * Dossier-Teil des Seeds erhalten, Bestand durchsuchbar, Dossier-Lebenszyklus.
  */
 export async function checkSeededRun({ appPath, logFile, expectations, fixtures, log }) {
   shiftTimestampsToNow(SEED_HOME)
@@ -177,6 +390,17 @@ export async function checkSeededRun({ appPath, logFile, expectations, fixtures,
       record('Inhalte der Vorversion erhalten', `nicht durchführbar: ${err.message}`)
     }
 
+    // ── Epic #192: Dossier-Teil des Seeds erhalten (vor jeder neuen Handlung,
+    // die «Zuletzt» verändert) ──────────────────────────────────────────────
+    try {
+      await checkDossierSeed(page, expectations, record, results)
+    } catch (err) {
+      record(
+        'Patientendossiers und Suchdaten der Vorversion erhalten',
+        `nicht durchführbar: ${err.message}`
+      )
+    }
+
     // ── Wartende Sitzung läuft nach dem Start weiter ──────────────────────
     try {
       log('Wartende Sitzung der Vorversion wird verarbeitet …')
@@ -187,6 +411,16 @@ export async function checkSeededRun({ appPath, logFile, expectations, fixtures,
       record('Wartende Sitzung der Vorversion läuft bis zur Zusammenfassung', null)
     } catch (err) {
       record('Wartende Sitzung der Vorversion läuft bis zur Zusammenfassung', err.message)
+    }
+
+    // ── Epic #192: Bestand durchsuchbar (nach der wartenden Sitzung: die
+    // Vektoren warten, solange eine Verarbeitung ansteht) ────────────────────
+    try {
+      const features = await page.eval(FEATURES_EXPRESSION)
+      if (!features?.search) throw new Error('Die App hat keine Suche (window.api.search)')
+      await checkSearchOfSeed(page, expectations, record, results, log)
+    } catch (err) {
+      record('Bestand der Vorversion durchsuchbar', `nicht durchführbar: ${err.message}`)
     }
 
     // ── AK 4: neue Aufnahme und neues PDF ──────────────────────────────────
@@ -206,10 +440,12 @@ export async function checkSeededRun({ appPath, logFile, expectations, fixtures,
     } catch (err) {
       record('Kurze Aufnahme bis zur Zusammenfassung', err.message)
     }
+    let newPdfId = null
     try {
       log('Neues PDF wird verarbeitet …')
       const pdfId = await importPdf(page, fixtures.pdf)
       const pdf = await waitUntilProcessed(page, pdfId, { label: 'Neues PDF', timeoutMs: 600_000 })
+      newPdfId = pdfId
       // Nicht pdfHasScannedPages: das meint «überwiegend gescannt» und ist
       // bei einem gemischten PDF korrekt false. Beweis für die Texterkennung
       // ist der Text der eingescannten Seite im Ergebnis.
@@ -225,6 +461,15 @@ export async function checkSeededRun({ appPath, logFile, expectations, fixtures,
       )
     } catch (err) {
       record('PDF mit Text- und eingescannter Seite bis zur Zusammenfassung', err.message)
+    }
+
+    // ── Epic #192: Dossier-Lebenszyklus mit dem neuen PDF ───────────────────
+    const lifecycle = 'Neues Dossier: anlegen, zuordnen, Verlauf, mit exklusiver Sitzung löschen'
+    try {
+      if (!newPdfId) throw new Error('kein fertig verarbeitetes neues PDF (siehe oben)')
+      await checkDossierLifecycle(page, newPdfId, record, log)
+    } catch (err) {
+      record(lifecycle, `nicht durchführbar: ${err.message}`)
     }
   } finally {
     await app.quit().catch(() => app.kill())

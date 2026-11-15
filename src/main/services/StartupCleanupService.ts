@@ -2,6 +2,7 @@ import { existsSync, readdirSync, rmSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { getDataDir } from '../db/connection'
+import { fileExists, writeFile } from '../utils/file-ops'
 
 // Startup-Sweep für PHI-tragende Temp-Artefakte, die ein harter Crash /
 // SIGKILL / Stromausfall hinterlassen kann (das reguläre finally-Cleanup der
@@ -91,4 +92,68 @@ export function sweepStaleArtifactsAtStartup(): void {
     osTmpDir: tmpdir(),
     dataDir: getDataDir()
   })
+}
+
+// Sitzungsordner unter ~/.therascript/, deren Dateien genau einer Sitzung
+// gehören und nach deren ID benannt sind (Issue #202, Postcondition 2).
+export const SESSION_FILE_DIRS = [
+  'audio',
+  'transcripts',
+  'diarization',
+  'anonymized',
+  'pdf',
+  'extracted',
+  'recovery'
+] as const
+
+// <uuid>.<ext> oder <uuid>-aligned.json — nur Dateien nach diesem Muster
+// sind sicher einer Sitzung zuzuordnen, alles andere bleibt unangetastet.
+const SESSION_FILE_PATTERN =
+  /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:-aligned)?\.[a-z0-9]+$/i
+
+/**
+ * Entfernt Dateien in den Sitzungsordnern, deren Sitzung es in der Datenbank
+ * nicht (mehr) gibt — Reste eines Löschens, das vor Issue #202 oder durch
+ * einen Absturz zwischen Zeilen- und Datei-Löschung unvollständig blieb, oder
+ * die ein abgebrochener Executor nach dem Löschen noch geschrieben hat.
+ * Konservativ: nur Dateien, deren Name dem Sitzungs-Muster entspricht. Muss
+ * laufen, bevor IPC-Handler eine neue Sitzung anlegen können.
+ *
+ * Returns the number of removed files.
+ */
+export function sweepOrphanedSessionFiles(dataDir: string, knownSessionIds: Set<string>): number {
+  const known = new Set([...knownSessionIds].map((id) => id.toLowerCase()))
+  let removed = 0
+  for (const dirName of SESSION_FILE_DIRS) {
+    const dir = join(dataDir, dirName)
+    let entries: string[]
+    try {
+      entries = readdirSync(dir)
+    } catch {
+      continue // Ordner fehlt — nichts zu tun
+    }
+    for (const entry of entries) {
+      const match = SESSION_FILE_PATTERN.exec(entry)
+      if (!match || known.has(match[1].toLowerCase())) continue
+      const full = join(dir, entry)
+      try {
+        if (!statSync(full).isFile()) continue
+        unlinkSync(full)
+        removed++
+        console.log(`[StartupCleanup] Datei einer gelöschten Sitzung entfernt: ${full}`)
+      } catch (err) {
+        console.error(`[StartupCleanup] Datei konnte nicht entfernt werden: ${full}`, err)
+      }
+    }
+  }
+  return removed
+}
+
+/** Hält Spotlight aus dem Datenverzeichnis heraus (PHI soll nicht indexiert werden). */
+export function ensureSpotlightExclusion(): void {
+  const dataDir = getDataDir()
+  const markerPath = join(dataDir, '.metadata_never_index')
+  if (!fileExists(markerPath)) {
+    writeFile(markerPath, '', 0o600)
+  }
 }

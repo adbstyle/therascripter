@@ -3,21 +3,34 @@
 # Creates tar.gz archives in r2-upload/ and prints SHA-256 hashes.
 #
 # Usage: scripts/package-models.sh [all|ner]
-#   ner  packt nur das NER-Artefakt. Wichtig beim Publizieren EINES neuen
-#        Artefakts: ein Voll-Lauf packt auch pyannote-suite.tar.gz neu, dessen
-#        Hash sich durch die gzip-Zeitstempel ändert — würde das hochgeladen,
-#        brächen die eingebauten Katalog-Hashes ausgelieferter App-Versionen.
+#        scripts/package-models.sh search <export-verzeichnis>
+#   ner     packt nur das NER-Artefakt. Wichtig beim Publizieren EINES neuen
+#           Artefakts: ein Voll-Lauf packt auch pyannote-suite.tar.gz neu, dessen
+#           Hash sich durch die gzip-Zeitstempel ändert — würde das hochgeladen,
+#           brächen die eingebauten Katalog-Hashes ausgelieferter App-Versionen.
+#   search  packt das Text-Artefakt des Suchmodells aus der Ausgabe von
+#           scripts/export-search-model.py — reproduzierbar (gleicher Inhalt →
+#           gleicher sha256), nicht Teil von `all`.
+#
+# PACKAGE_OUTPUT_DIR=<dir> schreibt woanders hin als nach r2-upload/ (z. B. für
+# einen Probelauf ausserhalb des Repos).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-OUTPUT_DIR="$PROJECT_ROOT/r2-upload"
+OUTPUT_DIR="${PACKAGE_OUTPUT_DIR:-$PROJECT_ROOT/r2-upload}"
 MODELS_DIR="$HOME/.therascript/models"
 SIDECAR_PY="$PROJECT_ROOT/python_sidecar/venv/bin/python"
 TARGET="${1:-all}"
 case "$TARGET" in
   all|ner) ;;
-  *) echo "FEHLER: unbekanntes Ziel '$TARGET' (erlaubt: all, ner)" >&2; exit 2 ;;
+  search)
+    if [ $# -lt 2 ]; then
+      echo "FEHLER: search braucht das Export-Verzeichnis (scripts/export-search-model.py)" >&2
+      exit 2
+    fi
+    SEARCH_EXPORT_DIR="$2" ;;
+  *) echo "FEHLER: unbekanntes Ziel '$TARGET' (erlaubt: all, ner, search)" >&2; exit 2 ;;
 esac
 
 # Pyannote-Suite Packaging.
@@ -101,11 +114,14 @@ fi
 # gäbe es als zu kopierenden Katalogwert aus.
 NER_OUTPUT_NAME="flair-ner-german-large-v3.tar.gz"
 NER_STAGING=""
-cleanup_ner() {
+SEARCH_OUTPUT_NAME="embeddinggemma-2-text-v1.tar.gz"
+SEARCH_STAGING=""
+cleanup() {
   [ -n "$NER_STAGING" ] && rm -rf "$NER_STAGING"
-  rm -f "$OUTPUT_DIR/$NER_OUTPUT_NAME.partial"
+  [ -n "$SEARCH_STAGING" ] && rm -rf "$SEARCH_STAGING"
+  rm -f "$OUTPUT_DIR/$NER_OUTPUT_NAME.partial" "$OUTPUT_DIR/$SEARCH_OUTPUT_NAME.partial"
 }
-trap cleanup_ner EXIT
+trap cleanup EXIT
 
 package_ner() {
   local SRC="$MODELS_DIR/ner"
@@ -144,7 +160,50 @@ package_ner() {
   echo "  -> $NER_OUTPUT_NAME"
 }
 
-package_ner
+# Suchmodell (Archiv wird INS Modellverzeichnis search-embeddinggemma-2-text-v1/
+# entpackt, Dateien liegen deshalb auf oberster Ebene des Tars).
+#
+# Reproduzierbar, damit ein erneutes Packen denselben sha256 ergibt und der
+# Katalogwert prüfbar bleibt: Staging-Kopie mit festen Modi und festem
+# Zeitstempel, feste Dateireihenfolge, ustar ohne macOS-Metadaten (keine
+# AppleDouble-/xattr-Einträge, keine pax-Zeitstempel), Eigentümer 0:0 ohne
+# Namen, `gzip -n` (kein Name/Zeitstempel im gzip-Header).
+#
+# READY ist die LETZTE Datei im Tar: der Katalog prüft checkPath=…/READY. Bricht
+# das Entpacken ab, fehlt READY und das Modell gilt nicht als installiert.
+SEARCH_FILES=(config.json tokenizer.json model.safetensors LICENSE READY)
+
+package_search() {
+  local f
+  for f in "${SEARCH_FILES[@]}"; do
+    if [ ! -f "$SEARCH_EXPORT_DIR/$f" ]; then
+      echo "  FEHLER: $SEARCH_EXPORT_DIR/$f fehlt — zuerst scripts/export-search-model.py ausführen." >&2
+      exit 1
+    fi
+  done
+
+  SEARCH_STAGING=$(mktemp -d)
+  for f in "${SEARCH_FILES[@]}"; do
+    cp "$SEARCH_EXPORT_DIR/$f" "$SEARCH_STAGING/$f"
+    chmod 0644 "$SEARCH_STAGING/$f"
+    touch -t 202601010000.00 "$SEARCH_STAGING/$f"
+  done
+
+  COPYFILE_DISABLE=1 tar --format ustar --no-mac-metadata --no-xattrs --no-acls \
+    --uid 0 --gid 0 --uname '' --gname '' \
+    -cf - -C "$SEARCH_STAGING" "${SEARCH_FILES[@]}" \
+    | gzip -n -9 > "$OUTPUT_DIR/$SEARCH_OUTPUT_NAME.partial"
+  mv "$OUTPUT_DIR/$SEARCH_OUTPUT_NAME.partial" "$OUTPUT_DIR/$SEARCH_OUTPUT_NAME"
+  rm -rf "$SEARCH_STAGING"
+  SEARCH_STAGING=""
+  echo "  -> $SEARCH_OUTPUT_NAME"
+}
+
+if [ "$TARGET" = "search" ]; then
+  package_search
+else
+  package_ner
+fi
 
 echo ""
 echo "=== Sizes ==="

@@ -24,14 +24,23 @@ export function handleSummaryGet(input: unknown, deps: SummaryHandlerDeps): Summ
   return deps.sessionService.getSummary(parsed.sessionId)
 }
 
-export function handleSummaryUpdateTitle(input: unknown, deps: SummaryHandlerDeps): void {
+/** Resolves with the updated record — the renderer needs the new token snapshot (#203). */
+export function handleSummaryUpdateTitle(
+  input: unknown,
+  deps: SummaryHandlerDeps
+): SummaryRecord | null {
   const parsed = SummaryUpdateTitleInputSchema.parse(input)
   deps.sessionService.updateTitle(parsed.sessionId, parsed.title)
+  return deps.sessionService.getSummary(parsed.sessionId)
 }
 
-export function handleSummaryUpdateText(input: unknown, deps: SummaryHandlerDeps): void {
+export function handleSummaryUpdateText(
+  input: unknown,
+  deps: SummaryHandlerDeps
+): SummaryRecord | null {
   const parsed = SummaryUpdateTextInputSchema.parse(input)
   deps.sessionService.updateSummaryText(parsed.sessionId, parsed.text)
+  return deps.sessionService.getSummary(parsed.sessionId)
 }
 
 export function handleSummaryMissingReason(

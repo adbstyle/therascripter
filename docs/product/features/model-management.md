@@ -1,16 +1,20 @@
 # Model Management
 
-Therascript relies on three ML models that are downloaded on first launch and kept up to date via an R2-hosted manifest. App updates are surfaced separately through a non-blocking hint.
+Therascript relies on three ML models plus the search model (Epic #192) that are downloaded on first launch and kept up to date via an R2-hosted manifest. App updates are surfaced separately through a non-blocking hint.
 
 Since v0.5 the ASR model (transcription) is **user-selectable** from a catalog — the default is the multilingual Turbo model; a High-German fine-tune can optionally be installed. A Swiss-German fine-tune was offered until v0.10.0 and retired for its non-commercial license (CC BY-NC 4.0, #185); Swiss German is transcribed by the default model, which normalizes it to High German (`-l de`). See [ASR Model Catalog](#asr-model-catalog) below.
 
 ## First Launch Flow
 
-On startup, `App.tsx` calls `modelDownload:status` (which runs `checkModelsExist()`) to determine whether all models are present. If any model is missing, `modelsReady` is `false` and the app renders `FirstLaunchScreen` instead of the main UI.
+On startup, `App.tsx` calls `modelDownload:status` (which runs `checkModelsExist()`) to determine whether all models are present. If any model is missing, `modelsReady` is `false` and the app renders `FirstLaunchScreen` instead of the main UI. `deferrable` models (the search model) do not count here (#210 AK 3): an install without them opens normally, see [Search model](#search-model-epic-192).
 
 ### Disk Space Check
 
-Before the user can start the download, `FirstLaunchScreen` calls `modelDownload:checkDiskSpace`. The handler in `model-download-handlers.ts` uses `statfsSync` against `~/.therascript/` and enforces a **5 GB minimum** (`MINIMUM_DISK_SPACE_BYTES = 5 * 1024 * 1024 * 1024`). If disk space is insufficient, the screen shows an error with available vs. required space and asks the user to free space and restart.
+Before the user can start the download, `FirstLaunchScreen` calls `modelDownload:checkDiskSpace`. The handler in `model-download-handlers.ts` uses `statfsSync` against `~/.therascript/` and enforces a **5 GB minimum**, decimal like every size in the app (`MINIMUM_DISK_SPACE_BYTES = 5_000_000_000` in `src/shared/constants/disk-space.ts`; until the epic #192 audit it was 5 GiB). If disk space is insufficient, the screen shows an error with available vs. required space and asks the user to free space and restart.
+
+**Sizes are shown in decimal units** everywhere in the app (`formatBytes` in `src/shared/utils/format-bytes.ts`: 1 GB = 10^9 bytes, like macOS Finder and all public texts) — first launch, Settings → Modelle, Updates, About, provenance and the «mindestens N GB» hints of the updater. The first-launch minimum is decimal too, so the error screen reads «Benötigt: 5.0 GB» like README and website; «Verfügbar» is rounded down to one decimal (`formatBytes(…, { floor: true })`), so a refusal never shows the same value on both lines. Invalid values (negative, NaN, infinite) read «—». The first-launch download of 2'101'189'732 bytes reads «2.1 GB». The update's «5 GB must remain free» (`MIN_FREE_AFTER_DOWNLOAD`) is a separate rule and stays 5 GiB.
+
+Why 5 GB is still enough with the search model: models download one after another and every archive is deleted right after extraction, so the peak is reached while the last big archive is extracted. Whisper 0.57 GB + pyannote extracted ~0.13 GB + NER 1.04 GB packed + ~1.1 GB extracted ≈ 2.85 GB (NER step), or with NER extracted plus the search archive 0.43 GB and its 0.58 GB extracted ≈ 2.8 GB (search step). Even the sum of everything packed and extracted (~3.8 GB, upper bound) stays below the 5 GB minimum, and afterwards models take ~2.4 GB, leaving room for the search index (up to ~0.7 GB at 2'000 sessions).
 
 ### Model Definitions
 
@@ -21,10 +25,11 @@ The required models are defined in `MODEL_DEFINITIONS` in `src/shared/model-cata
 | `whisper-large-v3-turbo` | Spracherkennung (whisper-large-v3-turbo) | ~574 MB | No (flat `.bin`) | `asr/ggml-large-v3-turbo-q5_0.bin` | `asr/ggml-large-v3-turbo-q5_0.bin` |
 | `pyannote-suite` | Sprechererkennung (pyannote 3.1 + community-1) | ~61 MB | Yes (`.tar.gz`) | `diarization` | see catalog |
 | `flair-ner-german-large` | Anonymisierung (flair-ner-german-large) | ~1.04 GB (v3, fp16) | Yes (`.tar.gz`) | `ner` | `ner/hf/hub/models--xlm-roberta-large` |
+| `embeddinggemma-2-text` | EmbeddingGemma 2 (search, `deferrable`, on R2 since 2026-11-15) | ~430 MB | Yes (`.tar.gz`) | `search-embeddinggemma-2-text-v1` | `search-embeddinggemma-2-text-v1/READY` |
 
 The NER check path deliberately points at the **v2-only** `hf/` tokenizer subtree (not the model payload): v1 installs (≤ 0.8.5, without `hf/`) read as "not installed", so the first-launch gate re-downloads the current tarball, which tar-merges over the existing `ner/`. The bootstrap reconciler shares this definition and clears the `ner` slot on such installs; `startModelDownload()` re-runs the reconciler after a successful download to re-promote the slot in the same session, and inverse repairs (X → null → X) collapse the pending reconcile event so the upgrade shows no "Modell entfernt" banner.
 
-Total download: ~1.7 GB (combined archive sizes). v2 installs keep counting as installed (same check path) and get v3 offered as a dismissible model update via the manifest. All downloads come from the Cloudflare R2 CDN at `https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/`.
+Total download: ~2.1 GB with the search model (combined archive sizes; `FirstLaunchScreen` sums the catalog, so it always shows what it will load; a future model with `published: false` is not counted). On disk afterwards: ~2.4 GB. v2 installs keep counting as installed (same check path) and get v3 offered as a dismissible model update via the manifest. All downloads come from the Cloudflare R2 CDN at `https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/`.
 
 ### Model Paths
 
@@ -59,6 +64,8 @@ The `getModelsDir()` function returns `join(getDataDir(), 'models')` where `getD
    - **Extract** archives via `extractTarGz()` into the `relativePath` directory.
 4. On completion, `modelsDownloaded` is set to `true` in electron-store and `FirstLaunchScreen` calls `onComplete`.
 
+The search model is loaded last. If only it fails (any reason except an abort), `startModelDownload()` logs it, continues and still sends `complete` — the app opens and the `SearchModelProvisioner` takes over (`modelDownload:start` kicks it after the download). Download, verification and extraction share one core, `installCatalogModel()`. A `.partial` of full length is verified and taken over (or deleted if too large or wrong), and an HTTP 416 on the range request deletes the `.partial` and retries once without range — otherwise every attempt would fail the same way. The core which returns a reason (`network | disk-space | checksum | extract | unknown | aborted`) instead of throwing.
+
 ### Progress UI
 
 `FirstLaunchScreen` displays:
@@ -72,6 +79,18 @@ Progress is pushed from the main process to the renderer via `modelDownload:stat
 ### Abort Handling
 
 `ModelDownloadService` maintains an `abortSignal` object. If the app is closed during download, the next launch detects missing models and re-enters `FirstLaunchScreen`. Already-downloaded models are skipped (checked via `checkPath` existence). Partial flat-file downloads use a `.partial` suffix for tracking via `getAlreadyDownloadedBytes()`.
+
+## Search model (Epic #192)
+
+The search model (`embeddinggemma-2-text`, group `search`) is **required but `deferrable`**: «Pflicht bei der Ersteinrichtung, aber kein Aussperren».
+
+- **No `activeModels` slot.** There is exactly one search model; it is neither activated nor deleted. `getActiveModelIdBelief('search')` is `null`, the reconciler and `retireObsoleteModels` skip slot handling for it, `deleteModel` and `downloadSingleModel` refuse it, and the `modelCatalog:*` IPC accepts only slot groups (`SlotModelGroupSchema`). Everything that maps a group onto a slot is typed `SlotModelGroup`, so a future slot-less group shows up as a compile error.
+- **Location:** `getSearchModelLocation()` → `~/.therascript/models/search-embeddinggemma-2-text-v1/` (`READY` is the last file of the tarball and the `checkPath`). In development (`app.isPackaged === false`) `THERASCRIPT_SEARCH_MODEL_DIR` overrides the directory. A model at the `checkPath` counts as installed regardless of `published`.
+- **`published: false`** keeps the entry out of all runtime access until the artifact is on R2 (see `docs/product/operations/model-pipeline.md`, «Publishing a new model»). The state is then `unpublished` («Noch nicht verfügbar»).
+- **`SearchModelProvisioner`** (`src/main/services/SearchModelProvisioner.ts`, wiring in `search-model-provisioner-deps.ts`): starts after retire/reconcile and again after the first-launch download; never during first launch (`checkModelsExist()` false) and never starts an attempt during a recording or processing (rechecks every minute; a running download continues). Single flight. Before downloading it checks free space (`modelStagingBytes` = 2.5 × archive ≈ 1.1 GB). Retries after 1, 5 and 30 minutes (`retry-scheduled{reason, nextAttemptAt}`), afterwards `failed{reason}` with a silent retry every 6 hours; «Erneut versuchen» (`search:retryModel`) tries immediately and restarts the ladder. States: `ready | waiting{reason: busy | setup | starting, nextAttemptAt?} | downloading{progress} | retry-scheduled | failed | unpublished` — `downloading` only once a download really runs; while a recording/processing runs it shows `waiting busy` with the next check time. Reasons `network | server | disk-space | checksum | extract | unknown` (`server` = HTTP 4xx/5xx) with German texts in `src/shared/search-model-texts.ts`. Every change is pushed as `search:availabilityChanged`. After the Mac wakes up (`powerMonitor` `resume`) an attempt that became due during sleep runs at once. `stop()` also ends a running `tar` (`abortExtraction`, only for the provisioner); the archive stays and the next attempt extracts it without downloading again — and since `READY` is the last tar entry, a half-extracted model never counts as installed.
+- **Not work in the sense of updates (#210 AK 7):** it does not use the global download signal, so `WorkGuard.currentWork()` ignores it and an update never waits for it. Quitting (also for an update swap) stops it in `runQuitCleanup` (`stopSearchModelProvisioner`); the next start resumes from the `.partial`, and if the update already brought the model, the leftover archive/`.partial` is removed.
+- **Updates:** an app that does not know the search model gets it from a manifest with `required: true` + layout as `kind: 'new'` in the same update (`selectBundle`). An app that provisions it itself passes `selfProvisionedIds`, so a missing search model never comes as `kind: 'new'` there (no double download); a new version of an installed one comes as a normal `update`.
+- **Settings → Modelle** shows a status card «Suchmodell» (`SearchModelCard.tsx`): ready / loading with `role="progressbar"` / next attempt at … with reason / failed with reason + «Erneut versuchen» / not yet available. The status line is a polite live region; it changes only with the state, not with every percent.
 
 ## R2 Manifest
 
@@ -151,14 +170,14 @@ Parts are staged one after another, app first:
 
 Legacy (pre-#167): `cleanupIncompleteUpdates()` still deletes `models/.staging` and restores a model from `models/.backup` after an interrupted swap of the old model-update flow — needed once for installations updating from v0.9.x; remove after a few releases. `migrateInstalledVersions()` seeds `installedModelVersions` for models already on disk (`version: 'pre-update'`, `sha256: ''`).
 
-Disk space (NFR 1): `diskNeedBytes` = app × 5 + archive model × 2.5 + flat model × 1 (only parts not yet staged), checked against the free space of both the app work dir and the models dir. Manual: need must fit, else «Nicht genügend Speicherplatz … mindestens N GB». Automatic (AK 8): 5 GB must remain free afterwards, else a hint naming the space.
+Disk space (NFR 1): `diskNeedBytes` = app × 5 + archive model × 2.5 + flat model × 1 (only parts not yet staged), checked against the free space of both the app work dir and the models dir. Manual: need must fit, else «Nicht genügend Speicherplatz … mindestens N GB». Automatic (AK 8): 5 GiB must remain free afterwards (N in the hints is rounded up in decimal GB), else a hint naming the space.
 
 ### Phases
 
 | Phase | Meaning |
 |---|---|
 | `idle` | no update known — up to date, not yet checked or last check failed (`checkedAt`, `checkFailed`) |
-| `available` | update known, not fully staged (auto-update off, too little space — with a hint naming the space needed — or a failed background download); always shown in the bottom bar |
+| `available` | update known, not fully staged (auto-update off, too little space — with a hint naming the space needed — or a failed background download); always shown in the sidebar footer |
 | `downloading` | staging of all parts (see above); progress weighted by size |
 | `ready` | all parts staged and verified; persisted in the `appUpdate` setting so a restart keeps it |
 | `unsupported` | only a new app version that cannot replace itself (not in `/Applications` or `~/Applications`, App Translocation, DMG volume, no write permission or foreign owner) → hint with the website installation guide |
@@ -179,7 +198,7 @@ Cancelling aborts the running step (`AbortSignal` into download, `hdiutil`, `dit
 
 ### Automatic updates (#165)
 
-Setting `autoUpdate` (default `true`, also for existing installations via electron-store defaults) — covers app **and** models. Off: no automatic download or install (also not on quit); checks continue and updates are shown; an update already downloaded stays installable; a running background download is cancelled. An update can be postponed but not skipped (#167 AK 5) — there is no dismiss any more; the former `dismissedManifestVersions` and `pendingModelUpdates` settings are deleted at start, so a previously skipped model is offered again once. UI: Settings → Updates (`UpdateSettings.tsx`, `Toggle.tsx`); the bottom bar shows «Update bereit» / «Update verfügbar» and opens that page — whenever `updateNeedsAttention()` (`useAppUpdate.ts`, also used for the highlighted Settings card) is true: phase `ready`, `unsupported` or `available`.
+Setting `autoUpdate` (default `true`, also for existing installations via electron-store defaults) — covers app **and** models. Off: no automatic download or install (also not on quit); checks continue and updates are shown; an update already downloaded stays installable; a running background download is cancelled. An update can be postponed but not skipped (#167 AK 5) — there is no dismiss any more; the former `dismissedManifestVersions` and `pendingModelUpdates` settings are deleted at start, so a previously skipped model is offered again once. UI: Settings → Updates (`UpdateSettings.tsx`, `Toggle.tsx`); the sidebar footer shows «Update bereit» / «Update verfügbar» and opens that page — whenever `updateNeedsAttention()` (`useAppUpdate.ts`, also used for the highlighted Settings card) is true: phase `ready`, `unsupported` or `available`.
 
 ## electron-store Keys
 
@@ -201,6 +220,14 @@ Setting `autoUpdate` (default `true`, also for existing installations via electr
 | `modelDownload:checkDiskSpace` | handle | Returns `{ sufficient, availableBytes, requiredBytes }` |
 | `modelDownload:start` | handle | Starts sequential model download |
 | `modelDownload:status` (event) | send | Pushes `ModelDownloadStatus` progress to renderer |
+
+### Search model
+
+| Channel | Direction | Purpose |
+|---------|-----------|---------|
+| `search:open` | handle | Returns `SearchAvailability` (`{ model: SearchModelState, semantic }`; `semantic` = processing/search process, PR S4) and starts preloading the search model |
+| `search:retryModel` | handle | «Erneut versuchen»: waits for the attempt, returns `SearchAvailability` |
+| `search:availabilityChanged` | send | Pushes every change of `SearchAvailability` |
 
 ### App Updates
 

@@ -1,10 +1,15 @@
-import { useSyncExternalStore } from 'react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { Square } from 'lucide-react'
 import type { Session } from '../../../shared/types'
 import { AUTO_STOP_SECONDS } from '../../../shared/constants/recording'
 import { VUMeter } from './VUMeter'
 import type { ValueStore } from '../utils/valueStore'
 import { formatTime } from '../utils/formatTime'
+import { useViewMode } from '../viewMode/useViewMode'
+import { sessionTitleIn } from '../viewMode/sessionText'
+import { DossierBadges } from './dossier/DossierBadges'
+import type { DossierRef } from '../../../shared/types/Dossier'
+import { consumeLiveCardFocus } from '../stores/liveCardFocus'
 
 export interface LiveRecording {
   /** Pegel und Dauer als Store statt Wert — siehe useRecording (Issue #140) */
@@ -14,7 +19,8 @@ export interface LiveRecording {
 }
 
 interface RecordingSessionCardProps {
-  session: Session
+  /** Mit `dossiers` zeigt die Karte die Plaketten — Zuordnen auch während der Aufnahme (#205 AK 3). */
+  session: Session & { dossiers?: DossierRef[] }
   live: LiveRecording
   'data-session-id'?: string
 }
@@ -31,8 +37,14 @@ export function RecordingSessionCard({
 }: RecordingSessionCardProps): React.JSX.Element {
   const duration = useSyncExternalStore(live.duration.subscribe, live.duration.get)
   const remaining = Math.max(0, AUTO_STOP_SECONDS - duration)
-  const displayTitle =
-    session.title && session.title.trim().length > 0 ? session.title : 'Unbenannte Transkription'
+  const title = sessionTitleIn(session, useViewMode())
+  const displayTitle = title.trim().length > 0 ? title : 'Unbenannte Transkription'
+  const stopRef = useRef<HTMLButtonElement>(null)
+
+  // Nach «Aufnahme starten» landet der Fokus hier (Review #225)
+  useEffect(() => {
+    if (consumeLiveCardFocus()) stopRef.current?.focus()
+  }, [])
 
   return (
     <div
@@ -64,8 +76,10 @@ export function RecordingSessionCard({
         </div>
 
         <button
+          ref={stopRef}
+          type="button"
           onClick={live.onStop}
-          className="flex shrink-0 items-center gap-1.5 rounded-md bg-recording px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-recording-hover"
+          className="flex shrink-0 items-center gap-1.5 rounded-md bg-recording-solid px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-recording-solid-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           aria-label="Aufnahme stoppen"
         >
           <Square className="h-3 w-3 fill-current" strokeWidth={2} aria-hidden />
@@ -74,6 +88,17 @@ export function RecordingSessionCard({
       </div>
 
       <p className="mt-2 text-xs text-text-tertiary">Auto-Stop nach {formatTime(remaining)}</p>
+
+      {session.dossiers !== undefined && (
+        <div className="mt-2">
+          <DossierBadges
+            sessionId={session.id}
+            sessionLabel={displayTitle}
+            dossiers={session.dossiers}
+            variant="list"
+          />
+        </div>
+      )}
     </div>
   )
 }

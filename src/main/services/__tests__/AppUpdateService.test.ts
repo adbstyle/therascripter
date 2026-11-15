@@ -591,6 +591,16 @@ describe('AppUpdateService — Installieren', () => {
     expect(service.prepareQuitInstall()).toEqual({ relaunch: true, startHidden: false })
   })
 
+  it('hält die Hintergrundarbeit der Suche vor dem Beenden an (Epic #192, #210 AK 7)', async () => {
+    const order: string[] = []
+    const service = await readyService(appOnly('1.1.0'), {
+      stopBackgroundWork: () => order.push('search')
+    })
+    deps.quitApp.mockImplementation(() => order.push('quit'))
+    expect(service.requestInstall()).toEqual({ status: 'installing' })
+    expect(order).toEqual(['search', 'quit'])
+  })
+
   it('merkt die Installation während einer Aufnahme vor und holt sie danach nach (AK 15, PC 9)', async () => {
     const service = await readyService()
     work = 'recording'

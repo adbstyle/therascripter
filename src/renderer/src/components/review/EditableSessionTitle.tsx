@@ -1,17 +1,25 @@
 import { useRef, useEffect } from 'react'
 import type { KeyboardEvent, FocusEvent } from 'react'
+import type { SummaryRecord } from '../../../../shared/types/IpcApi'
 
 interface Props {
   sessionId: string
   title: string
+  /**
+   * Issue #203 — set in the Klartext view: shown instead of the editable
+   * title, read-only (AK 8). null/undefined: the editable title.
+   */
+  readOnlyText?: string | null
   fallback: string
-  onSaved?: (next: string) => void
+  /** `record` carries the title's new token snapshot (#203). */
+  onSaved?: (next: string, record: SummaryRecord | null) => void
   className?: string
 }
 
 export function EditableSessionTitle({
   sessionId,
   title,
+  readOnlyText,
   fallback,
   onSaved,
   className
@@ -52,7 +60,7 @@ export function EditableSessionTitle({
     originalRef.current = next
     window.api.summary
       .updateTitle(sessionId, next)
-      .then(() => onSaved?.(next))
+      .then((record) => onSaved?.(next, record ?? null))
       .catch((err) => {
         console.error('Failed to save title edit', err)
       })
@@ -61,7 +69,7 @@ export function EditableSessionTitle({
   const onBlur = (e: FocusEvent<HTMLHeadingElement>): void => {
     // Focused state had `overflow-x: auto` (so the user could edit past the
     // visible width); contentEditable auto-scrolls to keep the caret visible.
-    // On blur the CSS reverts to `truncate` (= overflow: hidden), but the
+    // On blur the CSS reverts to the two-line clamp (= overflow: hidden), but the
     // browser preserves scrollLeft through that transition — without this
     // reset the filled state would render the middle of the title with
     // ellipsis on the right, looking like a rendering bug. Resetting here
@@ -71,6 +79,9 @@ export function EditableSessionTitle({
   }
   const onKeyDown = (e: KeyboardEvent<HTMLHeadingElement>): void => {
     if (e.key === 'Escape') {
+      // Nur die Bearbeitung abbrechen — Esc darf nicht bis zum Editor
+      // durchdringen, der damit sonst zurück im Verlauf ginge
+      e.stopPropagation()
       e.currentTarget.textContent = originalRef.current
       e.currentTarget.blur()
     }
@@ -80,29 +91,34 @@ export function EditableSessionTitle({
     }
   }
 
+  if (readOnlyText != null) {
+    const empty = readOnlyText.trim().length === 0
+    return (
+      <h2
+        key="read-only"
+        className={`session-title line-clamp-2 min-h-9 break-words rounded-lg border border-transparent px-4 py-[7px] leading-5 ${className ?? ''}`}
+        title={empty ? undefined : readOnlyText}
+      >
+        {empty ? <span className="text-text-tertiary">{fallback}</span> : readOnlyText}
+      </h2>
+    )
+  }
+
   return (
     <h2
+      key="editable"
       ref={setRef}
-      // `titlebar-no-drag` is mandatory: the parent ReviewEditor header is a
-      // macOS hiddenInset drag region (`titlebar-drag`); without this opt-out
-      // the OS treats clicks as window-drags and the contentEditable never
-      // receives focus. A contentEditable element must always pass clicks
-      // through, so the class belongs on the component itself, not the call
-      // site.
-      //
       // Standard inline-edit-title pattern (Linear/Notion/Figma):
-      // - Filled (default): looks like a plain bold heading. truncate +
-      //   transparent border that reserves space so focus does not shift
-      //   the layout.
-      // - Focused: same dimensions, border becomes primary (the only
-      //   visual change), overflow-x-auto + text-clip replaces truncate
-      //   so the user edits without ellipsis. text-clip is required —
-      //   overflow-x-auto alone does not suppress text-overflow:ellipsis,
-      //   the dots keep rendering.
+      // - Filled (default): looks like a plain bold heading. Wraps to at most
+      //   two lines (line-clamp-2, ellipsis after that) so a narrow editor
+      //   column does not cut the title after a few words; the transparent
+      //   border reserves space so focus does not shift the layout.
+      // - Focused: the clamp is lifted so the user edits the whole title; the
+      //   border becomes primary (the only other visual change).
       // The contentEditable element shows a text caret on hover by
       // default — that is the discoverability hint, no extra hover chrome
       // needed.
-      className={`titlebar-no-drag session-title h-9 rounded-lg border border-transparent px-4 leading-9 outline-none transition-colors truncate focus:border-primary focus:overflow-x-auto focus:text-clip ${className ?? ''}`}
+      className={`session-title line-clamp-2 min-h-9 break-words rounded-lg border border-transparent px-4 py-[7px] leading-5 outline-none transition-colors focus:line-clamp-none focus:border-primary ${className ?? ''}`}
       contentEditable
       suppressContentEditableWarning
       onBlur={onBlur}

@@ -45,6 +45,65 @@ function ctx(over: Partial<SelectContext> = {}): SelectContext {
 
 const ids = (b: ReturnType<typeof selectBundle>): string[] => b?.models.map((m) => m.id) ?? []
 
+describe('selectBundle — Suchmodell (Epic #192, #210 AK 2)', () => {
+  const searchEntry = entry({
+    id: 'embeddinggemma-2-text',
+    relativePath: 'search-embeddinggemma-2-text-v1',
+    checkPath: 'search-embeddinggemma-2-text-v1/READY',
+    archive: true,
+    required: true,
+    minAppVersion: '1.1.0',
+    sizeBytes: 430_211_881
+  })
+
+  it('eine App ohne Suche bekommt das veröffentlichte Suchmodell im selben Update mit', () => {
+    const bundle = selectBundle({ app, models: [searchEntry] }, ctx())
+    expect(bundle?.models).toEqual([
+      expect.objectContaining({
+        id: 'embeddinggemma-2-text',
+        kind: 'new',
+        relativePath: 'search-embeddinggemma-2-text-v1',
+        checkPath: 'search-embeddinggemma-2-text-v1/READY',
+        archive: true,
+        required: true
+      })
+    ])
+  })
+
+  it('eine App, die es selbst nachlädt, nimmt es nicht ins Update — kein doppelter Download', () => {
+    const local: LocalLayout[] = [
+      ...LOCAL,
+      {
+        id: 'embeddinggemma-2-text',
+        relativePath: 'search-embeddinggemma-2-text-v1',
+        checkPath: 'search-embeddinggemma-2-text-v1/READY',
+        archive: true,
+        required: true
+      }
+    ]
+    const bundle = selectBundle(
+      { app, models: [searchEntry] },
+      ctx({ localLayouts: local, selfProvisionedIds: new Set(['embeddinggemma-2-text']) })
+    )
+    expect(bundle).toEqual({ app, models: [] })
+  })
+
+  it('liegt es schon da, kommt eine neue Fassung als normales Update', () => {
+    const bundle = selectBundle(
+      { app, models: [searchEntry] },
+      ctx({
+        selfProvisionedIds: new Set(['embeddinggemma-2-text']),
+        isOnDisk: (p) => p === 'search-embeddinggemma-2-text-v1/READY'
+      })
+    )
+    expect(bundle?.models.map((m) => [m.id, m.kind])).toEqual([['embeddinggemma-2-text', 'update']])
+  })
+
+  it('ohne neue App wird ein fehlendes Suchmodell nie angeboten (das macht der Provisioner)', () => {
+    expect(selectBundle({ models: [searchEntry] }, ctx())).toBeNull()
+  })
+})
+
 describe('selectBundle (#167)', () => {
   it('bündelt eine neue App mit den Updates der installierten Modelle', () => {
     const bundle = selectBundle(

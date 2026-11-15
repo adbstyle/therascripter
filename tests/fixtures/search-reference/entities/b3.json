@@ -1,0 +1,65 @@
+{
+  "doc": "b3",
+  "entities": [
+    {
+      "text": "Rüegg",
+      "type": "PERSON",
+      "canonical": "Marco Rüegg"
+    },
+    {
+      "text": "Thunersee",
+      "type": "ORT",
+      "canonical": "Thunersee"
+    },
+    {
+      "text": "Nicoles",
+      "type": "PERSON",
+      "canonical": "Nicole"
+    },
+    {
+      "text": "Gurten",
+      "type": "ORT",
+      "canonical": "Gurten"
+    },
+    {
+      "text": "Lukas",
+      "type": "PERSON",
+      "canonical": "Lukas"
+    },
+    {
+      "text": "Nicole",
+      "type": "PERSON",
+      "canonical": "Nicole"
+    },
+    {
+      "text": "ADHS",
+      "type": "MEDIZINISCH",
+      "canonical": "ADHS"
+    },
+    {
+      "text": "Ammann",
+      "type": "PERSON",
+      "canonical": "Ammann"
+    },
+    {
+      "text": "Ritalin",
+      "type": "MEDIZINISCH",
+      "canonical": "Ritalin"
+    },
+    {
+      "text": "Marco",
+      "type": "PERSON",
+      "canonical": "Marco Rüegg"
+    },
+    {
+      "text": "Stadt Bern",
+      "type": "ORGANISATION",
+      "canonical": "Stadt Bern"
+    },
+    {
+      "text": "Keller",
+      "type": "PERSON",
+      "canonical": "Keller"
+    }
+  ]
+}

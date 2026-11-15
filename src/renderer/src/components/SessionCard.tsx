@@ -1,15 +1,23 @@
 import { memo } from 'react'
-import { FileText, Info, Mic, Trash2 } from 'lucide-react'
-import type { Session, SessionStatus } from '../../../shared/types'
-import { STEP_LABELS_DE, PIPELINE_UI_STRINGS } from '../../../shared/constants/pipelineWording'
-import { useTaskProgress } from '../hooks/useTaskProgress'
+import { FileText, Mic, Trash2 } from 'lucide-react'
+import type { Session } from '../../../shared/types'
+import type { DossierRef } from '../../../shared/types/Dossier'
+import { useViewMode } from '../viewMode/useViewMode'
+import { sessionSummaryIn, sessionTitleIn } from '../viewMode/sessionText'
 import { startOfDay } from '../hooks/useStartOfToday'
-import { isToolBlockedMessage } from '../../../shared/tool-blocked'
+import { FULL_TIMESTAMP_FORMAT, formatCardTimestamp } from '../utils/sessionDates'
+import { SessionStatusBlock } from './session/SessionStatusBlock'
+import { DossierBadges } from './dossier/DossierBadges'
+import { DocumentDateButton } from './session/DocumentDateButton'
 
 // Callbacks bekommen die Session bzw. ihre ID, damit SessionDashboard stabile
 // Handler statt Closures pro Karte durchreichen kann — sonst griffe memo nie.
 interface SessionCardProps {
-  session: Session
+  /**
+   * Mit `dossiers` (Sitzungsliste, #205) zeigt die Karte die Plaketten der
+   * Patientendossiers bzw. «Dossier zuordnen».
+   */
+  session: Session & { dossiers?: DossierRef[] }
   onDelete: (session: Session) => void
   onClick?: (sessionId: string) => void
   onRetry?: (sessionId: string) => void
@@ -18,51 +26,6 @@ interface SessionCardProps {
    *  die memoisierte Karte dann neu ("Gestern"). Default: jetzt berechnet. */
   today?: number
   'data-session-id'?: string
-}
-
-const STATUS_CONFIG: Record<SessionStatus, { label: string; color: string }> = {
-  recording: { label: 'Aufnahme läuft', color: 'text-recording' },
-  queued: { label: 'Wartet', color: 'text-text-secondary' },
-  processing: { label: 'Verarbeitung', color: 'text-primary' },
-  review: { label: 'Review', color: 'text-success' },
-  error: { label: 'Fehler', color: 'text-error-text' }
-}
-
-function isInPipeline(status: SessionStatus): boolean {
-  return status === 'processing' || status === 'queued'
-}
-
-// Modulweit gecacht: toLocale*String mit Optionen baut pro Aufruf einen neuen
-// Intl-Formatter (~33 µs), bei vielen Karten pro Render spürbar.
-const TIME_FORMAT = new Intl.DateTimeFormat('de-CH', { hour: '2-digit', minute: '2-digit' })
-const DAY_MONTH_FORMAT = new Intl.DateTimeFormat('de-CH', { day: '2-digit', month: '2-digit' })
-const SHORT_DATE_FORMAT = new Intl.DateTimeFormat('de-CH', {
-  day: '2-digit',
-  month: '2-digit',
-  year: '2-digit'
-})
-const FULL_TIMESTAMP_FORMAT = new Intl.DateTimeFormat('de-CH', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit'
-})
-
-function formatCardTimestamp(iso: string, today: number): string {
-  const date = new Date(iso)
-  const time = TIME_FORMAT.format(date)
-
-  const dayDiff = Math.round((today - startOfDay(date)) / 86_400_000)
-
-  if (dayDiff === 0) return time
-  if (dayDiff === 1) return `Gestern, ${time}`
-
-  if (date.getFullYear() === new Date(today).getFullYear()) {
-    return `${DAY_MONTH_FORMAT.format(date)}, ${time}`
-  }
-
-  return SHORT_DATE_FORMAT.format(date)
 }
 
 export const SessionCard = memo(function SessionCard({
@@ -74,96 +37,15 @@ export const SessionCard = memo(function SessionCard({
   today,
   'data-session-id': dataSessionId
 }: SessionCardProps): React.JSX.Element {
-  // Subscribe to progress events for both queued (to receive queue:positions)
-  // and processing (to receive task:started / task:progress).
-  const subscribed = isInPipeline(session.status)
-  const { current, queuePosition } = useTaskProgress(
-    subscribed ? session.id : null,
-    session.plannedSteps
-  )
-
-  const statusConfig = STATUS_CONFIG[session.status]
   const TypeIcon = session.type === 'audio' ? Mic : FileText
   const typeLabel = session.type === 'audio' ? 'Sprachaufnahme' : 'PDF-Dokument'
 
-  const displayTitle =
-    session.title && session.title.trim().length > 0 ? session.title : 'Unbenannte Transkription'
-  const summary = session.summary?.trim()
+  const viewMode = useViewMode()
+  const title = sessionTitleIn(session, viewMode)
+  const displayTitle = title.trim().length > 0 ? title : 'Unbenannte Transkription'
+  const summary = sessionSummaryIn(session, viewMode)?.trim()
   const hasSummary = summary != null && summary.length > 0
   const fullTimestamp = FULL_TIMESTAMP_FORMAT.format(new Date(session.createdAt))
-
-  // ---- Status-Zeile-Inhalt ableiten -------------------------------------
-  // Drei Zustände: review, queued (mit/ohne Position), processing (mit/ohne current).
-  // Phase F deckt review + processing happy path ab; queued kommt in Phase K.
-  const isProcessing = session.status === 'processing'
-  const isQueued = session.status === 'queued'
-  const isReview = session.status === 'review'
-
-  // Phase L: Empty-speech is signalled via wordCount === 0 on a review session.
-  // Visual treatment: Info icon + headline in the status row, body text below.
-  // #168 — Verarbeitung an einem von macOS blockierten Werkzeug gescheitert
-  const toolBlocked = isToolBlockedMessage(session.errorMessage)
-  const isEmptySpeech = isReview && session.wordCount === 0
-
-  let statusContent: React.ReactNode
-  if (isReview) {
-    if (isEmptySpeech) {
-      statusContent = (
-        <>
-          <Info className="h-3.5 w-3.5 text-text-secondary" strokeWidth={1.75} aria-hidden="true" />
-          <span className="text-xs font-medium text-text-secondary">
-            {PIPELINE_UI_STRINGS.emptySpeechHeadline}
-          </span>
-        </>
-      )
-    } else {
-      // Append pseudonymization count inline after the word count when > 0.
-      // Hidden when 0 (no audit signal). Singular form for 1, plural for 2+.
-      const anonCount = session.anonymizationCount ?? 0
-      statusContent =
-        session.wordCount != null ? (
-          <span className="text-xs text-text-tertiary">
-            {session.wordCount.toLocaleString('de-CH')} Wörter
-            {anonCount > 0 && (
-              <>
-                {' · '}
-                {anonCount.toLocaleString('de-CH')}{' '}
-                {anonCount === 1 ? 'Pseudonymisierung' : 'Pseudonymisierungen'}
-              </>
-            )}
-          </span>
-        ) : null
-    }
-  } else if (isQueued) {
-    statusContent = (
-      <span className="text-xs font-medium text-text-secondary" aria-live="polite">
-        {queuePosition != null ? PIPELINE_UI_STRINGS.waiting(queuePosition) : statusConfig.label}
-      </span>
-    )
-  } else if (isProcessing && current) {
-    const stepLabel = STEP_LABELS_DE[current.taskType]
-    const headline = current.isTransitioning
-      ? PIPELINE_UI_STRINGS.preparingNext
-      : current.totalSteps > 0
-        ? PIPELINE_UI_STRINGS.step(current.stepIndex, current.totalSteps, stepLabel)
-        : stepLabel
-    statusContent = <span className="text-xs font-medium text-primary">{headline}</span>
-  } else {
-    statusContent = (
-      <span className={`text-xs font-medium ${statusConfig.color}`}>{statusConfig.label}</span>
-    )
-  }
-
-  // ---- Progress-Zeile ---------------------------------------------------
-  // ETA + Gesamt-Bar wurden zurückgebaut: baked-in Schätzwerte sind
-  // hardware-abhängig und führen zu irreführenden Anzeigen, eine Calibration
-  // mit ≥3 echten Sessions ist für viele User in der Praxis nie erreicht.
-  // Sichtbares Feedback ist der Schritt-Counter (Status-Zeile) + die
-  // schritt-eigene Bar.
-  const showTransitionBar = isProcessing && current != null && current.isTransitioning
-  const showStepBar = isProcessing && current != null && !current.isTransitioning
-  const stepProgressPct = current ? Math.round(current.progress * 100) : 0
-  const stepLabel = current ? STEP_LABELS_DE[current.taskType] : ''
 
   return (
     <div
@@ -214,96 +96,37 @@ export const SessionCard = memo(function SessionCard({
         </div>
       </div>
 
-      <div className="pointer-events-none relative z-[1] mt-1.5 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">{statusContent}</div>
+      <SessionStatusBlock
+        session={session}
+        onRetry={onRetry}
+        retryDisabled={retryDisabled}
+        trailing={
+          <TypeIcon
+            className="h-3.5 w-3.5 shrink-0 text-text-tertiary"
+            strokeWidth={1.75}
+            role="img"
+            aria-label={typeLabel}
+          />
+        }
+      />
 
-        <TypeIcon
-          className="h-3.5 w-3.5 shrink-0 text-text-tertiary"
-          strokeWidth={1.75}
-          role="img"
-          aria-label={typeLabel}
-        />
-      </div>
-
-      {isEmptySpeech && (
-        <p
-          className="pointer-events-none relative z-[1] mt-1 line-clamp-2 text-xs text-text-tertiary"
-          role="alert"
-        >
-          {PIPELINE_UI_STRINGS.emptySpeechBody}
-        </p>
-      )}
-
-      {session.status === 'error' && session.errorMessage && (
-        <p className="pointer-events-none relative z-[1] mt-1 line-clamp-3 text-xs text-text-tertiary">
-          {session.errorMessage}
-        </p>
-      )}
-      {/* Phase M: 3-stage retry-limit UX driven by Session.retryCount. Eine
-          Blockade durch macOS (#168) zählt nicht: die Meldung oben sagt, was zu
-          tun ist, und «Erneut versuchen» bleibt, bis sie behoben ist. */}
-      {session.status === 'error' && !toolBlocked && session.retryCount === 1 && (
-        <p className="pointer-events-none relative z-[1] mt-1 text-xs text-text-tertiary">
-          {PIPELINE_UI_STRINGS.retryAfterFirstFailure}
-        </p>
-      )}
-      {session.status === 'error' && !toolBlocked && session.retryCount === 2 && (
-        <p className="pointer-events-none relative z-[1] mt-1 text-xs text-text-tertiary">
-          {PIPELINE_UI_STRINGS.retryAfterSecondFailure}
-        </p>
-      )}
-      {session.status === 'error' && (toolBlocked || session.retryCount < 3) && onRetry && (
-        <button
-          className="pointer-events-auto relative z-10 mt-1.5 text-xs font-medium text-primary hover:text-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
-          onClick={() => onRetry(session.id)}
-          disabled={retryDisabled}
-          title={retryDisabled ? 'Eine andere Transkription wird gerade verarbeitet' : undefined}
-        >
-          {PIPELINE_UI_STRINGS.retryButton}
-        </button>
-      )}
-      {session.status === 'error' && !toolBlocked && session.retryCount >= 3 && (
-        <p
-          className="pointer-events-none relative z-[1] mt-1.5 text-xs text-text-tertiary"
-          role="alert"
-        >
-          {PIPELINE_UI_STRINGS.retryExhausted}
-        </p>
-      )}
-
-      {showStepBar && (
-        <div className="pointer-events-none relative z-[1] mt-2">
-          <div
-            className="h-1 w-full overflow-hidden rounded-full bg-surface-2"
-            role="progressbar"
-            aria-valuenow={stepProgressPct}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label={
-              current && current.totalSteps > 0
-                ? `${PIPELINE_UI_STRINGS.step(current.stepIndex, current.totalSteps, stepLabel)}, ${stepProgressPct} Prozent`
-                : `${stepLabel}, ${stepProgressPct} Prozent`
-            }
-          >
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-300"
-              style={{ width: `${stepProgressPct}%` }}
+      {(session.dossiers !== undefined || session.type === 'pdf') && (
+        // Ohne z-index: sonst bildete die Zeile einen Stapelkontext und die
+        // offene Auswahl läge unter den folgenden Karten und Gruppenköpfen
+        <div className="pointer-events-none relative mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+          {session.dossiers !== undefined ? (
+            <DossierBadges
+              sessionId={session.id}
+              sessionLabel={displayTitle}
+              dossiers={session.dossiers}
+              variant="list"
             />
-          </div>
-        </div>
-      )}
-
-      {showTransitionBar && (
-        <div className="pointer-events-none relative z-[1] mt-2">
-          <div
-            className="h-1 w-full overflow-hidden rounded-full bg-surface-2"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label={PIPELINE_UI_STRINGS.preparingNext}
-          >
-            <div className="h-full w-1/4 animate-pulse rounded-full bg-surface-3" />
-          </div>
+          ) : (
+            <span />
+          )}
+          {session.type === 'pdf' && (
+            <DocumentDateButton session={session} sessionLabel={displayTitle} />
+          )}
         </div>
       )}
     </div>

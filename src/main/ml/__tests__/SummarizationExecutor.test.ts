@@ -3,11 +3,21 @@ import { SummarizationExecutor } from '../SummarizationExecutor'
 import type { Task } from '../../../shared/types'
 import { ToolBlockedError } from '../../../shared/tool-blocked'
 
+const ENTITY_MAP = {
+  'person-1': {
+    original: 'Ruth Gerber',
+    placeholder: '[PERSON 1]',
+    type: 'PERSON' as const,
+    source: 'ner' as const
+  }
+}
+
 const makeDeps = (
   over: {
     llamaSummarizer?: { summarize?: ReturnType<typeof vi.fn> }
     sessionService?: {
       getAnonymizedPlainText?: ReturnType<typeof vi.fn>
+      getEntityMap?: ReturnType<typeof vi.fn>
       saveGeneratedSummary?: ReturnType<typeof vi.fn>
     }
     isModelInstalled?: () => boolean
@@ -17,6 +27,7 @@ const makeDeps = (
   llamaSummarizer: { summarize: ReturnType<typeof vi.fn> }
   sessionService: {
     getAnonymizedPlainText: ReturnType<typeof vi.fn>
+    getEntityMap: ReturnType<typeof vi.fn>
     saveGeneratedSummary: ReturnType<typeof vi.fn>
   }
   isModelInstalled: () => boolean
@@ -32,6 +43,7 @@ const makeDeps = (
     getAnonymizedPlainText:
       over.sessionService?.getAnonymizedPlainText ??
       vi.fn().mockReturnValue('Der Patient war müde.'),
+    getEntityMap: over.sessionService?.getEntityMap ?? vi.fn().mockReturnValue(ENTITY_MAP),
     saveGeneratedSummary: over.sessionService?.saveGeneratedSummary ?? vi.fn()
   },
   isModelInstalled: over.isModelInstalled ?? ((): boolean => true),
@@ -62,7 +74,34 @@ describe('SummarizationExecutor', () => {
       'abc',
       'Kurztitel',
       'Eine Zusammenfassung.',
-      'gemma-4-e2b-summarization'
+      'gemma-4-e2b-summarization',
+      ENTITY_MAP
+    )
+  })
+
+  it('#203: records the EntityMap read with the text, not the one at save time', async () => {
+    const getEntityMap = vi.fn().mockReturnValue(ENTITY_MAP)
+    let resolveSummary: (v: { title: string; text: string }) => void = () => {}
+    const deps = makeDeps({
+      llamaSummarizer: {
+        summarize: vi.fn(() => new Promise((resolve) => (resolveSummary = resolve)))
+      },
+      sessionService: { getEntityMap }
+    })
+    const exec = new SummarizationExecutor(deps)
+    const run = exec.execute(task, onProgress, signal)
+    await Promise.resolve()
+    // The user edits while the model runs — the EntityMap changes meanwhile
+    getEntityMap.mockReturnValue({})
+    resolveSummary({ title: '[PERSON 1]', text: 'Mit [PERSON 1].' })
+    await run
+    expect(getEntityMap).toHaveBeenCalledTimes(1)
+    expect(deps.sessionService.saveGeneratedSummary).toHaveBeenCalledWith(
+      'abc',
+      '[PERSON 1]',
+      'Mit [PERSON 1].',
+      'gemma-4-e2b-summarization',
+      ENTITY_MAP
     )
   })
 

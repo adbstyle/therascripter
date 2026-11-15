@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 
 interface ConsentBannerProps {
   /**
-   * Feuert beim Wegklicken. Der Parent (App) merkt sich das pro Aufnahme —
-   * die Sessions-View (und damit dieser Banner) wird bei jedem View-Wechsel
+   * Feuert beim Wegklicken. Der RecordingContext merkt sich das pro Aufnahme —
+   * die Sitzungsliste (und damit dieser Banner) wird bei jedem Seitenwechsel
    * neu gemountet, lokaler State allein würde den Banner also bei jeder
    * Rückkehr zur Liste erneut zeigen.
    */
@@ -31,7 +31,7 @@ export function ConsentBanner({ onDismiss }: ConsentBannerProps): React.JSX.Elem
   if (!visible) return null
 
   return (
-    <div className="mx-6 mt-4 rounded-lg border border-warning-border bg-warning-bg px-4 py-3">
+    <div className="rounded-lg border border-warning-border bg-warning-bg px-4 py-3">
       <div className="flex items-start gap-3">
         <span className="mt-0.5 text-lg text-warning" aria-hidden="true">
           &#9888;

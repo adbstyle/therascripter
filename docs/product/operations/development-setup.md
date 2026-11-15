@@ -117,9 +117,10 @@ Note: The `dev` script uses `env -u ELECTRON_RUN_AS_NODE` to unset that environm
 | Whisper Large V3 Turbo Q5_0 | ~574 MB | `~/.therascript/models/asr/` |
 | pyannote diarization | ~60 MB | `~/.therascript/models/diarization/` |
 | flair NER German Large | ~2.2 GB (HF-Original, fp32) | `~/.therascript/models/ner/` |
-| **Total** | **~2.8 GB** | |
+| EmbeddingGemma 2 text encoder (search) | ~0.58 GB extracted | `~/.therascript/models/search-embeddinggemma-2-text-v1/` (or `THERASCRIPT_SEARCH_MODEL_DIR`) |
+| **Total** | **~3.4 GB** | |
 
-End users download less (~1.7 GB): the NER artifact ships fp16 (~1.0 GB), see `docs/product/operations/model-pipeline.md`.
+End users download less (~2.1 GB): the NER artifact ships fp16 (~1.0 GB), see `docs/product/operations/model-pipeline.md`. The search model is on R2 since 2026-11-15 and is downloaded like the others; for local work you can also extract the artifact from `scripts/package-models.sh search` into the folder above, or point `THERASCRIPT_SEARCH_MODEL_DIR` at it (development builds only); either way it counts as installed.
 
 Models are stored in `~/.therascript/models/` and persist across app builds and updates.
 
