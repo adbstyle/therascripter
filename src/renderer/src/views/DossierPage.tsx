@@ -86,11 +86,14 @@ export default function DossierPage({ dossierId }: DossierPageProps): React.JSX.
         actions={<DossierHeaderActions dossierId={dossierId} dossierName={dossierName} />}
       />
       {showsLiveCard && !consentDismissed && <ConsentBanner onDismiss={dismissConsent} />}
-      {/* Zweispaltig (Stammdaten max. 380 px neben dem Verlauf, Prototyp),
-          sobald der Inhaltsbereich es zulässt: Verlauf mind. 480 px + Stammdaten
-          mind. 300 px + Abstand = 51rem; darunter einspaltig, Stammdaten unten */}
+      {/* Zweispaltig (Stammdaten 300–380 px neben dem Verlauf, Prototyp),
+          sobald der Inhaltsbereich es zulässt: Verlauf mind. 440 px + Stammdaten
+          mind. 300 px + Abstand 32 px = 772 px, Schwelle 48.5rem (776 px). So
+          ist die Seite bei 1100 px Fensterbreite mit offener Seitenleiste
+          (Inhalt ~803 px) zweispaltig, bei 800 px Fensterbreite auch ohne
+          Seitenleiste (Inhalt ~752 px) einspaltig, Stammdaten unten */}
       <div className="@container">
-        <div className="grid grid-cols-1 items-start gap-8 @min-[51rem]:grid-cols-[minmax(480px,1fr)_minmax(300px,380px)]">
+        <div className="grid grid-cols-1 items-start gap-8 @min-[48.5rem]:grid-cols-[minmax(440px,1fr)_minmax(300px,380px)]">
           <DossierTimeline dossierId={dossierId} dossierName={dossierName} />
           {autosave && <DossierMasterDataForm autosave={autosave} />}
         </div>

@@ -57,15 +57,31 @@ describe('DossierPage (#204 AK 3/4/9–11)', () => {
     expect(status()).not.toBeVisible()
   })
 
-  it('legt Verlauf und Stammdaten in ein Raster, das ab 51rem Inhaltsbreite zweispaltig ist', async () => {
+  it('legt Verlauf und Stammdaten in ein Raster, das ab 48.5rem Inhaltsbreite zweispaltig ist', async () => {
     renderPage()
     const timeline = await screen.findByRole('region', { name: 'Verlauf' })
     const masterData = await screen.findByRole('complementary', { name: 'Stammdaten' })
     const grid = timeline.parentElement!
     expect(masterData.parentElement).toBe(grid)
-    expect(grid.className).toContain(
-      '@min-[51rem]:grid-cols-[minmax(480px,1fr)_minmax(300px,380px)]'
-    )
+    const match =
+      /@min-\[([\d.]+)rem\]:grid-cols-\[minmax\((\d+)px,1fr\)_minmax\((\d+)px,(\d+)px\)\]/.exec(
+        grid.className
+      )
+    expect(match).not.toBeNull()
+    const [threshold, timelineMin, dataMin, dataMax] = match!.slice(1).map(Number)
+    const thresholdPx = threshold * 16
+    const gapPx = 32 // gap-8
+    // Die Spalten passen bei der Schwelle hinein (sonst liefe das Raster über)
+    expect(timelineMin + dataMin + gapPx).toBeLessThanOrEqual(thresholdPx)
+    // Verlauf mindestens ~440 px, Stammdaten ~300–380 px
+    expect(timelineMin).toBeGreaterThanOrEqual(440)
+    expect([dataMin, dataMax]).toEqual([300, 380])
+    // Inhaltsbreite = Fenster − Seitenleiste (248 px + 1 px Rand) − Seitenabstand (2 × 24 px)
+    const content = (windowWidth: number, sidebar: boolean): number =>
+      windowWidth - (sidebar ? 249 : 0) - 48
+    expect(content(1100, true)).toBeGreaterThanOrEqual(thresholdPx) // zweispaltig
+    expect(content(800, true)).toBeLessThan(thresholdPx) // einspaltig
+    expect(content(800, false)).toBeLessThan(thresholdPx) // einspaltig
     expect(grid.parentElement!.className).toContain('@container')
     // Kopf-Aktion behält ihren Namen, auch wenn schmal nur das Symbol steht
     expect(screen.getByRole('button', { name: 'Im Dossier suchen' })).toBeInTheDocument()
