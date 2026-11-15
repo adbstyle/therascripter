@@ -199,25 +199,53 @@ export function missingInResults(result, sessionIds) {
 }
 
 /**
- * Suche nach Bedeutung.
- *   - skipped: Suchmodell nicht installiert (nie grün, nie rot)
- *   - waiting: noch keine Antwort mit Vektoren (Prozess lädt, Vektoren
- *     entstehen, Verarbeitung läuft) — weiter abfragen
- *   - ok: ein Treffer nach Bedeutung in der erwarteten Sitzung
- *   - fail: Antwort vollständig, aber ohne diesen Treffer; oder Suchprozess
- *     blockiert bzw. im Fehler
- * `availability` ist ein SearchAvailability, `result` ein SearchQueryResult
- * von search:semantic (oder null, solange nicht gefragt).
+ * Ordner des Suchmodells unter `<home>/.therascript/models`, gelesen aus dem
+ * Katalog-Quelltext (`src/shared/model-catalog.ts`, `SEARCH_MODEL_DIR_NAME`)
+ * — die Release-Prüfung läuft als reines Node-Skript und importiert kein
+ * TypeScript. Ohne Treffer wirft sie: dann stimmt diese Prüfung nicht mehr.
  */
-export function evaluateSemantic({ availability, result, sessionId }) {
-  const model = availability?.model?.status
-  if (model !== 'ready') {
-    return { state: 'skipped', detail: `Suchmodell nicht installiert (${model ?? 'unbekannt'})` }
+export function searchModelDirFromCatalog(catalogSource) {
+  const match = /export const SEARCH_MODEL_DIR_NAME\s*=\s*'([^']+)'/.exec(catalogSource)
+  if (!match) throw new Error('SEARCH_MODEL_DIR_NAME nicht im Katalog gefunden')
+  return match[1]
+}
+
+/**
+ * Bereitschaft des Suchmodells für die Suche nach Bedeutung (Review PR #234).
+ * «Installiert» kommt vom Datenträger (`installed`: liegt der Ordner des
+ * Suchmodells im Test-Home?), nicht aus dem gemeldeten Status — sonst verdeckte
+ * «nicht geprüft» einen Modellfehler.
+ *   - skipped: das Modell fehlt auf dem Datenträger (nie grün, nie rot)
+ *   - ok: Status `ready`
+ *   - fail: macOS blockiert das Werkzeug
+ *   - waiting: liegt da, ist aber (noch) nicht bereit — der Aufrufer fragt bis
+ *     zu seiner Frist erneut und meldet dann ROT (auch `failed`,
+ *     `retry-scheduled`: ein vorhandenes Modell muss bereit werden)
+ * `availability` ist ein SearchAvailability (oder null, solange nicht gefragt).
+ */
+export function evaluateSearchModel({ installed, availability }) {
+  if (!installed) {
+    return { state: 'skipped', detail: 'Suchmodell liegt nicht auf dem Release-Mac' }
   }
-  if (availability.semantic === 'tool-blocked') {
+  if (availability?.semantic === 'tool-blocked') {
     return { state: 'fail', detail: availability.semanticMessage ?? 'Python-Werkzeug blockiert' }
   }
-  if (!result) return { state: 'waiting', detail: `Suche nach Bedeutung: ${availability.semantic}` }
+  const model = availability?.model
+  if (model?.status === 'ready') return { state: 'ok', detail: 'Suchmodell bereit' }
+  const reason = model?.reason ? `, ${model.reason}` : ''
+  return { state: 'waiting', detail: `Suchmodell «${model?.status ?? 'unbekannt'}${reason}»` }
+}
+
+/**
+ * Suche nach Bedeutung, nachdem das Suchmodell bereit ist.
+ *   - waiting: noch keine Antwort mit Vektoren (Prozess lädt, Vektoren
+ *     entstehen, Verarbeitung läuft) — weiter abfragen, nach der Frist ROT
+ *   - ok: ein Treffer nach Bedeutung in der erwarteten Sitzung
+ *   - fail: Suchprozess blockiert
+ * `result` ist ein SearchQueryResult von search:semantic.
+ */
+export function evaluateSemantic({ result, sessionId }) {
+  if (!result) return { state: 'waiting', detail: 'noch keine Antwort' }
   if (result.semantic === 'tool-blocked') {
     return { state: 'fail', detail: 'Python-Werkzeug blockiert' }
   }

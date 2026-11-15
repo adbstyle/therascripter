@@ -4,7 +4,9 @@
  * gescheitert (AK 7).
  */
 import { deepStrictEqual } from 'assert'
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import {
   importPdf,
   listSessions,
@@ -17,7 +19,9 @@ import {
   FEATURES_EXPRESSION,
   SEMANTIC_PROBE,
   compareDossierSeed,
+  evaluateSearchModel,
   evaluateSemantic,
+  searchModelDirFromCatalog,
   leftoverQueries,
   leftoversAfterDossierDelete,
   lifecycleDossier,
@@ -29,6 +33,7 @@ import { SEED_SETTINGS_KEYS } from './seed.mjs'
 import {
   FRESH_HOME,
   SEED_HOME,
+  dataDir,
   query,
   resetHome,
   settingsPath,
@@ -151,20 +156,43 @@ async function checkSearchOfSeed(page, expectations, record, results, log) {
   }
 
   const name = `Suche nach Bedeutung «${SEMANTIC_PROBE}» findet die Sitzung der Vorversion`
-  const availability = await page.eval('window.api.search.open()')
-  let verdict = evaluateSemantic({ availability, result: null, sessionId: pdfId })
-  if (verdict.state === 'skipped') {
-    results.push(skipped(name, verdict.detail))
+  // «Installiert» vom Datenträger, nicht aus dem Status: ein vorhandenes, aber
+  // kaputtes Modell muss rot werden, nicht «nicht geprüft» (Review PR #234)
+  const installed = existsSync(join(dataDir(SEED_HOME), 'models', searchModelDir()))
+  let model = evaluateSearchModel({ installed, availability: null })
+  if (model.state === 'skipped') {
+    results.push(skipped(name, model.detail))
     return
   }
+  log('Suchmodell liegt auf dem Datenträger — warte, bis es bereit ist …')
+  const modelDeadline = Date.now() + 180_000
+  for (;;) {
+    model = evaluateSearchModel({
+      installed,
+      availability: await page.eval('window.api.search.open()')
+    })
+    if (model.state !== 'waiting' || Date.now() > modelDeadline) break
+    await sleep(5000)
+  }
+  if (model.state !== 'ok') {
+    record(
+      name,
+      model.state === 'waiting'
+        ? `Suchmodell liegt auf dem Datenträger, wird aber nach 180 s nicht bereit (${model.detail})`
+        : model.detail
+    )
+    return
+  }
+
   log('Suche nach Bedeutung (wartet auf die Vektoren) …')
+  let verdict = evaluateSemantic({ result: null, sessionId: pdfId })
   const semanticDeadline = Date.now() + 300_000
   while (verdict.state === 'waiting' && Date.now() < semanticDeadline) {
     const result = await page.eval(
       `window.api.search.semantic(${json({ requestId: ++requestId, query: SEMANTIC_PROBE, scope: { kind: 'all' } })})`,
       { timeoutMs: 120_000 }
     )
-    verdict = evaluateSemantic({ availability, result, sessionId: pdfId })
+    verdict = evaluateSemantic({ result, sessionId: pdfId })
     if (verdict.state === 'waiting') await sleep(5000)
   }
   record(
@@ -175,6 +203,14 @@ async function checkSearchOfSeed(page, expectations, record, results, log) {
         ? `Nach 300 s kein Treffer nach Bedeutung (${verdict.detail})`
         : verdict.detail,
     verdict.detail
+  )
+}
+
+/** Ordner des Suchmodells laut Katalog dieses Checkouts (siehe searchModelDirFromCatalog). */
+function searchModelDir() {
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+  return searchModelDirFromCatalog(
+    readFileSync(join(root, 'src', 'shared', 'model-catalog.ts'), 'utf8')
   )
 }
 

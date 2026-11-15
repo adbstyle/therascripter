@@ -3,6 +3,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { normalizeSearchText } from '../utils/search-normalize'
+import { SEARCH_MODEL_DIR_NAME } from '../model-catalog'
 
 // Release-Prüfung, Epic #192 (scripts/release-check/lib/dossier-search.mjs):
 // die reinen Teile — Seed-Erwartungen, Vergleich, Auswertung der Suche und des
@@ -201,54 +202,76 @@ describe('Prüfung: Suche über den Bestand', () => {
     expect(m.missingInResults(null, ['a'])).toEqual(['a'])
   })
 
+  it('Suchmodell fehlt auf dem Datenträger: nicht geprüft, nie grün und nie rot', () => {
+    // Was der Status meldet, spielt dann keine Rolle
+    for (const availability of [null, ready, { model: { status: 'unpublished' } }]) {
+      const verdict = m.evaluateSearchModel({ installed: false, availability })
+      expect(verdict.state).toBe('skipped')
+      const entry = m.skipped('Suche nach Bedeutung', verdict.detail)
+      expect(m.marker(entry)).toBe('–')
+      expect(m.summarize([entry]).passed).toEqual([])
+      expect(m.summarize([entry]).failed).toEqual([])
+    }
+  })
+
   it.each([
-    [{ status: 'waiting', reason: 'setup' }],
+    [{ status: 'waiting', reason: 'starting' }],
+    [{ status: 'waiting', reason: 'busy', nextAttemptAt: 'x' }],
     [{ status: 'downloading', progress: 40 }],
-    [{ status: 'unpublished' }],
-    [{ status: 'failed', reason: 'network' }]
-  ])('nach Bedeutung ohne installiertes Suchmodell: nicht geprüft, nie grün (%o)', (model) => {
-    const verdict = m.evaluateSemantic({
-      availability: { model, semantic: 'model-missing' },
-      result: result([{ id: 'a', kinds: ['semantic'] }]),
-      sessionId: 'a'
-    })
-    expect(verdict.state).toBe('skipped')
-    const entry = m.skipped('Suche nach Bedeutung', verdict.detail)
-    expect(m.marker(entry)).toBe('–')
-    expect(m.summarize([entry]).passed).toEqual([])
-    expect(m.summarize([entry]).failed).toEqual([])
+    [{ status: 'failed', reason: 'extract' }],
+    [{ status: 'retry-scheduled', reason: 'checksum', nextAttemptAt: 'x' }],
+    [{ status: 'unpublished' }]
+  ])(
+    'Suchmodell liegt auf dem Datenträger, Status %o: weiter abfragen (nach der Frist rot), nie «nicht geprüft»',
+    (model) => {
+      const verdict = m.evaluateSearchModel({
+        installed: true,
+        availability: { model, semantic: 'model-missing' }
+      })
+      expect(verdict.state).toBe('waiting')
+      expect(verdict.detail).toContain(model.status)
+    }
+  )
+
+  it('Suchmodell: bereit ist grün, noch nicht gefragt heisst warten, blockiertes Werkzeug rot', () => {
+    expect(m.evaluateSearchModel({ installed: true, availability: ready }).state).toBe('ok')
+    expect(m.evaluateSearchModel({ installed: true, availability: null }).state).toBe('waiting')
+    expect(
+      m.evaluateSearchModel({
+        installed: true,
+        availability: { ...ready, semantic: 'tool-blocked', semanticMessage: 'blockiert' }
+      })
+    ).toEqual({ state: 'fail', detail: 'blockiert' })
+  })
+
+  it('Ordner des Suchmodells kommt aus dem Katalog dieses Checkouts', () => {
+    const catalog = readFileSync(join(__dirname, '../model-catalog.ts'), 'utf8')
+    expect(m.searchModelDirFromCatalog(catalog)).toBe(SEARCH_MODEL_DIR_NAME)
+    expect(() => m.searchModelDirFromCatalog('kein Katalog')).toThrow(/SEARCH_MODEL_DIR_NAME/)
   })
 
   it('nach Bedeutung: grün nur mit einem Treffer nach Bedeutung in der Sitzung', () => {
     const ok = m.evaluateSemantic({
-      availability: ready,
       result: result([{ id: 'a', kinds: ['exact', 'semantic'] }]),
       sessionId: 'a'
     })
     expect(ok.state).toBe('ok')
     // Nur exakt getroffen: die Vektoren könnten noch fehlen — weiter warten
     expect(
-      m.evaluateSemantic({
-        availability: ready,
-        result: result([{ id: 'a', kinds: ['exact'] }]),
-        sessionId: 'a'
-      }).state
+      m.evaluateSemantic({ result: result([{ id: 'a', kinds: ['exact'] }]), sessionId: 'a' }).state
     ).toBe('waiting')
     expect(
-      m.evaluateSemantic({
-        availability: ready,
-        result: result([{ id: 'b', kinds: ['semantic'] }]),
-        sessionId: 'a'
-      }).state
+      m.evaluateSemantic({ result: result([{ id: 'b', kinds: ['semantic'] }]), sessionId: 'a' })
+        .state
     ).toBe('waiting')
+    expect(m.evaluateSemantic({ result: null, sessionId: 'a' }).state).toBe('waiting')
   })
 
-  it.each(['pending', 'unavailable-processing', 'error', 'superseded'])(
+  it.each(['pending', 'unavailable-processing', 'error', 'superseded', 'model-missing'])(
     'nach Bedeutung: Antwort «%s» heisst weiter warten',
     (semantic) => {
       expect(
         m.evaluateSemantic({
-          availability: ready,
           result: result([{ id: 'a', kinds: ['semantic'] }], semantic),
           sessionId: 'a'
         }).state
@@ -257,20 +280,9 @@ describe('Prüfung: Suche über den Bestand', () => {
   )
 
   it('nach Bedeutung: blockiertes Werkzeug ist rot', () => {
-    expect(
-      m.evaluateSemantic({
-        availability: { ...ready, semantic: 'tool-blocked', semanticMessage: 'blockiert' },
-        result: null,
-        sessionId: 'a'
-      })
-    ).toEqual({ state: 'fail', detail: 'blockiert' })
-    expect(
-      m.evaluateSemantic({
-        availability: ready,
-        result: result([], 'tool-blocked'),
-        sessionId: 'a'
-      }).state
-    ).toBe('fail')
+    expect(m.evaluateSemantic({ result: result([], 'tool-blocked'), sessionId: 'a' }).state).toBe(
+      'fail'
+    )
   })
 
   it('die Suchbegriffe passen zu den Testdaten und zum Seed', () => {
