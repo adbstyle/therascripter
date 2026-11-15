@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import DossierPage from '../DossierPage'
@@ -76,9 +78,18 @@ describe('DossierPage (#204 AK 3/4/9–11)', () => {
     // Verlauf mindestens ~440 px, Stammdaten ~300–380 px
     expect(timelineMin).toBeGreaterThanOrEqual(440)
     expect([dataMin, dataMax]).toEqual([300, 380])
-    // Inhaltsbreite = Fenster − Seitenleiste (248 px + 1 px Rand) − Seitenabstand (2 × 24 px)
+    // Inhaltsbreite = Fenster − Seitenleiste (Breite + 1 px Rand) − Seitenabstand.
+    // Beide Werte aus dem Quelltext, nicht abgeschrieben: Seitenleiste aus
+    // components/shell/Sidebar.tsx (w-[…px] border-r), Abstand aus dem
+    // Seitenrahmen hier in views/DossierPage.tsx (px-N, Tailwind: N × 4 px)
+    const read = (rel: string): string => readFileSync(join(__dirname, rel), 'utf8')
+    const sidebarSource = read('../../components/shell/Sidebar.tsx')
+    const sidebarWidth = Number(/\bw-\[(\d+)px\][^"]*\bborder-r\b/.exec(sidebarSource)![1])
+    const pagePadding = Number(
+      /max-w-\[1240px\][^"]*\bpx-(\d+)\b/.exec(read('../DossierPage.tsx'))![1]
+    )
     const content = (windowWidth: number, sidebar: boolean): number =>
-      windowWidth - (sidebar ? 249 : 0) - 48
+      windowWidth - (sidebar ? sidebarWidth + 1 : 0) - 2 * pagePadding * 4
     expect(content(1100, true)).toBeGreaterThanOrEqual(thresholdPx) // zweispaltig
     expect(content(800, true)).toBeLessThan(thresholdPx) // einspaltig
     expect(content(800, false)).toBeLessThan(thresholdPx) // einspaltig
