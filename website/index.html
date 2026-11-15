@@ -8,7 +8,7 @@
     </title>
     <meta
       name="description"
-      content="Mac-App für Therapie-Sitzungen: transkribiert Gespräche auf Hochdeutsch und Schweizerdeutsch und pseudonymisiert sie direkt auf Ihrem Mac. Spart Zeit bei der Dokumentation. Kostenlos und quelloffen."
+      content="Mac-App für Therapie-Sitzungen: transkribiert und pseudonymisiert direkt auf Ihrem Mac, mit Patientendossiers und Suche. Kostenlos und quelloffen."
     />
     <meta name="theme-color" content="#1884b5" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
@@ -26,7 +26,7 @@
     />
     <meta
       property="og:description"
-      content="Therapie-Sitzungen direkt auf Ihrem Mac transkribieren und pseudonymisieren. Spart Zeit bei der Dokumentation. Kostenlos und quelloffen."
+      content="Therapie-Sitzungen direkt auf Ihrem Mac transkribieren und pseudonymisieren, mit Patientendossiers und Suche. Kostenlos und quelloffen."
     />
     <meta
       property="og:image"
@@ -117,7 +117,8 @@
           <h1 id="hero-h">Transkription, die Ihre Praxis nicht verlässt.</h1>
           <p class="lede">
             TheraScript schreibt Ihre Therapie-Sitzungen mit und ersetzt Namen und persönliche
-            Angaben durch Platzhalter – direkt auf Ihrem Mac.
+            Angaben durch Platzhalter – direkt auf Ihrem Mac. Mit Patientendossiers und Suche
+            behalten Sie den Überblick.
           </p>
           <div class="cta-group">
             <a class="btn btn-primary" href="installation.html">
@@ -196,7 +197,7 @@
             <source srcset="assets/editor-dark.webp" media="(prefers-color-scheme: dark)" />
             <img
               src="assets/editor-light.webp"
-              alt="TheraScript-Editor mit einer erfundenen Therapiesitzung: Namen, Orte und medizinische Angaben sind durch Platzhalter wie Person 1, Ort 1 und Medizinisch 1 ersetzt. Oben steht die Zusammenfassung der Sitzung, rechts listet die Seitenleiste alle Pseudonymisierungen mit ihrem Original auf."
+              alt="TheraScript-Editor mit einer erfundenen Therapiesitzung: Namen, Orte und medizinische Angaben sind durch Platzhalter wie Person 1, Ort 1 und Medizinisch 1 ersetzt. Oben steht die Zusammenfassung der Sitzung, rechts listet die Übersicht alle Pseudonymisierungen mit ihrem Original auf. Links die Seitenleiste mit Suche, Transkriptionen, Patientendossiers und den zuletzt geöffneten Einträgen."
               width="1600"
               height="1056"
               fetchpriority="high"
@@ -229,6 +230,14 @@
             <p>
               Keine Bezahlversion, kein Abo, keine In-App-Käufe. Der Quellcode ist unter der
               MIT-Lizenz öffentlich auf GitHub einsehbar und lässt sich unabhängig überprüfen.
+            </p>
+          </article>
+          <article class="benefit-card">
+            <h3>Alles an einem Ort</h3>
+            <p>
+              Sitzungen und PDF-Dokumente liegen in Patientendossiers. Die Suche findet sie nach
+              Bedeutung, nach genauen Begriffen und nach Namen – ohne dass etwas Ihren Mac
+              verlässt.
             </p>
           </article>
         </div>
@@ -326,8 +335,10 @@
               Namen, Orte und Kontaktangaben wie Telefon-, E-Mail- oder AHV-Nummern ersetzt
               TheraScript automatisch durch Platzhalter, ebenso geschriebene Daten wie 12.03.2026.
               Diagnosen und eigene Begriffe nehmen Sie direkt aus dem Text heraus in die Sperrliste
-              auf. Sie werden dann in dieser und allen künftigen Sitzungen ersetzt. Eine
-              Seitenleiste listet alle Pseudonymisierungen der Sitzung auf.
+              auf. Sie werden dann in dieser und allen künftigen Sitzungen ersetzt. Die Übersicht
+              rechts listet alle Pseudonymisierungen der Sitzung auf. Mit dem Umschalter
+              «Pseudonymisiert | Klartext» oben rechts lesen Sie Sitzungen, Titel und
+              Zusammenfassungen wahlweise mit Platzhaltern oder mit den Klarnamen.
             </p>
           </div>
           <div class="feature-image">
@@ -390,7 +401,7 @@
               Optional fasst TheraScript jede Sitzung und jedes Dokument mit einem Titel und zwei
               Sätzen zusammen – lokal und auf Grundlage des pseudonymisierten Texts. Dafür laden Sie
               in den Einstellungen unter «Modelle» einmalig ein zusätzliches Sprachmodell herunter.
-              Alle Sitzungen sehen Sie in der Übersicht «Transkriptionen».
+              Alle Sitzungen sehen Sie in der Übersicht «Transkriptionen», nach Tagen geordnet.
             </p>
           </div>
           <div class="feature-image">
@@ -398,7 +409,7 @@
               <source srcset="assets/sitzungen-dark.webp" media="(prefers-color-scheme: dark)" />
               <img
                 src="assets/sitzungen-light.webp"
-                alt="Übersicht «Transkriptionen» in TheraScript mit Aufnahmen und importierten PDF-Berichten, gruppiert nach Heute, Gestern und Diese Woche. Jede Karte zeigt Titel, Zusammenfassung sowie die Zahl der Wörter und Pseudonymisierungen."
+                alt="Übersicht «Transkriptionen» in TheraScript mit Aufnahmen und importierten PDF-Berichten, gruppiert nach Heute, Gestern und Diese Woche. Jede Karte zeigt Titel, Zusammenfassung, die Zahl der Wörter und Pseudonymisierungen sowie das zugeordnete Patientendossier."
                 width="1600"
                 height="1056"
                 loading="lazy"
@@ -407,6 +418,130 @@
           </div>
         </article>
 
+        <article class="feature feature-right">
+          <div class="feature-text">
+            <h3>Ein Patientendossier pro Person</h3>
+            <p>
+              Für jede Patientin und jeden Patienten legen Sie ein Patientendossier an: mit Name,
+              Dossier-ID, Geburtsdatum, Diagnosen, Medikation und einer freien Notiz. Sitzungen und
+              PDF-Dokumente ordnen Sie zu – auch mehreren Dossiers – und sehen sie im Dossier als
+              Zeitleiste, nach Monaten gegliedert. Aufnahmen und PDF-Importe starten Sie direkt im
+              Dossier. Änderungen werden laufend gespeichert und bleiben lokal auf Ihrem Mac.
+            </p>
+          </div>
+          <div class="feature-image">
+            <picture>
+              <source srcset="assets/dossier-dark.webp" media="(prefers-color-scheme: dark)" />
+              <img
+                src="assets/dossier-light.webp"
+                alt="Patientendossier «Brunner, Lea» (erfundene Demo-Daten) in TheraScript: links die Zeitleiste mit einer Sitzung und zwei PDF-Dokumenten, rechts die Stammdaten mit Dossier-ID, Geburtsdatum, Diagnosen, Medikation und Notiz. Oben stehen die Knöpfe «Im Dossier suchen», «PDF importieren» und «Aufnahme starten»."
+                width="1600"
+                height="1056"
+                loading="lazy"
+              />
+            </picture>
+          </div>
+        </article>
+
+        <article class="feature feature-left">
+          <div class="feature-text">
+            <h3>Alles durchsuchen</h3>
+            <p>
+              Mit ⌘K oder «Suchen» in der Seitenleiste durchsuchen Sie alle Sitzungen und
+              PDF-Dokumente: nach genauen Begriffen und Wortteilen, nach den Klarnamen hinter den
+              Platzhaltern und nach Bedeutung. Patientendossiers finden Sie über Namen oder
+              Dossier-ID. Ein Klick auf einen Treffer öffnet die Fundstelle hervorgehoben; «Im
+              Dossier suchen» beschränkt die Suche auf ein Patientendossier. Suchanfragen und
+              Suchindex verlassen Ihren Mac nicht.
+            </p>
+          </div>
+          <div class="feature-image">
+            <picture>
+              <source srcset="assets/suche-dark.webp" media="(prefers-color-scheme: dark)" />
+              <img
+                src="assets/suche-light.webp"
+                alt="Suchfenster in TheraScript mit der Anfrage «Brunner»: Oben ein passendes Patientendossier mit Dossier-ID und Geburtsdatum, darunter Treffer aus PDF-Dokumenten und Sitzungen mit hervorgehobenem Suchbegriff im Ausschnitt."
+                width="1600"
+                height="1056"
+                loading="lazy"
+              />
+            </picture>
+          </div>
+        </article>
+
+        <article class="feature feature-right">
+          <div class="feature-text">
+            <h3>Suche nach Bedeutung</h3>
+            <p>
+              Sie müssen das Wort nicht kennen, das im Gespräch fiel: Wer «Prüfungsangst» sucht,
+              findet auch die Sitzung über Prüfungsdruck und nächtliche Schlafprobleme. Dafür lädt
+              TheraScript beim ersten Start ein kleines Suchmodell (rund 0.43 GB) herunter, das auf
+              Ihrem Mac läuft. Während TheraScript eine Sitzung verarbeitet, ist die Suche nach
+              Bedeutung kurz nicht verfügbar; die Suche nach genauen Begriffen funktioniert weiter.
+              Die Ausschnitte in den Treffern zeigen Klarnamen, auch in der pseudonymisierten
+              Ansicht – achten Sie darauf, wenn andere auf Ihren Bildschirm sehen.
+            </p>
+          </div>
+          <div class="feature-image">
+            <picture>
+              <source srcset="assets/bedeutung-dark.webp" media="(prefers-color-scheme: dark)" />
+              <img
+                src="assets/bedeutung-light.webp"
+                alt="Suchfenster in TheraScript mit der Anfrage «Prüfungsangst»: Der Treffer ist eine Sitzung, in der von Prüfungsdruck und Schlafproblemen die Rede ist; Zusammenfassung und Gesprächsabschnitt sind als Treffer nach Bedeutung markiert."
+                width="1600"
+                height="1056"
+                loading="lazy"
+              />
+            </picture>
+          </div>
+        </article>
+      </section>
+
+      <section id="navigation" class="benefits" aria-labelledby="navigation-h">
+        <h2 id="navigation-h">Übersichtlich navigieren</h2>
+        <div class="benefits-grid">
+          <article class="benefit-card">
+            <h3>Seitenleiste</h3>
+            <p>
+              Transkriptionen, Patientendossiers und Suche sind immer einen Klick entfernt. Das
+              Symbol oben links blendet die Seitenleiste ein und aus (Ctrl+⌘+S).
+            </p>
+          </article>
+          <article class="benefit-card">
+            <h3>Zurück und Vorwärts</h3>
+            <p>
+              Mit den Pfeilen in der Titelleiste oder mit ⌘[ und ⌘] gehen Sie Schritt für Schritt
+              zurück und vor. TheraScript stellt die Scrollposition wieder her und hebt die Karte
+              hervor, von der Sie kamen.
+            </p>
+          </article>
+          <article class="benefit-card">
+            <h3>Zuletzt geöffnet</h3>
+            <p>
+              Die zuletzt geöffneten Patientendossiers und Sitzungen stehen in der Seitenleiste,
+              eine laufende Aufnahme zuoberst.
+            </p>
+          </article>
+          <article class="benefit-card">
+            <h3>Aufnahme im Hintergrund</h3>
+            <p>
+              Während einer Aufnahme bleibt TheraScript bedienbar: Sie lesen und bearbeiten
+              Sitzungen oder öffnen die Einstellungen, während die Aufnahme weiterläuft.
+            </p>
+          </article>
+        </div>
+        <div class="feature-image nav-image">
+          <picture>
+            <source srcset="assets/dossiers-dark.webp" media="(prefers-color-scheme: dark)" />
+            <img
+              src="assets/dossiers-light.webp"
+              alt="Die Übersicht «Patientendossiers» in TheraScript mit zehn erfundenen Dossiers, Filterfeld und Dossier-ID, Geburtsdatum, Anzahl Einträgen und letztem Eintrag je Zeile. Links die Seitenleiste mit Suche, Transkriptionen, Alle Patientendossiers und den zuletzt geöffneten Einträgen, oben in der Titelleiste die Pfeile für Zurück und Vorwärts."
+              width="1600"
+              height="1056"
+              loading="lazy"
+            />
+          </picture>
+        </div>
       </section>
 
       <!-- Kurzform der Installationsanleitung: Schritte und Fakten synchron mit
@@ -652,6 +787,30 @@
             Kopierter Text verlässt TheraScript über die Zwischenablage Ihres Macs. Dort können ihn
             andere Apps lesen, und macOS kann ihn über die «Universelle Zwischenablage» an Ihre
             anderen Apple-Geräte weitergeben. TheraScript leert die Zwischenablage nicht.
+          </p>
+        </details>
+
+        <details>
+          <summary>Wie funktioniert die Suche?</summary>
+          <p>
+            Mit ⌘K oder «Suchen» in der Seitenleiste öffnen Sie das Suchfenster. TheraScript
+            durchsucht Sitzungen und PDF-Dokumente nach Bedeutung, nach genauen Begriffen (auch
+            Wortteilen, unabhängig von Gross- und Kleinschreibung und der Schreibweise von Umlauten)
+            und nach den Klarnamen hinter den Platzhaltern. Patientendossiers finden Sie über Teile
+            des Namens oder die Dossier-ID. Index und Suchanfragen liegen nur auf Ihrem Mac. Das
+            Suchmodell für die Suche nach Bedeutung lädt TheraScript beim ersten Start herunter;
+            fehlt es nach einem Update, lädt TheraScript es im Hintergrund nach.
+          </p>
+        </details>
+
+        <details>
+          <summary>Kann ich eine Sitzung mehreren Patientendossiers zuordnen?</summary>
+          <p>
+            Ja. Eine Sitzung oder ein PDF-Dokument lässt sich mehreren Patientendossiers zuordnen,
+            etwa bei Paar- oder Familiengesprächen, und jederzeit wieder lösen. Zuordnen können Sie
+            in der Liste «Transkriptionen», im Editor oder bei einer laufenden Aufnahme. Löschen
+            Sie ein Patientendossier, löscht TheraScript nur die Inhalte mit, die sonst keinem
+            anderen Dossier zugeordnet sind.
           </p>
         </details>
 

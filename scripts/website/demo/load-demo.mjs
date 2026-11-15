@@ -38,6 +38,7 @@ const log = (m) => console.log(`[${((Date.now() - started) / 1000).toFixed(0)}s]
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const { sitzungen } = JSON.parse(readFileSync(join(HERE, 'sitzungen.json'), 'utf8'))
 const { eintraege } = JSON.parse(readFileSync(join(HERE, 'sperrliste.json'), 'utf8'))
+const { dossiers } = JSON.parse(readFileSync(join(HERE, 'dossiers.json'), 'utf8'))
 
 await assertDemoInstance(evalInApp).catch((e) => {
   console.error(e.message)
@@ -100,7 +101,7 @@ for (const s of [...sitzungen].sort((a, b) => b.tageZurueck - a.tageZurueck)) {
   await evalInApp(`window.api.recording.stop(${JSON.stringify(sessionId)})`)
   const done = await waitDone(sessionId)
   log(`  → «${done.title}», ${done.anonymizationCount ?? '?'} Pseudonymisierungen`)
-  created.push({ id: sessionId, tageZurueck: s.tageZurueck, uhrzeit: s.uhrzeit })
+  created.push({ id: sessionId, key: s.id, tageZurueck: s.tageZurueck, uhrzeit: s.uhrzeit })
 }
 
 for (const [file, tage, zeit] of [
@@ -108,10 +109,46 @@ for (const [file, tage, zeit] of [
   ['bericht-scan.pdf', 2, '09:12']
 ]) {
   log(`PDF «${file}» …`)
-  const [s] = await evalInApp(`window.api.import.pdf(${JSON.stringify([join(ASSETS, file)])})`)
+  // Seit Epic #192 antwortet der Import mit { sessions, unassigned, failed }.
+  const imported = await evalInApp(
+    `window.api.import.pdf(${JSON.stringify([join(ASSETS, file)])})`
+  )
+  const s = imported.sessions?.[0]
+  if (!s) throw new Error(`PDF «${file}» nicht importiert: ${JSON.stringify(imported.failed)}`)
   const done = await waitDone(s.id)
   log(`  → «${done.title}»`)
-  created.push({ id: s.id, tageZurueck: tage, uhrzeit: zeit })
+  created.push({ id: s.id, key: file, tageZurueck: tage, uhrzeit: zeit })
+}
+
+// Patientendossiers anlegen und Sitzungen/PDFs zuordnen (Epic #192). «dossiers» in
+// dossiers.json: sitzungen = IDs aus sitzungen.json, pdfs = Dateinamen.
+for (const d of dossiers) {
+  log(`Patientendossier «${d.lastName}» …`)
+  const r = await evalInApp(
+    `window.api.dossiers.create(${JSON.stringify({
+      firstName: d.firstName,
+      lastName: d.lastName,
+      externalId: d.externalId,
+      birthDate: d.birthDate
+    })})`
+  )
+  if (!r.ok) throw new Error(`Dossier «${d.lastName}» nicht angelegt: ${JSON.stringify(r)}`)
+  const dossierId = r.dossier.id
+  for (const field of ['diagnoses', 'medication', 'note']) {
+    if (!d[field]) continue
+    const u = await evalInApp(
+      `window.api.dossiers.update(${JSON.stringify(dossierId)}, ${JSON.stringify({ [field]: d[field] })})`
+    )
+    if (!u.ok) throw new Error(`«${d.lastName}»: ${field} nicht gespeichert: ${JSON.stringify(u)}`)
+  }
+  for (const key of [...d.sitzungen, ...d.pdfs]) {
+    const c = created.find((x) => x.key === key)
+    if (!c) throw new Error(`Inhalt «${key}» für «${d.lastName}» nicht gefunden`)
+    const a = await evalInApp(
+      `window.api.dossiers.assign(${JSON.stringify(c.id)}, ${JSON.stringify(dossierId)})`
+    )
+    if (!a.ok) throw new Error(`«${d.lastName}»: «${key}» nicht zugeordnet: ${JSON.stringify(a)}`)
+  }
 }
 closeCdp()
 
