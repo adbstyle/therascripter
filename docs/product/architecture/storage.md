@@ -258,11 +258,13 @@ The staged app of an update lives outside `~/.therascript/`, in `<userData>/app-
 
 Sessions are kept until the user deletes them (#202). There is no age-based deletion — the 30-day auto-deletion of earlier versions is gone. Only the source file of a successfully processed session is removed automatically.
 
-### Source-file cleanup (24 hours after review)
+### Source-file cleanup (at the earliest 24 hours after review)
 
 Once a session reaches `review` status, `review_at` is stamped. Sessions that have been in `review` for more than 24 hours and still have a source file on disk (`audio_path IS NOT NULL` or `pdf_path IS NOT NULL`) have their source file deleted and the corresponding column set to `NULL`. This removes the raw patient audio or PDF while preserving the text, the pseudonymization, title and summary. Failed sessions never reach `review`, so their recording or PDF stays for a later retry — however old the session is.
 
 `SourceFileCleanupService` runs this once at app startup, then every 6 hours (`CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000`). It deletes no rows, so it needs neither `VACUUM` nor a checkpoint.
+
+**When exactly:** a source file is deleted **at the earliest 24 hours** after the session reached `review` (successful processing) and **at the latest at the next cleanup run after that** — so 24 to ~30 hours while the app keeps running. Runs only happen while the app runs: a Mac that is off or an app that is quit postpones the deletion to the next start (which runs the cleanup at once). Public texts (README, website, Datenschutzerklärung, AboutPage) say «frühestens 24 Stunden nach erfolgreicher Verarbeitung, sobald die App das nächste Mal aufräumt (beim Start und alle 6 Stunden, solange sie läuft)» — keep them in sync with this rule.
 
 ### Deleting a session
 

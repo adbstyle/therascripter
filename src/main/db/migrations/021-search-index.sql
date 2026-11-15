@@ -8,7 +8,7 @@
 --                        SessionRepository.update writes it.
 -- search_index_state   — per session: active text generation (exact search)
 --                        and active vector generation (search by meaning,
---                        filled from PR S4 on). A session is "to be indexed"
+--                        filled by the vector phase). A session is "to be indexed"
 --                        while text_rev < search_rev (or no row exists — the
 --                        stock before the update falls under the same rule,
 --                        #210 AK 1). doc_stat = size:mtime of the document
@@ -21,7 +21,8 @@
 --                        active vector generation still points at it.
 --                        `units` (JSON) maps each unit back to the TipTap
 --                        paragraph: [{p, s, e, o, pfx, spk?, ts?}].
---                        vec/vec_scale stay NULL until PR S4 (int8[768]).
+--                        vec/vec_scale: int8[768] and its scale, NULL until
+--                        the vector phase has embedded the chunk.
 -- search_fts           — trigram index over the normalized text
 --                        (normalizeSearchText of the unit texts). Stores its
 --                        own copy of that normalized text (a regular,

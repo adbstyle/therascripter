@@ -118,12 +118,12 @@ Renaming calls `SessionService.renameSession()` which updates only the `title` f
 
 ## Delete
 
-Sessions are kept until the user deletes them — there is no automatic deletion by age (#202). Deleting a session (card menu in the list, trash button in the Review Editor) shows `DeleteSessionDialog.tsx`, the one delete dialog for both places, built on `ConfirmDialog.tsx`:
+Sessions are kept until the user deletes them — there is no automatic deletion by age (#202). **Deliberate extension of #202 OOS 3** («nicht mehrere Sitzungen in einem Schritt löschen»): deleting a patient dossier (#207) deletes all sessions and PDF documents assigned only to it in one step, after a confirmation that names their number ([patient-dossiers.md](patient-dossiers.md#deleting)). The session list itself still deletes one session at a time. Deleting a session (card menu in the list, trash button in the Review Editor) shows `DeleteSessionDialog.tsx`, the one delete dialog for both places, built on `ConfirmDialog.tsx`:
 
 - Title: «Transkription löschen»
 - Message: the session title in guillemets, asking for confirmation
 - «Gelöscht werden:» — a list of exactly what exists for this session (`sessionDeletionDetails` in `src/shared/utils/`):
-  - «Audioaufnahme» / «Original-PDF» — only while the source file still exists (until 24 h after successful processing, for failed sessions until deleted)
+  - «Audioaufnahme» / «Original-PDF» — only while the source file still exists (at the earliest 24 h after successful processing, at the latest until the next cleanup run — see below; for failed sessions until deleted)
   - «Transkript inklusive Ihrer Bearbeitungen» / «Text des PDF-Dokuments inklusive Ihrer Bearbeitungen» and «Pseudonymisierung samt den Originaltexten aller Platzhalter» — once processing finished
   - «Zwischenergebnisse der Verarbeitung» — raw transcript, speaker assignment, extracted text, if present
   - «Für die Suche aufbereitete Texte» — once processing finished once (`reviewAt` set; it is never reset): from then on the search index holds title, summary and text in clear text (Epic #192, #207)
@@ -142,6 +142,7 @@ When confirmed, `SessionService.deleteSession()` marks the session (`deleting_at
 `SourceFileCleanupService` deletes the source file (audio WAV or imported PDF) of sessions that have been in `review` status for more than 24 hours and sets its path to `null`. Text, pseudonymization, title and summary stay. Failed sessions keep their source file until the user deletes them, so a retry works at any age.
 
 - **Interval:** runs immediately at app startup, then every 6 hours (`CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000`)
+- **Effective time:** a source file goes at the earliest 24 h after `review_at` and at the latest at the next run after that (24 to ~30 h while the app runs); runs only happen while the app runs, so a quit app deletes it at its next start. Public texts word it as «frühestens 24 Stunden nach erfolgreicher Verarbeitung, sobald die App das nächste Mal aufräumt» (storage.md «Source-file cleanup»)
 - **Spotlight exclusion:** at startup `ensureSpotlightExclusion()` (`StartupCleanupService`) makes sure a `.metadata_never_index` marker file exists in the data directory to keep Spotlight from indexing session data.
 
 ## Orphaned Session Recovery
