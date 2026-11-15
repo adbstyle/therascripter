@@ -52,6 +52,30 @@ beforeEach(() => {
 })
 
 describe('DeleteDossierDialog (#204 AK 16/17, #207 AK 1/2)', () => {
+  it('unterscheidet gleichnamige Dossiers schon im Titel (ID · Geburtsdatum)', async () => {
+    const self = makeDossier({ id: 'd1' })
+    setup({
+      deletePreview: vi.fn().mockResolvedValue(makeDeletePreview()),
+      get: vi.fn().mockResolvedValue(self),
+      list: vi.fn().mockResolvedValue([
+        { ...self, entryCount: 2, lastEntryDay: null },
+        {
+          ...self,
+          id: 'd2',
+          externalId: 'PD-2001',
+          birthDate: null,
+          entryCount: 0,
+          lastEntryDay: null
+        }
+      ])
+    })
+    expect(
+      await screen.findByRole('dialog', {
+        name: 'Patientendossier Lukas Hofer (PD-1188 · 03.02.1978) löschen?'
+      })
+    ).toBeInTheDocument()
+  })
+
   it('nennt, welche Angaben gelöscht werden, und startet auf «Abbrechen» (AK 17)', async () => {
     setup({ deletePreview: vi.fn().mockResolvedValue(makeDeletePreview()) })
     const dialog = await screen.findByRole('dialog', {

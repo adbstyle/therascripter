@@ -188,3 +188,65 @@ describe('gleichnamige Dossiers unterscheiden (Sichtprüfung)', () => {
     expect(dossierLabel(other, set)).toBe('Keller, Nina')
   })
 })
+
+describe('gleichnamige Dossiers ohne ID und Geburtsdatum (dritte Sichtprüfung)', () => {
+  // Lokale Mittagszeit: der Anlagetag ist in jeder Zeitzone derselbe
+  const row = (id: string, createdAt: string, entryCount: number) => ({
+    ...ref({ id }),
+    createdAt,
+    entryCount
+  })
+  const first = row('a', '2026-11-03T12:00:00', 3)
+  const second = row('b', '2026-11-05T12:00:00', 0)
+  const withId = { ...row('c', '2026-11-06T12:00:00', 1), externalId: 'P-9' }
+  const unique = { ...row('d', '2026-11-07T12:00:00', 2), lastName: 'Keller' }
+
+  it('unterscheidet sie über Anlagetag und Anzahl Einträge', () => {
+    const set = ambiguousDossierNames([first, second, withId, unique])
+    expect(dossierLabel(first, set)).toBe('Hofer, Maria (angelegt am 03.11.2026 · 3 Einträge)')
+    expect(dossierLabel(second, set)).toBe('Hofer, Maria (angelegt am 05.11.2026 · keine Einträge)')
+    // Mit ID bleibt es bei der ID; ein eindeutiger Name bekommt keinen Zusatz
+    expect(dossierLabel(withId, set)).toBe('Hofer, Maria (P-9)')
+    expect(dossierLabel(unique, set)).toBe('Keller, Maria')
+  })
+
+  it('wirkt auch für Kurzformen (Plaketten, Treffer) mit derselben ID', () => {
+    const set = ambiguousDossierNames([first, second])
+    expect(dossierLabel(ref({ id: 'a' }), set)).toBe(
+      'Hofer, Maria (angelegt am 03.11.2026 · 3 Einträge)'
+    )
+    // Ohne ID (keine Übersichtszeile bekannt) kein Zusatz statt eines falschen
+    expect(dossierLabel({ ...ref(), id: undefined }, set)).toBe('Hofer, Maria')
+  })
+
+  it('Löschdialog: der Titel unterscheidet gleichnamige Dossiers', () => {
+    const p: DossierDeletePreview = {
+      dossierId: 'a',
+      displayName: 'Maria Hofer',
+      exclusive: { sessions: 2, pdfs: 1 },
+      shared: { sessions: 0, pdfs: 0, otherDossiers: [] },
+      search: { exclusiveSearchable: 0, recentQueries: 0 },
+      blockedByRecording: false,
+      fingerprint: 'f'
+    }
+    const dossier = (over: Partial<DossierRef>) => ({
+      ...ref({ id: 'a', ...over }),
+      diagnoses: '',
+      medication: '',
+      note: '',
+      createdAt: '2026-11-03T12:00:00',
+      updatedAt: '2026-11-03T12:00:00'
+    })
+    const set = ambiguousDossierNames([first, second])
+    expect(summarizeDeletion(p, set, dossier({})).title).toBe(
+      'Patientendossier Maria Hofer (angelegt am 03.11.2026 · 3 Einträge) löschen?'
+    )
+    expect(
+      summarizeDeletion(p, set, dossier({ externalId: 'P-1', birthDate: '1985-02-14' })).title
+    ).toBe('Patientendossier Maria Hofer (P-1 · 14.02.1985) löschen?')
+    // Eindeutiger Name: wie bisher
+    expect(summarizeDeletion(p, new Set(), dossier({ externalId: 'P-1' })).title).toBe(
+      'Patientendossier Maria Hofer löschen?'
+    )
+  })
+})

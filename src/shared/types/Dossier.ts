@@ -40,6 +40,11 @@ export interface DossierListItem extends DossierRef {
   entryCount: number
   /** Tag des jüngsten Eintrags (`YYYY-MM-DD`, lokale Zeit) oder null ohne Einträge. */
   lastEntryDay: string | null
+  /**
+   * Angelegt (ISO-UTC). Unterscheidet gleichnamige Dossiers ohne ID und
+   * Geburtsdatum («angelegt am 05.11.2026 · 3 Einträge»).
+   */
+  createdAt: string
 }
 
 /** Eingabe für `dossier:create`. */

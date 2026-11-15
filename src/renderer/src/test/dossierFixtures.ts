@@ -32,6 +32,7 @@ export function makeDossierListItem(overrides: Partial<DossierListItem> = {}): D
     birthDate: '1978-02-03',
     entryCount: 0,
     lastEntryDay: null,
+    createdAt: '2026-11-01T10:00:00.000Z',
     ...overrides
   }
 }

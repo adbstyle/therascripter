@@ -302,6 +302,8 @@ describe('DossierService', () => {
       expect(Object.keys(list[0]).sort()).toEqual(
         [
           'birthDate',
+          // Zur Unterscheidung gleichnamiger Dossiers ohne ID und Geburtsdatum
+          'createdAt',
           'entryCount',
           'externalId',
           'firstName',

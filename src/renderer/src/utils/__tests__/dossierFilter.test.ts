@@ -10,7 +10,8 @@ function item(id: string, firstName: string, lastName: string): DossierListItem 
     externalId: null,
     birthDate: null,
     entryCount: 0,
-    lastEntryDay: null
+    lastEntryDay: null,
+    createdAt: '2026-11-01T10:00:00.000Z'
   }
 }
 
