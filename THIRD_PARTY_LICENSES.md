@@ -40,7 +40,7 @@ Die App lädt alle Modelle vom R2-CDN `https://pub-f6971d643e3a464ba6977c0816c43
 | XLM-RoBERTa large (Tokenizer) | `flair-ner-german-large-v3.tar.gz` | MIT | zulässig unter Bedingungen | zulässig | v0.8.13, main |
 | Gemma 3 4B Instruct (Q4_K_M) | `google_gemma-3-4b-it-Q4_K_M.gguf` | Gemma Terms of Use | zulässig unter Bedingungen | zulässig unter Bedingungen | v0.8.13 |
 | Gemma 4 E2B Instruct (QAT Q4_0) | `gemma-4-E2B_q4_0-it.gguf` | Apache-2.0 | zulässig unter Bedingungen | zulässig | main |
-| EmbeddingGemma 2 (Text-Encoder, bf16) | `embeddinggemma-2-text-v1.tar.gz` | Apache-2.0 | zulässig unter Bedingungen (Lizenzkopie liegt im Tarball) | zulässig unter Bedingungen (siehe Abschnitt) | geplant (Epic #192), noch nicht auf R2 |
+| EmbeddingGemma 2 (Text-Encoder, bf16) | `embeddinggemma-2-text-v1.tar.gz` | Apache-2.0 | zulässig unter Bedingungen (Lizenzkopie liegt im Tarball) | zulässig unter Bedingungen (siehe Abschnitt) | auf R2 seit 2026-11-15 (Epic #192) |
 
 Ältere NER-Artefakte (v1, v2) liegen laut `src/shared/model-catalog.ts` weiterhin auf R2, weil ältere App-Versionen sie laden. Sie enthalten dasselbe Modell in fp32 und unterliegen derselben Bewertung wie das v3-Artefakt.
 

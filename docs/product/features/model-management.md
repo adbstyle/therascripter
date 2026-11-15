@@ -25,11 +25,11 @@ The required models are defined in `MODEL_DEFINITIONS` in `src/shared/model-cata
 | `whisper-large-v3-turbo` | Spracherkennung (whisper-large-v3-turbo) | ~574 MB | No (flat `.bin`) | `asr/ggml-large-v3-turbo-q5_0.bin` | `asr/ggml-large-v3-turbo-q5_0.bin` |
 | `pyannote-suite` | Sprechererkennung (pyannote 3.1 + community-1) | ~61 MB | Yes (`.tar.gz`) | `diarization` | see catalog |
 | `flair-ner-german-large` | Anonymisierung (flair-ner-german-large) | ~1.04 GB (v3, fp16) | Yes (`.tar.gz`) | `ner` | `ner/hf/hub/models--xlm-roberta-large` |
-| `embeddinggemma-2-text` | EmbeddingGemma 2 (search, `deferrable`, `published: false` until on R2) | ~430 MB | Yes (`.tar.gz`) | `search-embeddinggemma-2-text-v1` | `search-embeddinggemma-2-text-v1/READY` |
+| `embeddinggemma-2-text` | EmbeddingGemma 2 (search, `deferrable`, on R2 since 2026-11-15) | ~430 MB | Yes (`.tar.gz`) | `search-embeddinggemma-2-text-v1` | `search-embeddinggemma-2-text-v1/READY` |
 
 The NER check path deliberately points at the **v2-only** `hf/` tokenizer subtree (not the model payload): v1 installs (≤ 0.8.5, without `hf/`) read as "not installed", so the first-launch gate re-downloads the current tarball, which tar-merges over the existing `ner/`. The bootstrap reconciler shares this definition and clears the `ner` slot on such installs; `startModelDownload()` re-runs the reconciler after a successful download to re-promote the slot in the same session, and inverse repairs (X → null → X) collapse the pending reconcile event so the upgrade shows no "Modell entfernt" banner.
 
-Total download: ~2.1 GB with the search model (combined archive sizes; ~1.7 GB while it is unpublished — `FirstLaunchScreen` sums the catalog, so it always shows what it will load). On disk afterwards: ~2.4 GB. v2 installs keep counting as installed (same check path) and get v3 offered as a dismissible model update via the manifest. All downloads come from the Cloudflare R2 CDN at `https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/`.
+Total download: ~2.1 GB with the search model (combined archive sizes; `FirstLaunchScreen` sums the catalog, so it always shows what it will load; a future model with `published: false` is not counted). On disk afterwards: ~2.4 GB. v2 installs keep counting as installed (same check path) and get v3 offered as a dismissible model update via the manifest. All downloads come from the Cloudflare R2 CDN at `https://pub-f6971d643e3a464ba6977c0816c43e50.r2.dev/`.
 
 ### Model Paths
 

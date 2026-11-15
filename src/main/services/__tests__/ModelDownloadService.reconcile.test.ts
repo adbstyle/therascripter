@@ -447,7 +447,8 @@ describe('startModelDownload re-reconciles required slots', () => {
     pretendInstalled(
       'asr/ggml-large-v3-turbo-q5_0.bin',
       'diarization/models--pyannote--speaker-diarization-community-1',
-      'ner/hf/hub/models--xlm-roberta-large'
+      'ner/hf/hub/models--xlm-roberta-large',
+      'search-embeddinggemma-2-text-v1/READY'
     )
 
     return startModelDownload().then(() => {

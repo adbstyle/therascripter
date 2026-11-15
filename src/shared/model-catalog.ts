@@ -184,12 +184,12 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
   },
   {
     // Suchmodell (Epic #192, #209/#210): Text-Encoder von EmbeddingGemma 2
-    // (Apache 2.0), gepackt von scripts/package-models.sh search. Grösse und
-    // sha256 sind die des lokal erzeugten, reproduzierbaren Pakets — das
-    // Artefakt liegt NOCH NICHT auf R2, deshalb `published: false`. Vor dem
-    // Umlegen die Werte des HOCHGELADENEN Objekts prüfen (model-hash-sync
-    // gotcha, docs/product/operations/model-pipeline.md). Der Ordner trägt die
-    // Version: ein inkompatibles Artefakt braucht neue ID UND neuen Ordner.
+    // (Apache 2.0), gepackt von scripts/package-models.sh search. Das
+    // Artefakt liegt seit 2026-11-15 auf R2; Grösse und sha256 sind gegen das
+    // HOCHGELADENE Objekt geprüft (model-hash-sync gotcha,
+    // docs/product/operations/model-pipeline.md), der Eintrag ist damit
+    // veröffentlicht. Der Ordner trägt die Version: ein inkompatibles
+    // Artefakt braucht neue ID UND neuen Ordner.
     id: 'embeddinggemma-2-text',
     label: 'EmbeddingGemma 2',
     url: `${R2_CDN}/embeddinggemma-2-text-v1.tar.gz`,
@@ -202,7 +202,6 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
     group: 'search',
     isRequired: true,
     deferrable: true,
-    published: false,
     embedding: {
       dim: 768,
       queryPrompt: 'task: search result | query: ',
@@ -238,7 +237,8 @@ export const MODEL_DEFINITIONS: ModelDefinition[] = [
 
 /**
  * Pflichtmodelle, die noch `published: false` tragen, obwohl die öffentlichen
- * Texte sie schon beschreiben (Suchmodell, Epic #192). `release.sh` bricht ab,
+ * Texte sie schon beschreiben (heute leer: das Suchmodell, Epic #192, ist
+ * seit 2026-11-15 veröffentlicht). `release.sh` bricht ab,
  * solange die Liste nicht leer ist (`scripts/check-unpublished-models.ts`):
  * README und Website nennen ab dem Merge nach main den Download mit dem
  * Modell — eine App ohne es widerspräche ihnen.

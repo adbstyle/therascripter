@@ -5,9 +5,10 @@
  *
  *   npx tsx scripts/check-unpublished-models.ts
  *
- * README und Website beschreiben ab dem Merge nach main den Zielzustand
- * (Download inkl. Suchmodell). Ein Release mit unveröffentlichtem Suchmodell
- * hiesse: Texte und App stimmen nicht überein. Vorgehen zum Veröffentlichen:
+ * README und Website beschreiben den Zielzustand (Download inkl. aller
+ * Pflichtmodelle). Ein Release mit einem unveröffentlichten Pflichtmodell
+ * hiesse: Texte und App stimmen nicht überein. Das Suchmodell liegt seit
+ * 2026-11-15 auf R2; der Schalter bleibt für künftige Modelle. Vorgehen zum Veröffentlichen:
  * docs/product/operations/model-pipeline.md, «Publishing a new model».
  * release.sh übersteuert nur mit --allow-unpublished-models "<Begründung>".
  */

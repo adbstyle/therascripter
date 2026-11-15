@@ -633,16 +633,14 @@ fi
 #     auf ein leeres Verzeichnis endet mit Exit 2 bei leerem stdout. So fällt
 #     ein Syntax- oder Importfehler im gebundelten Skript in jedem Release auf.
 #
-#     Skip-Regel — bewusst anders als bei NER/Diarization: solange das
-#     Suchmodell nicht auf R2 liegt, hat KEIN Mac es installiert, auch der
-#     Release-Mac nicht. Ein Skip im Gate-Modus wäre dann ein Fehler und jeder
-#     Release bis zum Upload rot. Deshalb: fehlt das Modell am Default-Ort,
-#     wird nur gemeldet (auch im Gate-Modus nicht rot). Ein Fehler ist es — in
-#     JEDEM Modus —, wenn --search-model-dir auf ein fehlendes Modell zeigt
-#     oder --require-search gesetzt ist. release.sh setzt --require-search
-#     (über verify-bundles.sh --smoke --require-search), sobald das Modell im
-#     Katalog veröffentlicht ist (Epic #192, PR S2/S6). Liegt das Modell da,
-#     laufen die Checks immer und zählen voll.
+#     Skip-Regel: fehlt das Modell am Default-Ort, wird ohne --require-search
+#     nur gemeldet (Dev-Macs und CI haben es nicht zwingend). Ein Fehler ist
+#     es — in JEDEM Modus —, wenn --search-model-dir auf ein fehlendes Modell
+#     zeigt oder --require-search gesetzt ist. release.sh setzt --require-search
+#     (über verify-bundles.sh --smoke --require-search): das Suchmodell ist seit
+#     dem 2026-11-15 auf R2 veröffentlicht und damit Pflichtmodell jedes
+#     Releases (Epic #192). Liegt das Modell da, laufen die Checks immer und
+#     zählen voll.
 SEARCH_GOLDEN="$REPO_ROOT/tests/fixtures/search-golden/golden.json"
 SEARCH_MAX_FOOTPRINT_GIB=2.5
 SEARCH_CHECKS=('search load' 'search eof' 'search parity' 'search parity cpu' 'search memory')
@@ -823,7 +821,7 @@ elif [ "$SEARCH_MODEL_EXPLICIT" = true ] || [ "$REQUIRE_SEARCH" = true ]; then
   done
 else
   for check in "${SEARCH_CHECKS[@]}"; do
-    echo "skip [$check]: Suchmodell nicht installiert ($SEARCH_MODEL_DIR) — noch kein Pflichtmodell, erst mit --require-search ein Fehler"
+    echo "skip [$check]: Suchmodell nicht installiert ($SEARCH_MODEL_DIR) — ohne --require-search nur gemeldet, release.sh setzt es"
   done
 fi
 

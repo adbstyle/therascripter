@@ -124,11 +124,11 @@ describe('buildManifest', () => {
   describe('Schalter «noch nicht veröffentlicht» (Suchmodell, Epic #192)', () => {
     const search = MODEL_DEFINITIONS.find((m) => m.id === 'embeddinggemma-2-text')!
 
-    it('der echte Katalog führt das Suchmodell mit echtem Hash, aber unveröffentlicht', () => {
+    it('der echte Katalog führt das Suchmodell mit echtem Hash, veröffentlicht (R2 seit 2026-11-15)', () => {
       expect(search.sha256).toBe('49e225895475004c699f08390f822e92a1fa8be4882e03e50d44c50f3badf4f8')
       expect(search.sizeBytes).toBe(430_211_881)
-      expect(search.published).toBe(false)
-      expect(isPublished(search)).toBe(false)
+      expect(search.published).toBeUndefined()
+      expect(isPublished(search)).toBe(true)
     })
 
     it('published: false — kein Manifest-Eintrag, kein Abbruch', () => {
