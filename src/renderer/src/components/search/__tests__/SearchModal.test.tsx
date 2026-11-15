@@ -1,5 +1,13 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest'
+import {
+  act,
+  configure,
+  fireEvent,
+  getConfig,
+  screen,
+  waitFor,
+  within
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SearchHost } from '../SearchHost'
 import { renderWithProviders } from '../../../test/renderWithProviders'
@@ -7,6 +15,7 @@ import { createMockApi, emitApiEvent } from '../../../test/mockApi'
 import { useNavigation } from '../../../navigation/navigation'
 import { _resetSearchSessionForTests, openSearchModal } from '../../../stores/searchSession'
 import { searchRowRenders } from '../searchOptions'
+import { SEARCH_DEBOUNCE_MS } from '../../../hooks/useSearch'
 import { _resetViewModeStoreForTests, setViewMode } from '../../../viewMode/viewModeStore'
 import type { SearchAvailability, SearchQueryInput } from '../../../../../shared/types/Search'
 import {
@@ -58,6 +67,18 @@ async function typeQuery(text: string): Promise<void> {
   const input = screen.getByRole('combobox')
   fireEvent.change(input, { target: { value: text } })
 }
+
+// Lastunabhängig: Nach dem Tippen wartet die Oberfläche die Entprellung
+// (SEARCH_DEBOUNCE_MS) echt ab. Unter Last kann das samt Rendern länger als
+// die üblichen 1 s der find*-Abfragen dauern — die Frist ist deshalb
+// grosszügig; am Ergebnis ändert sie nichts. Was VOR dem Ende der Entprellung
+// geschehen muss, läuft mit Fake-Timern.
+let asyncUtilTimeout: number
+beforeAll(() => {
+  asyncUtilTimeout = getConfig().asyncUtilTimeout
+  configure({ asyncUtilTimeout: 10_000 })
+})
+afterAll(() => configure({ asyncUtilTimeout }))
 
 beforeEach(() => {
   _resetSearchSessionForTests()
@@ -132,9 +153,26 @@ describe('Suchfenster öffnen und schliessen', () => {
   it('holt eine getippte, aber noch nicht gesuchte Anfrage beim nächsten Öffnen nach', async () => {
     renderHost()
     await openModal()
-    await typeQuery('Hofer')
-    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' })
-    expect(window.api.search.query).not.toHaveBeenCalled()
+    // Nur zwischen Tippen und Schliessen falsche Timer: Schliessen vor dem Ende
+    // der Entprellung gelingt so unabhängig von der Rechnerlast. (find*/waitFor
+    // von Testing Library warten intern auf setTimeout — nicht während der
+    // falschen Timer aufrufen.)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      await typeQuery('Hofer')
+      act(() => {
+        vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS - 1)
+      })
+      fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' })
+      expect(window.api.search.query).not.toHaveBeenCalled()
+      // Das Schliessen hat die Entprellung beendet: auch später keine Anfrage
+      act(() => {
+        vi.advanceTimersByTime(10 * SEARCH_DEBOUNCE_MS)
+      })
+      expect(window.api.search.query).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
     await openModal()
     expect(screen.getByRole('combobox')).toHaveValue('Hofer')
     await waitFor(() =>
@@ -277,8 +315,10 @@ describe('Treffer in zwei Stufen', () => {
     await typeQuery('neu')
     await screen.findByText(/Sitzung neu/)
     first.resolve(answer(0, { results: [doc('alt')], semantic: 'model-missing' }))
+    // Die überholte Antwort ist da und verarbeitet (Mikrotasks), bevor geprüft wird
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 20))
+      await first.promise
+      await new Promise((r) => setTimeout(r, 0))
     })
     expect(screen.queryByText(/Sitzung alt/)).toBeNull()
     expect(screen.getByText(/Sitzung neu/)).toBeTruthy()

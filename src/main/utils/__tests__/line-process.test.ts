@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { join } from 'path'
 import {
   LineProcess,
@@ -12,6 +12,11 @@ import {
 // Lebenszyklus mit echten Prozessen: ein Fake-Dienst (Node-Skript) mit dem
 // Protokoll von search_service.py. Nur so lassen sich Kill-Semantik, EOF und
 // Pipe-Verhalten belegen.
+//
+// Lastunabhängig: gewartet wird auf Ereignisse (Start, Exit, pid), nie über
+// feste Wartezeiten; Zeitgrenzen sind nur Untergrenzen (Eskalation braucht
+// mindestens so lange) oder grosszügige Obergrenzen, deren Abstand zum
+// erwarteten Wert jede Rechnerlast überdeckt.
 
 const FAKE = join(__dirname, 'fixtures', 'fake-line-service.mjs')
 
@@ -22,7 +27,7 @@ function create(env: Record<string, string> = {}, opts: Partial<LineProcessOptio
     bin: process.execPath,
     args: [FAKE],
     env,
-    startTimeoutMs: 5_000,
+    startTimeoutMs: 20_000,
     eofGraceMs: 500,
     killGraceMs: 500,
     ...opts
@@ -48,7 +53,7 @@ afterEach(async () => {
   }
 })
 
-describe('LineProcess', () => {
+describe('LineProcess', { timeout: 30_000 }, () => {
   it('starts, answers requests by id, and records the weights contract line', async () => {
     const proc = create()
     const ready = await proc.start()
@@ -110,7 +115,8 @@ describe('LineProcess', () => {
   it('times out a single request without killing the process; the late answer is dropped', async () => {
     const proc = create()
     await proc.start()
-    const err = await proc.request({ op: 'sleep', ms: 300 }, { timeoutMs: 50 }).catch((e) => e)
+    // Antwort erst nach 2 s — die Frist von 50 ms läuft sicher vorher ab
+    const err = await proc.request({ op: 'sleep', ms: 2_000 }, { timeoutMs: 50 }).catch((e) => e)
     expect(err).toBeInstanceOf(LineProcessTimeoutError)
     // Die späte Antwort (id der abgelaufenen Anfrage) wird verworfen
     await expect(proc.request({ op: 'echo', value: 'x' })).resolves.toMatchObject({ echo: 'x' })
@@ -147,11 +153,11 @@ describe('LineProcess', () => {
     const proc = create()
     await proc.start()
     const pid = proc.pid
-    const started = Date.now()
     const exit = await proc.stop()
     expect(exit.code).toBe(0)
+    // Ohne Signal beendet: der Dienst ging von selbst, bevor eskaliert wurde
+    expect(exit.exitSignal).toBeNull()
     expect(exit.stopRequested).toBe(true)
-    expect(Date.now() - started).toBeLessThan(500)
     expect(alive(pid)).toBe(false)
     // idempotent
     await expect(proc.stop()).resolves.toBe(exit)
@@ -176,9 +182,10 @@ describe('LineProcess', () => {
   })
 
   it('stop() during startup ends the process and rejects start()', async () => {
-    const proc = create({ FAKE_READY_DELAY_MS: '5000' })
+    // Die Startzeile kommt erst nach 30 s — der Stopp fällt sicher in den Start
+    const proc = create({ FAKE_READY_DELAY_MS: '30000' })
     const start = proc.start()
-    await new Promise((r) => setTimeout(r, 100))
+    await vi.waitFor(() => expect(proc.pid).toBeDefined(), { timeout: 10_000 })
     const exit = await proc.stop()
     expect(exit.stopRequested).toBe(true)
     await expect(start).rejects.toBeInstanceOf(LineProcessExitedError)
@@ -239,7 +246,8 @@ describe('LineProcess', () => {
       // Erst nach dem SIGKILL weiter, aber mit harter Obergrenze
       expect(exit.exitSignal).toBe('SIGKILL')
       expect(Date.now() - started).toBeGreaterThanOrEqual(200)
-      expect(Date.now() - started).toBeLessThan(2_000)
+      // Obergrenze: endet überhaupt (ohne Settle-Zeit hinge stop() an den Pipes)
+      expect(Date.now() - started).toBeLessThan(10_000)
       expect(alive(proc.pid)).toBe(false)
     } finally {
       try {
@@ -251,11 +259,15 @@ describe('LineProcess', () => {
   })
 
   it('stop() accepts shorter escalation times (quit)', async () => {
-    const proc = create({ FAKE_IGNORE_EOF: '1', FAKE_IGNORE_SIGTERM: '1' })
+    // Voreinstellung 2 × 5 s; die kurzen Zeiten (150 ms) liegen weit darunter
+    const proc = create(
+      { FAKE_IGNORE_EOF: '1', FAKE_IGNORE_SIGTERM: '1' },
+      { eofGraceMs: 5_000, killGraceMs: 5_000 }
+    )
     await proc.start()
     const started = Date.now()
     const exit = await proc.stop({ eofGraceMs: 50, killGraceMs: 100 })
     expect(exit.exitSignal).toBe('SIGKILL')
-    expect(Date.now() - started).toBeLessThan(800)
+    expect(Date.now() - started).toBeLessThan(5_000)
   })
 })

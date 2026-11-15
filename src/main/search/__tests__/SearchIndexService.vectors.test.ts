@@ -343,7 +343,8 @@ describe('SearchIndexService — Vektorphase', () => {
         release = () => resolve(texts.map((t) => fakeEmbed(t)))
       })
     h.service.start()
-    await new Promise((r) => setTimeout(r, 20))
+    // Auf den Batch warten, der gerade im Suchprozess steckt — nicht auf eine feste Zeit
+    await vi.waitFor(() => expect(h.calls).toHaveLength(1), { timeout: 10_000 })
     expect(h.service.isVectorPhaseRunning()).toBe(true)
     h.flags.processing = true
     const aborted = h.service.abortVectorPhase()
@@ -400,7 +401,7 @@ describe('SearchIndexService — Vektorphase', () => {
         release = () => resolve(texts.map((t) => fakeEmbed(t)))
       })
     const run = h.service.runVectorPhaseToEnd()
-    await new Promise((r) => setTimeout(r, 10))
+    await vi.waitFor(() => expect(h.calls).toHaveLength(1), { timeout: 10_000 })
     expect(h.activity).toEqual([true])
     h.service.setRecordingPause(true)
     release()
