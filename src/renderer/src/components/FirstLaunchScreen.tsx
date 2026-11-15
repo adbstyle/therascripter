@@ -7,6 +7,7 @@ import type {
   DiskSpaceInfo
 } from '../../../shared/types'
 import { formatBytes } from '../utils/formatBytes'
+import { MINIMUM_DISK_SPACE_BYTES } from '../../../shared/constants/disk-space'
 import AppLogo from './AppLogo'
 import MicrophoneSetupRow from './MicrophoneSetupRow'
 
@@ -68,11 +69,12 @@ export default function FirstLaunchScreen({
             Nicht genügend Speicherplatz
           </h2>
           <p className="mb-4 text-sm text-text-secondary">
-            TheraScript benötigt mindestens 5 GB freien Speicherplatz für die ML-Modelle.
+            TheraScript benötigt mindestens {formatBytes(MINIMUM_DISK_SPACE_BYTES)} freien
+            Speicherplatz für die ML-Modelle.
           </p>
           <div className="mb-4 text-sm text-text-tertiary">
-            <p>Verfügbar: {formatBytes(diskSpace.availableBytes)}</p>
-            <p>Benötigt: ~5.0 GB</p>
+            <p>Verfügbar: {formatBytes(diskSpace.availableBytes, { floor: true })}</p>
+            <p>Benötigt: {formatBytes(MINIMUM_DISK_SPACE_BYTES)}</p>
           </div>
           <p className="text-sm text-text-tertiary">
             Bitte schaffen Sie Speicherplatz frei und starten Sie die App erneut.

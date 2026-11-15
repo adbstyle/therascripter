@@ -24,6 +24,7 @@ type DossierRefRow = Pick<
 >
 
 interface DossierListRow extends DossierRefRow {
+  created_at: string
   entry_count: number
   last_entry_day: string | null
 }
@@ -212,7 +213,7 @@ export class DossierRepository {
   listSummaries(): DossierListItem[] {
     const rows = this.db
       .prepare(
-        `SELECT ${REF_COLUMNS},
+        `SELECT ${REF_COLUMNS}, d.created_at,
                 COUNT(s.id) AS entry_count,
                 MAX(CASE WHEN s.type = 'pdf'
                          THEN COALESCE(s.document_date, date(s.created_at, 'localtime'))
@@ -227,7 +228,8 @@ export class DossierRepository {
     return rows.map((row) => ({
       ...rowToRef(row),
       entryCount: row.entry_count,
-      lastEntryDay: row.last_entry_day
+      lastEntryDay: row.last_entry_day,
+      createdAt: row.created_at
     }))
   }
 

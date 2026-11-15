@@ -32,6 +32,7 @@ import {
   swapModelsIn
 } from './model-staging'
 import type { BusyReason } from './WorkGuard'
+import { ceilGigabytes } from '../../shared/utils/format-bytes'
 
 /**
  * Updates in der App (Issues #164, #165, #167, ADR-009). App und Modelle sind
@@ -631,7 +632,7 @@ export class AppUpdateService {
     this.autoDeferred = false
     const need = this.stagingNeed(bundle)
     if (!this.hasFree(need + MIN_FREE_AFTER_DOWNLOAD)) {
-      const gb = Math.ceil((need + MIN_FREE_AFTER_DOWNLOAD) / 1024 ** 3)
+      const gb = ceilGigabytes(need + MIN_FREE_AFTER_DOWNLOAD)
       const what = bundle.app ? `auf Version ${bundle.app.version}` : 'der Modelle'
       this.message = `Für das automatische Update ${what} fehlt Speicherplatz (mindestens ${gb} GB frei). Sie können es hier selbst herunterladen oder Platz freigeben.`
       return false
@@ -662,7 +663,7 @@ export class AppUpdateService {
     if (manual) {
       const need = this.stagingNeed(bundle)
       if (!this.hasFree(need)) {
-        const gb = Math.ceil(need / 1024 ** 3)
+        const gb = ceilGigabytes(need)
         this.message = `Nicht genügend Speicherplatz. Bitte geben Sie mindestens ${gb} GB frei und versuchen Sie es erneut.`
         this.emit()
         return

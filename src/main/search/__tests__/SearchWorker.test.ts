@@ -8,6 +8,11 @@ import type { SearchProcessState } from '../../../shared/types/Search'
 
 // Lebenszyklus des Suchprozesses mit einem echten Fake-Dienst (Node-Skript mit
 // dem Protokoll von search_service.py).
+//
+// Lastunabhängig: Zeitabhängiges Verhalten (Leerlauf, Pause nach Fehlern) läuft
+// über die injizierte Uhr `clock`; auf echte Prozesse wird über Ereignisse
+// gewartet (onStopped, vi.waitFor mit grosszügiger Frist), nie über feste
+// Wartezeiten, deren Ausgang von der Rechnerlast abhinge.
 
 vi.mock('electron', () => ({ app: { isPackaged: false, getPath: () => '/tmp' } }))
 
@@ -42,7 +47,12 @@ interface Harness {
   processing: { active: boolean }
   model: { info: SearchModelInfo | null }
   clock: { now: number }
+  /** Gründe aus onStopped, in Reihenfolge ('crash' = unerwartet). */
+  stopped: string[]
 }
+
+/** Frist für Ereignisse echter Prozesse — grosszügig, damit Last nichts ändert. */
+const EVENT_TIMEOUT = { timeout: 10_000 }
 
 function create(env: Record<string, string> = {}, deps: Partial<SearchWorkerDeps> = {}): Harness {
   const spawned: LineProcess[] = []
@@ -62,13 +72,15 @@ function create(env: Record<string, string> = {}, deps: Partial<SearchWorkerDeps
     now: () => clock.now,
     eofGraceMs: 300,
     killGraceMs: 300,
-    startTimeoutMs: 5_000,
+    startTimeoutMs: 20_000,
     ...deps
   })
   const states: SearchProcessState[] = []
   worker.onStateChange((s) => states.push(s))
+  const stopped: string[] = []
+  worker.onStopped((r) => stopped.push(r))
   workers.push(worker)
-  return { worker, spawned, states, processing, model, clock }
+  return { worker, spawned, states, processing, model, clock, stopped }
 }
 
 afterEach(async () => {
@@ -81,7 +93,7 @@ function norm(v: Float32Array): number {
   return Math.sqrt(s)
 }
 
-describe('SearchWorker', () => {
+describe('SearchWorker', { timeout: 30_000 }, () => {
   it('starts on warmup, answers queries and documents, passes model args and offline env', async () => {
     const h = create()
     await h.worker.ensureStarted('warmup')
@@ -122,26 +134,32 @@ describe('SearchWorker', () => {
   })
 
   it('stops after the idle time without queries and frees the process', async () => {
-    const h = create({}, { idleMs: 200, now: Date.now })
-    const stopped: string[] = []
-    h.worker.onStopped((r) => stopped.push(r))
+    // Leerlauf über die injizierte Uhr: der echte Takt prüft nur nach, ob die
+    // Uhr die Leerlaufzeit überschritten hat — wie lange er real braucht,
+    // ändert am Ergebnis nichts
+    const h = create({}, { idleMs: 200 })
     await h.worker.embedQuery('x')
     const pid = h.worker.pid
-    await new Promise((r) => setTimeout(r, 150))
+    h.clock.now += 150
     // Eine weitere Anfrage verschiebt den Leerlauf
     await h.worker.embedQuery('y')
-    await new Promise((r) => setTimeout(r, 150))
+    h.clock.now += 150
+    // Mehrere Runden des echten Takts: der Prozess bleibt, die Uhr steht 150 ms
+    // nach der letzten Anfrage
+    await new Promise((r) => setTimeout(r, 600))
     expect(alive(pid)).toBe(true)
-    await new Promise((r) => setTimeout(r, 500))
-    expect(stopped).toEqual(['idle'])
-    expect(alive(pid)).toBe(false)
+    expect(h.stopped).toEqual([])
+    h.clock.now += 100
+    await vi.waitFor(() => expect(h.stopped).toEqual(['idle']), EVENT_TIMEOUT)
+    await vi.waitFor(() => expect(alive(pid)).toBe(false), EVENT_TIMEOUT)
     expect(h.worker.getState().phase).toBe('stopped')
   })
 
   it('stop() during startup ends the process; the pending start is rejected', async () => {
-    const h = create({ FAKE_READY_DELAY_MS: '3000' })
+    // Der Dienst meldet sich erst nach 30 s — der Stopp fällt sicher in den Start
+    const h = create({ FAKE_READY_DELAY_MS: '30000' })
     const start = h.worker.ensureStarted('warmup').catch((e: unknown) => e)
-    await new Promise((r) => setTimeout(r, 100))
+    await vi.waitFor(() => expect(h.spawned[0]?.pid).toBeDefined(), EVENT_TIMEOUT)
     const pid = h.spawned[0].pid
     h.processing.active = true
     await h.worker.stop('processing')
@@ -168,8 +186,8 @@ describe('SearchWorker', () => {
     expect(h.spawned).toHaveLength(1)
     await h.worker.embedDocuments(['c', 'd']) // 3 GiB → Neustart danach
     // Vorgezogen: der neue Prozess startet sofort, nicht erst beim nächsten Batch
-    await vi.waitFor(() => expect(h.spawned).toHaveLength(2), { timeout: 3_000 })
-    await vi.waitFor(() => expect(h.worker.getState().phase).toBe('ready'), { timeout: 3_000 })
+    await vi.waitFor(() => expect(h.spawned).toHaveLength(2), EVENT_TIMEOUT)
+    await vi.waitFor(() => expect(h.worker.getState().phase).toBe('ready'), EVENT_TIMEOUT)
     expect(stopped).toEqual(['memory'])
     await h.worker.embedDocuments(['e', 'f'])
     expect(h.spawned).toHaveLength(2)
@@ -183,7 +201,8 @@ describe('SearchWorker', () => {
     await h.worker.ensureStarted('warmup')
     process.kill(h.worker.pid!, 'SIGKILL')
     await h.spawned[0].waitForExit()
-    await new Promise((r) => setTimeout(r, 50))
+    // onStopped kommt erst, wenn der Absturz samt Nachprüfung verbucht ist
+    await vi.waitFor(() => expect(h.stopped).toContain('crash'), EVENT_TIMEOUT)
     expect(stopped).toEqual(['crash'])
     expect(h.worker.getState()).toEqual({ phase: 'stopped', reason: 'tool-blocked' })
     await expect(h.worker.embedQuery('x')).rejects.toMatchObject({ reason: 'tool-blocked' })
@@ -200,7 +219,8 @@ describe('SearchWorker', () => {
     await h.worker.embedQuery('vorher')
     process.kill(h.worker.pid!, 'SIGKILL')
     await h.spawned[0].waitForExit()
-    await new Promise((r) => setTimeout(r, 50))
+    // onStopped kommt erst, wenn der Absturz samt Nachprüfung verbucht ist
+    await vi.waitFor(() => expect(h.stopped).toContain('crash'), EVENT_TIMEOUT)
     expect(h.worker.getState().reason).toBe('error')
     expect(h.worker.getMessage()).toMatch(/startet gleich von selbst neu/)
     h.clock.now += 31_000
@@ -214,7 +234,8 @@ describe('SearchWorker', () => {
     await h.worker.ensureStarted('warmup')
     process.kill(h.worker.pid!, 'SIGKILL')
     await h.spawned[0].waitForExit()
-    await new Promise((r) => setTimeout(r, 50))
+    // onStopped kommt erst, wenn der Absturz samt Nachprüfung verbucht ist
+    await vi.waitFor(() => expect(h.stopped).toContain('crash'), EVENT_TIMEOUT)
     expect(h.worker.getState().reason).toBeNull()
     expect(await h.worker.embedQuery('x')).toHaveLength(768)
     expect(h.spawned).toHaveLength(2)
@@ -262,7 +283,8 @@ describe('SearchWorker', () => {
     // Je nach Zeitpunkt beantwortet der Dienst die Anfrage noch vor dem Ende
     if (result !== 'ok') expect(result).toBeInstanceOf(SearchWorkerUnavailableError)
     await h.spawned[0].waitForExit()
-    await new Promise((r) => setTimeout(r, 50))
+    // onStopped kommt erst, wenn der Absturz samt Nachprüfung verbucht ist
+    await vi.waitFor(() => expect(h.stopped).toContain('crash'), EVENT_TIMEOUT)
     expect(h.worker.getState()).toEqual({ phase: 'stopped', reason: 'error' })
   })
 
@@ -276,14 +298,14 @@ describe('SearchWorker', () => {
   })
 
   it('stops a service that does not answer in time; after the pause queries work again', async () => {
-    const h = create({ FAKE_QUERY_DELAY_MS: '1000' }, { queryTimeoutMs: 100 })
+    const h = create({ FAKE_QUERY_DELAY_MS: '30000' }, { queryTimeoutMs: 100 })
     await h.worker.ensureStarted('warmup')
     const pid = h.worker.pid
     await expect(h.worker.embedQuery('x')).rejects.toMatchObject({
       reason: 'error',
       kind: 'request'
     })
-    await vi.waitFor(() => expect(alive(pid)).toBe(false), { timeout: 3_000 })
+    await vi.waitFor(() => expect(alive(pid)).toBe(false), EVENT_TIMEOUT)
     expect(h.worker.getState().reason).toBe('error')
     h.clock.now += 31_000
     expect(h.worker.getState().reason).toBeNull()

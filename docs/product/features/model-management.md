@@ -10,9 +10,11 @@ On startup, `App.tsx` calls `modelDownload:status` (which runs `checkModelsExist
 
 ### Disk Space Check
 
-Before the user can start the download, `FirstLaunchScreen` calls `modelDownload:checkDiskSpace`. The handler in `model-download-handlers.ts` uses `statfsSync` against `~/.therascript/` and enforces a **5 GB minimum** (`MINIMUM_DISK_SPACE_BYTES = 5 * 1024 * 1024 * 1024`). If disk space is insufficient, the screen shows an error with available vs. required space and asks the user to free space and restart.
+Before the user can start the download, `FirstLaunchScreen` calls `modelDownload:checkDiskSpace`. The handler in `model-download-handlers.ts` uses `statfsSync` against `~/.therascript/` and enforces a **5 GB minimum**, decimal like every size in the app (`MINIMUM_DISK_SPACE_BYTES = 5_000_000_000` in `src/shared/constants/disk-space.ts`; until the epic #192 audit it was 5 GiB). If disk space is insufficient, the screen shows an error with available vs. required space and asks the user to free space and restart.
 
-Why 5 GB is still enough with the search model: models download one after another and every archive is deleted right after extraction, so the peak is reached while the last big archive is extracted. Whisper 0.57 GB + pyannote extracted ~0.13 GB + NER 1.04 GB packed + ~1.1 GB extracted ≈ 2.85 GB (NER step), or with NER extracted plus the search archive 0.43 GB and its 0.58 GB extracted ≈ 2.8 GB (search step). Even the sum of everything packed and extracted (~3.8 GB, upper bound) stays below 5 GiB (5.37 GB), and afterwards models take ~2.4 GB, leaving room for the search index (up to ~0.7 GB at 2'000 sessions).
+**Sizes are shown in decimal units** everywhere in the app (`formatBytes` in `src/shared/utils/format-bytes.ts`: 1 GB = 10^9 bytes, like macOS Finder and all public texts) — first launch, Settings → Modelle, Updates, About, provenance and the «mindestens N GB» hints of the updater. The first-launch minimum is decimal too, so the error screen reads «Benötigt: 5.0 GB» like README and website; «Verfügbar» is rounded down to one decimal (`formatBytes(…, { floor: true })`), so a refusal never shows the same value on both lines. Invalid values (negative, NaN, infinite) read «—». The first-launch download of 2'101'189'732 bytes reads «2.1 GB». The update's «5 GB must remain free» (`MIN_FREE_AFTER_DOWNLOAD`) is a separate rule and stays 5 GiB.
+
+Why 5 GB is still enough with the search model: models download one after another and every archive is deleted right after extraction, so the peak is reached while the last big archive is extracted. Whisper 0.57 GB + pyannote extracted ~0.13 GB + NER 1.04 GB packed + ~1.1 GB extracted ≈ 2.85 GB (NER step), or with NER extracted plus the search archive 0.43 GB and its 0.58 GB extracted ≈ 2.8 GB (search step). Even the sum of everything packed and extracted (~3.8 GB, upper bound) stays below the 5 GB minimum, and afterwards models take ~2.4 GB, leaving room for the search index (up to ~0.7 GB at 2'000 sessions).
 
 ### Model Definitions
 
@@ -168,7 +170,7 @@ Parts are staged one after another, app first:
 
 Legacy (pre-#167): `cleanupIncompleteUpdates()` still deletes `models/.staging` and restores a model from `models/.backup` after an interrupted swap of the old model-update flow — needed once for installations updating from v0.9.x; remove after a few releases. `migrateInstalledVersions()` seeds `installedModelVersions` for models already on disk (`version: 'pre-update'`, `sha256: ''`).
 
-Disk space (NFR 1): `diskNeedBytes` = app × 5 + archive model × 2.5 + flat model × 1 (only parts not yet staged), checked against the free space of both the app work dir and the models dir. Manual: need must fit, else «Nicht genügend Speicherplatz … mindestens N GB». Automatic (AK 8): 5 GB must remain free afterwards, else a hint naming the space.
+Disk space (NFR 1): `diskNeedBytes` = app × 5 + archive model × 2.5 + flat model × 1 (only parts not yet staged), checked against the free space of both the app work dir and the models dir. Manual: need must fit, else «Nicht genügend Speicherplatz … mindestens N GB». Automatic (AK 8): 5 GiB must remain free afterwards (N in the hints is rounded up in decimal GB), else a hint naming the space.
 
 ### Phases
 

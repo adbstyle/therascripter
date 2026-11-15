@@ -8,8 +8,12 @@
  *   2. Start auf dem Seed der zuletzt veröffentlichten Version: alle
  *      Sitzungen in der Liste, alle Inhalte erhalten, die wartende Sitzung
  *      läuft weiter
- *   3. Eine neue Aufnahme und ein PDF (Text- und eingescannte Seite) laufen
- *      bis zur Zusammenfassung
+ *   3. Epic #192: Dossier-Teil des Seeds erhalten (ab einer Vorversion mit
+ *      Patientendossiers), Bestand ohne Zutun durchsuchbar (exakt; nach
+ *      Bedeutung nur mit installiertem Suchmodell)
+ *   4. Eine neue Aufnahme und ein PDF (Text- und eingescannte Seite) laufen
+ *      bis zur Zusammenfassung; mit dem PDF ein Dossier anlegen, zuordnen,
+ *      im Verlauf sehen und samt Sitzung löschen — danach nichts auffindbar
  *
  * Läuft isoliert (eigenes Home, Sandbox gegen die echten Daten, kein
  * Internet), siehe lib/instance.mjs. Braucht die Modelle des Release-Macs
@@ -17,12 +21,14 @@
  *
  * Usage: node scripts/release-check/run.mjs --app dist/mac-arm64/Therascript.app [--prev-tag vX.Y.Z]
  * Exit 0 = alle Prüfungen grün, 1 = mindestens eine rot oder nicht durchführbar.
+ * «Nicht geprüft» (–) zählt weder als grün noch als rot und steht im Bericht.
  */
 import { execFileSync } from 'child_process'
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { checkFreshStart, checkSeededRun } from './lib/checks.mjs'
+import { marker, summarize } from './lib/dossier-search.mjs'
 import { ensureSeed } from './lib/seed.mjs'
 import { LOG_DIR, previousApp, previousReleaseTag } from './lib/workspace.mjs'
 
@@ -102,10 +108,10 @@ if (prevTag) {
   })
 }
 
-const failed = results.filter((r) => !r.ok)
+const { failed, notChecked, passed } = summarize(results)
 console.log('\nRelease-Prüfung')
 for (const r of results) {
-  console.log(`  ${r.ok ? '✓' : '✗'} ${r.name}${r.detail ? ` — ${r.detail}` : ''}`)
+  console.log(`  ${marker(r)} ${r.name}${r.detail ? ` — ${r.detail}` : ''}`)
 }
 const report = join(LOG_DIR, `release-check-${stamp}.json`)
 writeFileSync(report, JSON.stringify({ appPath, prevTag, results }, null, 2))
@@ -114,4 +120,5 @@ if (failed.length) {
   console.log(`RELEASE-PRÜFUNG ROT: ${failed.length} von ${results.length} Prüfungen gescheitert`)
   process.exit(1)
 }
-console.log(`RELEASE-PRÜFUNG GRÜN: ${results.length} Prüfungen`)
+const open = notChecked.length ? `, ${notChecked.length} nicht geprüft (–)` : ''
+console.log(`RELEASE-PRÜFUNG GRÜN: ${passed.length} Prüfungen${open}`)

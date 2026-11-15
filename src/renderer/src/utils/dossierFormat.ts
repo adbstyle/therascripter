@@ -20,34 +20,87 @@ export function dossierIdentification(ref: Pick<DossierRef, 'externalId' | 'birt
 }
 
 type NameFields = Pick<DossierRef, 'firstName' | 'lastName'>
-type DistinctionFields = NameFields & Pick<DossierRef, 'externalId' | 'birthDate'>
+type DistinctionFields = NameFields & Pick<DossierRef, 'externalId' | 'birthDate'> & { id?: string }
+/** Was eine Übersichtszeile zusätzlich hat: Anlagezeitpunkt und Anzahl Einträge. */
+type FallbackFields = DistinctionFields & { id: string; createdAt?: string; entryCount?: number }
+
+/**
+ * «angelegt am 05.11.2026 · 3 Einträge» — unterscheidet gleichnamige Dossiers,
+ * die weder ID noch Geburtsdatum haben, über etwas, das der USER kennt.
+ * Anlagetag in Lokalzeit; leer, wenn der Zeitpunkt fehlt.
+ */
+export function dossierFallbackDistinction(
+  createdAt: string | undefined,
+  entryCount?: number
+): string {
+  if (!createdAt) return ''
+  const created = new Date(createdAt)
+  if (Number.isNaN(created.getTime())) return ''
+  const parts = [`angelegt am ${formatSwissDate(localTodayIso(created))}`]
+  if (entryCount !== undefined) {
+    parts.push(entryCount === 0 ? 'keine Einträge' : pluralize(entryCount, 'Eintrag', 'Einträge'))
+  }
+  return parts.join(' · ')
+}
+
+/**
+ * Mehrfach vergebene Namen (Schlüssel wie `dossierNameKey`) und — für
+ * gleichnamige Dossiers ohne ID und Geburtsdatum — ein Ersatz-Zusatz pro
+ * Dossier-ID. Ein `Set` der Namen, damit jede Stelle es wie bisher als
+ * `ReadonlySet<string>` weiterreichen kann.
+ */
+export class AmbiguousDossierNames extends Set<string> {
+  readonly fallbacks: ReadonlyMap<string, string>
+  constructor(keys: Iterable<string> = [], fallbacks: ReadonlyMap<string, string> = new Map()) {
+    super(keys)
+    this.fallbacks = fallbacks
+  }
+}
 
 /** Vergleichsschlüssel des angezeigten Namens (gleiche Regel wie die Dublettenprüfung). */
 export function dossierNameKey(ref: NameFields): string {
   return `${normalizeDossierKey(ref.lastName)}\u0000${normalizeDossierKey(ref.firstName)}`
 }
 
-/** Namen (Schlüssel), die mehr als ein Dossier trägt. */
-export function ambiguousDossierNames(list: readonly NameFields[]): Set<string> {
+/**
+ * Namen (Schlüssel), die mehr als ein Dossier trägt. Tragen die Einträge
+ * ID, Anlagezeitpunkt und Anzahl (Übersichtszeilen), kommt für gleichnamige
+ * ohne ID und Geburtsdatum der Ersatz-Zusatz dazu.
+ */
+export function ambiguousDossierNames(
+  list: readonly (NameFields | FallbackFields)[]
+): AmbiguousDossierNames {
   const seen = new Set<string>()
-  const ambiguous = new Set<string>()
+  const keys = new Set<string>()
   for (const ref of list) {
     const key = dossierNameKey(ref)
-    if (seen.has(key)) ambiguous.add(key)
+    if (seen.has(key)) keys.add(key)
     else seen.add(key)
   }
-  return ambiguous
+  const fallbacks = new Map<string, string>()
+  for (const ref of list) {
+    if (!keys.has(dossierNameKey(ref)) || !('id' in ref) || !('createdAt' in ref)) continue
+    if (ref.externalId || ref.birthDate) continue
+    const fallback = dossierFallbackDistinction(ref.createdAt, ref.entryCount)
+    if (fallback) fallbacks.set(ref.id, fallback)
+  }
+  return new AmbiguousDossierNames(keys, fallbacks)
 }
 
 /**
  * Zusatz für gleichnamige Dossiers (Sichtprüfung): gibt es mehrere Dossiers
- * mit diesem Namen, die Dossier-ID, sonst das Geburtsdatum; fehlt beides —
- * oder ist der Name eindeutig —, kein Zusatz ('').
+ * mit diesem Namen, die Dossier-ID, sonst das Geburtsdatum, sonst «angelegt
+ * am … · N Einträge» (wenn `ambiguous` ihn kennt, siehe
+ * `ambiguousDossierNames`); bei eindeutigem Namen kein Zusatz ('').
  */
 export function dossierDistinction(ref: DistinctionFields, ambiguous: ReadonlySet<string>): string {
   if (!ambiguous.has(dossierNameKey(ref))) return ''
   if (ref.externalId) return ref.externalId
-  return ref.birthDate ? formatSwissDate(ref.birthDate) : ''
+  if (ref.birthDate) return formatSwissDate(ref.birthDate)
+  if (ref.id && ambiguous instanceof AmbiguousDossierNames) {
+    return ambiguous.fallbacks.get(ref.id) ?? ''
+  }
+  return ''
 }
 
 /** «Hofer, Lukas» bzw. bei gleichnamigen Dossiers «Hofer, Lukas (P-1001)». */
@@ -93,4 +146,26 @@ export function duplicateNameText(duplicates: DossierRef[]): string {
     duplicates.length === 1 ? 'ein Patientendossier' : `${duplicates.length} Patientendossiers`
   const ids = duplicates.map(dossierIdentification).filter(Boolean)
   return `Es gibt bereits ${what} mit diesem Namen${ids.length > 0 ? ` (${ids.join('; ')})` : ''}.`
+}
+
+/**
+ * Vollständiger Zusatz für gleichnamige Dossiers in Dialogen: «ID ·
+ * Geburtsdatum», soweit vorhanden, sonst «angelegt am … · N Einträge»; bei
+ * eindeutigem Namen ''. `fallback` ersetzt den Eintrag aus `ambiguous`, wenn
+ * der Aufrufer Anlagezeitpunkt und Anzahl selbst kennt.
+ */
+export function dossierFullDistinction(
+  ref: DistinctionFields,
+  ambiguous: ReadonlySet<string>,
+  fallback?: { createdAt?: string; entryCount?: number }
+): string {
+  if (!ambiguous.has(dossierNameKey(ref))) return ''
+  const identification = dossierIdentification(ref)
+  if (identification) return identification
+  if (fallback?.createdAt)
+    return dossierFallbackDistinction(fallback.createdAt, fallback.entryCount)
+  if (ref.id && ambiguous instanceof AmbiguousDossierNames) {
+    return ambiguous.fallbacks.get(ref.id) ?? ''
+  }
+  return ''
 }

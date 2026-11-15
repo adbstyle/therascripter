@@ -6,6 +6,7 @@ import { VectorStore, quantizeVector, vectorToBlob } from '../VectorStore'
 import { SearchWorkerUnavailableError } from '../SearchWorker'
 import { addIndexedSession, createSearchTestDb, indexAll } from './helpers'
 import { TEST_MODEL, fakeEmbed } from './semanticHelpers'
+import { SEARCH_MAX_DOCUMENT_RESULTS } from '../../../shared/search-config'
 import type {
   SearchProcessState,
   SearchQueryResult,
@@ -204,5 +205,122 @@ describe('SearchService — Suche nach Bedeutung', () => {
     for (let i = 1; i < chunks.length; i++) {
       expect(chunks[i - 1].cosine).toBeGreaterThanOrEqual(chunks[i].cosine)
     }
+  })
+})
+
+// #211 AK 3 nach Bedeutung OBERHALB der Grenzen (Abschluss-Check Epic #192):
+// Mehr Treffer als SEARCH_MAX_DOCUMENT_RESULTS. Die Gesamtsuche schneidet ab
+// und meldet `truncated`; die Dossier-Suche filtert VOR der Grenze — sie zeigt
+// auch Sitzungen, die die Gesamtsuche abgeschnitten hat, und die gemeinsamen
+// in derselben Reihenfolge (dokumentierte Abweichung, search.md «Exact search»).
+describe('SearchService — Dossier-Suche nach Bedeutung oberhalb der Grenzen (#211 AK 3)', () => {
+  const COUNT = SEARCH_MAX_DOCUMENT_RESULTS + 30
+  // Kein Abschnitt enthält beide Wörter → keine exakten Treffer, alles nach Bedeutung
+  const QUERY = 'Traumbild Mondlicht'
+  let db: Database.Database
+  let service: SearchService
+  const id = (i: number): string => `s${String(i).padStart(3, '0')}`
+  // Kleines Dossier: oben, in der Mitte und weit hinter der Grenze der Gesamtsuche
+  const small = [2, 17, 40, 77, 99, 100, 101, 115, 128, 129].map(id)
+  // Grosses Dossier: selbst mehr Treffer als die Grenze
+  const large = Array.from({ length: SEARCH_MAX_DOCUMENT_RESULTS + 10 }, (_, k) => id(k + 15))
+
+  beforeEach(async () => {
+    db = createSearchTestDb()
+    const docs = new Map<string, unknown>()
+    for (let i = 0; i < COUNT; i++) {
+      // Je mehr Füllwörter, desto kleiner der Kosinus zur Anfrage → eine Rangfolge
+      const filler = Array.from({ length: i + 1 }, (_, k) => `fuell${k}wort`).join(' ')
+      addIndexedSession(
+        db,
+        docs,
+        {
+          id: id(i),
+          title: `Eintrag ${i}`,
+          createdAt: new Date(Date.UTC(2025, 0, 1) + i * 86_400_000).toISOString()
+        },
+        [{ speaker: 'A', text: `Traumbild ${filler}` }]
+      )
+    }
+    const index = new SearchIndexService(db, {
+      now: () => Date.parse('2026-06-01T00:00:00.000Z'),
+      readDocument: (p) => docs.get(p),
+      vectors: {
+        resolveModel: () => TEST_MODEL,
+        isProcessingActive: () => false,
+        embedDocuments: async (texts) => texts.map((t) => fakeEmbed(t))
+      }
+    })
+    indexAll(index)
+    await index.runVectorPhaseToEnd()
+    const insertDossier = db.prepare(
+      `INSERT INTO dossiers (id, first_name, last_name, first_name_norm, last_name_norm, created_at, updated_at)
+       VALUES (?, 'Anna', ?, 'anna', ?, 'x', 'x')`
+    )
+    const assign = db.prepare(
+      `INSERT INTO session_dossiers (session_id, dossier_id, assigned_at) VALUES (?, ?, 'x')`
+    )
+    insertDossier.run('small', 'Klein', 'klein')
+    insertDossier.run('large', 'Gross', 'gross')
+    for (const s of small) assign.run(s, 'small')
+    for (const s of large) assign.run(s, 'large')
+    service = new SearchService(db, {
+      semantic: {
+        embedQuery: async (t) => fakeEmbed(t),
+        getState: () => ({ phase: 'ready', reason: null }),
+        store: new VectorStore(db),
+        resolveModel: () => TEST_MODEL,
+        // Jeder Eintrag trifft — mehr Treffer als die Grenze
+        threshold: 0.01
+      }
+    })
+  })
+
+  afterEach(() => db.close())
+
+  const run = (scope: SearchScope) => service.semantic({ requestId: 1, query: QUERY, scope })
+  const idsOf = (r: SearchQueryResult): string[] => r.results.map((d) => d.sessionId)
+
+  it('die Gesamtsuche schneidet an der Grenze ab und meldet es; nur Treffer nach Bedeutung', async () => {
+    const all = await run({ kind: 'all' })
+    expect(all.semantic).toBe('complete')
+    expect(all.truncated).toBe(true)
+    expect(all.results).toHaveLength(SEARCH_MAX_DOCUMENT_RESULTS)
+    expect(all.results.every((d) => d.hits.every((h) => h.kind === 'semantic'))).toBe(true)
+  })
+
+  it('ein kleines Dossier zeigt alle seine Treffer, auch die abgeschnittenen, in derselben Reihenfolge', async () => {
+    const all = idsOf(await run({ kind: 'all' }))
+    const inDossier = await run({ kind: 'dossier', dossierId: 'small' })
+    expect(inDossier.semantic).toBe('complete')
+    expect(inDossier.truncated).toBe(false)
+    const ids = idsOf(inDossier)
+    expect([...ids].sort()).toEqual([...small].sort())
+
+    // Die gemeinsamen zuerst, in der Reihenfolge der Gesamtsuche …
+    const common = all.filter((s) => small.includes(s))
+    expect(common.length).toBeGreaterThan(0)
+    expect(ids.slice(0, common.length)).toEqual(common)
+    // … danach die, die die Gesamtsuche abgeschnitten hat (sie liegen dort hinter Platz 100)
+    const beyond = ids.slice(common.length)
+    expect(beyond.length).toBeGreaterThan(0)
+    expect(beyond.some((s) => all.includes(s))).toBe(false)
+    // Die Treffer selbst sind dieselben wie in der Gesamtsuche
+    const allResult = await run({ kind: 'all' })
+    expect(inDossier.results.slice(0, common.length).map((d) => d.hits)).toEqual(
+      allResult.results.filter((d) => small.includes(d.sessionId)).map((d) => d.hits)
+    )
+  })
+
+  it('ein Dossier mit mehr Treffern als die Grenze schneidet selbst ab und meldet es', async () => {
+    const all = idsOf(await run({ kind: 'all' }))
+    const inDossier = await run({ kind: 'dossier', dossierId: 'large' })
+    expect(inDossier.truncated).toBe(true)
+    expect(inDossier.results).toHaveLength(SEARCH_MAX_DOCUMENT_RESULTS)
+    const ids = idsOf(inDossier)
+    expect(ids.every((s) => large.includes(s))).toBe(true)
+    const common = all.filter((s) => large.includes(s))
+    expect(ids.slice(0, common.length)).toEqual(common)
+    expect(inDossier.dossiers).toEqual([])
   })
 })

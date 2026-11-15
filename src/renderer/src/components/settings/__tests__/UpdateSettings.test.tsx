@@ -50,16 +50,18 @@ describe('UpdateSettings', () => {
     show({ autoUpdate: false })
     const toggle = await screen.findByRole('switch', { name: 'Automatische Updates' })
     expect(toggle).toHaveAttribute('aria-checked', 'false')
-    expect(screen.getByText(/kommen erst an, wenn Sie sie hier selbst herunterladen/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/kommen erst an, wenn Sie sie hier selbst herunterladen/)
+    ).toBeInTheDocument()
 
     await userEvent.click(toggle)
     expect(api.setAutoUpdate).toHaveBeenCalledWith(true)
   })
 
   it('nennt Version und Grösse vor dem Download (AK 4)', async () => {
-    show({ phase: 'available', version: '1.1.0', sizeBytes: 300 * 1024 * 1024, autoUpdate: false })
+    show({ phase: 'available', version: '1.1.0', sizeBytes: 300_000_000, autoUpdate: false })
     const button = await screen.findByRole('button', {
-      name: /Version 1\.1\.0 herunterladen \(300/
+      name: /Version 1\.1\.0 herunterladen \(300 MB/
     })
     await userEvent.click(button)
     expect(api.download).toHaveBeenCalledOnce()
@@ -118,12 +120,10 @@ describe('UpdateSettings', () => {
       phase: 'available',
       autoUpdate: false,
       version: '1.1.0',
-      sizeBytes: 1300 * 1024 * 1024,
-      appSizeBytes: 300 * 1024 * 1024,
-      diskNeedBytes: 4 * 1024 ** 3,
-      models: [
-        { id: 'ner', label: 'Anonymisierung', sizeBytes: 1000 * 1024 * 1024, kind: 'update' }
-      ]
+      sizeBytes: 1_300_000_000,
+      appSizeBytes: 300_000_000,
+      diskNeedBytes: 4_000_000_000,
+      models: [{ id: 'ner', label: 'Anonymisierung', sizeBytes: 1_000_000_000, kind: 'update' }]
     })
     expect(await screen.findByText('Therascript 1.1.0')).toBeInTheDocument()
     expect(screen.getByText(/Anonymisierung \(neue Fassung\)/)).toBeInTheDocument()

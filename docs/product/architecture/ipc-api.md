@@ -53,6 +53,8 @@ The `api` object contains the following namespaces:
 
 All `on*` listener methods return an unsubscribe function `() => void`.
 
+**One `ipcRenderer.on` per event channel.** Channels with many subscribers — `sessions:changed`, `dossiers:changed`, `recent:changed`, `search:availabilityChanged`, `summary:changed`, `task:progress`/`started`/`completed`/`error`, `queue:positions` — go through `src/preload/api/channelHub.ts`: each channel and its validation are defined once when the preload module loads (`createChannel(channel, parse)`, a second definition throws — no subscriber can change the validation), the first subscriber registers the channel once, every renderer subscriber lands in a distribution list, the event is validated once per event, a throwing subscriber does not stop the others, and the last unsubscribe removes the listener. Before, every card and popover registered its own listener (`MaxListenersExceededWarning: 11 dossiers:changed listeners added` with a filled list). Tests: `src/preload/api/__tests__/channelHub.test.ts`.
+
 Note: `api.import.getPathForFile(file)` is a local call to `webUtils.getPathForFile()` — it does not use IPC.
 
 ---

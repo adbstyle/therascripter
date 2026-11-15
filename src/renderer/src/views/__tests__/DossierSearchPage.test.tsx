@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import DossierSearchPage from '../DossierSearchPage'
 import RouteView from '../../components/shell/RouteView'
@@ -145,16 +145,73 @@ describe('Suche im Patientendossier (#211)', () => {
     expect(getSearchEntry(key).submitted).toBeNull()
   })
 
-  it('hält die Suche pro Dossier getrennt', async () => {
-    const { unmount } = renderWithProviders(<DossierSearchPage dossierId="d1" />, {
+  it('hält Anfrage und Treffer pro Dossier getrennt und bringt beim Zurückkehren die eigenen zurück', async () => {
+    const SARA: Dossier = { ...DOSSIER, id: 'd2', firstName: 'Sara', lastName: 'Meier' }
+    vi.mocked(window.api.dossiers.get).mockImplementation(async (id) =>
+      id === 'd2' ? SARA : DOSSIER
+    )
+    // Ohne Suchmodell (passend zu semantic: 'model-missing' der Antworten) —
+    // sonst holte die Seite beim Zurückkehren die Suche nach Bedeutung nach
+    vi.mocked(window.api.search.open).mockResolvedValue({
+      model: { status: 'unpublished' },
+      semantic: 'model-missing'
+    })
+    // Jedes Dossier hat eigene Treffer — so ist sichtbar, wessen Ergebnis angezeigt wird
+    vi.mocked(window.api.search.query).mockImplementation(async (input) =>
+      answer(input.requestId, {
+        dossiers: [],
+        results: [
+          doc(input.scope.kind === 'dossier' && input.scope.dossierId === 'd2' ? 's7' : 's1')
+        ],
+        semantic: 'model-missing'
+      })
+    )
+    const searchIn = async (name: string, text: string, hit: string): Promise<void> => {
+      const input = await screen.findByRole('combobox', {
+        name: `Suchanfrage im Patientendossier ${name}`
+      })
+      fireEvent.change(input, { target: { value: text } })
+      await screen.findByText(`[PERSON 1] Sitzung ${hit}`)
+    }
+
+    const first = renderWithProviders(<DossierSearchPage dossierId="d1" />, {
       route: { kind: 'dossierSearch', dossierId: 'd1' }
     })
-    await search('Brändli')
-    unmount()
-    renderWithProviders(<DossierSearchPage dossierId="d2" />, {
+    await searchIn('Hofer, Lukas', 'Brändli', 's1')
+    first.unmount()
+
+    // Anderes Dossier: leer, nichts von Hofer — und die Suche dort bleibt auf d2
+    const second = renderWithProviders(<DossierSearchPage dossierId="d2" />, {
       route: { kind: 'dossierSearch', dossierId: 'd2' }
     })
-    await waitFor(() => expect(screen.getByRole('combobox')).toHaveValue(''))
+    const input = await screen.findByRole('combobox', {
+      name: 'Suchanfrage im Patientendossier Meier, Sara'
+    })
+    expect(input).toHaveValue('')
+    expect(screen.queryByText('[PERSON 1] Sitzung s1')).toBeNull()
+    await searchIn('Meier, Sara', 'Keller', 's7')
+    expect(window.api.search.query).toHaveBeenLastCalledWith(
+      expect.objectContaining({ query: 'Keller', scope: { kind: 'dossier', dossierId: 'd2' } })
+    )
+    second.unmount()
+
+    // Zurück zu Hofer: dessen Anfrage und Treffer, ohne neue Anfrage
+    const calls = vi.mocked(window.api.search.query).mock.calls.length
+    renderWithProviders(<DossierSearchPage dossierId="d1" />, {
+      route: { kind: 'dossierSearch', dossierId: 'd1' }
+    })
+    expect(
+      await screen.findByRole('combobox', { name: 'Suchanfrage im Patientendossier Hofer, Lukas' })
+    ).toHaveValue('Brändli')
+    expect(await screen.findByText('[PERSON 1] Sitzung s1')).toBeTruthy()
+    expect(screen.queryByText('[PERSON 1] Sitzung s7')).toBeNull()
+    expect(window.api.search.query).toHaveBeenCalledTimes(calls)
+    expect(getSearchEntry(searchEntryKey({ kind: 'dossier', dossierId: 'd1' })).submitted).toBe(
+      'Brändli'
+    )
+    expect(getSearchEntry(searchEntryKey({ kind: 'dossier', dossierId: 'd2' })).submitted).toBe(
+      'Keller'
+    )
   })
 
   it('zeigt die Reihenfolge der Antwort (#211 AK 3) und Klartext-Ausschnitte nur in «Klartext» auswählbar', async () => {

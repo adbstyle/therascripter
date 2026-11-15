@@ -1,16 +1,17 @@
-import { dossierIdentification, dossierListName, dossierNameKey, pluralize } from './dossierFormat'
-import type { DossierDeletePreview, DossierRef } from '../../../shared/types/Dossier'
+import { dossierFullDistinction, dossierListName, pluralize } from './dossierFormat'
+import type { Dossier, DossierDeletePreview, DossierRef } from '../../../shared/types/Dossier'
 
 /** Höchstens so viele andere Dossiers werden mit Namen genannt. */
 const MAX_NAMED_DOSSIERS = 3
 
 /**
  * Name eines anderen Dossiers; gleichnamige mit «ID · Geburtsdatum» in
- * Klammern (wie im Löschdialog einer Sitzung).
+ * Klammern (wie im Löschdialog einer Sitzung), ohne beides mit «angelegt am
+ * … · N Einträge».
  */
 function otherName(ref: DossierRef, ambiguous: ReadonlySet<string>): string {
-  const identification = ambiguous.has(dossierNameKey(ref)) ? dossierIdentification(ref) : ''
-  return identification ? `${dossierListName(ref)} (${identification})` : dossierListName(ref)
+  const distinction = dossierFullDistinction(ref, ambiguous)
+  return distinction ? `${dossierListName(ref)} (${distinction})` : dossierListName(ref)
 }
 
 /** «6 Sitzungen und 2 PDF-Dokumente», «1 PDF-Dokument». */
@@ -63,14 +64,24 @@ function sharedClause(
  * Was der Dialog nach aktuellem Stand nennt (#204 AK 17, #207 AK 1): was
  * gelöscht wird und was in anderen Dossiers erhalten bleibt — mit Zahlen.
  * `ambiguous`: mehrfach vergebene Namen (`stores/dossierNames`) — solche
- * Dossiers nennt der Dialog mit «ID · Geburtsdatum».
+ * Dossiers nennt der Dialog mit «ID · Geburtsdatum» (ohne beides «angelegt
+ * am … · N Einträge»), das zu löschende (`self`) schon im Titel.
  */
 export function summarizeDeletion(
   preview: DossierDeletePreview,
-  ambiguous: ReadonlySet<string> = new Set()
+  ambiguous: ReadonlySet<string> = new Set(),
+  self?: Dossier | null
 ): DeleteDossierSummary {
   const exclusiveCount = preview.exclusive.sessions + preview.exclusive.pdfs
   const sharedCount = preview.shared.sessions + preview.shared.pdfs
+  // Gleichnamige Dossiers schon im Titel unterscheiden (Sichtprüfung)
+  const distinction = self
+    ? dossierFullDistinction(self, ambiguous, {
+        createdAt: self.createdAt,
+        entryCount: exclusiveCount + sharedCount
+      })
+    : ''
+  const name = distinction ? `${preview.displayName} (${distinction})` : preview.displayName
   const deleted: string[] = []
   if (exclusiveCount > 0) {
     deleted.push(`${describeContents(preview.exclusive)} samt Text und Zusammenfassung`)
@@ -96,7 +107,7 @@ export function summarizeDeletion(
   if (exclusiveCount > 0 || sharedCount > 0) kept.push('Einträge in der Sperrliste')
 
   return {
-    title: `Patientendossier ${preview.displayName} löschen?`,
+    title: `Patientendossier ${name} löschen?`,
     message:
       exclusiveCount > 0
         ? 'Das Dossier und alle Inhalte, die nur ihm zugeordnet sind, werden endgültig entfernt.'

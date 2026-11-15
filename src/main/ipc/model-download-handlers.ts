@@ -3,14 +3,13 @@ import { getAppUpdateService } from '../services/app-update-deps'
 import { getSearchModelProvisioner } from '../services/search-model-provisioner-deps'
 import { statfsSync } from 'fs'
 import { getDataDir } from '../db/connection'
+import { MINIMUM_DISK_SPACE_BYTES } from '../../shared/constants/disk-space'
 import {
   checkModelsExist,
   getModelsToLoad,
   getOverallModelSize,
   startModelDownload
 } from '../services/ModelDownloadService'
-
-const MINIMUM_DISK_SPACE_BYTES = 5 * 1024 * 1024 * 1024 // 5 GB
 
 export function registerModelDownloadHandlers(): void {
   ipcMain.handle('modelDownload:status', () => {

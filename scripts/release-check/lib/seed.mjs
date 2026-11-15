@@ -11,6 +11,13 @@
  *     importieren (es wartet, die Warteschlange pausiert während Aufnahmen),
  *     dann die App beenden — die Aufnahme endet als «error», das PDF wartet
  *
+ *   - ab einer Vorversion mit Patientendossiers (Epic #192, erkannt an der
+ *     Renderer-API, nicht an der Versionsnummer): ein Dossier mit beiden
+ *     fertigen Sitzungen, ein Dokumentdatum am PDF, eine letzte
+ *     Suchanfrage und «Zuletzt»-Einträge (Sitzung, Dossier). Ältere
+ *     Vorversionen bekommen diesen Teil nicht; die Prüfung meldet seinen
+ *     Erhalt dann als «nicht geprüft».
+ *
  * Kein «recording»: Eine solche Sitzung löst beim Start einen nativen
  * Wiederherstellungs-Dialog aus, den die Prüfung nicht wegklicken kann.
  *
@@ -24,6 +31,14 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { importPdf, listSessions, startRecording, waitUntilProcessed } from './app-actions.mjs'
+import {
+  FEATURES_EXPRESSION,
+  SEED_DOCUMENT_DATE,
+  SEED_DOSSIER,
+  SEED_RECENT_QUERY,
+  buildDossierSeedExpectations,
+  supportsDossierSeed
+} from './dossier-search.mjs'
 import { launchInstance } from './instance.mjs'
 import {
   BASE,
@@ -65,6 +80,7 @@ function seedDir(tag, fixtures) {
   for (const file of [
     join(here, 'seed.mjs'),
     join(here, 'app-actions.mjs'),
+    join(here, 'dossier-search.mjs'),
     fixtures.wav,
     fixtures.pdf
   ]) {
@@ -149,6 +165,19 @@ export async function ensureSeed({ tag, appPath, fixtures, logFile, log }) {
     const sessions = await listSessions(page)
     const blocklist = await page.eval('window.api.blocklist.list()')
 
+    const features = (await page.eval(FEATURES_EXPRESSION)) ?? {}
+    let dossierId = null
+    let recentQueries = null
+    let dossier = null
+    if (supportsDossierSeed(features)) {
+      log('Seed: Patientendossier, Zuordnung, Dokumentdatum, Suchanfrage, «Zuletzt» …')
+      dossierId = await seedDossierData(page, { audioId, pdfId })
+      dossier = await page.eval(`window.api.dossiers.get(${JSON.stringify(dossierId)})`)
+      recentQueries = await page.eval('window.api.search.recentList()')
+    } else {
+      log(`Seed: ${tag} kennt keine Patientendossiers — Seed ohne Dossier-Teil`)
+    }
+
     log('Seed: wartende und abgebrochene Sitzung anlegen …')
     const interruptedId = await startRecording(page, fixtures.wav, { seconds: 3 })
     const queuedId = await importPdf(page, fixtures.pdf)
@@ -160,7 +189,8 @@ export async function ensureSeed({ tag, appPath, fixtures, logFile, log }) {
       queuedId,
       sessions: sessions.filter((s) => reviewIds.includes(s.id)),
       reviews,
-      blocklist
+      blocklist,
+      dossierSeed: dossierId ? { dossier, recentQueries, audioId, pdfId } : null
     }
   } catch (err) {
     app.kill()
@@ -191,6 +221,31 @@ export async function ensureSeed({ tag, appPath, fixtures, logFile, log }) {
   expectations.status = status
   expectations.taskCount = query(SEED_HOME, 'SELECT count(*) AS n FROM task_queue')[0].n
   expectations.settings = Object.fromEntries(SEED_SETTINGS_KEYS.map((k) => [k, settings[k]]))
+  if (expectations.dossierSeed) {
+    // Zuordnungen, Dokumentdatum und «Zuletzt» aus der Datenbank nach dem
+    // Beenden — auch die abgebrochene Aufnahme legt einen «Zuletzt»-Eintrag an
+    const { dossier, recentQueries, audioId, pdfId } = expectations.dossierSeed
+    expectations.dossierSeed = buildDossierSeedExpectations({
+      dossier,
+      recentQueries,
+      audioId,
+      pdfId,
+      assignments: query(
+        SEED_HOME,
+        'SELECT session_id, dossier_id, assigned_at FROM session_dossiers'
+      ),
+      documentDates: Object.fromEntries(
+        query(
+          SEED_HOME,
+          'SELECT id, document_date FROM sessions WHERE document_date IS NOT NULL'
+        ).map((r) => [r.id, r.document_date])
+      ),
+      recentItems: query(
+        SEED_HOME,
+        'SELECT dossier_id, session_id FROM recent_items ORDER BY opened_at DESC, id DESC'
+      )
+    })
+  }
 
   // Ablegen: Datenverzeichnis ohne Modelle, Einstellungen, Erwartungen
   rmSync(dir, { recursive: true, force: true })
@@ -208,6 +263,32 @@ export async function ensureSeed({ tag, appPath, fixtures, logFile, log }) {
   writeFileSync(join(dir, 'expectations.json'), JSON.stringify(expectations, null, 2))
   log(`Seed für ${tag} gespeichert (${dir})`)
   return restoreSeed(dir)
+}
+
+/**
+ * Dossier-Teil des Seeds (Epic #192) über die reguläre Renderer-API: Dossier
+ * anlegen, beide fertigen Sitzungen zuordnen, Dokumentdatum am PDF setzen,
+ * eine Suchanfrage merken, Sitzung und Dossier «öffnen» (Zuletzt). Jede
+ * Antwort wird geprüft — ein still gescheiterter Schritt ergäbe einen Seed,
+ * der die Prüfung nichts mehr beweisen liesse.
+ */
+async function seedDossierData(page, { audioId, pdfId }) {
+  const json = (value) => JSON.stringify(value)
+  const created = await page.eval(`window.api.dossiers.create(${json(SEED_DOSSIER)})`)
+  if (!created?.ok) throw new Error(`Seed: Dossier nicht angelegt — ${json(created)}`)
+  const dossierId = created.dossier.id
+  for (const id of [audioId, pdfId]) {
+    const assigned = await page.eval(`window.api.dossiers.assign(${json(id)}, ${json(dossierId)})`)
+    if (!assigned?.ok) throw new Error(`Seed: Zuordnung ${id} gescheitert — ${json(assigned)}`)
+  }
+  const dated = await page.eval(
+    `window.api.sessions.setDocumentDate(${json(pdfId)}, ${json(SEED_DOCUMENT_DATE)})`
+  )
+  if (!dated?.ok) throw new Error(`Seed: Dokumentdatum nicht gesetzt — ${json(dated)}`)
+  await page.eval(`window.api.search.recentRemember(${json(SEED_RECENT_QUERY)})`)
+  await page.eval(`window.api.recent.touch(${json({ kind: 'session', id: audioId })})`)
+  await page.eval(`window.api.recent.touch(${json({ kind: 'dossier', id: dossierId })})`)
+  return dossierId
 }
 
 /** Entpackt den Seed nach SEED_HOME und klont die Modelle dazu. */

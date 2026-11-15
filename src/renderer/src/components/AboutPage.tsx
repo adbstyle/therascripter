@@ -168,9 +168,10 @@ export default function AboutPage(): React.JSX.Element {
             Der Text Ihrer Sitzungen und PDF-Dokumente bleibt erhalten, bis Sie ihn selbst löschen.
           </p>
           <p className="mt-1 text-sm text-text-secondary">
-            Audioaufnahmen und Original-PDFs werden 24&nbsp;Stunden nach erfolgreicher Verarbeitung
-            gelöscht. Schlägt die Verarbeitung fehl, bleiben sie erhalten, bis Sie die Sitzung
-            selbst löschen.
+            Audioaufnahmen und Original-PDFs werden frühestens 24&nbsp;Stunden nach erfolgreicher
+            Verarbeitung gelöscht, sobald TheraScript das nächste Mal aufräumt (beim Start und alle
+            6&nbsp;Stunden, solange die App läuft). Schlägt die Verarbeitung fehl, bleiben sie
+            erhalten, bis Sie die Sitzung selbst löschen.
           </p>
           <p className="mt-1 text-sm text-text-secondary">
             Der Suchindex liegt nur lokal auf Ihrem Mac (bis ~0.7&nbsp;GB bei 2&apos;000 Sitzungen).
@@ -185,7 +186,9 @@ export default function AboutPage(): React.JSX.Element {
           <p className="mt-1 text-sm text-text-secondary">
             Patientendossiers mit Stammdaten, Diagnosen, Medikation und Notiz bleiben lokal
             gespeichert, bis Sie sie löschen oder TheraScript vollständig entfernen. TheraScript nur
-            in den Papierkorb zu legen, löscht sie nicht.
+            in den Papierkorb zu legen, löscht sie nicht. Löschen Sie ein Patientendossier, löscht
+            TheraScript die Sitzungen und PDF-Dokumente mit, die nur ihm zugeordnet sind; was auch
+            einem anderen Dossier zugeordnet ist, bleibt erhalten.
           </p>
           <p className="mt-1 text-sm text-text-secondary">
             Inhalte mit Aufbewahrungspflicht gehören weiterhin in Ihre rechtlich führende

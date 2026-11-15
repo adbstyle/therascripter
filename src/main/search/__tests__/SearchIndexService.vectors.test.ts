@@ -343,7 +343,8 @@ describe('SearchIndexService — Vektorphase', () => {
         release = () => resolve(texts.map((t) => fakeEmbed(t)))
       })
     h.service.start()
-    await new Promise((r) => setTimeout(r, 20))
+    // Auf den Batch warten, der gerade im Suchprozess steckt — nicht auf eine feste Zeit
+    await vi.waitFor(() => expect(h.calls).toHaveLength(1), { timeout: 10_000 })
     expect(h.service.isVectorPhaseRunning()).toBe(true)
     h.flags.processing = true
     const aborted = h.service.abortVectorPhase()
@@ -400,7 +401,7 @@ describe('SearchIndexService — Vektorphase', () => {
         release = () => resolve(texts.map((t) => fakeEmbed(t)))
       })
     const run = h.service.runVectorPhaseToEnd()
-    await new Promise((r) => setTimeout(r, 10))
+    await vi.waitFor(() => expect(h.calls).toHaveLength(1), { timeout: 10_000 })
     expect(h.activity).toEqual([true])
     h.service.setRecordingPause(true)
     release()
@@ -582,5 +583,159 @@ describe('SearchIndexService — Vektoren nach einer Bearbeitung binnen einer Mi
     expect(poisoned).toBe(SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES)
     expect(state(db, 's1').attempts).toBe(SEARCH_VECTOR_EDIT_RETRY_MAX_FAILURES)
     expect(state(db, 's1').next_attempt_at).not.toBeNull()
+  })
+})
+
+// #212 AK 3 und AK 4 für die Vektoren, über den echten Takt mit Fake-Timern und
+// einem Fake-Suchprozess (embedDocuments): Während einer Aufnahme wird nichts
+// aufbereitet, binnen einer Minute nach ihrem Ende sind Text UND Vektoren
+// nachgezogen; was beim Beenden ausstand, ist binnen einer Minute nach dem
+// nächsten Start nachgezogen.
+describe('SearchIndexService — Vektoren nach Aufnahmeende und nach dem Start (#212 AK 3, AK 4)', () => {
+  let db: Database.Database
+  let services: SearchIndexService[]
+  let docs: Map<string, unknown>
+  let calls: string[][]
+
+  function createService(onBatch?: () => void): SearchIndexService {
+    const service = new SearchIndexService(db, {
+      now: () => Date.now(),
+      readDocument: (path) => docs.get(path),
+      vectors: {
+        resolveModel: () => TEST_MODEL,
+        isProcessingActive: () => false,
+        embedDocuments: async (texts) => {
+          onBatch?.()
+          calls.push(texts)
+          return texts.map((t) => fakeEmbed(t))
+        }
+      }
+    })
+    services.push(service)
+    return service
+  }
+
+  /** Bearbeitung wie review:save: neues Dokument, search_rev + 1, updated_at = jetzt. */
+  function edit(id: string, word: string): void {
+    docs.set(`/docs/${id}.json`, makeDoc(longParagraphs(6, word)))
+    db.prepare('UPDATE sessions SET search_rev = search_rev + 1, updated_at = ? WHERE id = ?').run(
+      new Date(Date.now()).toISOString(),
+      id
+    )
+  }
+
+  const embedded = (word: string): boolean => calls.flat().some((t) => t.includes(word))
+
+  beforeEach(async () => {
+    db = createSearchTestDb()
+    docs = new Map()
+    calls = []
+    services = []
+    addIndexedSession(db, docs, { id: 's1' }, longParagraphs(6, 'Angst'))
+    addIndexedSession(db, docs, { id: 'stock' }, longParagraphs(6, 'Bestand'))
+    const prepare = createService()
+    indexAll(prepare)
+    await prepare.runVectorPhaseToEnd()
+    prepare.stop()
+    calls.length = 0
+    // Erst jetzt Fake-Timer: die Vorbereitung oben treibt die Phasen selbst
+    vi.useFakeTimers({ now: NOW })
+  })
+
+  afterEach(() => {
+    for (const s of services) s.stop()
+    db.close()
+    vi.useRealTimers()
+  })
+
+  it('AK 3: während der Aufnahme nichts, binnen 60 s nach ihrem Ende Text und Vektoren', async () => {
+    const service = createService()
+    const before = state(db, 's1').text_gen
+    service.start()
+    service.setRecordingPause(true)
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    // Bearbeitung während der Aufnahme (die App bleibt bedienbar), dann
+    // eine lange Aufnahme — weit über Ruhefenster und Takt hinaus
+    edit('s1', 'Freude')
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    expect(state(db, 's1').text_gen).toBe(before)
+    expect(calls).toEqual([])
+
+    // Aufnahmeende: binnen einer Minute ist alles nachgezogen
+    service.setRecordingPause(false)
+    await vi.advanceTimersByTimeAsync(60_000)
+    const after = state(db, 's1')
+    expect(after.text_gen).toBeGreaterThan(before)
+    expect(after.vec_gen).toBe(after.text_gen)
+    expect(pendingVectors(db, 's1', after.text_gen)).toBe(0)
+    expect(embedded('Freude')).toBe(true)
+  })
+
+  it('AK 3: eine Bearbeitung kurz vor dem Aufnahmeende ist ebenfalls binnen 60 s nachgezogen', async () => {
+    const service = createService()
+    service.start()
+    service.setRecordingPause(true)
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+    edit('s1', 'Zuversicht')
+    await vi.advanceTimersByTimeAsync(1_000)
+    service.setRecordingPause(false)
+    await vi.advanceTimersByTimeAsync(60_000)
+    const after = state(db, 's1')
+    expect(after.vec_gen).toBe(after.text_gen)
+    expect(pendingVectors(db, 's1', after.text_gen)).toBe(0)
+    expect(embedded('Zuversicht')).toBe(true)
+  })
+
+  it('AK 4: eine beim Beenden ausstehende Bearbeitung ist binnen 60 s nach dem Start nachgezogen', async () => {
+    const before = state(db, 's1').text_gen
+    const first = createService()
+    first.start()
+    edit('s1', 'Hoffnung')
+    // Beenden, bevor das Ruhefenster vorbei ist — nichts wurde aufbereitet
+    await vi.advanceTimersByTimeAsync(2_000)
+    first.stop()
+    expect(state(db, 's1').text_gen).toBe(before)
+    expect(calls).toEqual([])
+
+    // App aus (Zeit vergeht nicht), nächster Start mit neuem Dienst
+    const second = createService()
+    second.start()
+    await vi.advanceTimersByTimeAsync(60_000)
+    const after = state(db, 's1')
+    expect(after.text_gen).toBeGreaterThan(before)
+    expect(after.vec_gen).toBe(after.text_gen)
+    expect(pendingVectors(db, 's1', after.text_gen)).toBe(0)
+    expect(embedded('Hoffnung')).toBe(true)
+  })
+
+  it('AK 4: beim Beenden halb fertige Vektoren werden nach dem Start binnen 60 s vervollständigt', async () => {
+    // Text schon neu indexiert, Vektoren nur zum Teil: die App endet mitten
+    // in der Vektorphase (zweiter Batch)
+    edit('s1', 'Gelassenheit')
+    docs.set('/docs/s1.json', makeDoc(longParagraphs(12, 'Gelassenheit')))
+    vi.setSystemTime(NOW + 60_000)
+    let batches = 0
+    const first = createService(() => {
+      if (++batches === 2) first.stop()
+    })
+    indexAll(first)
+    const textGen = state(db, 's1').text_gen
+    const total = pendingVectors(db, 's1', textGen)
+    expect(total).toBeGreaterThan(2)
+    await first.runVectorPhaseToEnd()
+    expect(pendingVectors(db, 's1', textGen)).toBe(total - 2)
+    expect(state(db, 's1').vec_gen).not.toBe(textGen)
+
+    calls.length = 0
+    const second = createService()
+    second.start()
+    await vi.advanceTimersByTimeAsync(60_000)
+    const after = state(db, 's1')
+    expect(after.text_gen).toBe(textGen)
+    expect(after.vec_gen).toBe(textGen)
+    expect(pendingVectors(db, 's1', textGen)).toBe(0)
+    // nur der Rest, nicht alles von vorn
+    expect(calls.flat()).toHaveLength(total - 2)
   })
 })

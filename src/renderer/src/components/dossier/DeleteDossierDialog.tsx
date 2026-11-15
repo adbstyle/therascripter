@@ -4,7 +4,7 @@ import { useLiveQuery } from '../../hooks/useLiveQuery'
 import { useRecordingState } from '../../contexts/recording'
 import { summarizeDeletion } from '../../utils/dossierDeletion'
 import { useAmbiguousDossierNames } from '../../stores/dossierNames'
-import type { DossierDeletePreview } from '../../../../shared/types/Dossier'
+import type { Dossier, DossierDeletePreview } from '../../../../shared/types/Dossier'
 
 interface DeleteDossierDialogProps {
   dossierId: string
@@ -48,6 +48,12 @@ export function DeleteDossierDialog({
       (cb) => window.api.sessions.onChanged(() => cb()),
       (cb) => window.api.dossiers.onChanged(() => cb())
     ],
+    null
+  )
+  // Für den Titel: gleichnamige Dossiers mit ID · Geburtsdatum unterscheiden
+  const self = useLiveQuery<Dossier | null>(
+    () => window.api.dossiers.get(dossierId),
+    [(cb) => window.api.dossiers.onChanged(() => cb())],
     null
   )
   const [busy, setBusy] = useState(false)
@@ -112,7 +118,7 @@ export function DeleteDossierDialog({
     }
   }
 
-  const summary = data ? summarizeDeletion(data, ambiguous) : null
+  const summary = data ? summarizeDeletion(data, ambiguous, self.data) : null
   const ariaLabel =
     view === 'blocked'
       ? 'Patientendossier kann gerade nicht gelöscht werden'

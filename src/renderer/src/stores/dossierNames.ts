@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { ambiguousDossierNames } from '../utils/dossierFormat'
+import { AmbiguousDossierNames, ambiguousDossierNames } from '../utils/dossierFormat'
 
 /**
  * Welche Dossier-Namen mehrfach vorkommen (Sichtprüfung: gleichnamige
@@ -8,7 +8,8 @@ import { ambiguousDossierNames } from '../utils/dossierFormat'
  * ersten Abonnenten, nachgeladen bei jedem `dossiers:changed`, freigegeben,
  * wenn niemand mehr zuhört (dann wird der Stand geleert). Hält die
  * normalisierten Namen (Nachname + Vorname nach `normalizeDossierKey`) der
- * mehrfach vergebenen Namen — keine weiteren Felder, keine IDs.
+ * mehrfach vergebenen Namen und, nur für gleichnamige Dossiers ohne ID und
+ * Geburtsdatum, je Dossier-ID den Zusatz «angelegt am … · N Einträge».
  */
 
 const EMPTY: ReadonlySet<string> = new Set()
@@ -31,7 +32,12 @@ function load(): void {
     .then((list) => {
       if (mine !== generation || !Array.isArray(list)) return
       const next = ambiguousDossierNames(list)
-      const same = next.size === snapshot.size && [...next].every((key) => snapshot.has(key))
+      const prev = snapshot instanceof AmbiguousDossierNames ? snapshot.fallbacks : new Map()
+      const same =
+        next.size === snapshot.size &&
+        [...next].every((key) => snapshot.has(key)) &&
+        next.fallbacks.size === prev.size &&
+        [...next.fallbacks].every(([id, text]) => prev.get(id) === text)
       if (same) return
       snapshot = next
       emit()
