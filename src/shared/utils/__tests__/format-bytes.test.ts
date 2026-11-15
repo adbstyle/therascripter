@@ -37,10 +37,28 @@ describe('formatBytes', () => {
     expect(formatBytes(search!.sizeBytes)).toBe('430 MB')
   })
 
-  it('Mindestplatz bleibt 5 GiB und wird als «5.4 GB» angezeigt', () => {
-    expect(MINIMUM_DISK_SPACE_BYTES).toBe(5 * 1024 ** 3)
-    expect(formatBytes(MINIMUM_DISK_SPACE_BYTES)).toBe('5.4 GB')
+  it('Mindestplatz ist dezimal 5 GB und wird als «5.0 GB» angezeigt (wie README, Website)', () => {
+    expect(MINIMUM_DISK_SPACE_BYTES).toBe(5e9)
+    expect(formatBytes(MINIMUM_DISK_SPACE_BYTES)).toBe('5.0 GB')
   })
+
+  it('«Verfügbar» abgerundet: knapp zu wenig Platz zeigt nie denselben Wert wie «Benötigt»', () => {
+    const almost = MINIMUM_DISK_SPACE_BYTES - 1
+    expect(formatBytes(almost)).toBe('5.0 GB')
+    expect(formatBytes(almost, { floor: true })).toBe('4.9 GB')
+    expect(formatBytes(4_999_999_999_000 / 1000, { floor: true })).toBe('4.9 GB')
+    expect(formatBytes(2_160_000_000, { floor: true })).toBe('2.1 GB')
+    expect(formatBytes(999_999, { floor: true })).toBe('999 KB')
+    expect(formatBytes(MINIMUM_DISK_SPACE_BYTES, { floor: true })).toBe('5.0 GB')
+  })
+
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'ungültiger Wert %d → «—»',
+    (bytes) => {
+      expect(formatBytes(bytes)).toBe('—')
+      expect(formatBytes(bytes, { floor: true })).toBe('—')
+    }
+  )
 })
 
 describe('ceilGigabytes', () => {

@@ -73,7 +73,7 @@ export default function FirstLaunchScreen({
             Speicherplatz für die ML-Modelle.
           </p>
           <div className="mb-4 text-sm text-text-tertiary">
-            <p>Verfügbar: {formatBytes(diskSpace.availableBytes)}</p>
+            <p>Verfügbar: {formatBytes(diskSpace.availableBytes, { floor: true })}</p>
             <p>Benötigt: {formatBytes(MINIMUM_DISK_SPACE_BYTES)}</p>
           </div>
           <p className="text-sm text-text-tertiary">
